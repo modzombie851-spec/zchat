@@ -3,27 +3,34 @@ import { Avatar, Portal, useBackClose, hapticTap, FONT, Spinner } from '../App.j
 import { useGameLink, useRoomRelay, useWatchChannel, useMeshRoom } from './relay.jsx';
 import { watchAllowed, setWatchAllowed, useLiveBeacon } from './live.js';
 import { EMOTES, PingChip, Sheet, injectCss, useVoice } from './livekit.jsx';
-import { GBtn, GPill, GPanel, GChip, GTitle, GJoy, GIcon, GControlsPanel, useCtlLook, useJoystick, injectKitCss, kitTap, pressProps, maxDpr, INK } from './gamekit.jsx';
+import { GC, GBtn, GPill, GPanel, GChip, GTitle, GJoy, GIcon, GControlsPanel, GHudBtn, GHudPanel, GHudSkill, useCtlLook, useGameStage, useJoystick, injectKitCss, kitTap, pressProps, maxDpr, INK } from './gamekit.jsx';
 import { Sfx } from './sfx.js';
-import { WW, LIVES, STAGES, SKILLS, SKILL_KEYS, SPECIES, rOf, viewOf, stageOf, clamp, makeGame, spawnFish, hostStep, applyGuestEvent, snap, applySnap, guestFollow, setNet, followNet, movePlayer, tickPlayer, canEat, canTake, gainFor, botInput, useSkill, addPlayer, dropPlayer, adoptHost } from './gulpengine.js';
+import { WW, WH, LIVES, STAGES, SKILLS, SKILL_KEYS, SPECIES, rOf, viewOf, stageOf, clamp, makeGame, spawnFish, hostStep, applyGuestEvent, snap, applySnap, guestFollow, setNet, followNet, movePlayer, tickPlayer, canEat, canTake, canOpen, chestGain, eatGain, botInput, useSkill, addPlayer, dropPlayer, adoptHost } from './gulpengine.js';
 import { render, makeDeco, updateParts, bubbles, floatText, burst, bits, ring, drawMinimap, drawBadge, fmtN, PLAYER_PAL, SLOT_KEYS, warmSprites } from './gulpdraw.js';
-import { GULP_LEVELS, goalText, rulesText, goalProgress, starsFor, readLevels, saveLevel } from './gulplevels.js';
+import { GULP_LEVELS, goalText, rulesText, goalProgress, starsFor, readLevels, saveLevel, pickMission, missionProgress, missionLabel, REWARDS } from './gulplevels.js';
 
 const QUICK = ['Come here', 'Run', 'Big fish', 'Nice one', 'Watch out', 'Good game'];
 const PHRASES = ['Come here', 'Run', 'Big fish behind you', 'Nice one', 'Watch out', 'Good game', 'Rematch', 'Sorry'];
 const ROOM_MAX = 10;
-const TOUCHY = typeof window !== 'undefined' && ((typeof navigator !== 'undefined' && (navigator.maxTouchPoints || 0) > 0) || 'ontouchstart' in window);
 const BEST_KEY = (uid) => `zchat-gulp2-best-${uid || 'me'}`;
 const SKILL_COL = { dash: 'blue', suck: 'purple', shield: 'teal', shock: 'gold', frenzy: 'red' };
 const SKILL_ICON = { dash: 'dash', suck: 'suck', shield: 'shield', shock: 'bolt', frenzy: 'flame' };
-const SKILL_POS = { dash: [128, 136], suck: [19, 145], shield: [37, 82], shock: [85, 39], frenzy: [149, 28] };
+const ARC = { suck: 180, shield: 145, shock: 112, frenzy: 82 };
+const FX_NAME = { shield: 'a shield', double: 'double food', magnet: 'a magnet', speed: 'a speed boost' };
+const MINI_W = 168, MINI_H = 44;
+const SK_X = 186, SK_Y = 156, SK_R = 94;
+const skillAt = (k) => {
+  if (k === 'dash') return [SK_X - 36, SK_Y - 36];
+  const a = (ARC[k] * Math.PI) / 180;
+  return [Math.round(SK_X + Math.cos(a) * SK_R - 26), Math.round(SK_Y - Math.sin(a) * SK_R - 26)];
+};
 const BOT_NAMES = ['Bubbles', 'Finn'];
 const JOY_COL = { sun: 'orange', moon: 'blue', c0: 'orange', c1: 'blue', c2: 'green', c3: 'pink', c4: 'purple', c5: 'gold', c6: 'teal', c7: 'red', c8: 'white', c9: 'orange' };
 function readBest(uid) { try { return JSON.parse(localStorage.getItem(BEST_KEY(uid)) || '{}') || {}; } catch { return {}; } }
 function saveBest(uid, r) {
   try {
     const b = readBest(uid);
-    const out = { top: Math.max(b.top || 0, r.n), time: Math.max(b.time || 0, r.time || 0), eaten: (b.eaten || 0) + (r.eaten || 0), wins: (b.wins || 0) + (r.win ? 1 : 0), games: (b.games || 0) + 1 };
+    const out = { top: Math.max(b.top || 0, r.n), time: Math.max(b.time || 0, r.time || 0), eaten: (b.eaten || 0) + (r.eaten || 0), wins: (b.wins || 0) + (r.win ? 1 : 0), games: (b.games || 0) + 1, missions: (b.missions || 0) + (r.missions || 0) };
     localStorage.setItem(BEST_KEY(uid), JSON.stringify(out));
     return { ...out, newTop: r.n > (b.top || 0) };
   } catch { return { top: r.n }; }
@@ -47,20 +54,6 @@ export function FishBadge({ color, stage, size = 64 }) {
   return <canvas ref={ref} aria-hidden="true" style={{ width: size, height: size, display: 'block', flexShrink: 0 }} />;
 }
 
-function useBox(ref) {
-  const [box, setBox] = useState(() => ({ w: typeof window !== 'undefined' ? window.innerWidth : 390, h: typeof window !== 'undefined' ? window.innerHeight : 844 }));
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return undefined;
-    const upd = () => { const w = el.clientWidth, h = el.clientHeight; if (w && h) setBox((b) => (b.w === w && b.h === h ? b : { w, h })); };
-    upd();
-    let ro = null;
-    try { ro = new ResizeObserver(upd); ro.observe(el); } catch { window.addEventListener('resize', upd); }
-    return () => { if (ro) ro.disconnect(); else window.removeEventListener('resize', upd); };
-  }, []);
-  return box;
-}
-
 function Toggle({ on }) {
   return <span aria-hidden="true" style={{ width: 46, height: 28, borderRadius: 14, background: on ? '#5BE37D' : '#5A5470', boxShadow: `0 0 0 2.5px ${INK}`, position: 'relative', flexShrink: 0 }}><span style={{ position: 'absolute', top: 3, left: on ? 21 : 3, width: 22, height: 22, borderRadius: 11, background: '#FFFFFF', boxShadow: `0 0 0 2px ${INK}`, transition: 'left 0.2s' }} /></span>;
 }
@@ -79,6 +72,7 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
   const peerFirst = isSolo ? 'Bot' : isWatch ? firstName(watch.names && watch.names.moon) : isDuel ? firstName(peer && peer.name) : 'Friend';
   const hostFirst = isWatch ? firstName(watch.names && watch.names.sun) : '';
   const look = useCtlLook();
+  const lookNow = useRef(look); lookNow.current = look;
   const relay0 = useGameLink({ id: isDuel ? `gulp-${gameId}` : null, myId, peerId: peer && peer.id, enabled: isDuel, g: 'gulp', fast: ['gp', 'gs'] });
   const wrelay = useRoomRelay({ id: isWatch ? `gulp-${gameId}` : null, myId, enabled: isWatch, passive: true });
   const myAva = me && typeof me.avatar === 'string' && me.avatar.length < 400 ? me.avatar : null;
@@ -92,7 +86,6 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
   const watchers = useWatchChannel({ room: isDuel || isWatch ? `gulp-${gameId}` : null, myId, enabled: isDuel || isWatch, role: isWatch ? 'watcher' : 'player', meta: { n: myFirst, a: myAva }, allow: allowWatch, onDenied: () => { setToast({ text: 'The players turned off watching.', at: Date.now() }); setTimeout(() => onClose(), 1600); } });
   const watchersRef = useRef(watchers); watchersRef.current = watchers;
   useEffect(() => { if (relay0.watch) relay0.watch(watchers.length > 0); }, [watchers.length]);
-  useLiveBeacon({ game: 'gulp', room: isRoom ? `gulpco-${gameId}` : `gulp-${gameId}`, info: isRoom ? { co: 1, rm: gameId } : { g: gameId, h: initial && initial.x, o: initial && initial.o }, active: isRoom || (isDuel && !!initial), allow: allowWatch });
   const [phase, setPhase] = useState(isSolo ? 'menu' : isRoom ? 'join' : 'lobby');
   const [hud, setHud] = useState({ n: 2, st: 0, lives: LIVES, time: 0, cd: {}, fx: {}, on: null, combo: 0, dead: 0, goal: null });
   const [toast, setToast] = useState(null);
@@ -112,12 +105,17 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
   const [lvls, setLvls] = useState(() => readLevels(myId));
   const [roomHost, setRoomHost] = useState(null);
   const [roster, setRoster] = useState({ ids: [], nm: {}, col: {} });
+  useLiveBeacon({ game: 'gulp', room: isRoom ? `gulpco-${gameId}` : `gulp-${gameId}`, info: isRoom ? { co: 1, rm: gameId, n: Math.max(1, roster.ids.length) } : { g: gameId, h: initial && initial.x, o: initial && initial.o }, active: isRoom || (isDuel && !!initial), allow: allowWatch });
   const [feed, setFeed] = useState([]);
   const [full, setFull] = useState(false);
   const best = useRef(readBest(myId));
-  const rootRef = useRef(null);
+  const GS = useGameStage(look);
+  const rootRef = GS.rootRef;
   const cvRef = useRef(null);
   const miniRef = useRef(null);
+  const hudRefs = useRef({});
+  const keepRef = useRef({ at: 0, list: [] });
+  const hudRef = (k) => (el) => { hudRefs.current[k] = el; };
   const wrapRef = useRef(null);
   const GR = useRef(null);
   const demoRef = useRef(null);
@@ -154,20 +152,20 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
   const lastGt = useRef(null);
   const hostHeard = useRef(0);
   const joinedAt = useRef(Date.now());
-  const box = useBox(rootRef);
-  const side = look.side && TOUCHY && box.h > box.w * 1.08;
+  const side = GS.side;
   const sideRef = useRef(side); sideRef.current = side;
-  const cw0 = side ? box.h : box.w, ch0 = side ? box.w : box.h;
-  const land = cw0 > ch0;
+  const cw0 = GS.W, ch0 = GS.H;
+  const land = GS.land;
+  const missRef = useRef(null);
   sheetOpen.current = !!sheet || leaveAsk || paused || ctl;
   const amHost = () => (isRoom ? hostRef.current === myId : host);
   const J = useJoystick(wrapRef, {
     enabled: () => phaseRef.current === 'play' && !sheetOpen.current,
     rot: () => sideRef.current,
-    radius: () => Math.round(52 * Math.max(0.7, look.size)),
+    radius: () => Math.round((land ? 46 : 52) * Math.max(0.7, look.size)),
     zone: (x, y, r) => (r.width > r.height ? x < r.width * 0.52 && y > 64 : !(x > r.width * 0.55 && y > r.height - 300) && y > 90),
   });
-  if (typeof window !== 'undefined' && window.__zfake) window.__zgulp = { game: () => GR.current, demo: () => demoRef.current, host: () => hostRef.current, roster: () => rosterRef.current, level: () => levelRef.current };
+  if (typeof window !== 'undefined' && window.__zfake) window.__zgulp = { game: () => GR.current, demo: () => demoRef.current, host: () => hostRef.current, roster: () => rosterRef.current, level: () => levelRef.current, miss: () => missRef.current };
 
   const say = (text, sec) => { setToast({ text, at: Date.now() }); clearTimeout(toastTimer.current); toastTimer.current = setTimeout(() => setToast(null), (sec || 2.6) * 1000); };
   const showBanner = (b, sec) => { setBanner({ ...b, at: Date.now() }); clearTimeout(bannerTimer.current); bannerTimer.current = setTimeout(() => setBanner(null), (sec || 2.8) * 1000); };
@@ -214,6 +212,13 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
     const G = makeGame(seed, { solo: isSolo, players });
     if (!host) G.fish = [];
     G.deco = makeDeco(seed);
+    missRef.current = null;
+    if (isSolo) {
+      const p0 = G.pl.sun;
+      const M = { list: [], done: 0, seq: 0, picks: 0 };
+      for (let k = 0; k < 3; k++) { const m = pickMission(M.list, p0, { picks: 0, t: 0 }); m.id = ++M.seq; m.cur = 0; M.list.push(m); }
+      missRef.current = M;
+    }
     initRound(G);
     if (isDuel && host && !quiet) relay.send('gl', { seed, sc: scoreRef.current });
     say('Eat fish with smaller numbers to grow. Red numbers can eat you.', 3.6);
@@ -229,11 +234,12 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
     const p = G.pl.sun;
     if (L.start) { p.x = L.start[0]; p.y = L.start[1]; }
     if (L.n) { p.n = L.n; p.best = L.n; p.stage = stageOf(L.n); }
-    if (L.lives) p.lives = L.lives;
+    if (L.lives) { p.lives = L.lives; p.maxLives = L.lives; }
     G.fish = [];
     for (let k = 0; k < 26; k++) spawnFish(G, true, p);
     G.deco = makeDeco(seed);
     levelRef.current = { i, L, picks: 0, combo: 0 };
+    missRef.current = null;
     initRound(G);
     showBanner({ title: `Level ${i + 1}`, sub: goalText(L) }, 2.6);
   };
@@ -316,10 +322,10 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
     let nsc = sc || scoreRef.current;
     if (isDuel && host && !sc) { nsc = { ...scoreRef.current }; if (o.w === 'sun') nsc.x += 1; else if (o.w === 'moon') nsc.o += 1; setScore(nsc); scoreRef.current = nsc; }
     G.sc = nsc; G.overAt = Date.now();
-    const rec = saveBest(myId, { n: meP ? meP.best : 2, time: G.t, eaten: meP ? meP.eaten : 0, win });
+    const rec = saveBest(myId, { n: meP ? meP.best : 2, time: G.t, eaten: meP ? meP.eaten : 0, win, missions: missRef.current ? missRef.current.done : 0 });
     best.current = readBest(myId);
     const other = G.pl[theirs];
-    const r = { win, solo: isSolo, why: o.why, mn: meP ? meP.best : 2, tn: other ? other.best : 0, time: G.t, eaten: meP ? meP.eaten : 0, newTop: !!rec.newTop, sc: nsc };
+    const r = { win, solo: isSolo, why: o.why, mn: meP ? meP.best : 2, tn: other ? other.best : 0, time: G.t, eaten: meP ? meP.eaten : 0, newTop: !!rec.newTop, sc: nsc, missions: missRef.current ? missRef.current.done : 0 };
     Sfx.music(null, false);
     setTimeout(() => { if (GR.current === G) { setResult(r); setPhase('over'); Sfx.play(win || (isSolo && rec.newTop) ? 'win' : 'die', { vol: 0.7 }); if (win) { try { window.dispatchEvent(new CustomEvent('zchat-screen-fx', { detail: 'confetti' })); } catch {} } } }, 1300);
     if (host && isDuel && onSaveState && initial) onSaveState({ ...initial, st: 'live', exp: null, sx: nsc.x, so: nsc.o, w: nsc.x > nsc.o ? 'x' : nsc.o > nsc.x ? 'o' : 'd' });
@@ -345,6 +351,8 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
           if (e.who === mine && e.c >= 3) Sfx.play('combo', { vol: 0.5, rate: Math.min(2, 0.9 + e.c * 0.08), gap: 0.05 });
           if (e.who === mine && e.c >= 10 && e.c % 10 === 0) setTimeout(() => Sfx.play('burp', { vol: 0.7, rate: 0.9 + Math.random() * 0.2 }), 450);
         }
+        if (e.n && near(e.x, e.y)) P.push({ k: 'swal', x: e.x, y: e.y, sp: e.sp, pv: e.pv || 0, n: e.n, who: e.who, life: 0.16, max: 0.16, vx: 0, vy: 0 });
+        if (e.gold && e.who === mine) { setToast(null); showBanner({ title: 'Golden fish', sub: `+${fmtN(e.gain)}` }, 2.4); Sfx.play('star', { vol: 0.8 }); burst(P, e.x, e.y, '#FFE15A', 26, 1.6); }
         const mp = G.pl[mine];
         if (e.who === mine ? e.gain >= Math.max(2, (mp ? mp.n : 2) * 0.025) || e.big : e.big) floatText(P, e.x, e.y - 0.4, `+${fmtN(e.gain)}`, e.who === mine ? '#FFF2A8' : '#CFE9FF');
         if (e.who === mine && e.c >= 3) {
@@ -370,7 +378,15 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
         break;
       }
       case 'out': if (e.who !== mine && isDuel) say(`${peerFirst} is out of lives`, 3); break;
-      case 'pick': if (remote && e.who === mine) break; Sfx.play('pick', { vol: 0.7 }); burst(P, e.x, e.y, '#BFEFFF', 12); if (e.who === mine) { if (levelRef.current) levelRef.current.picks += 1; say({ shield: 'Shield on. Nothing can eat you for a moment.', double: 'Double food for a few seconds.', magnet: 'Magnet on. Small fish swim to you.', speed: 'Speed boost.', life: 'Extra life.' }[e.kind] || '', 2); } break;
+      case 'chest': {
+        if (remote && e.who === mine) break;
+        burst(P, e.x, e.y - 1, '#FFD23F', 30, 1.8); bubbles(P, e.x, e.y - 1, 10, 0.25);
+        if (near(e.x, e.y)) Sfx.play('pick', { vol: 0.9 });
+        if (e.who === mine) { Sfx.play('coin', { vol: 0.8 }); floatText(P, e.x, e.y - 2, `+${fmtN(e.gain)}`, '#FFE15A', true); say(`Treasure. +${fmtN(e.gain)}${e.kind && FX_NAME[e.kind] ? ` and ${FX_NAME[e.kind]}` : ''}${e.life ? ', plus an extra life' : ''}.`, 2.6); }
+        break;
+      }
+      case 'goldin': if (e.who === mine) { say('A golden fish is close. Catch it before it gets away.', 3); Sfx.play('pick', { vol: 0.5, rate: 1.3 }); } break;
+      case 'pick': if (remote && e.who === mine) break; Sfx.play('pick', { vol: 0.7 }); burst(P, e.x, e.y, '#BFEFFF', 12); if (e.who === mine) { if (levelRef.current) levelRef.current.picks += 1; if (missRef.current) missRef.current.picks += 1; say({ shield: 'Shield on. Nothing can eat you for a moment.', double: 'Double food for a few seconds.', magnet: 'Magnet on. Small fish swim to you.', speed: 'Speed boost.', life: 'Extra life.' }[e.kind] || '', 2); } break;
       case 'hunt': if (e.who === mine) { Sfx.play('alert', { vol: 0.7, gap: 1.5 }); try { hapticTap(); } catch {} } break;
       case 'spawn': if (e.who === mine) { Sfx.play('pop', { vol: 0.6 }); cam.current.init = false; } break;
       case 'evolve': if (e.who === mine) { Sfx.play('evolve', { vol: 0.9, force: true }); const st = STAGES[e.st]; const sk = SKILL_KEYS.find((k) => SKILLS[k].stage === e.st); showBanner({ title: `You grew into a ${st.name}`, sub: sk ? `New skill: ${SKILLS[sk].name}` : 'Your skills got stronger' }, 3.2); const p = G.pl[mine]; if (p) { ring(P, p.x, p.y, rOf(p.n) * 4, '#FFE15A'); burst(P, p.x, p.y, '#FFE15A', 30, 2); } } break;
@@ -622,10 +638,38 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
     const p = G.pl.sun;
     if (!Lv || !p || G.over) return null;
     Lv.combo = Math.max(Lv.combo, p.combo || 0);
-    const pr = goalProgress(Lv.L, { n: p.n, eaten: p.eaten, picks: Lv.picks, combo: Lv.combo, time: G.t });
+    const pr = goalProgress(Lv.L, { n: p.n, eaten: p.eaten, picks: Lv.picks, combo: Lv.combo, time: G.t, chests: p.chests || 0, golds: p.golds || 0 });
     if (pr.cur >= pr.need) G.over = { w: 'sun', why: 'goal' };
     else if (Lv.L.limit && G.t >= Lv.L.limit) G.over = { w: null, why: 'time' };
     return pr;
+  };
+
+  const checkMissions = (G) => {
+    const M = missRef.current;
+    const p = G.pl.sun;
+    if (!M || !p || G.over) return;
+    const st = { picks: M.picks, t: G.t };
+    for (let i = 0; i < M.list.length; i++) {
+      const m = M.list[i];
+      if (!m.doneAt) {
+        m.cur = missionProgress(m, p, st);
+        if (m.cur >= m.v) {
+          m.doneAt = G.t;
+          const rw = REWARDS[M.done % REWARDS.length];
+          M.done += 1;
+          if (rw.k === 'life') p.lives = Math.min(p.maxLives || LIVES, p.lives + 1);
+          else if (rw.k === 'double') p.fx.double = Math.max(p.fx.double, 10);
+          else if (rw.k === 'shield') p.fx.shield = Math.max(p.fx.shield, 8);
+          else p.fx.magnet = Math.max(p.fx.magnet, 10);
+          showBanner({ title: 'Mission done', sub: rw.text }, 2.6);
+          Sfx.play('star', { vol: 0.75 });
+        }
+      } else if (G.t - m.doneAt > 1.6) {
+        const nm = pickMission(M.list, p, st);
+        nm.id = ++M.seq; nm.cur = missionProgress(nm, p, st);
+        M.list[i] = nm;
+      }
+    }
   };
 
   useEffect(() => {
@@ -690,6 +734,7 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
         else if (step > 0) { G.t += step * 0.2; for (const f of G.fish) { f.x += Math.cos(f.a) * 0.2 * step; } }
         while (G.events.length) handleEv(G, G.events.shift(), false);
         if (levelRef.current) goal = checkLevel(G);
+        else if (missRef.current) checkMissions(G);
         if (G.over && !overRef.current) finishRound(G);
         if (isDuel && (!G.overAt || Date.now() - G.overAt < 3000)) {
           const now = Date.now();
@@ -716,11 +761,21 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
             for (const f of G.fish) {
               if (hiddenRef.current.has(f.id) || !canEat(meP, f)) continue;
               hiddenRef.current.set(f.id, now);
-              const gain = gainFor(meP, f.n);
+              const gain = eatGain(meP, f);
               pendRef.current.push({ id: f.id, gain, at: now });
               sendGE(G, { k: 'eat', id: f.id, slack: Math.ceil(gain * 0.2) });
               meP.eat = 0.3;
-              handleEv(G, { k: 'eat', who: mine, gain, x: f.x, y: f.y, sp: f.sp, c: 0, big: f.n > meP.n * 0.35 ? 1 : 0 }, false);
+              handleEv(G, { k: 'eat', who: mine, gain, x: f.x, y: f.y, sp: f.sp, pv: f.pv, n: f.n, gold: f.gold ? 1 : 0, c: 0, big: f.n > meP.n * 0.35 ? 1 : 0 }, false);
+            }
+            for (const ch of G.chests || []) {
+              const hk = `c${ch.id}`;
+              if (hiddenRef.current.has(hk) || !canOpen(meP, ch)) continue;
+              hiddenRef.current.set(hk, now);
+              ch.cool = 45;
+              const gain = chestGain(meP);
+              pendRef.current.push({ id: hk, gain, at: now });
+              sendGE(G, { k: 'chest', id: ch.id });
+              handleEv(G, { k: 'chest', who: mine, id: ch.id, gain, x: ch.x, y: ch.y }, false);
             }
             for (const pk of G.pk) {
               if (hiddenRef.current.has(pk.id) || !canTake(meP, pk)) continue;
@@ -737,7 +792,7 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
         const fk = isRoom ? (G.pl[hostRef.current] ? hostRef.current : G.order[0]) : null;
         const fp = fk ? G.pl[fk] : null;
         if (!fp) return;
-        const s0 = (cw > ch ? Math.min(cw * 0.62, ch * 1.05) : Math.min(cw, ch * 0.62)) / viewOf(fp.n);
+        const s0 = (cw > ch ? Math.min(cw * 0.5, ch * 0.76) : Math.min(cw, ch * 0.62)) / viewOf(fp.n);
         updateParts(partsRef.current, dt);
         render(cv.getContext('2d'), G, { cw, ch, dpr, s: s0, ox: Math.round(cw / 2 - fp.x * s0), oy: Math.round(ch / 2 - fp.y * s0), mine: fk, names: names(), bubbles: bubblesRef.current, parts: partsRef.current, hidden: null, noArrows: true, mics: micsRef.current });
         return;
@@ -761,7 +816,7 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
       if (playing && Math.random() < step * 0.4) Sfx.play(['bub1', 'bub2', 'bub3', 'bub4'][Math.floor(Math.random() * 4)], { vol: 0.12 + Math.random() * 0.1, rate: 0.8 + Math.random() * 0.5 });
       const C = cam.current;
       const V = viewOf(meP.n);
-      const base = cw > ch ? Math.min(cw * 0.62, ch * 1.05) : Math.min(cw, ch * 0.62);
+      const base = cw > ch ? Math.min(cw * 0.5, ch * 0.76) : Math.min(cw, ch * 0.62);
       const zoom = base / V;
       const lead = 0.12 * V;
       const tx = meP.x + Math.cos(meP.a) * lead * Math.min(1, Math.hypot(meP.vx, meP.vy) / 3), ty = meP.y + Math.sin(meP.a) * lead * 0.6 * Math.min(1, Math.hypot(meP.vx, meP.vy) / 3);
@@ -771,19 +826,30 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
       const s = C.z;
       const halfW = cw / s / 2, halfH = ch / s / 2;
       let cx = WW <= halfW * 2 ? WW / 2 : clamp(C.x, halfW, WW - halfW);
-      let cy = clamp(C.y, halfH - 3, Math.max(halfH - 3, 330 - halfH + 1));
+      let cy = clamp(C.y, halfH - 3, Math.max(halfH - 3, WH - halfH + 1));
       if (C.shake > 0) { C.shake = Math.max(0, C.shake - dt); const a = C.shake * 0.4; cx += (Math.random() - 0.5) * a; cy += (Math.random() - 0.5) * a; }
       const ox = Math.round(cw / 2 - cx * s), oy = Math.round(ch / 2 - cy * s);
-      const wide = cw > ch;
-      render(cv.getContext('2d'), G, { cw, ch, dpr, s, ox, oy, mine: isWatch ? followRef.current : mine, names: names(), bubbles: bubblesRef.current, parts: partsRef.current, hidden: H ? null : hiddenRef.current, safeTop: wide ? 96 : 130, safeBottom: wide ? 120 : 230, mics: micsRef.current });
+      const KR = keepRef.current;
+      const kNow = performance.now();
+      if (kNow - KR.at > 400) {
+        KR.at = kNow; KR.list = [];
+        const R = hudRefs.current;
+        for (const k of ['tl', 'tc', 'tr', 'sc']) { const el = R[k]; if (el && el.offsetWidth) KR.list.push([el.offsetLeft, el.offsetTop, el.offsetLeft + el.offsetWidth, el.offsetTop + el.offsetHeight]); }
+        const sk = R.sk;
+        if (sk && sk.offsetWidth) { const q = lookNow.current.size || 1; const x1 = sk.offsetLeft + sk.offsetWidth, y1 = sk.offsetTop + sk.offsetHeight; KR.list.push([x1 - sk.offsetWidth * q, y1 - sk.offsetHeight * q * 0.8, x1, y1]); }
+        if (!isWatch && phaseRef.current === 'play') { const jr = J.R + 12, jx = cw > ch ? 116 : 96, jy = ch - (cw > ch ? 98 : 132); KR.list.push([jx - jr, jy - jr, jx + jr, jy + jr]); }
+      }
+      render(cv.getContext('2d'), G, { cw, ch, dpr, s, ox, oy, mine: isWatch ? followRef.current : mine, names: names(), bubbles: bubblesRef.current, parts: partsRef.current, hidden: H ? null : hiddenRef.current, safeTop: 28, safeBottom: 28, keep: KR.list, mics: micsRef.current });
       const mc = miniRef.current;
-      if (mc) { const md = Math.min(2, window.devicePixelRatio || 1); if (mc.width !== 96 * md) { mc.width = 96 * md; mc.height = 52 * md; } const x2 = mc.getContext('2d'); x2.setTransform(md, 0, 0, md, 0, 0); drawMinimap(x2, G, isWatch ? followRef.current : mine, 96, 52); }
+      if (mc) { const md = Math.min(2, window.devicePixelRatio || 1); if (mc.width !== MINI_W * md) { mc.width = MINI_W * md; mc.height = MINI_H * md; } const x2 = mc.getContext('2d'); x2.setTransform(md, 0, 0, md, 0, 0); drawMinimap(x2, G, isWatch ? followRef.current : mine, MINI_W, MINI_H, { x: cx, y: cy, hw: halfW, hh: halfH }); }
       const otherK = isWatch ? (followRef.current === 'sun' ? 'moon' : 'sun') : isDuel ? theirs : null;
       const other = otherK ? G.pl[otherK] : null;
       const gk = goal ? goal.label : '';
-      const hk = `${otherK}|${fmtN(meP.n)}|${meP.stage}|${meP.lives}|${Math.floor(G.t)}|${SKILL_KEYS.map((k) => Math.ceil(meP.cd[k] * 2)).join(',')}|${meP.combo}|${meP.dead > 0 ? 1 : 0}|${other ? `${other.n},${other.lives},${other.out}` : ''}|${['shield', 'double', 'magnet', 'speed', 'frenzy'].map((x) => (meP.fx[x] > 0 ? Math.ceil(meP.fx[x]) : 0)).join(',')}|${gk}|${isRoom ? G.order.length : ''}`;
+      const MM = missRef.current;
+      const mk = MM ? MM.list.map((m) => `${m.id}:${Math.floor(m.cur || 0)}:${m.doneAt ? 1 : 0}`).join(',') : '';
+      const hk = `${otherK}|${fmtN(meP.n)}|${meP.stage}|${meP.lives}|${Math.floor(G.t)}|${SKILL_KEYS.map((k) => Math.ceil(meP.cd[k] * 2)).join(',')}|${meP.combo}|${meP.dead > 0 ? 1 : 0}|${other ? `${other.n},${other.lives},${other.out}` : ''}|${['shield', 'double', 'magnet', 'speed', 'frenzy'].map((x) => (meP.fx[x] > 0 ? Math.ceil(meP.fx[x]) : 0)).join(',')}|${gk}|${isRoom ? G.order.length : ''}|${mk}`;
       const hnow = performance.now();
-      if (hk !== hudKey.current && (hnow - (hudKey.at || 0) > 90 || meP.dead > 0)) { hudKey.current = hk; hudKey.at = hnow; setHud({ n: meP.n, st: meP.stage, lives: meP.lives, time: G.t, cd: { ...meP.cd }, fx: { ...meP.fx }, combo: meP.combo, dead: meP.dead, on: other ? { n: other.n, lives: other.lives, out: other.out, k: otherK } : null, goal: goal ? { label: goal.label, frac: Math.min(1, goal.cur / Math.max(1, goal.need)) } : null }); }
+      if (hk !== hudKey.current && (hnow - (hudKey.at || 0) > 90 || meP.dead > 0)) { hudKey.current = hk; hudKey.at = hnow; setHud({ n: meP.n, st: meP.stage, lives: meP.lives, time: G.t, cd: { ...meP.cd }, fx: { ...meP.fx }, combo: meP.combo, dead: meP.dead, on: other ? { n: other.n, lives: other.lives, out: other.out, k: otherK } : null, goal: goal ? { label: goal.label, frac: Math.min(1, goal.cur / Math.max(1, goal.need)) } : null, missDone: MM ? MM.done : 0, miss: MM ? MM.list.map((m) => ({ id: m.id, text: m.text, done: !!m.doneAt, label: m.doneAt ? 'Done' : missionLabel(m, m.cur || 0), frac: Math.min(1, (m.cur || 0) / Math.max(1, m.v)) })) : null }); }
       const ms = performance.now() - t0;
       B.avg = B.avg * 0.95 + ms * 0.05; B.n += 1;
       if (B.n > 120 && B.avg > 14 && !B.low) B.low = true;
@@ -820,31 +886,48 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
   const sz = look.size;
   const see = 1 - look.see;
   const W = cw0, Ht = ch0;
-  const sat = side ? 'env(safe-area-inset-right, 0px)' : 'env(safe-area-inset-top, 0px)';
-  const sar = side ? 'env(safe-area-inset-bottom, 0px)' : 'env(safe-area-inset-right, 0px)';
-  const sab = side ? 'env(safe-area-inset-left, 0px)' : 'env(safe-area-inset-bottom, 0px)';
-  const sal = side ? 'env(safe-area-inset-top, 0px)' : 'env(safe-area-inset-left, 0px)';
-  const top = (px) => `calc(${px}px + ${sat})`;
-  const bottom = (px) => `calc(${px}px + ${sab})`;
-  const left = (px) => `calc(${px}px + ${sal})`;
-  const right = (px) => `calc(${px}px + ${sar})`;
-  const skillH = Math.round(214 * sz);
+  const { top, bottom, left, right } = GS.at;
   const showSide = (isDuel || isRoom) && phase === 'play';
   const totalStars = Object.values(lvls).reduce((a, b) => a + ((b && b.stars) || 0), 0);
   const G0 = GR.current;
   const roomCount = roster.ids.length || 1;
   const pauseOn = paused && phase === 'play';
+  const hb = land ? 38 : 40;
+  const heartsMax = Lv && Lv.L.lives ? Lv.L.lives : LIVES;
+  const softInk = 'rgba(0,0,0,0.35)';
 
-  const sideBtns = showSide ? (
-    <>
-      {isRoom ? <GBtn icon={mesh.mic.on ? 'mic' : 'micoff'} color={mesh.mic.on ? 'green' : 'dark'} size={44} label={mesh.mic.on ? 'Turn your mic off' : 'Turn your mic on'} onPress={mesh.toggleMic} />
-        : <GBtn icon={voice.micOn ? 'mic' : 'micoff'} color={voice.micOn ? 'green' : 'dark'} size={44} label={voice.micOn ? 'Turn your mic off' : 'Turn your mic on'} onPress={voice.toggle} />}
-      {isRoom ? <GBtn icon="people" color={sheet && sheet.k === 'room' ? 'gold' : 'dark'} size={44} label="Players and voice" badge={roomCount > 1 ? roomCount : null} onPress={() => { setQuick(false); setSheet({ k: 'room' }); }} />
-        : <GBtn icon={voice.peerMuted ? 'mute' : 'sound'} color={voice.peerMuted ? 'red' : 'dark'} size={44} label={voice.peerMuted ? `Unmute ${peerFirst}` : `Mute ${peerFirst}`} onPress={voice.togglePeer} />}
-      <GBtn icon="smile" color={quick ? 'gold' : 'dark'} size={44} label="Quick messages and emojis" onPress={() => setQuick((v) => !v)} />
-      <GBtn icon="chat" color="dark" size={44} label="Chat" onPress={() => { setQuick(false); setSheet({ k: 'chat' }); }} />
-    </>
+  const socialBtns = showSide ? [
+    isRoom ? <GHudBtn key="mic" icon={mesh.mic.on ? 'mic' : 'micoff'} on={mesh.mic.on} size={hb} label={mesh.mic.on ? 'Turn your mic off' : 'Turn your mic on'} onPress={mesh.toggleMic} />
+      : <GHudBtn key="mic" icon={voice.micOn ? 'mic' : 'micoff'} on={voice.micOn} size={hb} label={voice.micOn ? 'Turn your mic off' : 'Turn your mic on'} onPress={voice.toggle} />,
+    isRoom ? <GHudBtn key="ppl" icon="people" on={!!(sheet && sheet.k === 'room')} tone="#F5AE1E" size={hb} label="Players and voice" badge={roomCount > 1 ? roomCount : null} onPress={() => { setQuick(false); setSheet({ k: 'room' }); }} />
+      : <GHudBtn key="ppl" icon={voice.peerMuted ? 'mute' : 'sound'} on={voice.peerMuted} tone="#E53A2A" size={hb} label={voice.peerMuted ? `Unmute ${peerFirst}` : `Mute ${peerFirst}`} onPress={voice.togglePeer} />,
+    <GHudBtn key="emo" icon="smile" on={quick} tone="#F5AE1E" size={hb} label="Quick messages and emojis" onPress={() => setQuick((v) => !v)} />,
+    <GHudBtn key="chat" icon="chat" size={hb} label="Chat" onPress={() => { setQuick(false); setSheet({ k: 'chat' }); }} />,
+  ] : [];
+  const sysBtns = [
+    !isWatch && <GHudBtn key="gear" icon="gear" size={hb} label="Controls" onPress={() => { setQuick(false); if (isSolo) setPaused(true); setCtl(true); }} />,
+    <GHudBtn key="x" icon={isSolo ? 'pause' : 'close'} size={hb} label={isSolo ? 'Pause' : 'Leave the game'} onPress={() => (isSolo ? setPaused(true) : leave())} />,
+  ].filter(Boolean);
+  const rowBtns = land ? [...socialBtns, ...sysBtns] : sysBtns;
+  const rowW = (n) => n * hb + Math.max(0, n - 1) * 6;
+  const lEnd = 10 + (land ? MINI_W : rowW(sysBtns.length)) + 8;
+  const rStart = W - 10 - (land ? rowW(rowBtns.length) : isRoom ? 84 : 40 + heartsMax * 14) - 8;
+  const capW = Math.max(104, Math.min(land ? 150 : 132, rStart - lEnd));
+  const capX = clamp(W / 2 - capW / 2, lEnd, Math.max(lEnd, rStart - capW));
+  const armB = Math.round(12 + 200 * sz + 12);
+  const tlEl = hudRefs.current.tl;
+  const tlBottom = tlEl && tlEl.offsetHeight ? tlEl.offsetTop + tlEl.offsetHeight : 0;
+  const oppChip = (isDuel || isWatch) && hud.on ? (
+    <GHudPanel style={{ height: 24, padding: '0 9px', display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 800, whiteSpace: 'nowrap' }}>
+      <span style={{ width: 8, height: 8, borderRadius: 4, background: PLAYER_PAL[hud.on.k || theirs][0], flexShrink: 0 }} />
+      <span>{isWatch ? (hud.on.k === 'sun' ? hostFirst : peerFirst) : peerFirst}</span>
+      <span style={{ color: PLAYER_PAL[hud.on.k || theirs][2], fontVariantNumeric: 'tabular-nums' }}>{hud.on.out ? 'out' : fmtN(hud.on.n)}</span>
+      <span style={{ display: 'flex', gap: 1 }}>{Array.from({ length: LIVES }, (_, i) => <GIcon key={i} k="heart" size={9} color={i < hud.on.lives ? '#FF5A6E' : 'rgba(255,255,255,0.28)'} ink={softInk} />)}</span>
+    </GHudPanel>
   ) : null;
+  const statusChip = isRoom
+    ? <GHudPanel style={{ height: 26, padding: '0 9px', display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap' }}><GIcon k="people" size={14} color="#CFE6FF" ink={softInk} />{`${roomCount} of ${ROOM_MAX}`}</GHudPanel>
+    : <GHudPanel style={{ height: 26, padding: '0 9px', display: 'flex', alignItems: 'center', gap: 2, whiteSpace: 'nowrap' }}>{Array.from({ length: heartsMax }, (_, i) => <GIcon key={i} k="heart" size={12} color={i < hud.lives ? '#FF5A6E' : 'rgba(255,255,255,0.28)'} ink={softInk} />)}<span style={{ marginLeft: 6, fontSize: 12, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>{fmtT(hud.time)}</span></GHudPanel>;
 
   const chatSheet = sheet && sheet.k === 'chat' && (
     <Sheet title={isRoom ? 'Talk to the room' : `Talk to ${peerFirst}`} onClose={() => setSheet(null)}>
@@ -868,74 +951,88 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
     <Portal>
       <div ref={rootRef} style={{ position: 'fixed', left: 0, right: 0, top: 'var(--zvp-top, 0px)', height: 'var(--zvp-h, 100%)', zIndex: 90, background: '#0A2A4A', overflow: 'hidden', touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', fontFamily: FONT, color: '#FFFFFF' }}>
         <div ref={wrapRef} {...J.handlers} data-side={side ? '1' : '0'}
-          style={side ? { position: 'absolute', left: 0, top: 0, width: box.h, height: box.w, transformOrigin: '0 0', transform: `translateX(${box.w}px) rotate(90deg)`, overflow: 'hidden', touchAction: 'none' } : { position: 'absolute', inset: 0, overflow: 'hidden', touchAction: 'none' }}>
+          style={GS.wrapStyle}>
           <canvas ref={cvRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block' }} />
 
           {phase === 'play' && (
             <>
-              <div style={{ position: 'absolute', left: left(12), top: top(10), display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-start', zIndex: 3 }}>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <GBtn icon={isSolo ? 'pause' : 'close'} color="white" size={44} label={isSolo ? 'Pause' : 'Leave the game'} onPress={() => (isSolo ? setPaused(true) : leave())} />
-                  {!isWatch && <GBtn icon="gear" color="dark" size={44} label="Controls" onPress={() => { setQuick(false); if (isSolo) setPaused(true); setCtl(true); }} />}
-                </div>
-                {isRoom && feed.length > 0 && (
-                  <div aria-live="polite" style={{ display: 'flex', flexDirection: 'column', gap: 4, pointerEvents: 'none' }}>
-                    {feed.map((f) => (
-                      <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 12, background: 'rgba(10,16,34,0.72)', boxShadow: `0 0 0 1.5px ${INK}`, fontSize: 12.5, fontWeight: 800, animation: 'zgk-in 0.25s ease-out', maxWidth: 200 }}>
-                        <span style={{ width: 8, height: 8, borderRadius: 4, background: f.kind === 'in' ? '#5BE37D' : '#9AA3B5', flexShrink: 0 }} />
-                        <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.text}</span>
+              <div ref={hudRef('tl')} style={{ position: 'absolute', left: left(10), top: top(8), display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start', zIndex: 3, pointerEvents: 'none' }}>
+                {!land && <div style={{ display: 'flex', gap: 6, pointerEvents: 'auto' }}>{sysBtns}</div>}
+                <canvas ref={miniRef} aria-hidden="true" style={{ width: MINI_W, height: MINI_H, display: 'block', borderRadius: 7, boxShadow: '0 2px 10px rgba(0,0,0,0.3)' }} />
+                {hud.goal && Lv && (
+                  <GHudPanel style={{ width: MINI_W, boxSizing: 'border-box', padding: '6px 9px 7px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <span style={{ fontSize: 11.5, fontWeight: 800, lineHeight: 1.25 }}>{hud.goal.label}</span>
+                    <span style={{ height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.18)', overflow: 'hidden' }}><span style={{ display: 'block', width: `${hud.goal.frac * 100}%`, height: '100%', background: '#5BE37D', transition: 'width 0.3s' }} /></span>
+                    {Lv.L.limit ? <span style={{ fontSize: 11, fontWeight: 800, color: Lv.L.limit - hud.time < 15 ? '#FF8F8F' : 'rgba(255,255,255,0.75)', fontVariantNumeric: 'tabular-nums' }}>{`${fmtT(Math.max(0, Lv.L.limit - hud.time))} left`}</span> : null}
+                  </GHudPanel>
+                )}
+                {hud.miss && (
+                  <GHudPanel style={{ width: MINI_W, boxSizing: 'border-box', padding: '6px 9px 8px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: 10.5, fontWeight: 900, color: 'rgba(255,255,255,0.62)' }}>
+                      <span>Missions</span>
+                      {hud.missDone > 0 && <span style={{ color: '#7BE05A', fontVariantNumeric: 'tabular-nums' }}>{`${hud.missDone} done`}</span>}
+                    </div>
+                    {hud.miss.map((m) => (
+                      <div key={m.id} style={{ display: 'flex', flexDirection: 'column', gap: 3, animation: 'zgk-in 0.3s ease-out' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span aria-hidden="true" style={{ width: 12, height: 12, borderRadius: 6, flexShrink: 0, background: m.done ? '#5BE37D' : 'transparent', boxShadow: m.done ? 'none' : 'inset 0 0 0 1.5px rgba(255,255,255,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{m.done && <GIcon k="check" size={9} color="#FFFFFF" ink="rgba(0,0,0,0.2)" stroke={3} />}</span>
+                          <span style={{ flex: 1, minWidth: 0, fontSize: 11.5, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: m.done ? '#B9F5C6' : '#FFFFFF' }}>{m.text}</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingLeft: 18 }}>
+                          <span style={{ flex: 1, height: 3, borderRadius: 2, background: 'rgba(255,255,255,0.16)', overflow: 'hidden' }}><span style={{ display: 'block', width: `${m.frac * 100}%`, height: '100%', background: m.done ? '#5BE37D' : '#FFD23F', transition: 'width 0.3s' }} /></span>
+                          <span style={{ fontSize: 10, fontWeight: 800, color: 'rgba(255,255,255,0.7)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{m.label}</span>
+                        </div>
                       </div>
+                    ))}
+                  </GHudPanel>
+                )}
+                {isRoom && feed.length > 0 && (
+                  <div aria-live="polite" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {feed.map((f) => (
+                      <GHudPanel key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 9px', fontSize: 11.5, fontWeight: 800, animation: 'zgk-in 0.25s ease-out', maxWidth: MINI_W, boxSizing: 'border-box' }}>
+                        <span style={{ width: 7, height: 7, borderRadius: 4, background: f.kind === 'in' ? '#5BE37D' : '#9AA3B5', flexShrink: 0 }} />
+                        <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.text}</span>
+                      </GHudPanel>
                     ))}
                   </div>
                 )}
-                {!isWatch && !isRoom && watchers.length > 0 && <div style={{ pointerEvents: 'none' }}><GChip style={{ height: 28, fontSize: 12.5, gap: 6 }}><GIcon k="eye" size={15} color="#CFE6FF" />{watchers.length === 1 ? `${watchers[0].n} is watching` : `${watchers.length} watching`}</GChip></div>}
+                {!isWatch && !isRoom && watchers.length > 0 && <GHudPanel style={{ height: 24, padding: '0 9px', display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 800, whiteSpace: 'nowrap' }}><GIcon k="eye" size={13} color="#CFE6FF" ink={softInk} />{watchers.length === 1 ? `${watchers[0].n} is watching` : `${watchers.length} watching`}</GHudPanel>}
               </div>
-              <div style={{ position: 'absolute', left: '50%', top: top(10), transform: 'translateX(-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, pointerEvents: 'none' }}>
-                <GPanel style={{ padding: '5px 12px 8px', display: 'flex', flexDirection: 'column', alignItems: 'center', width: land ? 150 : 'min(140px, calc(100vw - 252px))', boxSizing: 'border-box' }}>
-                  <span style={{ fontSize: 24, fontWeight: 900, color: myCol, fontVariantNumeric: 'tabular-nums', textShadow: `0 2px 0 ${INK}`, lineHeight: 1.15 }}>{fmtN(hud.n)}</span>
-                  <span style={{ fontSize: 11.5, fontWeight: 800, color: 'rgba(255,255,255,0.78)' }}>{stage.name}</span>
-                  <div style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 5, marginTop: 4 }}>
-                    <div style={{ flex: 1, height: 7, borderRadius: 4, background: 'rgba(255,255,255,0.15)', overflow: 'hidden', boxShadow: `0 0 0 1.5px ${INK}` }}><div style={{ width: `${prog * 100}%`, height: '100%', background: `linear-gradient(90deg, ${myCol}, #FFE15A)`, transition: 'width 0.3s' }} /></div>
-                    {nextSt && <span style={{ fontSize: 10, fontWeight: 900, color: 'rgba(255,255,255,0.7)', fontVariantNumeric: 'tabular-nums' }}>{fmtN(nextSt.n)}</span>}
+              <div ref={hudRef('tc')} style={{ position: 'absolute', left: capX, top: top(8), width: capW, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, pointerEvents: 'none', zIndex: 2 }}>
+                <GHudPanel style={{ width: '100%', boxSizing: 'border-box', padding: '4px 10px 6px', display: 'flex', flexDirection: 'column', gap: 3 }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 6 }}>
+                    <span style={{ fontSize: 19, fontWeight: 900, color: myCol, fontVariantNumeric: 'tabular-nums', lineHeight: 1.15, textShadow: '0 1px 3px rgba(0,0,0,0.55)' }}>{fmtN(hud.n)}</span>
+                    <span style={{ minWidth: 0, fontSize: 10.5, fontWeight: 800, color: 'rgba(255,255,255,0.75)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{stage.name}</span>
                   </div>
-                </GPanel>
-                {hud.goal && Lv && (
-                  <GChip style={{ height: 'auto', minHeight: 30, padding: '4px 12px', fontSize: 12.5, flexDirection: 'column', alignItems: 'stretch', gap: 3, whiteSpace: 'nowrap' }}>
-                    <span>{hud.goal.label}</span>
-                    <span style={{ height: 5, borderRadius: 3, background: 'rgba(255,255,255,0.18)', overflow: 'hidden' }}><span style={{ display: 'block', width: `${hud.goal.frac * 100}%`, height: '100%', background: '#5BE37D' }} /></span>
-                  </GChip>
-                )}
-                {Lv && Lv.L.limit && <GChip style={{ height: 26, fontSize: 12, color: Lv.L.limit - hud.time < 15 ? '#FF8F8F' : '#FFFFFF' }}>{`${fmtT(Math.max(0, Lv.L.limit - hud.time))} left`}</GChip>}
-                {(isDuel || isWatch) && hud.on && (
-                  <GChip style={{ height: 28, fontSize: 13 }}>
-                    <span style={{ width: 9, height: 9, borderRadius: 5, background: PLAYER_PAL[hud.on.k || theirs][0], boxShadow: `0 0 0 1.5px ${INK}` }} />
-                    <span>{isWatch ? (hud.on.k === 'sun' ? hostFirst : peerFirst) : peerFirst}</span>
-                    <span style={{ color: PLAYER_PAL[hud.on.k || theirs][2] }}>{hud.on.out ? 'out' : fmtN(hud.on.n)}</span>
-                    <span style={{ display: 'flex', gap: 1 }}>{[0, 1, 2].map((i) => <GIcon key={i} k="heart" size={11} color={i < hud.on.lives ? '#FF5A6E' : '#5A5470'} />)}</span>
-                  </GChip>
-                )}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <span style={{ flex: 1, height: 5, borderRadius: 3, background: 'rgba(255,255,255,0.16)', overflow: 'hidden' }}><span style={{ display: 'block', width: `${prog * 100}%`, height: '100%', background: myCol, transition: 'width 0.3s' }} /></span>
+                    {nextSt && <span style={{ fontSize: 9.5, fontWeight: 900, color: 'rgba(255,255,255,0.65)', fontVariantNumeric: 'tabular-nums' }}>{fmtN(nextSt.n)}</span>}
+                  </div>
+                </GHudPanel>
+                {land && oppChip}
               </div>
-              <div style={{ position: 'absolute', right: right(12), top: top(10), display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, pointerEvents: 'none' }}>
-                {isRoom ? <GChip style={{ height: 28, fontSize: 13, gap: 6 }}><GIcon k="people" size={15} color="#CFE6FF" />{`${roomCount} of ${ROOM_MAX}`}</GChip>
-                  : <GChip style={{ height: 28, fontSize: 13, gap: 3 }}>{[0, 1, 2].map((i) => <GIcon key={i} k="heart" size={13} color={i < hud.lives ? '#FF5A6E' : '#5A5470'} />)}<span style={{ marginLeft: 5, fontVariantNumeric: 'tabular-nums' }}>{fmtT(hud.time)}</span></GChip>}
-                <canvas ref={miniRef} aria-hidden="true" style={{ width: 96, height: 52, display: 'block' }} />
+              <div ref={hudRef('tr')} style={{ position: 'absolute', right: right(10), top: top(8), display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, zIndex: 3, pointerEvents: 'none' }}>
+                {land && <div style={{ display: 'flex', gap: 6, pointerEvents: 'auto' }}>{rowBtns}</div>}
+                {statusChip}
+                {!land && oppChip}
                 {isDuel && <PingChip ms={net.ping} weak={net.weak} />}
-                {fxList.map(([k, label, col]) => <GChip key={k} style={{ height: 26, fontSize: 12, color: col }}>{`${label} ${Math.ceil(hud.fx[k])}`}</GChip>)}
+                {fxList.map(([k, label, col]) => <GHudPanel key={k} style={{ height: 22, padding: '0 8px', display: 'flex', alignItems: 'center', fontSize: 11, fontWeight: 900, color: col, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{`${label} ${Math.ceil(hud.fx[k])}`}</GHudPanel>)}
               </div>
+              {!land && socialBtns.length > 0 && <div ref={hudRef('sc')} style={{ position: 'absolute', right: right(16), bottom: bottom(armB), display: 'flex', flexDirection: 'column', gap: 8, zIndex: 3 }}>{socialBtns}</div>}
               {toast && (
-                <div key={`t${toast.at}`} style={{ position: 'absolute', left: '50%', top: land ? top(100) : top(140), transform: 'translateX(-50%)', maxWidth: 'min(88%, 380px)', pointerEvents: 'none', animation: 'zduo-toast 0.25s ease-out' }}>
-                  <GPanel style={{ padding: '9px 14px', fontSize: 13.5, fontWeight: 800, lineHeight: 1.4, textAlign: 'center' }}>{toast.text}</GPanel>
+                <div key={`t${toast.at}`} style={{ position: 'absolute', left: '50%', ...(land ? { bottom: bottom(16) } : { top: tlBottom ? tlBottom + 10 : top(224) }), transform: 'translateX(-50%)', maxWidth: land ? 'min(44%, 360px)' : 'min(80%, 340px)', width: 'max-content', pointerEvents: 'none', animation: 'zduo-toast 0.25s ease-out', zIndex: 4 }}>
+                  <GHudPanel style={{ padding: '7px 12px', fontSize: 12.5, fontWeight: 800, lineHeight: 1.35, textAlign: 'center' }}>{toast.text}</GHudPanel>
                 </div>
               )}
               {banner && (
-                <div key={`b${banner.at}`} style={{ position: 'absolute', left: 0, right: 0, top: land ? '34%' : '30%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, pointerEvents: 'none', animation: 'zgk-pop 0.4s ease-out' }}>
-                  <GTitle text={banner.title} size={26} color="#FFE15A" style={{ textAlign: 'center', padding: '0 20px' }} />
-                  <GChip style={{ fontSize: 14 }}>{banner.sub}</GChip>
+                <div key={`b${banner.at}`} style={{ position: 'absolute', left: 0, right: 0, top: land ? '23%' : '32%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, pointerEvents: 'none', animation: 'zgk-pop 0.4s ease-out' }}>
+                  <GTitle text={banner.title} size={land ? 24 : 26} color="#FFE15A" style={{ textAlign: 'center', padding: '0 20px' }} />
+                  <GChip style={{ fontSize: 13.5 }}>{banner.sub}</GChip>
                 </div>
               )}
               {deathMsg && (
-                <div key={`d${deathMsg.at}`} style={{ position: 'absolute', left: 0, right: 0, top: land ? '36%' : '38%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, pointerEvents: 'none', animation: 'zgk-pop 0.35s ease-out' }}>
-                  <GTitle text={deathMsg.text} size={24} color="#FF8F8F" style={{ textAlign: 'center', padding: '0 20px' }} />
+                <div key={`d${deathMsg.at}`} style={{ position: 'absolute', left: 0, right: 0, top: land ? '34%' : '38%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, pointerEvents: 'none', animation: 'zgk-pop 0.35s ease-out' }}>
+                  <GTitle text={deathMsg.text} size={land ? 22 : 24} color="#FF8F8F" style={{ textAlign: 'center', padding: '0 20px' }} />
                   <GChip>{isRoom ? 'You come back a bit smaller.' : hud.lives > 0 ? `${hud.lives} ${hud.lives === 1 ? 'life' : 'lives'} left. You come back smaller.` : 'No lives left'}</GChip>
                 </div>
               )}
@@ -950,36 +1047,32 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
                 </div>
               )}
               {isWatch && (
-                <div style={{ position: 'absolute', left: 0, right: 0, bottom: bottom(22), display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, padding: '0 14px', flexWrap: 'wrap' }}>
-                  <GChip style={{ height: 34 }}><GIcon k="eye" size={15} color="#CFE6FF" />Follow</GChip>
-                  <GPill small text={hostFirst} color={followK === 'sun' ? 'orange' : 'white'} height={42} onPress={() => { setFollowK('sun'); cam.current.init = false; }} />
-                  <GPill small text={peerFirst} color={followK === 'moon' ? 'blue' : 'white'} height={42} onPress={() => { setFollowK('moon'); cam.current.init = false; }} />
+                <div style={{ position: 'absolute', left: 0, right: 0, bottom: bottom(18), display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, padding: '0 14px', flexWrap: 'wrap' }}>
+                  <GHudPanel style={{ height: 32, padding: '0 11px', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 800 }}><GIcon k="eye" size={14} color="#CFE6FF" ink={softInk} />Follow</GHudPanel>
+                  <GPill small text={hostFirst} color={followK === 'sun' ? 'orange' : 'white'} height={40} onPress={() => { setFollowK('sun'); cam.current.init = false; }} />
+                  <GPill small text={peerFirst} color={followK === 'moon' ? 'blue' : 'white'} height={40} onPress={() => { setFollowK('moon'); cam.current.init = false; }} />
                 </div>
               )}
-              {!isWatch && <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', opacity: see }}><GJoy view={J.view} knobRef={J.knob} color={JOY_COL[myColKey] || 'orange'} idle={{ x: land ? 104 : 86, y: Ht - (land ? 100 : 120) }} R={J.R} /></div>}
+              {!isWatch && <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', opacity: see }}><GJoy flat view={J.view} knobRef={J.knob} color={JOY_COL[myColKey] || 'orange'} idle={{ x: land ? 116 : 96, y: Ht - (land ? 98 : 132) }} R={J.R} /></div>}
               {!isWatch && (
-                <div style={{ position: 'absolute', right: right(14), bottom: bottom(land ? 12 : 20), width: 206, height: 214, pointerEvents: 'none', transform: `scale(${sz})`, transformOrigin: '100% 100%', opacity: see }}>
+                <div ref={hudRef('sk')} style={{ position: 'absolute', right: right(14), bottom: bottom(12), width: 230, height: 200, pointerEvents: 'none', transform: `scale(${sz})`, transformOrigin: '100% 100%', opacity: see, zIndex: 2 }}>
                   {skillsOn.map((k) => {
-                    const pos = SKILL_POS[k];
-                    const big = k === 'dash';
+                    const main = k === 'dash';
+                    const s = main ? 72 : 52;
+                    const [x, y] = skillAt(k);
                     return (
-                      <div key={k} style={{ position: 'absolute', left: pos[0], top: pos[1], pointerEvents: 'auto', animation: 'zgk-pop 0.35s ease-out' }}>
-                        <GBtn icon={SKILL_ICON[k]} color={SKILL_COL[k]} size={big ? 78 : 60} label={SKILLS[k].name} cool={hud.cd[k] || 0} coolMax={SKILLS[k].cd} sound={k === 'dash' ? 'click' : 'pop'} onPress={() => { skillReq.current = k; }} />
+                      <div key={k} style={{ position: 'absolute', left: x, top: y, pointerEvents: 'auto', animation: 'zgk-pop 0.35s ease-out' }}>
+                        <GHudSkill icon={SKILL_ICON[k]} tone={GC[SKILL_COL[k]][0]} main={main} size={s} label={SKILLS[k].name} cool={hud.cd[k] || 0} coolMax={SKILLS[k].cd} sound={main ? 'click' : 'pop'} onPress={() => { skillReq.current = k; }} />
                       </div>
                     );
                   })}
                 </div>
               )}
-              {showSide && (land ? (
-                <div style={{ position: 'absolute', left: '50%', bottom: bottom(12), transform: `translateX(-50%) scale(${Math.min(1, sz)})`, transformOrigin: '50% 100%', display: 'flex', gap: 8, opacity: see }}>{sideBtns}</div>
-              ) : (
-                <div style={{ position: 'absolute', right: right(14), bottom: `calc(${20 + skillH + 16}px + ${sab})`, display: 'flex', flexDirection: 'column', gap: 8, transform: `scale(${Math.min(1, sz)})`, transformOrigin: '100% 100%', opacity: see }}>{sideBtns}</div>
-              ))}
               {quick && !isSolo && (
-                <div onPointerDown={(e) => e.stopPropagation()} style={land ? { position: 'absolute', left: '50%', bottom: bottom(72), transform: 'translateX(-50%)', width: 'min(300px, calc(100% - 40px))', animation: 'zgk-pop 0.2s ease-out', zIndex: 5 } : { position: 'absolute', right: right(66), bottom: `calc(${20 + skillH + 16}px + ${sab})`, width: 'min(280px, calc(100% - 90px))', animation: 'zgk-pop 0.2s ease-out', zIndex: 5 }}>
+                <div onPointerDown={(e) => e.stopPropagation()} style={land ? { position: 'absolute', right: right(10), top: top(8 + hb + 8), width: 'min(300px, calc(100% - 40px))', animation: 'zgk-pop 0.2s ease-out', zIndex: 6 } : { position: 'absolute', right: right(16 + hb + 10), bottom: bottom(armB), width: 'min(280px, calc(100% - 90px))', animation: 'zgk-pop 0.2s ease-out', zIndex: 6 }}>
                   <GPanel style={{ padding: 10 }}>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 6 }}>
-                      {EMOTES.map((e) => <button key={e} type="button" className="zgk-btn" aria-label={`Send ${e}`} {...pressProps(() => sendEmote(e))} style={{ height: 44, borderRadius: 14, border: 'none', background: 'rgba(255,255,255,0.1)', fontSize: 25, cursor: 'pointer' }}>{e}</button>)}
+                      {EMOTES.map((e) => <button key={e} type="button" className="zgk-btn" aria-label={`Send ${e}`} {...pressProps(() => sendEmote(e))} style={{ height: 42, borderRadius: 14, border: 'none', background: 'rgba(255,255,255,0.1)', fontSize: 24, cursor: 'pointer' }}>{e}</button>)}
                     </div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
                       {QUICK.map((p) => <button key={p} type="button" className="zgk-btn" {...pressProps(() => { kitTap(); sendChat(p); })} style={{ height: 32, padding: '0 11px', borderRadius: 16, border: 'none', background: 'rgba(255,255,255,0.12)', color: '#FFFFFF', fontFamily: FONT, fontSize: 12.5, fontWeight: 800, cursor: 'pointer' }}>{p}</button>)}
@@ -1064,7 +1157,7 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
           )}
 
           {pauseOn && (
-            <div style={{ position: 'absolute', inset: 0, background: 'rgba(2,10,22,0.55)', display: 'flex', padding: 12, overflowY: 'auto', touchAction: 'pan-y' }}>
+            <div style={{ position: 'absolute', inset: 0, zIndex: 20, background: 'rgba(2,10,22,0.55)', display: 'flex', padding: 12, overflowY: 'auto', touchAction: 'pan-y' }}>
               <GPanel style={{ margin: 'auto', width: '100%', maxWidth: 330, padding: land ? '12px 16px' : '18px 18px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: land ? 9 : 12, animation: 'zgk-pop 0.3s ease-out' }}>
                 <GTitle text="Paused" size={34} />
                 <GPill text="Resume" icon="play" color="green" wide onPress={() => setPaused(false)} />
@@ -1082,7 +1175,7 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
           )}
 
           {phase === 'over' && result && (
-            <div style={{ position: 'absolute', inset: 0, background: 'rgba(2,10,22,0.5)', display: 'flex', padding: 12, overflowY: 'auto', touchAction: 'pan-y' }}>
+            <div style={{ position: 'absolute', inset: 0, zIndex: 20, background: 'rgba(2,10,22,0.5)', display: 'flex', padding: 12, overflowY: 'auto', touchAction: 'pan-y' }}>
               <div style={{ margin: 'auto', width: '100%', display: 'flex', justifyContent: 'center' }}>
               {result.level != null ? (
                 <GPanel style={{ width: '100%', maxWidth: 360, padding: '20px 18px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, textAlign: 'center', animation: 'zgk-pop 0.35s ease-out' }}>
@@ -1151,7 +1244,10 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
                   ['#C08BFF', 'Suck', 'Pulls every fish you can eat near your mouth straight in.'],
                   ['#FFE15A', 'Grow forever', 'There is no end. Grow into bigger fish and unlock a shield, a shock wave and frenzy.'],
                   ['#7FD4FF', 'Levels', 'Each level has its own goal, like growing to a size or eating a number of fish. Finish fast for three stars.'],
-                  ['#FF7A8A', isRoom ? 'Team up' : 'Three lives', isRoom ? 'Friends can join or leave any time. Nobody eats anyone here, so swim together and grow.' : isSolo ? 'Each time you get eaten you come back smaller. Lose all three and the game ends.' : `Each time you get eaten you come back smaller. Whoever keeps their lives longer wins. You can eat ${peerFirst} if you are bigger.`],
+                  ['#FFD23F', 'Treasure and gold', 'Chests sit on the sea floor. Swim into one for food and a power up. A golden fish shows up now and then. Catch it for a huge boost.'],
+                  ['#9BE7FF', 'Currents', 'Streaks in the water push you along. Ride them to cross the sea fast.'],
+                  ...(isSolo ? [['#5BE37D', 'Missions', 'In endless play you always have three missions. Finish one to get an extra life or a power up, then a new one appears.']] : []),
+                  ['#FF7A8A', isRoom ? 'Team up' : 'Five lives', isRoom ? 'Friends can join or leave any time. Nobody eats anyone here, so swim together and grow.' : isSolo ? 'Each time you get eaten you come back smaller. Lose all five and the game ends.' : `Each time you get eaten you come back smaller. Whoever keeps their lives longer wins. You can eat ${peerFirst} if you are bigger.`],
                 ].map(([c, t1, t2]) => (
                   <div key={t1} style={{ display: 'flex', gap: 10 }}>
                     <span style={{ width: 12, height: 12, borderRadius: 6, background: c, marginTop: 4, flexShrink: 0, boxShadow: `0 0 0 2px ${INK}` }} />
@@ -1238,7 +1334,7 @@ export function GulpInviteSheet({ friends, onClose, onInvite, onSolo, already, s
   const toggle = (id) => { kitTap(); setSel((v) => (v.includes(id) ? v.filter((x) => x !== id) : v.length >= left ? v : [...v, id])); };
   return (
     <Portal>
-      <div onClick={onClose} style={{ position: 'fixed', ...(side && typeof window !== 'undefined' ? { left: 0, top: 0, width: window.innerHeight, height: window.innerWidth, transformOrigin: '0 0', transform: `translateX(${window.innerWidth}px) rotate(90deg)` } : { inset: 0 }), zIndex: 96, background: 'rgba(4,14,30,0.6)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT, color: '#FFFFFF' }}>
+      <div onClick={onClose} data-side={side ? '1' : '0'} style={{ position: 'fixed', ...(side && typeof window !== 'undefined' ? { left: 0, top: 0, width: window.innerHeight, height: window.innerWidth, transformOrigin: '0 0', transform: `translateX(${window.innerWidth}px) rotate(90deg)` } : { inset: 0 }), zIndex: 96, background: 'rgba(4,14,30,0.6)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT, color: '#FFFFFF' }}>
         <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 480, maxHeight: side ? '100%' : 'min(88vh, 660px)', display: 'flex', flexDirection: 'column', padding: side ? '10px 14px' : '14px 14px calc(14px + env(safe-area-inset-bottom))', boxSizing: 'border-box', animation: 'zgk-in 0.25s ease-out' }}>
           <GPanel color="rgba(10,40,74,0.96)" style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10, minHeight: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

@@ -30,6 +30,7 @@ export function injectKitCss() {
     '@keyframes zgk-spin{to{transform:rotate(360deg)}}',
     '.zgk-btn{-webkit-tap-highlight-color:transparent;touch-action:none;user-select:none;-webkit-user-select:none;outline:none}',
     '.zgk-btn:focus-visible{box-shadow:0 0 0 3px #fff,0 0 0 6px #2479E8!important}',
+    '[data-side="1"] [style*="overflow-y: auto"]{overflow-x:auto!important;touch-action:pan-x pan-y!important}',
   ].join('');
   document.head.appendChild(st);
 }
@@ -125,7 +126,7 @@ export function GBtn({ icon, label, onPress, color = 'blue', size = 64, cool = 0
   );
 }
 
-export function GHold({ icon, label, color = 'blue', size = 72, onDown, onUp, style }) {
+export function GHold({ icon, label, color = 'blue', size = 72, onDown, onUp, style, flat = false, main = false }) {
   injectKitCss();
   const [down, setDown] = useState(false);
   const pid = useRef(null);
@@ -133,6 +134,19 @@ export function GHold({ icon, label, color = 'blue', size = 72, onDown, onUp, st
   const edge = Math.max(4, Math.round(size * 0.075));
   const start = (e) => { e.stopPropagation(); if (e.cancelable) e.preventDefault(); if (pid.current != null) return; pid.current = e.pointerId; try { e.currentTarget.setPointerCapture(e.pointerId); } catch {} setDown(true); if (onDown) onDown(); };
   const end = (e) => { if (e && pid.current !== e.pointerId) return; pid.current = null; setDown(false); if (onUp) onUp(); };
+  if (flat) {
+    return (
+      <button type="button" className="zgk-btn" aria-label={label}
+        onPointerDown={start} onPointerUp={end} onPointerCancel={end} onLostPointerCapture={end} onContextMenu={(e) => e.preventDefault()}
+        onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && !down) { e.preventDefault(); setDown(true); if (onDown) onDown(); } }}
+        onKeyUp={(e) => { if (e.key === 'Enter' || e.key === ' ') { setDown(false); if (onUp) onUp(); } }}
+        style={{ position: 'relative', width: size, height: size, padding: 0, border: 'none', borderRadius: '50%', background: 'transparent', cursor: 'pointer', flexShrink: 0, touchAction: 'none', transform: down ? 'scale(0.93)' : 'none', transition: 'transform 0.05s ease-out', ...style }}>
+        <span aria-hidden="true" style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: main ? `radial-gradient(circle at 50% 38%, ${c[0]}dd 0%, ${c[1]}bb 62%, ${c[1]}88 100%)` : down ? 'rgba(255,255,255,0.3)' : 'rgba(8,14,30,0.42)', boxShadow: `inset 0 0 0 ${main ? 3 : 2.5}px ${main ? c[0] : 'rgba(255,255,255,0.72)'}, 0 2px 10px rgba(0,0,0,0.28)`, display: 'flex', alignItems: 'center', justifyContent: 'center', filter: down && main ? 'brightness(1.12)' : 'none' }}>
+          <GIcon k={icon} size={Math.round(size * 0.44)} color="#FFFFFF" ink="rgba(0,0,0,0.35)" stroke={2.2} />
+        </span>
+      </button>
+    );
+  }
   return (
     <button type="button" className="zgk-btn" aria-label={label}
       onPointerDown={start} onPointerUp={end} onPointerCancel={end} onLostPointerCapture={end} onContextMenu={(e) => e.preventDefault()}
@@ -230,8 +244,18 @@ export function useJoystick(wrapRef, opts) {
   return { joy, view, knob, handlers: { onPointerDown: onDown, onPointerMove: onMove, onPointerUp: onUp, onPointerCancel: onUp }, reset, R };
 }
 
-export function GJoy({ view, knobRef, color = 'blue', idle, R = 52, alpha = 1 }) {
+export function GJoy({ view, knobRef, color = 'blue', idle, R = 52, alpha = 1, flat = false }) {
   const c = GC[color] || GC.blue;
+  const flatBase = (x, y, op) => (
+    <div style={{ position: 'absolute', left: x - R - 10, top: y - R - 10, width: (R + 10) * 2, height: (R + 10) * 2, borderRadius: '50%', background: 'rgba(8,14,30,0.32)', boxShadow: 'inset 0 0 0 2px rgba(255,255,255,0.42), 0 2px 10px rgba(0,0,0,0.25)', pointerEvents: 'none', opacity: op * alpha }}>
+      <div ref={op === 1 ? knobRef : null} style={{ position: 'absolute', left: R + 10 - Math.round(R * 0.48), top: R + 10 - Math.round(R * 0.48), width: Math.round(R * 0.96), height: Math.round(R * 0.96), borderRadius: '50%', background: 'rgba(255,255,255,0.78)', boxShadow: `inset 0 0 0 ${Math.max(5, Math.round(R * 0.14))}px ${c[0]}, 0 3px 8px rgba(0,0,0,0.3)` }} />
+    </div>
+  );
+  if (flat) {
+    if (view) return flatBase(view.x, view.y, 1);
+    if (idle) return flatBase(idle.x, idle.y, 0.6);
+    return null;
+  }
   const base = (x, y, op) => (
     <div style={{ position: 'absolute', left: x - R - 14, top: y - R - 14, width: (R + 14) * 2, height: (R + 14) * 2, borderRadius: '50%', background: 'radial-gradient(circle at 50% 40%, rgba(255,255,255,0.18), rgba(255,255,255,0.06) 70%)', boxShadow: `0 0 0 3px ${INK}, inset 0 0 0 4px rgba(255,255,255,0.22), 0 6px 14px rgba(0,0,0,0.3)`, pointerEvents: 'none', opacity: op * alpha }}>
       <div ref={op === 1 ? knobRef : null} style={{ position: 'absolute', left: R + 14 - Math.round(R * 0.575), top: R + 14 - Math.round(R * 0.575), width: Math.round(R * 1.15), height: Math.round(R * 1.15), borderRadius: '50%', background: `radial-gradient(circle at 38% 30%, ${c[0]} 0%, ${c[1]} 62%, ${c[2]} 100%)`, boxShadow: `0 0 0 3px ${INK}, 0 6px 0 rgba(0,0,0,0.3)` }}>
@@ -355,4 +379,77 @@ export function useFrameBudget() {
 export function maxDpr(low) {
   const d = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
   return Math.min(low ? 1.25 : 2, d);
+}
+
+export const TOUCHY = typeof window !== 'undefined' && ((typeof navigator !== 'undefined' && (navigator.maxTouchPoints || 0) > 0) || 'ontouchstart' in window);
+export function useStageBox(ref) {
+  const [box, setBox] = useState(() => ({ w: typeof window !== 'undefined' ? window.innerWidth : 390, h: typeof window !== 'undefined' ? window.innerHeight : 844 }));
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return undefined;
+    const upd = () => { const w = el.clientWidth, h = el.clientHeight; if (w && h) setBox((b) => (b.w === w && b.h === h ? b : { w, h })); };
+    upd();
+    let ro = null;
+    try { ro = new ResizeObserver(upd); ro.observe(el); } catch { window.addEventListener('resize', upd); }
+    return () => { if (ro) ro.disconnect(); else window.removeEventListener('resize', upd); };
+  }, []);
+  return box;
+}
+const envIn = (n) => `env(safe-area-inset-${n}, 0px)`;
+export function useGameStage(look) {
+  const rootRef = useRef(null);
+  const box = useStageBox(rootRef);
+  const side = !!(look && look.side) && TOUCHY && box.h > box.w * 1.08;
+  const W = side ? box.h : box.w, H = side ? box.w : box.h;
+  const ins = side ? { t: envIn('right'), r: envIn('bottom'), b: envIn('left'), l: envIn('top') } : { t: envIn('top'), r: envIn('right'), b: envIn('bottom'), l: envIn('left') };
+  const at = { top: (px) => `calc(${px}px + ${ins.t})`, right: (px) => `calc(${px}px + ${ins.r})`, bottom: (px) => `calc(${px}px + ${ins.b})`, left: (px) => `calc(${px}px + ${ins.l})` };
+  const wrapStyle = side
+    ? { position: 'absolute', left: 0, top: 0, width: box.h, height: box.w, transformOrigin: '0 0', transform: `translateX(${box.w}px) rotate(90deg)`, overflow: 'hidden', touchAction: 'none' }
+    : { position: 'absolute', inset: 0, overflow: 'hidden', touchAction: 'none' };
+  return { rootRef, box, side, W, H, land: W > H, at, wrapStyle };
+}
+export function stagePoint(el, e, side) {
+  const r = el.getBoundingClientRect();
+  return side ? { x: e.clientY - r.top, y: r.right - e.clientX } : { x: e.clientX - r.left, y: e.clientY - r.top };
+}
+
+export function GHudBtn({ icon, label, onPress, on = false, tone = '#3FB950', size = 40, badge, children }) {
+  injectKitCss();
+  const ic = Math.round(size * 0.5);
+  return (
+    <button type="button" className="zgk-btn" aria-label={label} aria-pressed={on || undefined} {...pressProps(() => { kitTap('click'); if (onPress) onPress(); })}
+      style={{ position: 'relative', width: size, height: size, borderRadius: '50%', border: 'none', padding: 0, flexShrink: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? tone : 'rgba(8,14,30,0.62)', boxShadow: on ? '0 0 0 1.5px rgba(255,255,255,0.85), 0 2px 8px rgba(0,0,0,0.3)' : 'inset 0 0 0 1.5px rgba(255,255,255,0.38), 0 2px 8px rgba(0,0,0,0.28)' }}>
+      {children || <GIcon k={icon} size={ic} color="#FFFFFF" ink="rgba(0,0,0,0.3)" stroke={2.2} />}
+      {badge != null && <span aria-hidden="true" style={{ position: 'absolute', right: -3, top: -3, minWidth: 18, height: 18, padding: '0 4px', borderRadius: 9, background: '#E53A2A', color: '#FFFFFF', fontFamily: FONT, fontWeight: 900, fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 0 2px rgba(8,14,30,0.9)', boxSizing: 'border-box' }}>{badge}</span>}
+    </button>
+  );
+}
+
+export function GHudPanel({ children, style }) {
+  return <div style={{ borderRadius: 12, background: 'rgba(8,14,30,0.66)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.22)', color: '#FFFFFF', fontFamily: FONT, ...style }}>{children}</div>;
+}
+
+export function GHudSkill({ icon, label, onPress, tone = '#FFD23F', size = 54, cool = 0, coolMax = 0, main = false, sound = 'pop' }) {
+  injectKitCss();
+  const [down, setDown] = useState(false);
+  const busy = cool > 0;
+  const frac = coolMax > 0 ? Math.max(0, Math.min(1, cool / coolMax)) : 0;
+  const ring = main ? 3 : 2.5;
+  const fire = () => { if (busy) return; kitTap(sound); if (onPress) onPress(); };
+  return (
+    <button type="button" className="zgk-btn" aria-label={label}
+      onPointerDown={(e) => { e.stopPropagation(); if (e.cancelable) e.preventDefault(); setDown(true); fire(); }}
+      onPointerUp={(e) => { e.stopPropagation(); setDown(false); }}
+      onPointerCancel={() => setDown(false)}
+      onPointerLeave={() => setDown(false)}
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fire(); } }}
+      style={{ position: 'relative', width: size, height: size, padding: 0, border: 'none', borderRadius: '50%', background: 'transparent', cursor: busy ? 'default' : 'pointer', flexShrink: 0, transform: down ? 'scale(0.93)' : 'none', transition: 'transform 0.06s ease-out' }}>
+      <span aria-hidden="true" style={{ position: 'absolute', inset: 0, borderRadius: '50%', overflow: 'hidden', background: busy ? 'rgba(8,14,30,0.62)' : main ? `radial-gradient(circle at 50% 38%, ${tone}cc 0%, ${tone}99 58%, ${tone}66 100%)` : 'rgba(8,14,30,0.55)', boxShadow: `inset 0 0 0 ${ring}px ${busy ? 'rgba(255,255,255,0.3)' : tone}, 0 2px 10px rgba(0,0,0,0.3)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {frac > 0 && <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: `conic-gradient(rgba(6,10,24,0.6) ${frac * 360}deg, rgba(6,10,24,0) 0deg)` }} />}
+        <span style={{ position: 'relative', opacity: busy ? 0.55 : 1 }}><GIcon k={icon} size={Math.round(size * (main ? 0.46 : 0.44))} color={main || busy ? '#FFFFFF' : tone} ink="rgba(0,0,0,0.35)" stroke={2.2} /></span>
+        {busy && coolMax > 1.5 && <span style={{ position: 'absolute', left: 0, right: 0, bottom: Math.round(size * 0.1), textAlign: 'center', fontFamily: FONT, fontWeight: 900, fontSize: Math.round(size * 0.26), color: '#FFFFFF', textShadow: '0 1px 2px rgba(0,0,0,0.8)' }}>{Math.ceil(cool)}</span>}
+      </span>
+    </button>
+  );
 }

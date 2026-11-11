@@ -4,8 +4,8 @@ import { useGameLink, useRoomRelay, useWatchChannel } from './relay.jsx';
 import { watchAllowed, setWatchAllowed, useLiveBeacon } from './live.js';
 import { EMOTES, SignalBars, PingChip, SpeakerIcon, SmileIcon, Check, Heart, MicIcon, ChatIcon, SwapIcon, HandIcon, btnBase, Btn, RoundBtn, Sheet, Stars, injectCss, useVoice, setKitTap } from './livekit.jsx';
 import { LIVES, GLYPHS, GLYPH_NAMES, STORY_N, ENDLESS, ATK_CD, levelDef, makeWorld, stepWorld, buddyInput, applyEvent, snapshot, mergeSnapshot, sameLevel, syncClock, setNet, nearDial, nearMirror, turnMirror, foeRows, setFoes, tryCode, hintFor, clamp, missionsFor, parTime, spikeAmt, crumbleState } from './duoengine.js';
-import { Snd, THEMES, buildStatic, render, updateParts, dust, puffs, embers, glints, part, ring, glyph, drawExplorer } from './duodraw.js';
-import { GBtn, GPill, GPanel, GChip, GTitle, GJoy, GIcon, injectKitCss, kitTap, pressProps, INK, useCtlLook, GControlsPanel } from './gamekit.jsx';
+import { Snd, THEMES, buildStatic, buildMini, drawDuoMini, render, updateParts, dust, puffs, embers, glints, part, ring, glyph, drawExplorer } from './duodraw.js';
+import { GC, GBtn, GPill, GPanel, GChip, GTitle, GJoy, GIcon, GHudBtn, GHudPanel, GHudSkill, injectKitCss, kitTap, pressProps, INK, useCtlLook, useGameStage, stagePoint, GControlsPanel } from './gamekit.jsx';
 import { Sfx } from './sfx.js';
 
 const PHRASES = ['Wait for me', 'Go ahead', 'Over here', 'Hold the plate', 'Come closer, I need light', 'On three', 'Nice one', 'Sorry', 'I will get the lever', 'Follow me'];
@@ -138,7 +138,16 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
   rsRef.current = rs;
   const [joyView, setJoyView] = useState(null);
   const look = useCtlLook();
-  const joyR = Math.round(50 * Math.max(0.7, look.size));
+  const GS = useGameStage(look);
+  const side = GS.side, land = GS.land;
+  const sideRef = useRef(side); sideRef.current = side;
+  const miniRef = useRef(null);
+  const miniBase = useRef({ W: null, cv: null });
+  const hudRefs = useRef({});
+  const keepRef = useRef({ at: 0, list: [] });
+  const hudRef = (k) => (el) => { hudRefs.current[k] = el; };
+  const lookNow = useRef(look); lookNow.current = look;
+  const joyR = Math.round((land ? 46 : 50) * Math.max(0.7, look.size));
   const joyRRef = useRef(joyR); joyRRef.current = joyR;
   const [ctl, setCtl] = useState(false);
   const knobRef = useRef(null);
@@ -333,7 +342,7 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
       const cw = wrap ? wrap.clientWidth : window.innerWidth, ch = wrap ? wrap.clientHeight : window.innerHeight;
       const dpr = Math.min(2, window.devicePixelRatio || 1);
       if (cv.width !== Math.round(cw * dpr) || cv.height !== Math.round(ch * dpr)) { cv.width = Math.round(cw * dpr); cv.height = Math.round(ch * dpr); }
-      const s = Math.round(clamp(cw / 7.4, 44, 66));
+      const s = Math.round(cw > ch ? clamp(ch / 9.5, 36, 66) : clamp(cw / 7.4, 44, 66));
       const st = statRef.current;
       if (!st.cv || st.s !== s || st.li !== W.li || st.a !== W.attempt || st.rs !== W.rs) statRef.current = { cv: buildStatic(W, s * dpr), s, li: W.li, a: W.attempt, rs: W.rs };
       const playing = phaseRef.current === 'play';
@@ -402,7 +411,27 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
       if (solo) { names.sun = act === 'sun' ? 'You' : 'Orange'; names.moon = act === 'moon' ? 'You' : 'Blue'; }
       if (watch) { names.sun = hostFirst; names.moon = peerFirst; }
       const ctx = cv.getContext('2d');
-      render(ctx, W, { cw, ch, dpr, s, ox, oy, me: myP, names, bubbles: bubbles.current, stat: statRef.current.cv, them: act === 'sun' ? 'moon' : 'sun', safeTop: 96, safeBottom: 40 });
+      const KR = keepRef.current;
+      if (ts - KR.at > 400) {
+        KR.at = ts; KR.list = [];
+        const R = hudRefs.current;
+        for (const k of ['tl', 'tc', 'tr', 'sc']) { const el = R[k]; if (el && el.isConnected && el.offsetWidth) KR.list.push([el.offsetLeft, el.offsetTop, el.offsetLeft + el.offsetWidth, el.offsetTop + el.offsetHeight]); }
+        const sk = R.sk;
+        if (sk && sk.isConnected && sk.offsetWidth) { const q = lookNow.current.size || 1; const x1 = sk.offsetLeft + sk.offsetWidth, y1 = sk.offsetTop + sk.offsetHeight; KR.list.push([x1 - sk.offsetWidth * q * 0.8, y1 - sk.offsetHeight * q * 0.8, x1, y1]); }
+        if (!watch && playing) { const jr = joyRRef.current + 12, jx = cw > ch ? 112 : 92, jy = ch - (cw > ch ? 96 : 120); KR.list.push([jx - jr, jy - jr, jx + jr, jy + jr]); }
+      }
+      render(ctx, W, { cw, ch, dpr, s, ox, oy, me: myP, names, bubbles: bubbles.current, stat: statRef.current.cv, them: act === 'sun' ? 'moon' : 'sun', safeTop: 30, safeBottom: 30, keep: KR.list });
+      const mc = miniRef.current;
+      if (mc && mc.isConnected) {
+        const MB = miniBase.current;
+        if (MB.W !== W) { MB.W = W; MB.cv = buildMini(W); }
+        const mw = mc.clientWidth, mh = mc.clientHeight;
+        if (mw && mh) {
+          if (mc.width !== mw * dpr || mc.height !== mh * dpr) { mc.width = mw * dpr; mc.height = mh * dpr; }
+          const x2 = mc.getContext('2d'); x2.setTransform(dpr, 0, 0, dpr, 0, 0);
+          drawDuoMini(x2, W, MB.cv, mw, mh, act, { x: cx, y: cy, hw: halfW, hh: halfH });
+        }
+      }
       const hk = `${W.lives}|${W.gems.map((g) => (g.taken ? 1 : 0)).join('')}|${W.key ? W.key.held || (W.key.used ? 'u' : '') : ''}|${W.chest && W.chest.done ? 1 : 0}`;
       if (hk !== hudKey.current) {
         hudKey.current = hk;
@@ -517,9 +546,10 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
   const onJoyDown = (e) => {
     if (phaseRef.current !== 'play' || sheetOpen.current) return;
     if (joy.current.id != null) return;
-    const r = wrapRef.current.getBoundingClientRect();
-    const x = e.clientX - r.left, y = e.clientY - r.top;
-    if (x > r.width * 0.6 && y > r.height - 240) return;
+    const el = wrapRef.current;
+    const { x, y } = stagePoint(el, e, sideRef.current);
+    const w = el.clientWidth, h = el.clientHeight;
+    if (y < 52 || (x > w * 0.55 && y > h - 230)) return;
     if (quick) setQuick(false);
     Snd.init();
     joy.current = { x: 0, y: 0, id: e.pointerId, cx: x, cy: y, show: true };
@@ -529,8 +559,8 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
   const onJoyMove = (e) => {
     const J = joy.current;
     if (J.id !== e.pointerId) return;
-    const r = wrapRef.current.getBoundingClientRect();
-    const dx = e.clientX - r.left - J.cx, dy = e.clientY - r.top - J.cy, d = Math.hypot(dx, dy), R = joyRRef.current;
+    const q = stagePoint(wrapRef.current, e, sideRef.current);
+    const dx = q.x - J.cx, dy = q.y - J.cy, d = Math.hypot(dx, dy), R = joyRRef.current;
     const k = d > R ? R / d : 1;
     if (knobRef.current) knobRef.current.style.transform = `translate(${dx * k}px,${dy * k}px)`;
     const m = Math.min(1, d / R);
@@ -552,111 +582,150 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
   const storyList = Array.from({ length: STORY_N }, (_, i) => i);
   const actKind = active;
   const atkCol = actKind === 'sun' ? 'orange' : 'blue';
-  const wrapH = wrapRef.current ? wrapRef.current.clientHeight : 800;
   const ROW = 104;
   const nodeX = (i) => (i % 2 === 0 ? 22 : 78);
+  const { top, right, bottom, left } = GS.at;
+  const hb = land ? 38 : 40;
+  const SW = GS.W, SH = GS.H;
+  const socialBtns = !solo && !watch ? [
+    <GHudBtn key="mic" icon={voice.micOn ? 'mic' : 'micoff'} on={voice.micOn} size={hb} label={voice.micOn ? 'Turn your mic off' : 'Turn your mic on'} onPress={voice.toggle} />,
+    <GHudBtn key="peer" icon={voice.peerMuted ? 'mute' : 'sound'} on={voice.peerMuted} tone="#E53A2A" size={hb} label={voice.peerMuted ? `Unmute ${peerFirst}` : `Mute ${peerFirst}`} onPress={voice.togglePeer} />,
+    <GHudBtn key="emo" icon="smile" on={quick} tone="#F5AE1E" size={hb} label="Quick messages and emojis" onPress={() => setQuick((v) => !v)} />,
+    <GHudBtn key="chat" icon="chat" size={hb} label="Chat" onPress={() => { setQuick(false); setSheet({ k: 'chat' }); }} />,
+  ] : [];
+  const sysBtns = [
+    !watch && <GHudBtn key="gear" icon="gear" size={hb} label="Controls" onPress={() => { setQuick(false); setCtl(true); }} />,
+    <GHudBtn key="x" icon="close" size={hb} label="Leave the game" onPress={leave} />,
+  ].filter(Boolean);
+  const rowBtns = land ? [...(phase === 'play' ? socialBtns : []), ...sysBtns] : sysBtns;
+  const rowW = (n) => n * hb + Math.max(0, n - 1) * 6;
+  const titleW = land ? Math.round(Math.min(240, SW * 0.28)) : Math.max(150, SW - 210);
+  const capW = 186;
+  const lEnd = 10 + (land ? titleW : rowW(sysBtns.length)) + 8;
+  const rStart = SW - 10 - (land ? rowW(rowBtns.length) + 8 : 0);
+  const capX = land ? clamp(SW / 2 - capW / 2, lEnd, Math.max(lEnd, rStart - capW)) : SW - 10 - capW;
+  const armB = Math.round(12 + 190 * look.size + 12);
+  const joyX = land ? 112 : 92, joyY = SH - (land ? 96 : 120);
+  const tlEl = hudRefs.current.tl;
+  const tlBottom = tlEl && tlEl.offsetHeight ? tlEl.offsetTop + tlEl.offsetHeight : 0;
+  const miniK = W ? Math.min((land ? 120 : 84) / W.MW, (land ? 136 : 120) / W.MH) : 0;
+  const mini = W && phase === 'play' ? { w: Math.max(30, Math.round(W.MW * miniK)), h: Math.max(30, Math.round(W.MH * miniK)) } : null;
+  const chatSheet = sheet && sheet.k === 'chat' && (
+    <Sheet title={solo ? 'Notes' : `Talk to ${peerFirst}`} onClose={() => setSheet(null)}>
+      {log.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, margin: '12px 0 4px', maxHeight: 150, overflowY: 'auto' }}>
+          {log.slice(-8).map((m, i) => <div key={i} style={{ fontSize: 13.5, lineHeight: 1.4 }}><span style={{ fontWeight: 800, color: m.who === 'You' ? '#FFCB7A' : '#A9CCFF' }}>{m.who}</span> <span style={{ color: 'rgba(255,255,255,0.85)' }}>{m.text}</span></div>)}
+        </div>
+      )}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+        {PHRASES.map((p) => <button key={p} type="button" className="zgk-btn" onClick={() => { tap(); sendChat(p); }} style={{ ...btnBase, height: 38, padding: '0 14px', borderRadius: 19, background: 'rgba(255,255,255,0.1)', color: '#FFFFFF', fontSize: 13.5, fontWeight: 700 }}>{p}</button>)}
+      </div>
+      <form onSubmit={(e) => { e.preventDefault(); sendChat(chatText); }} style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+        <input value={chatText} onChange={(e) => setChatText(e.target.value)} maxLength={90} placeholder="Write a message" aria-label="Message"
+          style={{ flex: 1, minWidth: 0, height: 46, borderRadius: 23, border: 'none', background: 'rgba(255,255,255,0.1)', color: '#FFFFFF', padding: '0 16px', fontSize: 16, fontFamily: FONT, outline: 'none' }} />
+        <GPill text="Send" color="green" small onPress={() => sendChat(chatText)} disabled={!chatText.trim()} />
+      </form>
+    </Sheet>
+  );
   return (
     <Portal>
-      <div ref={wrapRef} onPointerDown={onJoyDown} onPointerMove={onJoyMove} onPointerUp={onJoyUp} onPointerCancel={onJoyUp}
-        style={{ position: 'fixed', left: 0, right: 0, top: 'var(--zvp-top, 0px)', height: 'var(--zvp-h, 100%)', zIndex: 90, background: '#0B0910', overflow: 'hidden', touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', fontFamily: FONT, color: '#FFFFFF' }}>
+      <div ref={GS.rootRef} style={{ position: 'fixed', left: 0, right: 0, top: 'var(--zvp-top, 0px)', height: 'var(--zvp-h, 100%)', zIndex: 90, background: '#0B0910', overflow: 'hidden', touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', fontFamily: FONT, color: '#FFFFFF' }}>
+      <div ref={wrapRef} data-side={side ? '1' : '0'} onPointerDown={onJoyDown} onPointerMove={onJoyMove} onPointerUp={onJoyUp} onPointerCancel={onJoyUp} style={GS.wrapStyle}>
         <canvas ref={cvRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block' }} />
 
         {(phase === 'play' || phase === 'won' || phase === 'out') && (
-          <div style={{ position: 'absolute', left: 0, right: 0, top: 0, padding: 'calc(10px + env(safe-area-inset-top)) 12px 10px', display: 'flex', alignItems: 'flex-start', gap: 8, pointerEvents: 'none' }}>
-            <div style={{ pointerEvents: 'auto', display: 'flex', gap: 8 }}><GBtn icon="close" color="white" size={44} label="Leave the game" onPress={leave} />{!watch && <GBtn icon="gear" color="dark" size={44} label="Controls" onPress={() => { setQuick(false); setCtl(true); }} />}</div>
-            <GPanel style={{ flex: 1, minWidth: 0, padding: '6px 12px 7px' }}>
-              <div style={{ fontSize: 14.5, fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
-              <div style={{ fontSize: 11.5, fontWeight: 800, color: 'rgba(255,255,255,0.72)', display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                {!solo && <span style={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, background: here ? (net.weak ? '#FFB347' : '#3DDC84') : '#8E8A9E', boxShadow: `0 0 0 1.5px ${INK}` }} />}
-                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{partnerLine}</span>
-                {!solo && !watch && here && <PingChip ms={net.ping} weak={net.weak} />}
-              </div>
-            </GPanel>
-            <GChip style={{ height: 'auto', padding: '7px 10px', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
-              <span style={{ display: 'flex', gap: 2 }}>{[0, 1, 2].map((i) => <GIcon key={i} k="heart" size={15} color={i < hud.lives ? '#FF5A6E' : '#5A5470'} />)}</span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontVariantNumeric: 'tabular-nums' }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 2 }}><GemIcon k="sun" size={14} />{hud.gems.sun[0]}/{hud.gems.sun[1]}</span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 2 }}><GemIcon k="moon" size={14} />{hud.gems.moon[0]}/{hud.gems.moon[1]}</span>
+          <>
+            <div ref={hudRef('tl')} style={{ position: 'absolute', left: left(10), top: top(8), display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start', zIndex: 3, pointerEvents: 'none', maxWidth: titleW }}>
+              {!land && <div style={{ display: 'flex', gap: 6, pointerEvents: 'auto' }}>{sysBtns}</div>}
+              <GHudPanel style={{ padding: '5px 10px 6px', maxWidth: '100%', boxSizing: 'border-box', minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
+                <div style={{ fontSize: 11, fontWeight: 800, color: 'rgba(255,255,255,0.72)', display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                  {!solo && <span style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: here ? (net.weak ? '#FFB347' : '#3DDC84') : '#8E8A9E' }} />}
+                  <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{partnerLine}</span>
+                  {!solo && !watch && here && <PingChip ms={net.ping} weak={net.weak} />}
+                </div>
+              </GHudPanel>
+              {mini && <canvas ref={miniRef} aria-hidden="true" style={{ width: mini.w, height: mini.h, display: 'block', borderRadius: 6, boxShadow: '0 2px 10px rgba(0,0,0,0.3)' }} />}
+              {!watch && watchers.length > 0 && <GHudPanel style={{ height: 24, padding: '0 9px', display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 800, whiteSpace: 'nowrap' }}><GIcon k="eye" size={13} color="#CFE6FF" ink="rgba(0,0,0,0.35)" />{watchers.length === 1 ? `${watchers[0].n} is watching` : `${watchers.length} watching`}</GHudPanel>}
+            </div>
+            <div ref={hudRef('tc')} style={{ position: 'absolute', left: capX, top: top(8), width: capW, display: 'flex', justifyContent: land ? 'center' : 'flex-end', zIndex: 2, pointerEvents: 'none' }}>
+              <GHudPanel style={{ height: 30, padding: '0 11px', display: 'flex', alignItems: 'center', gap: 9, fontSize: 12, fontWeight: 800, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                <span style={{ display: 'flex', gap: 2 }}>{Array.from({ length: LIVES }, (_, i) => <GIcon key={i} k="heart" size={13} color={i < hud.lives ? '#FF5A6E' : 'rgba(255,255,255,0.28)'} ink="rgba(0,0,0,0.35)" />)}</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}><GemIcon k="sun" size={13} />{hud.gems.sun[0]}/{hud.gems.sun[1]}</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}><GemIcon k="moon" size={13} />{hud.gems.moon[0]}/{hud.gems.moon[1]}</span>
                 {hud.key && <KeyIcon />}
-              </span>
-            </GChip>
-          </div>
+              </GHudPanel>
+            </div>
+            {land && <div ref={hudRef('tr')} style={{ position: 'absolute', right: right(10), top: top(8), display: 'flex', gap: 6, zIndex: 3 }}>{rowBtns}</div>}
+            {!land && socialBtns.length > 0 && phase === 'play' && <div ref={hudRef('sc')} style={{ position: 'absolute', right: right(16), bottom: bottom(armB), display: 'flex', flexDirection: 'column', gap: 8, zIndex: 3 }}>{socialBtns}</div>}
+          </>
         )}
         {toast && phase === 'play' && !intro && (
-          <div key={toast.at} style={{ position: 'absolute', left: '50%', top: 'calc(84px + env(safe-area-inset-top))', transform: 'translateX(-50%)', width: 'max-content', maxWidth: 'min(90%, 400px)', pointerEvents: 'none', animation: 'zduo-toast 0.25s ease-out' }}>
-            <GPanel style={{ padding: '10px 14px', fontSize: 13.5, fontWeight: 800, lineHeight: 1.4, textAlign: 'center' }}>{toast.text}</GPanel>
+          <div key={toast.at} style={{ position: 'absolute', left: '50%', ...(land ? { bottom: bottom(16) } : { top: tlBottom ? tlBottom + 10 : top(150) }), transform: 'translateX(-50%)', width: 'max-content', maxWidth: land ? 'min(44%, 380px)' : 'min(88%, 380px)', pointerEvents: 'none', animation: 'zduo-toast 0.25s ease-out', zIndex: 4 }}>
+            <GHudPanel style={{ padding: '8px 12px', fontSize: 12.5, fontWeight: 800, lineHeight: 1.4, textAlign: 'center' }}>{toast.text}</GHudPanel>
           </div>
         )}
         {intro && phase === 'play' && (
-          <div key={intro.key} style={{ position: 'absolute', left: '50%', top: 'calc(86px + env(safe-area-inset-top))', transform: 'translateX(-50%)', width: 'min(90%, 360px)', pointerEvents: 'none', animation: 'zgk-pop 0.35s ease-out' }}>
-            <GPanel style={{ padding: '14px 16px' }}>
+          <div key={intro.key} style={{ position: 'absolute', left: '50%', top: top(land ? 46 : 120), transform: 'translateX(-50%)', width: land ? 'min(50%, 340px)' : 'min(88%, 340px)', pointerEvents: 'none', animation: 'zgk-pop 0.35s ease-out', zIndex: 4 }}>
+            <GHudPanel style={{ padding: land ? '10px 14px' : '14px 16px', background: 'rgba(14,10,24,0.82)' }}>
               <div style={{ fontSize: 12, fontWeight: 900, color: '#FFD36B' }}>{intro.endless ? `Endless temples, ${intro.place}` : intro.place}</div>
-              <div style={{ fontSize: 21, fontWeight: 900, marginTop: 2, textShadow: `0 2px 0 ${INK}` }}>{intro.title}</div>
-              <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)', marginTop: 4, lineHeight: 1.4, fontWeight: 700 }}>{intro.goal}</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginTop: 10 }}>
-                {intro.missions.map((m) => <div key={m.k} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, fontWeight: 800, color: 'rgba(255,255,255,0.88)' }}><GIcon k="star" size={14} color="#5A5470" />{m.t}</div>)}
+              <div style={{ fontSize: land ? 18 : 21, fontWeight: 900, marginTop: 2, textShadow: `0 2px 0 ${INK}` }}>{intro.title}</div>
+              <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.8)', marginTop: 4, lineHeight: 1.4, fontWeight: 700 }}>{intro.goal}</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 8 }}>
+                {intro.missions.map((m) => <div key={m.k} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 800, color: 'rgba(255,255,255,0.88)' }}><GIcon k="star" size={13} color="#5A5470" />{m.t}</div>)}
               </div>
-            </GPanel>
+            </GHudPanel>
           </div>
         )}
         {phase === 'play' && !solo && net.lost && (
-          <div style={{ position: 'absolute', left: '50%', top: '42%', transform: 'translate(-50%, -50%)', maxWidth: '86%', pointerEvents: 'none' }}>
+          <div style={{ position: 'absolute', left: '50%', top: '42%', transform: 'translate(-50%, -50%)', maxWidth: '86%', pointerEvents: 'none', zIndex: 4 }}>
             <GPanel style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 10 }}>
               <Spinner size={18} color="#FFFFFF" />
               <div style={{ fontSize: 13.5, fontWeight: 800, lineHeight: 1.35 }}>{`Waiting for ${peerFirst}'s connection. Keep playing, the game catches up.`}</div>
             </GPanel>
           </div>
         )}
-        {!watch && watchers.length > 0 && (phase === 'play' || phase === 'pick') && (
-          <div style={{ position: 'absolute', left: 12, top: phase === 'play' ? 'calc(74px + env(safe-area-inset-top))' : 'calc(66px + env(safe-area-inset-top))', pointerEvents: 'none', zIndex: 3 }}>
+        {!watch && watchers.length > 0 && phase === 'pick' && (
+          <div style={{ position: 'absolute', left: left(12), top: top(66), pointerEvents: 'none', zIndex: 3 }}>
             <GChip style={{ height: 28, fontSize: 12.5, gap: 6 }}><GIcon k="eye" size={15} color="#CFE6FF" />{watchers.length === 1 ? `${watchers[0].n} is watching` : `${watchers.length} watching`}</GChip>
           </div>
         )}
         {phase === 'play' && watch && (
-          <div style={{ position: 'absolute', left: 0, right: 0, bottom: 'calc(22px + env(safe-area-inset-bottom))', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, padding: '0 14px', flexWrap: 'wrap' }}>
-            <GChip style={{ height: 34 }}><GIcon k="eye" size={15} color="#CFE6FF" />Follow</GChip>
-            <GPill small text={hostFirst} color={active === 'sun' ? 'orange' : 'white'} height={42} onPress={() => { setActive('sun'); cam.current.init = false; }} />
-            <GPill small text={peerFirst} color={active === 'moon' ? 'blue' : 'white'} height={42} onPress={() => { setActive('moon'); cam.current.init = false; }} />
+          <div style={{ position: 'absolute', left: 0, right: 0, bottom: bottom(18), display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, padding: '0 14px', flexWrap: 'wrap' }}>
+            <GHudPanel style={{ height: 32, padding: '0 11px', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 800 }}><GIcon k="eye" size={14} color="#CFE6FF" ink="rgba(0,0,0,0.35)" />Follow</GHudPanel>
+            <GPill small text={hostFirst} color={active === 'sun' ? 'orange' : 'white'} height={40} onPress={() => { setActive('sun'); cam.current.init = false; }} />
+            <GPill small text={peerFirst} color={active === 'moon' ? 'blue' : 'white'} height={40} onPress={() => { setActive('moon'); cam.current.init = false; }} />
           </div>
         )}
-        {phase === 'play' && !watch && <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', opacity: 1 - look.see }}><GJoy view={joyView} knobRef={knobRef} color={actKind === 'sun' ? 'orange' : 'blue'} idle={{ x: 82, y: wrapH - 96 }} R={joyR} /></div>}
+        {phase === 'play' && !watch && <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', opacity: 1 - look.see }}><GJoy flat view={joyView} knobRef={knobRef} color={actKind === 'sun' ? 'orange' : 'blue'} idle={{ x: joyX, y: joyY }} R={joyR} /></div>}
         {phase === 'play' && quick && !solo && (
-          <div onPointerDown={(e) => e.stopPropagation()} style={{ position: 'absolute', right: 12, bottom: 'calc(250px + env(safe-area-inset-bottom))', width: 'min(300px, calc(100% - 24px))', animation: 'zgk-pop 0.2s ease-out', zIndex: 5 }}>
+          <div onPointerDown={(e) => e.stopPropagation()} style={land ? { position: 'absolute', right: right(10), top: top(54), width: 'min(300px, calc(100% - 40px))', animation: 'zgk-pop 0.2s ease-out', zIndex: 6 } : { position: 'absolute', right: right(16 + 40 + 10), bottom: bottom(armB), width: 'min(280px, calc(100% - 90px))', animation: 'zgk-pop 0.2s ease-out', zIndex: 6 }}>
             <GPanel style={{ padding: 10 }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 6 }}>
-                {EMOTES.map((e) => <button key={e} type="button" className="zgk-btn" aria-label={`Send ${e}`} {...pressProps(() => sendEmote(e))} style={{ ...btnBase, height: 46, borderRadius: 14, background: 'rgba(255,255,255,0.1)', fontSize: 26, lineHeight: 1 }}>{e}</button>)}
+                {EMOTES.map((e) => <button key={e} type="button" className="zgk-btn" aria-label={`Send ${e}`} {...pressProps(() => sendEmote(e))} style={{ ...btnBase, height: 42, borderRadius: 14, background: 'rgba(255,255,255,0.1)', fontSize: 24, lineHeight: 1 }}>{e}</button>)}
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-                {QUICK.map((p) => <button key={p} type="button" className="zgk-btn" {...pressProps(() => { tap(); sendChat(p); })} style={{ ...btnBase, height: 34, padding: '0 12px', borderRadius: 17, background: 'rgba(255,255,255,0.12)', color: '#FFFFFF', fontSize: 12.5, fontWeight: 800 }}>{p}</button>)}
-                <button type="button" className="zgk-btn" {...pressProps(() => { tap(); setQuick(false); setSheet({ k: 'chat' }); })} style={{ ...btnBase, height: 34, padding: '0 12px', borderRadius: 17, background: 'rgba(255,255,255,0.22)', color: '#FFFFFF', fontSize: 12.5, fontWeight: 900 }}>Type a message</button>
+                {QUICK.map((p) => <button key={p} type="button" className="zgk-btn" {...pressProps(() => { tap(); sendChat(p); })} style={{ ...btnBase, height: 32, padding: '0 11px', borderRadius: 16, background: 'rgba(255,255,255,0.12)', color: '#FFFFFF', fontSize: 12.5, fontWeight: 800 }}>{p}</button>)}
+                <button type="button" className="zgk-btn" {...pressProps(() => { tap(); setQuick(false); setSheet({ k: 'chat' }); })} style={{ ...btnBase, height: 32, padding: '0 11px', borderRadius: 16, background: 'rgba(255,255,255,0.22)', color: '#FFFFFF', fontSize: 12.5, fontWeight: 900 }}>Type a message</button>
               </div>
             </GPanel>
           </div>
         )}
         {phase === 'play' && !watch && (
-          <div style={{ position: 'absolute', right: 14, bottom: 'calc(22px + env(safe-area-inset-bottom))', display: 'flex', alignItems: 'flex-end', gap: 12, transform: `scale(${look.size})`, transformOrigin: '100% 100%', opacity: 1 - look.see }}>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
-              {nearUse && <div style={{ animation: 'zgk-pop 0.25s ease-out' }}><GBtn icon="hand" color="gold" size={64} label={nearUse === 'mirror' ? 'Turn the mirror' : 'Use the dial'} onPress={useAction} /></div>}
-              {solo
-                ? <GBtn icon="swap" color={actKind === 'sun' ? 'blue' : 'orange'} size={56} label={actKind === 'sun' ? 'Switch to the blue torch' : 'Switch to the orange torch'} onPress={() => { swapAt.current = Date.now(); setActive((a) => (a === 'sun' ? 'moon' : 'sun')); cam.current.init = true; }} />
-                : (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 46px)', gap: 8 }}>
-                    <GBtn icon={voice.peerMuted ? 'mute' : 'sound'} color={voice.peerMuted ? 'red' : 'dark'} size={46} label={voice.peerMuted ? `Unmute ${peerFirst}` : `Mute ${peerFirst}`} onPress={voice.togglePeer} />
-                    <GBtn icon={voice.micOn ? 'mic' : 'micoff'} color={voice.micOn ? 'green' : 'dark'} size={46} label={voice.micOn ? 'Turn your mic off' : 'Turn your mic on'} onPress={voice.toggle} />
-                    <GBtn icon="smile" color={quick ? 'gold' : 'dark'} size={46} label="Quick messages and emojis" onPress={() => setQuick((v) => !v)} />
-                    <GBtn icon="chat" color="dark" size={46} label="Chat" onPress={() => { setQuick(false); setSheet({ k: 'chat' }); }} />
-                  </div>
-                )}
+          <div ref={hudRef('sk')} style={{ position: 'absolute', right: right(14), bottom: bottom(12), width: 210, height: 190, pointerEvents: 'none', transform: `scale(${look.size})`, transformOrigin: '100% 100%', opacity: 1 - look.see, zIndex: 2 }}>
+            <div style={{ position: 'absolute', left: 131, top: 111, pointerEvents: 'auto' }}>
+              <GHudSkill main icon={actKind === 'sun' ? 'flame' : 'snow'} tone={actKind === 'sun' ? GC.orange[1] : GC.blue[1]} size={74} label={actKind === 'sun' ? 'Throw a fireball' : 'Throw frost'} sound="none" onPress={() => { atkReq.current = Date.now(); }} />
             </div>
-            <GBtn icon={actKind === 'sun' ? 'flame' : 'snow'} color={atkCol} size={80} label={actKind === 'sun' ? 'Throw a fireball' : 'Throw frost'} sound="none" onPress={() => { atkReq.current = Date.now(); }} />
+            {nearUse && <div style={{ position: 'absolute', left: 50, top: 120, pointerEvents: 'auto', animation: 'zgk-pop 0.25s ease-out' }}><GHudSkill icon="hand" tone="#FFD23F" size={56} label={nearUse === 'mirror' ? 'Turn the mirror' : 'Use the dial'} onPress={useAction} /></div>}
+            {solo && <div style={{ position: 'absolute', left: 134, top: 32, pointerEvents: 'auto' }}><GHudSkill icon="swap" tone={actKind === 'sun' ? '#8CC0FF' : '#FFB347'} size={52} label={actKind === 'sun' ? 'Switch to the blue torch' : 'Switch to the orange torch'} onPress={() => { swapAt.current = Date.now(); setActive((a) => (a === 'sun' ? 'moon' : 'sun')); cam.current.init = true; }} /></div>}
           </div>
         )}
         {ctl && (
-          <div onPointerDown={(e) => e.stopPropagation()} style={{ position: 'absolute', inset: 0, zIndex: 45, background: 'rgba(8,6,14,0.6)', display: 'flex', padding: 12, overflowY: 'auto', touchAction: 'pan-y' }}>
-            <div style={{ margin: 'auto', width: '100%', display: 'flex', justifyContent: 'center' }}><GControlsPanel onClose={() => setCtl(false)} /></div>
+          <div onPointerDown={(e) => e.stopPropagation()} style={{ position: 'absolute', inset: 0, zIndex: 45, background: 'rgba(8,6,14,0.6)', display: 'flex', padding: 12, overflowY: 'auto', touchAction: 'pan-x pan-y' }}>
+            <div style={{ margin: 'auto', width: '100%', display: 'flex', justifyContent: 'center' }}><GControlsPanel sideways wide={land} onClose={() => setCtl(false)} /></div>
           </div>
         )}
-        {voice.err && phase === 'play' && <div style={{ position: 'absolute', right: 14, bottom: 'calc(250px + env(safe-area-inset-bottom))' }}><GChip style={{ background: 'rgba(217,75,75,0.95)' }}>{voice.err}</GChip></div>}
+        {voice.err && phase === 'play' && <div style={{ position: 'absolute', left: '50%', top: '22%', transform: 'translateX(-50%)', pointerEvents: 'none', zIndex: 4 }}><GChip style={{ background: 'rgba(217,75,75,0.95)' }}>{voice.err}</GChip></div>}
 
         {phase === 'lobby' && (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, background: 'radial-gradient(circle at 50% 30%, #4A3420 0%, #17121C 70%)' }}>
@@ -671,7 +740,7 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
         )}
 
         {phase === 'pick' && (
-          <div style={{ position: 'absolute', inset: 0, overflowY: 'auto', padding: 'calc(12px + env(safe-area-inset-top)) 16px calc(28px + env(safe-area-inset-bottom))', boxSizing: 'border-box', background: 'linear-gradient(180deg, #2C5A8C 0%, #3E7BB8 26%, #E9B66B 62%, #B5703A 100%)' }}>
+          <div style={{ position: 'absolute', inset: 0, overflowY: 'auto', touchAction: 'pan-x pan-y', padding: `${top(12)} ${right(16)} ${bottom(28)} ${left(16)}`, boxSizing: 'border-box', background: 'linear-gradient(180deg, #2C5A8C 0%, #3E7BB8 26%, #E9B66B 62%, #B5703A 100%)' }}>
             <div style={{ maxWidth: 460, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <GBtn icon="close" color="white" size={44} fast={false} label={solo ? 'Leave' : 'Back to chat'} onPress={finish} />
@@ -759,41 +828,45 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
         )}
 
         {phase === 'won' && result && (
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(5,4,10,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 18, overflowY: 'auto' }}>
-            <GPanel style={{ width: '100%', maxWidth: 360, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, textAlign: 'center', padding: '20px 18px', animation: 'zgk-pop 0.35s ease-out' }}>
-              <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>{[0, 1, 2].map((i) => <div key={i} style={{ transform: i === 1 ? 'translateY(-8px)' : 'none', animation: `zgk-pop ${0.3 + i * 0.15}s ease-out` }}><GIcon k="star" size={i === 1 ? 50 : 40} color={result.stars > i ? '#FFD23F' : '#5A5470'} /></div>)}</div>
-              <GTitle text={result.watch ? `${hostFirst} and ${peerFirst} made it` : result.depth ? `Temple ${result.depth} cleared` : solo ? 'Both torches made it' : 'You made it together'} size={26} color="#FFE15A" />
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8, width: '100%' }}>
-                {[['Time', fmtTime(result.time)], ['Gems', `${result.gems} of ${result.gemsTotal}`], ['Hearts lost', String(result.deaths)]].map(([a, b2]) => (
-                  <div key={a} style={{ padding: '10px 6px', borderRadius: 14, background: 'rgba(255,255,255,0.08)', boxShadow: 'inset 0 0 0 1.5px rgba(255,255,255,0.08)' }}>
-                    <div style={{ fontSize: 16, fontWeight: 900, fontVariantNumeric: 'tabular-nums', color: '#FFE15A' }}>{b2}</div>
-                    <div style={{ fontSize: 11.5, fontWeight: 800, color: 'rgba(255,255,255,0.65)', marginTop: 2 }}>{a}</div>
-                  </div>
-                ))}
-              </div>
-              {!result.watch && <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 7, padding: '10px 12px', borderRadius: 16, background: 'rgba(255,255,255,0.06)', textAlign: 'left' }}>
-                <div style={{ fontSize: 12, fontWeight: 900, color: 'rgba(255,255,255,0.65)' }}>{`Missions, ${result.done} of ${result.missions.length}`}</div>
-                {result.missions.map((m) => <div key={m.k} style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 13.5, fontWeight: 800, color: m.on ? '#FFFFFF' : 'rgba(255,255,255,0.55)' }}><GIcon k={m.on ? 'check' : 'star'} size={16} color={m.on ? '#5BE37D' : '#5A5470'} />{m.t}</div>)}
-              </div>}
-              {watch ? <div style={{ fontSize: 13.5, fontWeight: 800, color: 'rgba(255,255,255,0.75)' }}>The players pick what is next</div> : host ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%', marginTop: 2 }}>
-                  {isEndless(li) ? <GPill text={`Next temple, ${depthOf(li) + 1}`} icon="play" color="green" wide onPress={() => startLevel(li + 1, undefined, false, rs)} /> : li < STORY_N - 1 ? <GPill text="Next level" icon="play" color="green" wide onPress={() => startLevel(li + 1)} /> : <GPill text="Try endless temples" icon="play" color="green" wide onPress={() => startEndless(1)} />}
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <GPill text="Play again" icon="replay" color="white" small onPress={() => startLevel(li, undefined, false, rs)} style={{ flex: 1 }} wide />
-                    <GPill text="Levels" icon="map" color="white" small onPress={toPick} style={{ flex: 1 }} wide />
-                  </div>
+          <div style={{ position: 'absolute', inset: 0, zIndex: 20, background: 'rgba(5,4,10,0.5)', display: 'flex', padding: 12, overflowY: 'auto', touchAction: 'pan-x pan-y' }}>
+            <GPanel style={{ margin: 'auto', width: '100%', maxWidth: land ? 640 : 360, display: 'flex', flexDirection: land ? 'row' : 'column', alignItems: land ? 'stretch' : 'center', gap: land ? 16 : 12, textAlign: 'center', padding: land ? '14px 16px' : '20px 18px', animation: 'zgk-pop 0.35s ease-out', boxSizing: 'border-box' }}>
+              <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: land ? 10 : 12 }}>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>{[0, 1, 2].map((i) => <div key={i} style={{ transform: i === 1 ? 'translateY(-8px)' : 'none', animation: `zgk-pop ${0.3 + i * 0.15}s ease-out` }}><GIcon k="star" size={i === 1 ? (land ? 44 : 50) : (land ? 36 : 40)} color={result.stars > i ? '#FFD23F' : '#5A5470'} /></div>)}</div>
+                <GTitle text={result.watch ? `${hostFirst} and ${peerFirst} made it` : result.depth ? `Temple ${result.depth} cleared` : solo ? 'Both torches made it' : 'You made it together'} size={land ? 23 : 26} color="#FFE15A" />
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8, width: '100%' }}>
+                  {[['Time', fmtTime(result.time)], ['Gems', `${result.gems} of ${result.gemsTotal}`], ['Hearts lost', String(result.deaths)]].map(([a, b2]) => (
+                    <div key={a} style={{ padding: land ? '8px 4px' : '10px 6px', borderRadius: 14, background: 'rgba(255,255,255,0.08)', boxShadow: 'inset 0 0 0 1.5px rgba(255,255,255,0.08)' }}>
+                      <div style={{ fontSize: 16, fontWeight: 900, fontVariantNumeric: 'tabular-nums', color: '#FFE15A' }}>{b2}</div>
+                      <div style={{ fontSize: 11.5, fontWeight: 800, color: 'rgba(255,255,255,0.65)', marginTop: 2 }}>{a}</div>
+                    </div>
+                  ))}
                 </div>
-              ) : (
-                <div style={{ fontSize: 13.5, fontWeight: 800, color: 'rgba(255,255,255,0.75)' }}>{`${peerFirst} picks what is next`}</div>
-              )}
-              <GPill text={solo ? 'Leave' : 'Back to chat'} color="dark" small wide onPress={finish} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: land ? 8 : 12, width: '100%' }}>
+                {!result.watch && <div style={{ width: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: land ? 5 : 7, padding: '10px 12px', borderRadius: 16, background: 'rgba(255,255,255,0.06)', textAlign: 'left' }}>
+                  <div style={{ fontSize: 12, fontWeight: 900, color: 'rgba(255,255,255,0.65)' }}>{`Missions, ${result.done} of ${result.missions.length}`}</div>
+                  {result.missions.map((m) => <div key={m.k} style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: land ? 12.5 : 13.5, fontWeight: 800, color: m.on ? '#FFFFFF' : 'rgba(255,255,255,0.55)' }}><GIcon k={m.on ? 'check' : 'star'} size={16} color={m.on ? '#5BE37D' : '#5A5470'} />{m.t}</div>)}
+                </div>}
+                {watch ? <div style={{ fontSize: 13.5, fontWeight: 800, color: 'rgba(255,255,255,0.75)' }}>The players pick what is next</div> : host ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
+                    {isEndless(li) ? <GPill text={`Next temple, ${depthOf(li) + 1}`} icon="play" color="green" wide height={land ? 50 : undefined} onPress={() => startLevel(li + 1, undefined, false, rs)} /> : li < STORY_N - 1 ? <GPill text="Next level" icon="play" color="green" wide height={land ? 50 : undefined} onPress={() => startLevel(li + 1)} /> : <GPill text="Try endless temples" icon="play" color="green" wide height={land ? 50 : undefined} onPress={() => startEndless(1)} />}
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <GPill text="Play again" icon="replay" color="white" small onPress={() => startLevel(li, undefined, false, rs)} style={{ flex: 1 }} wide />
+                      <GPill text="Levels" icon="map" color="white" small onPress={toPick} style={{ flex: 1 }} wide />
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 13.5, fontWeight: 800, color: 'rgba(255,255,255,0.75)' }}>{`${peerFirst} picks what is next`}</div>
+                )}
+                <GPill text={solo ? 'Leave' : 'Back to chat'} color="dark" small wide onPress={finish} />
+              </div>
             </GPanel>
           </div>
         )}
 
         {phase === 'out' && (
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(5,4,10,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 18 }}>
-            <GPanel style={{ width: '100%', maxWidth: 340, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, textAlign: 'center', padding: '22px 18px', animation: 'zgk-pop 0.35s ease-out' }}>
+          <div style={{ position: 'absolute', inset: 0, zIndex: 20, background: 'rgba(5,4,10,0.55)', display: 'flex', padding: 12, overflowY: 'auto', touchAction: 'pan-x pan-y' }}>
+            <GPanel style={{ margin: 'auto', width: '100%', maxWidth: 340, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: land ? 9 : 12, textAlign: 'center', padding: land ? '14px 16px' : '22px 18px', animation: 'zgk-pop 0.35s ease-out' }}>
               <div style={{ display: 'flex', gap: 4 }}>{[0, 1, 2].map((i) => <GIcon key={i} k="heart" size={30} color="#5A5470" />)}</div>
               <GTitle text="Out of hearts" size={28} color="#FF8F8F" />
               <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.78)', lineHeight: 1.5, fontWeight: 700 }}>{isEndless(li) ? 'This temple starts over with three new hearts. Talk it through first.' : 'The level starts over with three new hearts. Talk it through first.'}</div>
@@ -804,23 +877,6 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
           </div>
         )}
 
-        {sheet && sheet.k === 'chat' && (
-          <Sheet title={solo ? 'Notes' : `Talk to ${peerFirst}`} onClose={() => setSheet(null)}>
-            {log.length > 0 && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, margin: '12px 0 4px', maxHeight: 150, overflowY: 'auto' }}>
-                {log.slice(-8).map((m, i) => <div key={i} style={{ fontSize: 13.5, lineHeight: 1.4 }}><span style={{ fontWeight: 800, color: m.who === 'You' ? '#FFCB7A' : '#A9CCFF' }}>{m.who}</span> <span style={{ color: 'rgba(255,255,255,0.85)' }}>{m.text}</span></div>)}
-              </div>
-            )}
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
-              {PHRASES.map((p) => <button key={p} type="button" className="zgk-btn" onClick={() => { tap(); sendChat(p); }} style={{ ...btnBase, height: 38, padding: '0 14px', borderRadius: 19, background: 'rgba(255,255,255,0.1)', color: '#FFFFFF', fontSize: 13.5, fontWeight: 700 }}>{p}</button>)}
-            </div>
-            <form onSubmit={(e) => { e.preventDefault(); sendChat(chatText); }} style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-              <input value={chatText} onChange={(e) => setChatText(e.target.value)} maxLength={90} placeholder="Write a message" aria-label="Message"
-                style={{ flex: 1, minWidth: 0, height: 46, borderRadius: 23, border: 'none', background: 'rgba(255,255,255,0.1)', color: '#FFFFFF', padding: '0 16px', fontSize: 16, fontFamily: FONT, outline: 'none' }} />
-              <GPill text="Send" color="green" small onPress={() => sendChat(chatText)} disabled={!chatText.trim()} />
-            </form>
-          </Sheet>
-        )}
         {sheet && sheet.k === 'dial' && W && (
           <Sheet title="Stone dial" text={W.mural > 0.5 || solo ? 'Turn in the three symbols in the right order.' : 'The code is painted where only blue light shows it. Ask the blue torch to read it.'} onClose={() => setSheet(null)}>
             <div style={{ display: 'flex', justifyContent: 'center', gap: 10, margin: '16px 0 14px' }}>
@@ -858,6 +914,9 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
             </div>
           </Sheet>
         )}
+        {!side && chatSheet}
+      </div>
+      {side && chatSheet}
       </div>
     </Portal>
   );

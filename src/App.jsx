@@ -14,6 +14,7 @@ import {
 } from './supabaseClient.js';
 import { zLazy, zLazyPrefetch, zLazySetUi } from './lazy.jsx';
 import { GAME_KITS, GAME_KIT_BY, GameKitArt, kitUser, gameKitPull } from './games/kits.jsx';
+import { loadLiveFriends } from './games/live.js';
 import { ZLANGS, setZLang, useZLang, zlangWanted, zlangOnPick, zlangDirty, zlangClean, zlangStored } from './i18n/index.js';
 export const TrustedFriendsPage = zLazy(() => import('./areas/safety.jsx'), 'TrustedFriendsPage', 'safety');
 export const RecoveryHelpPage = zLazy(() => import('./areas/safety.jsx'), 'RecoveryHelpPage', 'safety');
@@ -17565,6 +17566,51 @@ export function CallVideo({ stream, muted, mirror, fit = 'cover', remote }) {
   return <video ref={ref} data-zchat-call-audio="1" data-zchat-remote={remote ? '1' : undefined} autoPlay playsInline muted={muted} style={{ width: '100%', height: '100%', objectFit: fit, display: 'block', background: '#000', transform: mirror ? 'scaleX(-1)' : 'none' }} />;
 }
 
+const livePlayCache = { at: 0, rows: [], job: null };
+function livePlayRows(force) {
+  if (!force && Date.now() - livePlayCache.at < 20000) return Promise.resolve(livePlayCache.rows);
+  if (livePlayCache.job) return livePlayCache.job;
+  livePlayCache.job = loadLiveFriends().then((rows) => { livePlayCache.rows = rows || []; livePlayCache.at = Date.now(); livePlayCache.job = null; return livePlayCache.rows; }).catch(() => { livePlayCache.job = null; return livePlayCache.rows; });
+  return livePlayCache.job;
+}
+const LIVE_ROOM_MAX = { gulpco: 10, roll: 4 };
+function livePlayOf(r) {
+  const info = (r && r.info) || {};
+  const k = r.game === 'gulp' && info.co ? 'gulpco' : r.game;
+  const n = Math.max(1, Number(info.n) || 1);
+  const max = LIVE_ROOM_MAX[k] || 0;
+  return { k, n, max, join: !!max, full: !!max && n >= max };
+}
+function LivePlayBar({ profile, onJoin, onWatch }) {
+  const { theme } = useTheme();
+  const [row, setRow] = useState(null);
+  const pid = profile && profile.id;
+  useEffect(() => {
+    if (!pid || profile.is_bot) { setRow(null); return undefined; }
+    let alive = true;
+    const pick = (rows) => { if (!alive) return; const r = (rows || []).find((x) => x && x.user_id === pid) || null; setRow((prev) => (prev && r && prev.room === r.room && JSON.stringify(prev.info) === JSON.stringify(r.info) ? prev : r)); };
+    livePlayRows(false).then(pick);
+    const iv = setInterval(() => { if (document.visibilityState === 'visible') livePlayRows(false).then(pick); }, 30000);
+    return () => { alive = false; clearInterval(iv); };
+  }, [pid]);
+  if (!row) return null;
+  const L = livePlayOf(row);
+  const first = String(profile.name || 'Your friend').split(' ')[0];
+  const title = L.k === 'gulpco' ? `${first} is in a Gulp room` : `${first} is playing ${GAME_TITLES[L.k] || 'a game'}`;
+  const sub = L.join ? (L.full ? 'The room is full right now' : `${L.n} of ${L.max} playing. You can join now.`) : 'Watch the game live';
+  const act = L.join ? (L.full ? null : 'Join') : 'Watch';
+  return (
+    <div className="zchat-fade" style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '2px 12px 8px', padding: 8, paddingRight: act ? 8 : 14, borderRadius: 14, flexShrink: 0, background: theme.dark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.045)' }}>
+      <GameArt k={L.k} width={44} height={44} radius={10} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
+        <div style={{ fontSize: 12.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub}</div>
+      </div>
+      {act && <button onClick={() => { livePlayCache.at = 0; if (act === 'Join') onJoin(row); else onWatch(row); }} className="zchat-press" aria-label={act === 'Join' ? `Join ${first}` : `Watch ${first}`} style={{ height: 32, padding: '0 16px', borderRadius: 10, border: 'none', background: act === 'Join' ? '#22B04B' : theme.coral, color: 'white', fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: FONT, flexShrink: 0 }}>{act}</button>}
+    </div>
+  );
+}
+
 function GroupCallBar({ row, onJoin }) {
   const { theme } = useTheme();
   return (
@@ -18488,7 +18534,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-export const APP_VERSION = '35.0V';
+export const APP_VERSION = '36.0V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -36516,6 +36562,13 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [gulpRoom, setGulpRoom] = useState(null);
   const [gulpPick, setGulpPick] = useState(null);
   if (typeof window !== 'undefined' && window.__zfake) { window.__zopenGulpRoom = (rm) => setGulpRoom({ rm }); window.__zopenRoll = (rm, host) => setRollGame({ rm, host }); }
+  const joinLivePlay = (r) => {
+    const info = (r && r.info) || {};
+    if (!r) return;
+    if (r.game === 'roll') { setRollGame({ rm: r.room, host: info.h || r.user_id }); return; }
+    if (r.game === 'gulp' && info.co && typeof info.rm === 'string') { setGulpRoom({ rm: info.rm }); return; }
+    openWatch(r);
+  };
   const startGulpRoomWith = async (profiles, rmIn) => {
     const rm = rmIn || newClientId();
     if (!rmIn) setGulpRoom({ rm });
@@ -46550,6 +46603,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               )}
               </div>
               {!activeGroup && activeProfile && !chatSearch && <ImpostorBanner profile={activeProfile} myId={session.user.id} />}
+              {!activeGroup && activeProfile && !chatSearch && <LivePlayBar profile={activeProfile} onJoin={joinLivePlay} onWatch={openWatch} />}
               {chatSearch && (
                 <ChatSearchBar query={chatSearch.query} onChange={changeSearch} count={chatSearchMatches.length}
                   position={chatSearchMatches.length ? chatSearchMatches.length - Math.min(chatSearch.pos, chatSearchMatches.length - 1) : 0}
@@ -48794,6 +48848,145 @@ function WnTwoGamesArt({ tall = false }) {
   );
 }
 
+function WnHeartsChip({ x, y, n = 5 }) {
+  return (
+    <g transform={`translate(${x} ${y})`}>
+      <rect x="0" y="0" width={n * 15 + 16} height="24" rx="12" fill="rgba(12,18,40,0.84)" stroke={ART_INK} strokeWidth="2" />
+      {Array.from({ length: n }, (_, i) => <path key={i} transform={`translate(${15 + i * 15} 13.5) scale(0.62)`} d="M0 6 C-10 -2 -9 -10 -3.5 -10 C-1 -10 0 -8 0 -7 C0 -8 1 -10 3.5 -10 C9 -10 10 -2 0 6 Z" fill="#FF5A6E" />)}
+    </g>
+  );
+}
+function WnGoldFish({ x, y, s = 1 }) {
+  return (
+    <g transform={`translate(${x} ${y}) scale(${s})`}>
+      <path d="M-14 0 L-26 -10 L-23 0 L-26 10 Z" fill="#E0A100" stroke={ART_INK} strokeWidth="2" strokeLinejoin="round" />
+      <path d="M-5 -10 Q1 -18 8 -10" fill="#FFF4B0" stroke={ART_INK} strokeWidth="1.8" strokeLinejoin="round" />
+      <ellipse cx="0" cy="0" rx="16" ry="11" fill="#FFD84D" stroke={ART_INK} strokeWidth="2" />
+      <path d="M-6 -6 Q-2 -8 2 -6" fill="none" stroke="#FFF4B0" strokeWidth="2" strokeLinecap="round" />
+      <circle cx="8" cy="-3" r="3.2" fill="#FFFFFF" stroke={ART_INK} strokeWidth="1.2" />
+      <circle cx="9" cy="-3" r="1.5" fill={ART_INK} />
+      <path d="M12 4 Q14.5 5.5 16 4" fill="none" stroke={ART_INK} strokeWidth="1.6" strokeLinecap="round" />
+    </g>
+  );
+}
+function WnSeaArt({ tall = false }) {
+  const cx = tall ? 222 : 236, cy = tall ? 122 : 134;
+  return (
+    <>
+      {tall ? <image href="/gulp-art.webp" x="-140" y="-112" width="474" height="296" preserveAspectRatio="xMidYMid slice" /> : <image href="/gulp-art.webp" x="16" y="-4" width="288" height="186" preserveAspectRatio="xMidYMid slice" />}
+      <g transform={`translate(${cx} ${cy})`}>
+        <ellipse cx="0" cy="23" rx="36" ry="6" fill="rgba(0,0,0,0.25)" />
+        <path d="M-27 -2 L-22 -31 H22 L27 -2 Z" fill="#7A4E24" {...ak} strokeWidth="2.6" />
+        <path d="M-18 -26 H18" stroke="#FFD23F" strokeWidth="3" strokeLinecap="round" />
+        {[[-15, -4], [-3, -8], [9, -5], [19, -2], [-8, -1], [4, -2]].map(([x, y], i) => <circle key={i} cx={x} cy={y} r="6" fill="#FFD23F" stroke={ART_INK} strokeWidth="2" />)}
+        <rect x="-29" y="-2" width="58" height="24" rx="3" fill="#8A5A2B" {...ak} strokeWidth="2.6" />
+        <rect x="-29" y="5" width="58" height="6" fill="#FFD23F" stroke={ART_INK} strokeWidth="2" />
+        <rect x="-5" y="2" width="10" height="13" rx="2.5" fill="#FFD23F" stroke={ART_INK} strokeWidth="2" />
+      </g>
+      <WnGoldFish x={tall ? 126 : 112} y={tall ? 90 : 64} s={1.3} />
+      <WnHeartsChip x={tall ? 46 : 28} y={tall ? -46 : 10} />
+    </>
+  );
+}
+function WnMissArt({ tall = false }) {
+  const rows = [['Eat 30 fish', 1, true], ['Grow to 500', 0.62, false], ['Catch a golden fish', 0, false]];
+  const px = tall ? 62 : 84, py = tall ? -40 : 22;
+  return (
+    <>
+      {tall ? <image href="/gulp-art.webp" x="-98" y="-112" width="474" height="296" preserveAspectRatio="xMidYMid slice" /> : <image href="/gulp-art.webp" x="16" y="-4" width="288" height="186" preserveAspectRatio="xMidYMid slice" />}
+      <g transform={`translate(${px} ${py})`}>
+        <rect x="0" y="0" width="152" height="112" rx="14" fill="rgba(8,14,30,0.84)" stroke={ART_INK} strokeWidth="2.4" />
+        <text x="12" y="20" fontFamily="-apple-system, BlinkMacSystemFont, sans-serif" fontWeight="900" fontSize="10.5" fill="rgba(255,255,255,0.62)">Missions</text>
+        <text x="140" y="20" textAnchor="end" fontFamily="-apple-system, BlinkMacSystemFont, sans-serif" fontWeight="900" fontSize="10.5" fill="#7BE05A">1 done</text>
+        {rows.map(([t, f, done], i) => (
+          <g key={t} transform={`translate(12 ${38 + i * 28})`}>
+            <circle cx="5" cy="-4" r="5.5" fill={done ? '#5BE37D' : 'none'} stroke={done ? '#5BE37D' : 'rgba(255,255,255,0.55)'} strokeWidth="1.6" />
+            {done && <path d="M2.4 -4 L4.4 -2 L7.8 -6" fill="none" stroke="#FFFFFF" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />}
+            <text x="16" y="0" fontFamily="-apple-system, BlinkMacSystemFont, sans-serif" fontWeight="800" fontSize="11" fill={done ? '#B9F5C6' : '#FFFFFF'}>{t}</text>
+            <rect x="16" y="6" width="112" height="3.5" rx="1.75" fill="rgba(255,255,255,0.18)" />
+            {f > 0 && <rect x="16" y="6" width={112 * f} height="3.5" rx="1.75" fill={done ? '#5BE37D' : '#FFD23F'} />}
+          </g>
+        ))}
+      </g>
+      <g transform={`translate(${tall ? 214 : 232} ${tall ? 94 : 140})`}>
+        <rect x="0" y="0" width="70" height="24" rx="12" fill="#36B23A" stroke={ART_INK} strokeWidth="2" />
+        <path transform="translate(14 13) scale(0.6)" d="M0 6 C-10 -2 -9 -10 -3.5 -10 C-1 -10 0 -8 0 -7 C0 -8 1 -10 3.5 -10 C9 -10 10 -2 0 6 Z" fill="#FFFFFF" />
+        <text x="24" y="16" fontFamily="-apple-system, BlinkMacSystemFont, sans-serif" fontWeight="900" fontSize="11" fill="#FFFFFF">Extra life</text>
+      </g>
+    </>
+  );
+}
+function WnHudArt({ tall = false }) {
+  const rid = React.useId().replace(/[^a-zA-Z0-9]/g, '');
+  const ring = 'rgba(255,255,255,0.8)', glass = 'rgba(8,14,30,0.5)';
+  return (
+    <>
+      <WnFloor />
+      {tall && <WnCloud x={44} y={-86} s={0.8} o={0.9} />}
+      {tall && <WnCloud x={226} y={-58} s={0.6} o={0.8} />}
+      <defs><clipPath id={`hs${rid}`}><rect x="46" y="10" width="228" height="116" rx="13" /></clipPath></defs>
+      <g transform="rotate(-4 160 70)">
+        <rect x="34" y="0" width="252" height="136" rx="22" fill={ART_INK} />
+        <g clipPath={`url(#hs${rid})`}>
+          <rect x="46" y="10" width="228" height="116" fill="#3FA9E8" />
+          <path d="M46 108 Q110 98 160 106 T274 100 V126 H46 Z" fill="#E9CF97" />
+          <path d="M228 108 q4 -22 -2 -40 M236 106 q6 -18 0 -34" fill="none" stroke="#3E9A52" strokeWidth="4" strokeLinecap="round" />
+          <g transform="translate(160 66)">
+            <path d="M-16 0 L-27 -9 L-25 0 L-27 9 Z" fill="#E57A12" stroke={ART_INK} strokeWidth="2" strokeLinejoin="round" />
+            <ellipse cx="0" cy="0" rx="17" ry="12" fill="#FFB347" stroke={ART_INK} strokeWidth="2" />
+            <circle cx="8" cy="-3" r="3.2" fill="#FFFFFF" stroke={ART_INK} strokeWidth="1.2" /><circle cx="9" cy="-3" r="1.5" fill={ART_INK} />
+            <path d="M13 2 Q17 4 13 6" fill="#5A1E14" stroke={ART_INK} strokeWidth="1.4" />
+          </g>
+          <g transform="translate(108 46) scale(0.55)"><path d="M-16 0 L-27 -9 L-25 0 L-27 9 Z" fill="#2479E8" stroke={ART_INK} strokeWidth="2.4" /><ellipse cx="0" cy="0" rx="17" ry="12" fill="#5BB8FF" stroke={ART_INK} strokeWidth="2.4" /></g>
+          <rect x="54" y="17" width="54" height="15" rx="4" fill="rgba(70,170,225,0.85)" stroke={ring} strokeWidth="1.2" />
+          <path d="M54 26 L62 26 L68 30 L80 30 L86 27 L96 27 L102 29 L108 29 V32 H54 Z" fill="#7A6A4E" />
+          <circle cx="66" cy="22" r="2.2" fill="#FFFFFF" />
+          <rect x="54" y="36" width="54" height="30" rx="5" fill={glass} />
+          {[42, 51, 60].map((y, i) => <g key={y}><circle cx="60" cy={y} r="2.4" fill={i === 0 ? '#5BE37D' : 'none'} stroke={i === 0 ? '#5BE37D' : ring} strokeWidth="1" /><rect x="65" y={y - 1.5} width={i === 1 ? 30 : 36} height="3" rx="1.5" fill="rgba(255,255,255,0.75)" /></g>)}
+          <rect x="136" y="16" width="48" height="16" rx="8" fill={glass} />
+          <text x="146" y="28" fontFamily="-apple-system, BlinkMacSystemFont, sans-serif" fontWeight="900" fontSize="10" fill="#FFB347">240</text>
+          <rect x="166" y="22" width="12" height="3" rx="1.5" fill="#FFB347" />
+          {[226, 242, 258].map((x) => <circle key={x} cx={x} cy="24" r="6.2" fill={glass} stroke={ring} strokeWidth="1.3" />)}
+          <circle cx="76" cy="104" r="15" fill="rgba(8,14,30,0.25)" stroke={ring} strokeWidth="1.5" />
+          <circle cx="80" cy="101" r="6.5" fill="rgba(255,255,255,0.85)" stroke="#FFAE55" strokeWidth="2" />
+          <circle cx="252" cy="106" r="11" fill="rgba(36,121,232,0.8)" stroke="#5BB8FF" strokeWidth="2" />
+          <path d="M248 103 h5 l-2 -3 M248 109 h5 l-2 3" fill="none" stroke="#FFFFFF" strokeWidth="1.6" strokeLinecap="round" />
+          {[[230, 110, '#C08BFF'], [234, 92, '#5EE6D2'], [250, 86, '#FFE15A']].map(([x, y, c]) => <circle key={x} cx={x} cy={y} r="6.5" fill={glass} stroke={c} strokeWidth="1.6" />)}
+        </g>
+      </g>
+    </>
+  );
+}
+function WnJoinArt({ tall = false }) {
+  const rid = React.useId().replace(/[^a-zA-Z0-9]/g, '');
+  const y0 = tall ? -34 : 16;
+  const font = '-apple-system, BlinkMacSystemFont, sans-serif';
+  return (
+    <>
+      {tall && <WnCloud x={50} y={-92} s={0.7} o={0.85} />}
+      {tall && <WnCloud x={232} y={-70} s={0.55} o={0.75} />}
+      <defs><clipPath id={`jn${rid}`}><rect x="10" y="9" width="38" height="38" rx="9" /></clipPath></defs>
+      <g transform={`translate(36 ${y0})`}>
+        <rect x="0" y="0" width="248" height="56" rx="15" fill={ART_C.card} {...ak} strokeWidth="2.6" />
+        <image href="/gulp-art.webp" x="10" y="9" width="38" height="38" preserveAspectRatio="xMidYMid slice" clipPath={`url(#jn${rid})`} />
+        <rect x="10" y="9" width="38" height="38" rx="9" fill="none" stroke={ART_INK} strokeWidth="2" />
+        <text x="57" y="25" fontFamily={font} fontWeight="800" fontSize="11.5" fill={ART_INK}>Ana is in a Gulp room</text>
+        <text x="58" y="41" fontFamily={font} fontWeight="600" fontSize="10.5" fill="#6B6680">3 of 10 playing</text>
+        <rect x="194" y="15" width="44" height="26" rx="8" fill="#22B04B" stroke={ART_INK} strokeWidth="2.2" />
+        <text x="216" y="32.2" textAnchor="middle" fontFamily={font} fontWeight="800" fontSize="12.5" fill="#FFFFFF">Join</text>
+      </g>
+      <g transform={`translate(36 ${y0 + 74})`}>
+        <rect x="0" y="0" width="134" height="30" rx="15" fill={ART_C.lilac} {...ak} strokeWidth="2.4" />
+        <text x="14" y="19.5" fontFamily={font} fontWeight="700" fontSize="11.5" fill={ART_INK}>come swim with us</text>
+      </g>
+      <g transform={`translate(182 ${y0 + 112})`}>
+        <rect x="0" y="0" width="102" height="30" rx="15" fill={ART_C.violet} {...ak} strokeWidth="2.4" />
+        <text x="14" y="19.5" fontFamily={font} fontWeight="700" fontSize="11.5" fill="#FFFFFF">on my way</text>
+      </g>
+    </>
+  );
+}
+
 export const WN_THUMBS = {
   gulp33: { bg: 'sky', draw: () => (<image href="/gulp-art.webp" x="16" y="-4" width="288" height="186" preserveAspectRatio="xMidYMid slice" />) },
   duo33: { bg: 'night', draw: () => (<image href="/duo-art.webp" x="16" y="-4" width="288" height="186" preserveAspectRatio="xMidYMid slice" />) },
@@ -48804,6 +48997,10 @@ export const WN_THUMBS = {
   glv35: { bg: 'sky', draw: () => <WnLevelsArt /> },
   side35: { bg: 'sky', draw: () => <WnSideArt /> },
   more35: { bg: 'sky', draw: () => <WnTwoGamesArt /> },
+  sea36: { bg: 'sky', draw: () => <WnSeaArt /> },
+  miss36: { bg: 'sky', draw: () => <WnMissArt /> },
+  hud36: { bg: 'sky', draw: () => <WnHudArt /> },
+  join36: { bg: 'lilac', draw: () => <WnJoinArt /> },
   duo32: { bg: 'night', draw: () => (<>
     <rect x="16" y="128" width="288" height="60" fill="#3A2E24" />
     <path d="M118 132 V60 Q160 14 202 60 V132 Z" fill="#1E1626" {...ak} />
@@ -49368,6 +49565,10 @@ Object.assign(WN_SCENES, {
   glv35h: { bg: 'sky', draw: () => <WnLevelsArt tall /> },
   side35h: { bg: 'sky', draw: () => <WnSideArt tall /> },
   more35h: { bg: 'sky', draw: () => <WnTwoGamesArt tall /> },
+  sea36h: { bg: 'sky', draw: () => <WnSeaArt tall /> },
+  miss36h: { bg: 'sky', draw: () => <WnMissArt tall /> },
+  hud36h: { bg: 'sky', draw: () => <WnHudArt tall /> },
+  join36h: { bg: 'lilac', draw: () => <WnJoinArt tall /> },
 });
 
 function WnBoardPin({ x, y, color = ART_C.coral }) {
@@ -58977,7 +59178,7 @@ Object.assign(FRIEND_GAME_SUBS, { roll: 'Live, up to four friends roll together'
 Object.assign(GAME_ART_BG, { roll: ['#6EC6FF', '#4FA83A'], duo: ['#3B2A48', '#120C1C'], gulp: ['#1C6FA8', '#082A4C'], gulpco: ['#1C6FA8', '#082A4C'], tug: ['#F97316', '#E11D48'], qrace: ['#7C3AED', '#2563EB'], rrace: ['#10B981', '#0EA5E9'] });
 Object.assign(GAME_RULES, {
   duo: { how: ['You carry the orange torch, your friend carries the blue one. Move with the joystick.', 'Orange walks through lava and fire. Blue wades through water, lights hidden stones and reads hidden codes.', 'Pull levers, hold doors on the plates, jump through glowing rings, cross spikes when they drop and keep moving on cracked floors.', 'Play the story or endless temples that are new every time. You share three hearts.', 'Talk with voice, quick messages and emojis. You can mute your friend any time.'], win: 'Stand on your own glowing doors at the same time to finish. Finish missions for stars.' },
-  gulp: { how: ['You are a small fish with the number 2. Swim with the joystick.', 'Touch fish with a number the same as yours or smaller to eat them. Any part of you works, even your tail. Their number adds to yours.', 'Fish with bigger numbers can eat you. Hunters chase you for a moment, then give up. Dash to get away.', 'Suck pulls the fish in front of you into your mouth. Grow bigger to unlock a shield, a shock wave and frenzy.', 'Grab bubbles for a shield, double food, a magnet or speed. If you are bigger than your friend you can eat them too.'], win: 'There is no size limit. Each of you has three lives and gets one back when you grow into a new fish. Whoever keeps their lives longer wins the round.' },
+  gulp: { how: ['You are a small fish with the number 2. Swim with the joystick.', 'Touch fish with a number the same as yours or smaller to eat them. Any part of you works, even your tail. Their number adds to yours.', 'Fish with bigger numbers can eat you. Hunters chase you for a moment, then give up. Dash to get away.', 'Suck pulls the fish in front of you into your mouth. Grow bigger to unlock a shield, a shock wave and frenzy.', 'Grab bubbles for a shield, double food, a magnet or speed. If you are bigger than your friend you can eat them too.'], win: 'There is no size limit. Each of you has five lives and gets one back when you grow into a new fish. Whoever keeps their lives longer wins the round.' },
   gulpco: { how: ['A fish room for up to ten friends. Anyone you invite can join or leave any time.', 'Swim with the joystick and eat fish with a number the same as yours or smaller.', 'Nobody eats anyone in the room. If a big fish gets you, you come back a bit smaller.', 'Turn your mic on to talk. Tap the people button to mute anyone.'], win: 'There is no end. Grow together and see who gets biggest.' },
   roll: { how: ['Hold the arrows to roll your ball. Tap jump, hold it to jump higher.', 'Land on top of enemies to bop them. Spiky ones hurt from every side.', 'Springs throw you high. Flags save where you come back after a pop.', 'Some gates need two buttons pressed at the same time. Team up.', 'Grab coins and find the three stars hidden in every level.'], win: 'Everyone has to reach the portal to clear the level. There are five worlds with six levels each.' },
   tug: { how: ['You both play at the same moment. Open the game and wait for your friend to join.', 'When the countdown ends, tap the big button as fast as you can.', 'Every tap pulls the rope toward you.'], win: 'After 15 seconds, whoever pulled the rope to their side wins.' },

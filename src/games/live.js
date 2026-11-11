@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient.js';
 
 const KEY = 'zchat-game-watchable';
@@ -14,13 +14,23 @@ async function call(fn, args) {
 }
 
 export function useLiveBeacon({ game, room, info, active, allow }) {
+  const infoRef = useRef(info);
+  infoRef.current = info;
+  const on = !!active && !!room;
+  const key = JSON.stringify(info || {});
+  const sent = useRef('');
   useEffect(() => {
-    if (!active || !room) return undefined;
-    const push = () => call('zchat_live_set', { p_game: game, p_room: room, p_watch: !!allow, p_info: info || {} });
+    if (!on) return undefined;
+    const push = () => { sent.current = JSON.stringify(infoRef.current || {}); call('zchat_live_set', { p_game: game, p_room: room, p_watch: !!allow, p_info: infoRef.current || {} }); };
     push();
     const iv = setInterval(push, 60000);
     return () => { clearInterval(iv); call('zchat_live_clear'); };
-  }, [active, room, allow]);
+  }, [on, room, allow]);
+  useEffect(() => {
+    if (!on || key === sent.current) return undefined;
+    const t = setTimeout(() => { sent.current = JSON.stringify(infoRef.current || {}); call('zchat_live_set', { p_game: game, p_room: room, p_watch: !!allow, p_info: infoRef.current || {} }); }, 2000);
+    return () => clearTimeout(t);
+  }, [key, on]);
 }
 
 export async function loadLiveFriends() {

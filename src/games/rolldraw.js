@@ -350,3 +350,46 @@ export function render(ctx, W, V) {
   }
   c.restore();
 }
+
+export function buildRollMini(L) {
+  const P = SKY[L.world] || SKY.meadow;
+  const cv = document.createElement('canvas');
+  cv.width = L.MW * 2; cv.height = L.MH * 2;
+  const c = cv.getContext('2d');
+  for (let x = 0; x < L.MW; x++) for (let y = 0; y < L.MH; y++) {
+    const ch = atL(L, x, y);
+    if (ch === '#' || ch === 'I' || ch === '/' || ch === '\\' || ch === '=') {
+      const up = atL(L, x, y - 1);
+      const top = !(up === '#' || up === 'I' || up === '/' || up === '\\' || up === '=' || up === 'D');
+      c.fillStyle = top ? P.grass[0] : P.dirt[1]; c.fillRect(x * 2, y * 2, 2, top ? 1 : 2);
+      if (top) { c.fillStyle = P.dirt[1]; c.fillRect(x * 2, y * 2 + 1, 2, 1); }
+    } else if (ch === '-') { c.fillStyle = P.plank[0]; c.fillRect(x * 2, y * 2, 2, 1); }
+    else if (ch === 'D') { c.fillStyle = P.brick[1]; c.fillRect(x * 2, y * 2, 2, 2); }
+    else if (ch === '^') { c.fillStyle = '#E5484D'; c.fillRect(x * 2, y * 2 + 1, 2, 1); }
+  }
+  return cv;
+}
+
+export function drawRollMini(c, W, base, w, h, list, me, view, myK) {
+  const L = W.L;
+  const P = SKY[L.world] || SKY.meadow;
+  c.clearRect(0, 0, w, h);
+  c.save(); c.beginPath(); c.roundRect(0, 0, w, h, 7); c.clip();
+  const g = c.createLinearGradient(0, 0, 0, h); g.addColorStop(0, P.top); g.addColorStop(1, P.bot);
+  c.globalAlpha = 0.72; c.fillStyle = g; c.fillRect(0, 0, w, h); c.globalAlpha = 1;
+  const sx = w / L.MW, sy = h / L.MH;
+  c.imageSmoothingEnabled = false; c.drawImage(base, 0, 0, w, h); c.imageSmoothingEnabled = true;
+  if (view) { c.strokeStyle = 'rgba(255,255,255,0.8)'; c.lineWidth = 1; c.strokeRect(Math.max(0.5, (view.x - view.hw) * sx), 0.5, Math.min(w - 1, view.hw * 2 * sx), h - 1); }
+  for (let i = 0; i < L.flags.length; i++) { const f = L.flags[i]; if (f.start) continue; const on = W.cps && W.cps.has(`${i}:${myK}`); c.fillStyle = on ? '#5BE37D' : 'rgba(255,255,255,0.85)'; c.fillRect(f.x * sx - 0.5, (f.y - 2) * sy, 1, 2 * sy); c.fillRect(f.x * sx, (f.y - 2) * sy, 3, 2); }
+  for (let i = 0; i < L.stars.length; i++) { if (W.stars.has(i)) continue; const st = L.stars[i]; c.fillStyle = '#FFD23F'; c.beginPath(); c.arc(st.x * sx, st.y * sy, 1.8, 0, TAU); c.fill(); }
+  c.strokeStyle = '#B98CFF'; c.lineWidth = 1.6; c.beginPath(); c.arc(L.goal.x * sx, (L.goal.y - 0.6) * sy, 3, 0, TAU); c.stroke();
+  for (const it of list) {
+    const b = it.b;
+    if (!b || b.home) continue;
+    const col = (BALLS[it.ci % 4] || BALLS[0]).body;
+    c.fillStyle = col; c.strokeStyle = b === me ? '#FFFFFF' : INK; c.lineWidth = b === me ? 1.5 : 1.1;
+    c.beginPath(); c.arc(clamp(b.x * sx, 2, w - 2), clamp(b.y * sy, 2, h - 2), b === me ? 3.2 : 2.7, 0, TAU); c.fill(); c.stroke();
+  }
+  c.restore();
+  c.strokeStyle = 'rgba(255,255,255,0.45)'; c.lineWidth = 1.2; c.beginPath(); c.roundRect(0.6, 0.6, w - 1.2, h - 1.2, 7); c.stroke();
+}

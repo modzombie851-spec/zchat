@@ -1,6 +1,6 @@
-export const WW = 640;
-export const WH = 330;
-export const LIVES = 3;
+export const WW = 1600;
+export const WH = 420;
+export const LIVES = 5;
 export const TAU = Math.PI * 2;
 export const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 export const PK_KINDS = ['shield', 'double', 'magnet', 'speed', 'life'];
@@ -40,6 +40,7 @@ export const SPECIES = [
   { id: 'angler', shape: 'angler', hunter: true, teeth: true, zones: [3], glow: '#FFF3A0', pal: [['#4A3A5C', '#2A1F38', '#6A587E', null]] },
   { id: 'orca', shape: 'orca', hunter: true, teeth: true, zones: [1, 2, 3], pal: [['#1E2230', '#0E1018', '#F2F4F8', null]] },
   { id: 'whale', shape: 'whale', zones: [2, 3], pal: [['#5A7393', '#36485F', '#B9C7D6', null]] },
+  { id: 'gold', shape: 'oval', zones: [0, 1, 2, 3], glow: '#FFE680', pal: [['#FFD84D', '#E0A100', '#FFF4B0', '#B37A00']] },
 ];
 export const SP_INDEX = Object.fromEntries(SPECIES.map((s, i) => [s.id, i]));
 const PREY_IDS = ['minnow', 'guppy', 'clown', 'tang', 'angel', 'puffer', 'snapper', 'tuna', 'lantern', 'squid', 'jelly', 'whale'];
@@ -65,21 +66,44 @@ const angLerp = (a, b, k) => { const d = ((b - a + Math.PI) % TAU + TAU) % TAU -
 const angDiff = (a, b) => ((b - a + Math.PI) % TAU + TAU) % TAU - Math.PI;
 
 function vn(x) { const i = Math.floor(x), f = x - i; const h = (k) => { const s = Math.sin(k * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); }; const u = f * f * (3 - 2 * f); return h(i) * (1 - u) + h(i + 1) * u; }
+const FLOOR = [[0, 80], [180, 80], [262, 196], [520, 206], [600, 300], [980, 300], [1060, 392], [1380, 392], [1470, 236], [1600, 214]];
 export function floorAt(x) {
   const n = (vn(x * 0.045) - 0.5) * 9 + (vn(x * 0.17 + 9) - 0.5) * 3;
-  let base;
-  if (x < 150) base = 80;
-  else if (x < 235) { const k = (x - 150) / 85; base = 80 + (270 - 80) * (k * k * (3 - 2 * k)); }
-  else if (x < 520) base = 270;
-  else { const k = Math.min(1, (x - 520) / 60); base = 270 + 42 * (k * k * (3 - 2 * k)); }
+  let base = FLOOR[FLOOR.length - 1][1];
+  for (let i = 1; i < FLOOR.length; i++) {
+    if (x <= FLOOR[i][0]) { const [xa, ya] = FLOOR[i - 1], [xb, yb] = FLOOR[i]; const k = clamp((x - xa) / (xb - xa), 0, 1); base = ya + (yb - ya) * (k * k * (3 - 2 * k)); break; }
+  }
   return Math.min(WH - 2, base + n);
 }
+export function regionAt(x) {
+  if (x < 190 || x > 1480) return 'reef';
+  if (x > 262 && x < 520) return 'kelp';
+  if (x > 600 && x < 980) return 'open';
+  if (x > 1060 && x < 1380) return 'abyss';
+  return 'slope';
+}
 export function zoneAt(x, y) {
-  if (y < 76 && x < 190) return 0;
-  if (y < 110) return 1;
-  if (y < 255) return 2;
+  if (y < 84 && (x < 200 || x > 1440)) return 0;
+  if (y < 125) return 1;
+  if (y < 270) return 2;
   return 3;
 }
+export const CURRENTS = [
+  { x0: 200, x1: 560, y0: 30, y1: 56, v: 3.4 },
+  { x0: 600, x1: 1040, y0: 148, y1: 184, v: 4.4 },
+  { x0: 1080, x1: 1400, y0: 298, y1: 332, v: -3.8 },
+];
+export function currentAt(x, y) {
+  for (const c of CURRENTS) {
+    if (x <= c.x0 || x >= c.x1 || y <= c.y0 || y >= c.y1) continue;
+    const ex = Math.min(1, (x - c.x0) / 30, (c.x1 - x) / 30);
+    return c.v * ex * Math.sin(((y - c.y0) / (c.y1 - c.y0)) * Math.PI);
+  }
+  return 0;
+}
+export const CHEST_X = [120, 395, 772, 834, 1190, 1310, 1540];
+export const canOpen = (p, ch) => !p.out && p.dead <= 0 && ch.cool <= 0 && Math.hypot(p.x - ch.x, p.y - ch.y) < rOf(p.n) * 1.1 + 2;
+export const chestGain = (p) => Math.max(8, Math.floor(p.n * 0.15));
 
 export function mkPl(kind, name, x, y) {
   return {
@@ -96,6 +120,7 @@ export function makeGame(seed, opts) {
     seed: String(seed), rng: R, t: 0, fish: [], pk: [], nextId: 1, seq: 0, events: [], log: [], over: null, acks: [],
     pl: {}, order: [], spawnT: 0, pkT: 6, deco: null, solo: !!o.solo, botMem: {}, demo: !!o.demo, coop: !!o.coop,
     cfg: { hunt: 1, pk: 1, ...(o.cfg || {}) },
+    chests: CHEST_X.map((x, i) => ({ id: i, x, y: floorAt(x) - 1.3, cool: 0 })), goldT: 28,
   };
   const spots = [[30, 34], [52, 40], [70, 30], [40, 52], [86, 46]];
   (o.players || [{ kind: 'sun' }]).forEach((pp, i) => {
@@ -255,7 +280,7 @@ function spawnPk(G) {
   const V = viewOf(P.n);
   const ang = R() * TAU, d = (0.5 + R() * 0.8) * V;
   const x = clamp(P.x + Math.cos(ang) * d, 3, WW - 3), y = clamp(P.y + Math.sin(ang) * d * 0.7, 3, floorAt(x) - 3);
-  const kinds = P.lives < LIVES && R() < 0.12 ? ['life'] : ['shield', 'double', 'magnet', 'speed'];
+  const kinds = P.lives < (P.maxLives || LIVES) && R() < 0.12 ? ['life'] : ['shield', 'double', 'magnet', 'speed'];
   G.pk.push({ id: G.nextId++, k: kinds[Math.floor(R() * kinds.length)], x, y, life: 20, r: Math.max(0.35, rOf(P.n) * 0.7) });
 }
 
@@ -314,6 +339,8 @@ export function movePlayer(G, p, input, dt) {
   const k = 1 - Math.exp(-dt * acc);
   p.vx += (tvx - p.vx) * k; p.vy += (tvy - p.vy) * k;
   p.x += p.vx * dt; p.y += p.vy * dt;
+  const cu = currentAt(p.x, p.y);
+  if (cu) p.x += cu * dt / (1 + rOf(p.n) * 0.12);
   const r = rOf(p.n);
   p.x = clamp(p.x, r, WW - r);
   const fl = floorAt(p.x) - r * 0.7;
@@ -357,7 +384,11 @@ function steerFish(G, f, dt) {
     }
   }
   const live = G.order.map((k) => G.pl[k]).filter((p) => p && !p.out && p.dead <= 0);
-  if (f.hunter) {
+  if (f.gold) {
+    let near = null, nd = 8 + r * 3;
+    for (const p of live) { const d = Math.hypot(p.x - f.x, p.y - f.y) - rOf(p.n); if (d < nd) { nd = d; near = p; } }
+    if (near) { want = Math.atan2(f.y - near.y, f.x - near.x) + Math.sin(G.t * 3 + f.id) * 0.45; sp = Math.max(sp, speedOf(near.n) * 0.8); }
+  } else if (f.hunter) {
     if (f.cool > 0) f.cool -= dt;
     if (f.warn > 0) {
       f.warn -= dt;
@@ -395,7 +426,7 @@ function steerFish(G, f, dt) {
   if (f.x > WW - m) want = angLerp(want, Math.PI, 0.6);
   f.a = angLerp(f.a, want, 1 - Math.exp(-dt * (f.chase > 0 ? 5 : 2.2)));
   if (f.sucked > 0) { f.sucked -= dt; return; }
-  f.x += Math.cos(f.a) * sp * dt; f.y += Math.sin(f.a) * sp * dt * (S.shape === 'jelly' ? 0.3 : 1);
+  f.x += Math.cos(f.a) * sp * dt + currentAt(f.x, f.y) * dt * 0.8; f.y += Math.sin(f.a) * sp * dt * (S.shape === 'jelly' ? 0.3 : 1);
   if (S.shape === 'jelly') f.y += Math.sin(G.t * 1.6 + f.id) * 0.25 * dt;
   f.y = clamp(f.y, 0.6, fl - r * 0.5);
   f.x = clamp(f.x, 0.5, WW - 0.5);
@@ -439,27 +470,43 @@ function grow(G, p, gain) {
   const st = stageOf(p.n);
   if (st > p.stage) {
     p.stage = st;
-    if (p.lives < LIVES) p.lives += 1;
+    if (p.lives < (p.maxLives || LIVES)) p.lives += 1;
     ev(G, { k: 'evolve', who: p.kind, st });
   }
 }
+export function eatGain(p, f) { const g = gainFor(p, f.n); return f.gold ? Math.max(g, Math.floor(p.n * 0.3), 12) : g; }
 export function eatFish(G, p, f) {
   const i = G.fish.indexOf(f);
   if (i < 0) return false;
   G.fish.splice(i, 1);
   p.combo = p.comboT > 0 ? p.combo + 1 : 1;
   p.comboT = 1.6;
-  const gain = gainFor(p, f.n);
+  const gain = eatGain(p, f);
   p.eat = 0.3; p.eaten += 1;
+  if (f.gold) p.golds = (p.golds || 0) + 1;
   feed(G, p, gain);
-  ev(G, { k: 'eat', who: p.kind, id: f.id, gain, x: f.x, y: f.y, sp: f.sp, c: p.combo, big: f.n > p.n * 0.35 ? 1 : 0 });
+  ev(G, { k: 'eat', who: p.kind, id: f.id, gain, x: f.x, y: f.y, sp: f.sp, pv: f.pv, n: f.n, c: p.combo, big: f.n > p.n * 0.35 ? 1 : 0, gold: f.gold ? 1 : 0 });
+  return true;
+}
+export function openChest(G, p, ch) {
+  if (!ch || ch.cool > 0) return false;
+  ch.cool = 45;
+  const gain = chestGain(p);
+  feed(G, p, gain);
+  const kinds = ['shield', 'double', 'magnet', 'speed'];
+  const k = kinds[Math.floor(G.rng() * kinds.length)];
+  p.fx[k] = Math.max(p.fx[k] || 0, PK_TIME[k]);
+  let life = 0;
+  if (p.lives < (p.maxLives || LIVES) && G.rng() < 0.4) { p.lives += 1; life = 1; }
+  p.chests = (p.chests || 0) + 1;
+  ev(G, { k: 'chest', who: p.kind, id: ch.id, gain, kind: k, life, x: ch.x, y: ch.y });
   return true;
 }
 export function takePk(G, p, pk) {
   const i = G.pk.indexOf(pk);
   if (i < 0) return false;
   G.pk.splice(i, 1);
-  if (pk.k === 'life') p.lives = Math.min(LIVES, p.lives + 1);
+  if (pk.k === 'life') p.lives = Math.min(p.maxLives || LIVES, p.lives + 1);
   else p.fx[pk.k] = Math.max(p.fx[pk.k] || 0, PK_TIME[pk.k]);
   ev(G, { k: 'pick', who: p.kind, id: pk.id, kind: pk.k, x: pk.x, y: pk.y });
   return true;
@@ -500,11 +547,28 @@ export function hostStep(G, dt, ctl) {
   const anchors = anchorPlayers(G);
   const keep = [];
   for (const f of G.fish) {
+    if (f.gold && G.t - f.born > 32) continue;
     let near = false;
     for (const p of anchors) { if (Math.hypot(f.x - p.x, f.y - p.y) < viewOf(p.n) * 2.2 + rOf(f.n) * 2) { near = true; break; } }
     if (near) keep.push(f);
   }
   G.fish = keep;
+  if (!G.demo) {
+    G.goldT -= dt;
+    if (G.goldT <= 0) {
+      G.goldT = 34 + G.rng() * 30;
+      const ga = anchors.filter((p) => p.kind !== 'demo');
+      if (ga.length && !G.fish.some((f) => f.gold)) {
+        const P = ga[Math.floor(G.rng() * ga.length)];
+        const V = viewOf(P.n), ang = G.rng() * TAU;
+        const gx = clamp(P.x + Math.cos(ang) * V * 0.85, 3, WW - 3), gy = clamp(P.y + Math.sin(ang) * V * 0.55, 3, floorAt(gx) - 3);
+        const gf = addFish(G, SP_INDEX.gold, Math.max(2, Math.floor(P.n * 0.45)), gx, gy, ang);
+        gf.gold = true; gf.v = 1.6;
+        ev(G, { k: 'goldin', x: gx, y: gy, who: P.kind });
+      }
+    }
+  }
+  for (const ch of G.chests || []) if (ch.cool > 0) ch.cool -= dt;
   G.spawnT -= dt;
   if (G.spawnT <= 0) {
     G.spawnT = 0.25;
@@ -526,6 +590,7 @@ export function hostStep(G, dt, ctl) {
     if (!p || p.dead > 0 || p.out || k === 'demo' || !ctl.local.has(k)) continue;
     for (const f of G.fish.slice()) if (canEat(p, f)) eatFish(G, p, f);
     for (const pk of G.pk.slice()) if (canTake(p, pk)) takePk(G, p, pk);
+    for (const ch of G.chests || []) if (canOpen(p, ch)) openChest(G, p, ch);
   }
   for (const f of G.fish) {
     if (f.stun > 0) continue;
@@ -575,12 +640,15 @@ export function applyGuestEvent(G, kind, e) {
   if (!e || !p || G.over) return;
   if (e.k === 'eat') {
     const f = G.fish.find((x) => x.id === e.id);
-    if (f && p.dead <= 0 && !p.out && f.n <= p.n + (e.slack || 0) && Math.hypot(p.x - f.x, p.y - f.y) < rOf(p.n) * 2.2 + rOf(f.n) + 2) { eatFish(G, p, f); G.acks.push([e.id, G.t]); }
+    if (f && p.dead <= 0 && !p.out && f.n <= p.n + (e.slack || 0) && Math.hypot(p.x - f.x, p.y - f.y) < rOf(p.n) * 2.2 + rOf(f.n) + 2 + (f.gold ? 3 : 0)) { eatFish(G, p, f); G.acks.push([e.id, G.t]); }
   } else if (e.k === 'pick') {
     const pk = G.pk.find((x) => x.id === e.id);
     if (pk && p.dead <= 0) { takePk(G, p, pk); G.acks.push([e.id, G.t]); }
   } else if (e.k === 'skill') {
     useSkill(G, p, e.s);
+  } else if (e.k === 'chest') {
+    const ch = (G.chests || []).find((x) => x.id === e.id);
+    if (ch && p.dead <= 0 && ch.cool <= 0 && Math.hypot(p.x - ch.x, p.y - ch.y) < rOf(p.n) * 2 + 5) { openChest(G, p, ch); G.acks.push([`c${e.id}`, G.t]); }
   }
 }
 
@@ -594,9 +662,9 @@ export function snap(G, views, forKey) {
   for (const k of G.order) if (G.pl[k] && k !== 'demo') pl[k] = P(G.pl[k]);
   return {
     gt: Math.round(G.t * 100), seq: G.seq,
-    f: G.fish.filter(inView).map((f) => [f.id, f.sp * 10 + f.pv, f.n, q10(f.x), q10(f.y), Math.round(f.a * 100), (f.hunter ? 1 : 0) + (f.chase > 0 ? 2 : 0) + (f.stun > 0 ? 4 : 0) + (f.warn > 0 ? 8 : 0), f.school != null ? f.school : 0, Math.round(f.puff * 10)]),
+    f: G.fish.filter(inView).map((f) => [f.id, f.sp * 10 + f.pv, f.n, q10(f.x), q10(f.y), Math.round(f.a * 100), (f.hunter ? 1 : 0) + (f.chase > 0 ? 2 : 0) + (f.stun > 0 ? 4 : 0) + (f.warn > 0 ? 8 : 0) + (f.gold ? 16 : 0), f.school != null ? f.school : 0, Math.round(f.puff * 10)]),
     pk: G.pk.map((k) => [k.id, PK_KINDS.indexOf(k.k), q10(k.x), q10(k.y), q10(k.r)]),
-    pl, ack: G.acks.map(([id]) => id), ev: (forKey ? G.log.filter(evOk) : G.log).slice(-14), over: G.over,
+    pl, ch: (G.chests || []).map((c) => Math.max(0, Math.ceil(c.cool))), ack: G.acks.map(([id]) => id), ev: (forKey ? G.log.filter(evOk) : G.log).slice(-14), over: G.over,
   };
 }
 export function applySnap(G, s, mine) {
@@ -614,11 +682,12 @@ export function applySnap(G, s, mine) {
     if (!f) { f = { id, sp, pv, n, x: nx, y: ny, a: a / 100, tx: nx, ty: ny, ta: a / 100, vx: 0, vy: 0, ext: 0, hunter: !!(fl & 1), chase: 0, stun: 0, school: sch || null, puff: 0, born: G.t }; G.fish.push(f); }
     else if (dts > 0.02 && f.sx != null) { f.vx = (nx - f.sx) / dts; f.vy = (ny - f.sy) / dts; const v = Math.hypot(f.vx, f.vy); const cap = 3 + rOf(n) * 3; if (v > cap) { f.vx *= cap / v; f.vy *= cap / v; } }
     f.sx = nx; f.sy = ny; f.ext = 0;
-    f.sp = sp; f.pv = pv; f.n = n; f.hunter = !!(fl & 1); f.chase = fl & 2 ? 1 : 0; f.stun = fl & 4 ? 1 : 0; f.warn = fl & 8 ? 1 : 0; f.tx = nx; f.ty = ny; f.ta = a / 100; f.puff = (puff || 0) / 10;
+    f.sp = sp; f.pv = pv; f.n = n; f.hunter = !!(fl & 1); f.chase = fl & 2 ? 1 : 0; f.stun = fl & 4 ? 1 : 0; f.warn = fl & 8 ? 1 : 0; f.gold = !!(fl & 16); f.tx = nx; f.ty = ny; f.ta = a / 100; f.puff = (puff || 0) / 10;
     if (Math.hypot(f.x - f.tx, f.y - f.ty) > 4 + rOf(n) * 2) { f.x = f.tx; f.y = f.ty; }
   }
   G.fish = G.fish.filter((f) => seen.has(f.id));
   G.pk = s.pk.map(([id, k, x, y, r]) => ({ id, k: PK_KINDS[k], x: x / 10, y: y / 10, r: r / 10, life: 9 }));
+  if (Array.isArray(s.ch) && G.chests) G.chests.forEach((c, i) => { c.cool = s.ch[i] || 0; });
   if (s.all) for (const k of G.order.slice()) if (k !== 'demo' && !s.pl[k]) { delete G.pl[k]; G.order = G.order.filter((x) => x !== k); }
   for (const k of Object.keys(s.pl)) {
     let p = G.pl[k];

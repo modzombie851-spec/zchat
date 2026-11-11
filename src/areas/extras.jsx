@@ -6564,23 +6564,26 @@ function WnSegments({ total, at, onArt, dark }) {
 }
 
 const WN_HIGHLIGHTS = [
-  { k: 'room35', art: 'room35h', go: 'games', title: 'Gulp rooms', text: 'Swim with up to ten friends. Anyone can join or leave any time and you see who comes and goes. Talk with your mic and mute anyone you like.' },
-  { k: 'glv35', art: 'glv35h', go: 'games', title: 'Gulp levels', text: 'Twenty levels with their own goals, plus endless mode. Real eating sounds, your number goes up the moment you eat, and sharks are fairer.' },
-  { k: 'side35', art: 'side35h', go: 'games', title: 'Play your way', text: 'Gulp turns sideways by itself, no need to rotate your phone. Make game buttons smaller or see through in Controls.' },
-  { k: 'more35', art: 'more35h', go: 'games', title: 'More levels', text: 'Ten new Two Torches temples and two new Roll Squad worlds, Candy hills and Lava caves.' },
+  { k: 'sea36', art: 'sea36h', go: 'games', title: 'A bigger Gulp sea', text: 'A much bigger sea with a kelp forest, a shipwreck, currents, treasure chests and golden fish. Fish open their mouths and gulp for real, and you get five lives.' },
+  { k: 'miss36', art: 'miss36h', go: 'games', title: 'Endless missions', text: 'Endless Gulp always gives you three missions. Finish one for an extra life or a power up, then a new one appears.' },
+  { k: 'hud36', art: 'hud36h', go: 'games', title: 'Clear game screens', text: 'Gulp, Two Torches and Roll Squad now play sideways with small see through buttons at the edges and a map in the corner, so you can see the whole game.' },
+  { k: 'join36', art: 'join36h', title: 'Join from chat', text: 'When a friend is in a game you can join, a Join button shows at the top of your chat with them. For two player games you can watch.' },
 ];
 const WN_SECTIONS = [
   { title: 'Games', items: [
-    { art: 'room35', title: 'Gulp rooms', text: 'Up to ten friends, join or leave any time, voice.' },
-    { art: 'glv35', title: 'Gulp levels', text: 'Twenty levels plus endless mode.' },
-    { art: 'side35', title: 'Play your way', text: 'Sideways play, smaller or see through buttons.' },
-    { art: 'more35', title: 'More levels', text: 'New temples in Two Torches, new worlds in Roll Squad.' },
+    { art: 'sea36', title: 'A bigger Gulp sea', text: 'Chests, golden fish, currents and five lives.' },
+    { art: 'miss36', title: 'Endless missions', text: 'Three missions at a time with rewards.' },
+    { art: 'hud36', title: 'Clear game screens', text: 'Small buttons at the edges and a map in the corner.' },
+  ] },
+  { title: 'Chats', items: [
+    { art: 'join36', title: 'Join from chat', text: 'Jump into a friend’s game right from your chat.' },
   ] },
 ];
 const WN_NEW_COUNT = WN_SECTIONS.reduce((n, sec) => n + sec.items.length, 0);
 const WN_SUMMARY = `${WN_NEW_COUNT} new things to try.`;
 
 const WN_EARLIER = [
+  { title: 'Gulp rooms and levels', text: 'Gulp rooms for up to ten friends, twenty Gulp levels, sideways play, button size controls, ten new Two Torches temples and two new Roll Squad worlds.' },
   { title: 'Roll Squad, watching friends and game clocks', text: 'A live ball game for up to four friends, a new Gulp, Two Torches enemies and mirror puzzles, watching friends play live, and clocks for chess and checkers.' },
   { title: 'Gulp and endless Two Torches', text: 'A live fish game, new temples every time you play, missions, voice and quick chat in Two Torches, and new rock paper scissors hands.' },
   { title: 'Two Torches and bubble pets', text: 'A live temple game for two, 51 soft 3D bubble pets, real rock paper scissors, Squish with water balloons and better group games.' },

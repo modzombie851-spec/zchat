@@ -1269,7 +1269,14 @@ export function render(ctx, W, V) {
     const bx = ox + p.x * s, by = oy + (p.y - 0.5) * s, m = 34, top = V.safeTop || 120, bot = ch - (V.safeBottom || 170);
     const off = bx < m || bx > cw - m || by < top || by > bot;
     if (off && alive(p)) {
-      const ix = clamp(bx, m, cw - m), iy = clamp(by, top, bot), ang = Math.atan2(by - iy, bx - ix);
+      let ix = clamp(bx, m, cw - m), iy = clamp(by, top, bot);
+      for (const k of V.keep || []) {
+        if (ix <= k[0] - 22 || ix >= k[2] + 22 || iy <= k[1] - 22 || iy >= k[3] + 22) continue;
+        const edgeX = ix <= m + 1 || ix >= cw - m - 1;
+        if (edgeX) iy = k[1] - 22 > top && (iy - k[1] < k[3] - iy || k[3] + 22 > bot) ? k[1] - 22 : Math.min(bot, k[3] + 22);
+        else ix = k[0] - 22 > m && (ix - k[0] < k[2] - ix || k[2] + 22 > cw - m) ? k[0] - 22 : Math.min(cw - m, k[2] + 22);
+      }
+      const ang = Math.atan2(by - iy, bx - ix);
       c.save(); c.translate(ix, iy);
       c.fillStyle = 'rgba(10,8,16,0.72)'; c.beginPath(); c.arc(0, 0, 19, 0, TAU); c.fill();
       c.fillStyle = them === 'moon' ? '#3E7FD6' : '#E59238'; c.beginPath(); c.arc(0, 0, 15, 0, TAU); c.fill();
@@ -1330,3 +1337,43 @@ function lighting(ctx, W, V, T) {
 }
 
 export { glyph, flame, LOOK, drawExplorer, gemShape, rr, rgba, shade };
+
+export function buildMini(W) {
+  const T = thOf(W);
+  const k = 4;
+  const cv = document.createElement('canvas');
+  cv.width = W.MW * k; cv.height = W.MH * k;
+  const c = cv.getContext('2d');
+  for (let y = 0; y < W.MH; y++) for (let x = 0; x < W.MW; x++) {
+    const ch = W.map[y][x];
+    c.fillStyle = isWallCh(ch) ? T.wall : ch === 'C' || ch === 'b' ? T.chasm[1] : ch === 'K' ? T.rim[0] : ch === 'L' ? '#E8641E' : ch === 'W' ? T.water[1] : ch === 'P' ? T.goo[1] : ch === 'I' ? '#CFE6F2' : ch === 'Z' ? '#C9772E' : ch === 'z' ? '#3E7FD6' : 'HJODEVQG'.includes(ch) ? T.faceB : T.floor[0];
+    c.fillRect(x * k, y * k, k, k);
+  }
+  return cv;
+}
+
+export function drawDuoMini(c, W, base, w, h, me, view) {
+  c.clearRect(0, 0, w, h);
+  const k = Math.min(w / W.MW, h / W.MH), ox = (w - W.MW * k) / 2, oy = (h - W.MH * k) / 2;
+  c.save(); rr(c, 0, 0, w, h, 6); c.clip();
+  c.fillStyle = 'rgba(8,8,16,0.6)'; c.fillRect(0, 0, w, h);
+  c.globalAlpha = 0.88; c.imageSmoothingEnabled = false; c.drawImage(base, ox, oy, W.MW * k, W.MH * k); c.globalAlpha = 1; c.imageSmoothingEnabled = true;
+  const d = Math.max(3, k * 0.6);
+  for (const g of W.gems) if (!g.taken) { c.fillStyle = g.k === 'sun' ? '#FFC23D' : '#69A8FF'; c.fillRect(ox + (g.x + 0.5) * k - d / 2, oy + (g.y + 0.5) * k - d / 2, d, d); }
+  for (const kk of ['sun', 'moon']) {
+    const e = W.exits[kk];
+    if (!e) continue;
+    const q = Math.max(4, k);
+    c.fillStyle = kk === 'sun' ? 'rgba(255,179,71,0.45)' : 'rgba(140,192,255,0.45)'; c.strokeStyle = kk === 'sun' ? '#FFB347' : '#8CC0FF'; c.lineWidth = 1.2;
+    c.fillRect(ox + (e.x + 0.5) * k - q / 2, oy + (e.y + 0.5) * k - q / 2, q, q); c.strokeRect(ox + (e.x + 0.5) * k - q / 2, oy + (e.y + 0.5) * k - q / 2, q, q);
+  }
+  if (view) { c.strokeStyle = 'rgba(255,255,255,0.7)'; c.lineWidth = 1; c.strokeRect(ox + (view.x - view.hw) * k, oy + (view.y - view.hh) * k, view.hw * 2 * k, view.hh * 2 * k); }
+  for (const kk of ['moon', 'sun']) {
+    const p = W.p[kk];
+    if (!p) continue;
+    c.fillStyle = kk === 'sun' ? '#FFB347' : '#6FB0FF'; c.strokeStyle = kk === me ? '#FFFFFF' : '#141018'; c.lineWidth = kk === me ? 1.6 : 1.2;
+    c.beginPath(); c.arc(ox + p.x * k, oy + (p.y - 0.3) * k, Math.max(2.8, k * 0.55), 0, TAU); c.fill(); c.stroke();
+  }
+  c.restore();
+  c.strokeStyle = 'rgba(255,255,255,0.38)'; c.lineWidth = 1.2; rr(c, 0.6, 0.6, w - 1.2, h - 1.2, 6); c.stroke();
+}
