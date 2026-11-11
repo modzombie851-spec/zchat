@@ -6575,22 +6575,20 @@ function WnSegments({ total, at, onArt, dark }) {
 }
 
 const WN_HIGHLIGHTS = [
-  { k: 'lens40', art: 'lens40h', go: 'camera', title: 'Face lenses in the camera', text: 'Puppy ears, heart eyes, crowns, big eyes and more follow your face live. Some of them move when you open your mouth.' },
-  { k: 'bg40', art: 'bg40h', go: 'camera', title: 'Change what is behind you', text: 'Blur your background, stand on a beach or in the city, or use your own photo. Turn on beauty for softer skin.' },
-  { k: 'sound40', art: 'sound40h', go: 'camera', title: 'Pick a sound, then record', text: 'In the story camera, add a song first and record to it. Hold to record, slide left to keep going hands free and slide up to zoom.' },
+  { k: 'race41', art: 'race41h', go: 'race', cta: 'Play now', title: 'Island Rally', text: 'Real 3D racing for up to six friends. Drift round corners to fill your boost, bump past your friends and talk on mic the whole way.' },
+  { k: 'grid41', art: 'grid41h', go: 'race', cta: 'Play now', title: 'Pick a ride and race', text: 'Sports car, hatchback, jeep or tuk tuk, in your own colour. No friends online? Race five bots any time.' },
 ];
 const WN_SECTIONS = [
-  { title: 'Camera', items: [
-    { art: 'lens40', title: 'Face lenses', text: '17 lenses that follow your face live.' },
-    { art: 'bg40', title: 'Backgrounds and beauty', text: 'Blur, a scene or your own photo behind you.' },
-    { art: 'sound40', title: 'Pick a sound first', text: 'Record your story to a song.' },
-    { art: 'tools40', title: 'Camera tools', text: 'Flash, timer, night mode, grid, zoom and hands free video.' },
+  { title: 'Games', items: [
+    { art: 'race41', title: 'Island Rally', text: 'Real 3D races for up to six friends, with mic.' },
+    { art: 'grid41', title: 'Race the bots', text: 'Pick a ride and race five bots any time.' },
   ] },
 ];
 const WN_NEW_COUNT = WN_SECTIONS.reduce((n, sec) => n + sec.items.length, 0);
 const WN_SUMMARY = `${WN_NEW_COUNT} new things to try.`;
 
 const WN_EARLIER = [
+  { title: 'A Snap style camera', text: 'Face lenses, background blur and beauty, a timer, night mode, hands free video and picking a sound before you record.' },
   { title: 'Talk while you play and lots of new filters', text: 'A mic and reactions in Roll Squad, wooden gates and new enemies in Two Torches, new Gulp skills, filters in groups, a lighter profile menu and Join buttons in your chats.' },
   { title: 'A cleaner look and better games', text: 'Calm greys with a blue accent, easy Roll Squad touch controls with a double jump, and no top size in Gulp.' },
   { title: 'Music on posts and tag controls', text: 'Songs on photo posts, hiding or removing tags from the post menu, sharing posts to your story and new game buttons.' },

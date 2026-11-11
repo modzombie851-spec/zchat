@@ -142,6 +142,7 @@ export const Sfx = {
     if (!ac) return;
     try { if (hidden) ac.suspend(); else ac.resume(); } catch {}
   },
+  bus() { return ac && sfxBus ? { ac, out: sfxBus } : null; },
 };
 
 if (typeof document !== 'undefined') {

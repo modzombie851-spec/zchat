@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useBackClose, FONT, hapticTap, playUiSound, applyPhotoFilter, photoFilterCss, FilterFx, paintFilterFx, PHOTO_FILTERS, filterSceneUrl, Spinner, playSong, stopSong, MusicPicker } from '../App.jsx';
+import { useBackClose, FONT, hapticTap, playUiSound, applyPhotoFilter, photoFilterCss, FilterFx, paintFilterFx, PHOTO_FILTERS, Spinner, playSong, stopSong, MusicPicker } from '../App.jsx';
 
 import { LENSES, BIG_EYES, lensThumb, loadFace, loadSeg, faceReady, segReady, detectFaces, segmentInto, coverBox, mapper, geomOf, smoothGeom, drawLens, drawBigEyes } from './snaplens.js';
 
@@ -8,15 +8,11 @@ const ITEM = 60, GAP = 14;
 const CTX_FILTER = typeof document !== 'undefined' && (() => { try { const c = document.createElement('canvas').getContext('2d'); return !!c && 'filter' in c; } catch { return false; } })();
 const BGS = [
   { k: 'none', name: 'No background' },
-  { k: 'blur', name: 'Blur' },
+  { k: 'blur', name: 'Blur', fx: 'blur(1.4px)' },
+  { k: 'blur2', name: 'Strong blur', fx: 'blur(3px)' },
+  { k: 'mono', name: 'Black and white', fx: 'grayscale(1)' },
+  { k: 'dim', name: 'Dim', fx: 'brightness(0.45)' },
   { k: 'photo', name: 'Your photo' },
-  { k: 'beach', name: 'Beach', s: 'beach' },
-  { k: 'city', name: 'City lights', s: 'city' },
-  { k: 'sky', name: 'Dreamy sky', s: 'sky' },
-  { k: 'forest', name: 'Forest', s: 'forest' },
-  { k: 'mountain', name: 'Mountains', s: 'mountain' },
-  { k: 'flowers', name: 'Flowers', s: 'flowers' },
-  { k: 'coffee', name: 'Coffee', s: 'coffee' },
 ];
 const MID = { x: 0.5, y: 0.5 };
 const NIGHT_CSS = 'brightness(1.4) contrast(1.06) saturate(1.08)';
@@ -27,31 +23,6 @@ const canvasOf = (cache, key, w, h) => {
   if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
   return c;
 };
-function sceneCanvas(url) {
-  return new Promise((res) => {
-    let svg = '';
-    try { svg = decodeURIComponent(url.slice(url.indexOf(',') + 1)); } catch {}
-    const img = new Image();
-    img.onload = () => {
-      const c = document.createElement('canvas'); c.width = 720; c.height = 960;
-      const g = c.getContext('2d');
-      let ok = false;
-      try { g.drawImage(img, 0, 0, 720, 960); g.getImageData(0, 0, 1, 1); ok = true; } catch {}
-      if (!ok) {
-        const d = document.createElement('canvas'); d.width = 720; d.height = 960;
-        const q = d.getContext('2d');
-        const gr = q.createLinearGradient(0, 0, 0, 960);
-        gr.addColorStop(0, '#6FB3E6'); gr.addColorStop(0.6, '#F6D2A2'); gr.addColorStop(1, '#E9B57E');
-        q.fillStyle = gr; q.fillRect(0, 0, 720, 960);
-        res(d);
-        return;
-      }
-      res(c);
-    };
-    img.onerror = () => res(null);
-    img.src = svg ? `data:image/svg+xml;utf8,${encodeURIComponent(svg.replace('<svg ', '<svg width="720" height="960" '))}` : url;
-  });
-}
 function photoCanvas(img) {
   const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
   const k = Math.min(1, 1280 / Math.max(iw, ih));
@@ -65,18 +36,18 @@ function drawCover(ctx, img, W, H) {
   const s = Math.max(W / iw, H / ih), dw = iw * s, dh = ih * s;
   ctx.drawImage(img, (W - dw) / 2, (H - dh) / 2, dw, dh);
 }
-function blurInto(ctx, src, W, H, cache) {
+function blurInto(ctx, src, W, H, cache, strong) {
   if (CTX_FILTER) {
     const h = canvasOf(cache, 'bh', Math.max(8, Math.round(W / 3)), Math.max(8, Math.round(H / 3)));
     const hx = h.getContext('2d');
-    hx.filter = `blur(${Math.max(2, Math.round(h.width / 30))}px)`;
+    hx.filter = `blur(${Math.max(2, Math.round(h.width / (strong ? 14 : 30)))}px)`;
     hx.drawImage(src, 0, 0, h.width, h.height);
     hx.filter = 'none';
     ctx.save(); ctx.imageSmoothingEnabled = true; ctx.drawImage(h, 0, 0, W, H); ctx.restore();
     return;
   }
   let cur = src, w = W, h = H;
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < (strong ? 5 : 4); i++) {
     w = Math.max(4, Math.round(w / 2)); h = Math.max(4, Math.round(h / 2));
     const c = canvasOf(cache, `m${i}`, w, h);
     c.getContext('2d').drawImage(cur, 0, 0, w, h);
@@ -150,8 +121,14 @@ function composeFrame(ctx, W, H, F, cache, smooth) {
     const Fc = canvasOf(cache, 'frame', W, H);
     const fx = Fc.getContext('2d');
     fx.clearRect(0, 0, W, H); drawV(fx);
-    if (F.bg === 'blur') blurInto(ctx, Fc, W, H, cache);
-    else if (F.bgImg && (F.bgImg.naturalWidth || F.bgImg.width)) drawCover(ctx, F.bgImg, W, H);
+    if (F.bg === 'blur' || F.bg === 'blur2') blurInto(ctx, Fc, W, H, cache, F.bg === 'blur2');
+    else if (F.bg === 'mono' || F.bg === 'dim') {
+      ctx.drawImage(Fc, 0, 0);
+      ctx.save();
+      if (F.bg === 'mono') { ctx.globalCompositeOperation = 'saturation'; ctx.fillStyle = '#808080'; } else ctx.fillStyle = 'rgba(0,0,0,0.58)';
+      ctx.fillRect(0, 0, W, H);
+      ctx.restore();
+    } else if (F.bgImg && (F.bgImg.naturalWidth || F.bgImg.width)) drawCover(ctx, F.bgImg, W, H);
     else { ctx.fillStyle = '#1A1A1E'; ctx.fillRect(0, 0, W, H); }
     const Pc = canvasOf(cache, 'person', W, H);
     const px = Pc.getContext('2d');
@@ -322,16 +299,25 @@ export function SnapCamera({ onClose, onCapture, onPickGallery, startMode = 'pho
     loadSeg().then(() => { if (alive) setSegState('ready'); }, () => { if (alive) setSegState('error'); });
     return () => { alive = false; };
   }, [bg, segState === 'error' ? 0 : 1]);
+  useEffect(() => { S.current.bgImg = bg === 'photo' ? S.current.userImg : null; }, [bg]);
+  const [liveThumb, setLiveThumb] = useState(null);
   useEffect(() => {
-    const B = BGS.find((b) => b.k === bg);
-    if (!B || !B.s) { S.current.bgImg = bg === 'photo' ? S.current.userImg : null; return undefined; }
-    let alive = true;
-    const memo = S.current.scenes || (S.current.scenes = {});
-    if (memo[B.s]) { S.current.bgImg = memo[B.s]; return undefined; }
-    S.current.bgImg = null;
-    sceneCanvas(filterSceneUrl(B.s)).then((c) => { if (!c) return; memo[B.s] = c; if (alive) S.current.bgImg = c; });
-    return () => { alive = false; };
-  }, [bg]);
+    if (tray === 'lenses' || !ready) return undefined;
+    const grab = () => {
+      const cv = stageRef.current;
+      if (!cv || !cv.width) return;
+      try {
+        const c = S.current.thumbCv || (S.current.thumbCv = document.createElement('canvas'));
+        c.width = 96; c.height = 96;
+        const s2 = Math.min(cv.width, cv.height) * 0.86;
+        c.getContext('2d').drawImage(cv, (cv.width - s2) / 2, Math.max(0, (cv.height - s2) / 2 - cv.height * 0.08), s2, s2, 0, 0, 96, 96);
+        setLiveThumb(c.toDataURL('image/jpeg', 0.72));
+      } catch {}
+    };
+    const t0 = setTimeout(grab, 120);
+    const t = setInterval(grab, 900);
+    return () => { clearTimeout(t0); clearInterval(t); };
+  }, [tray, ready]);
 
   useEffect(() => {
     let raf = 0, last = 0;
@@ -538,10 +524,10 @@ export function SnapCamera({ onClose, onCapture, onPickGallery, startMode = 'pho
   const cancelTimer = () => { clearInterval(countRef.current); countRef.current = null; setCount(0); };
 
   const trayItems = tray === 'lenses'
-    ? [{ k: 'none', name: 'No lens', icon: 'none' }, ...LENSES.map((l) => ({ k: l.k, name: l.name, thumb: lensThumb(l.k) }))]
+    ? [{ k: 'none', name: 'No lens', icon: 'none' }, ...LENSES.map((l) => ({ k: l.k, name: l.name, glyph: lensThumb(l.k) }))]
     : tray === 'filters'
-      ? PHOTO_FILTERS.map((f) => ({ k: f.k, name: f.label, thumb: filterSceneUrl(f.s), css: photoFilterCss(f.k) }))
-      : BGS.map((b) => ({ k: b.k, name: b.name, thumb: b.s ? filterSceneUrl(b.s) : null, icon: b.s ? null : b.k === 'none' ? 'none' : b.k }));
+      ? PHOTO_FILTERS.map((f) => ({ k: f.k, name: f.label, thumb: liveThumb, css: photoFilterCss(f.k) }))
+      : BGS.map((b) => ({ k: b.k, name: b.name, thumb: b.fx ? liveThumb : (b.k === 'photo' && S.current.userThumb) || null, css: b.fx || 'none', icon: b.fx ? null : b.k === 'none' ? 'none' : 'photo' }));
   const curKey = tray === 'lenses' ? lens : tray === 'filters' ? filter : bg;
   const curIdx = Math.max(0, trayItems.findIndex((it) => it.k === curKey));
   const userPick = useRef(null);
@@ -649,7 +635,7 @@ export function SnapCamera({ onClose, onCapture, onPickGallery, startMode = 'pho
     const url = URL.createObjectURL(f);
     S.current.userUrl = url;
     const img = new Image();
-    img.onload = () => { const c = photoCanvas(img); URL.revokeObjectURL(url); S.current.userUrl = null; S.current.userImg = c; S.current.bgImg = c; setBg('photo'); };
+    img.onload = () => { const c = photoCanvas(img); URL.revokeObjectURL(url); S.current.userUrl = null; S.current.userImg = c; S.current.bgImg = c; try { const t = document.createElement('canvas'); t.width = 96; t.height = 96; const m = Math.min(c.width, c.height); t.getContext('2d').drawImage(c, (c.width - m) / 2, (c.height - m) / 2, m, m, 0, 0, 96, 96); S.current.userThumb = t.toDataURL('image/jpeg', 0.75); } catch {} setBg('photo'); };
     img.src = url;
   };
 
@@ -743,8 +729,8 @@ export function SnapCamera({ onClose, onCapture, onPickGallery, startMode = 'pho
           <div ref={carRef} onScroll={onCarScroll} aria-label="Effects" style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', gap: GAP, overflowX: 'auto', scrollSnapType: 'x mandatory', scrollbarWidth: 'none', padding: `0 calc(50% - ${ITEM / 2}px)`, boxSizing: 'border-box', visibility: showUi ? 'visible' : 'hidden', touchAction: 'pan-x' }}>
             {trayItems.map((it, i) => (
               <div key={`${tray}.${it.k}`} role="button" aria-label={it.name} aria-pressed={i === curIdx} onClick={() => { if (i !== curIdx) { scrollToIdx(i, true); pickIdx(i); } }}
-                style={{ width: ITEM, height: ITEM, flexShrink: 0, borderRadius: '50%', overflow: 'hidden', scrollSnapAlign: 'center', background: 'rgba(255,255,255,0.18)', boxShadow: '0 0 0 2px rgba(255,255,255,0.75), 0 2px 8px rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', opacity: i === curIdx ? 0 : 1, transition: 'opacity 120ms' }}>
-                {it.thumb ? <img src={it.thumb} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', filter: it.css || 'none' }} /> : <CamIcon k={it.icon || 'none'} size={26} />}
+                style={{ width: ITEM, height: ITEM, flexShrink: 0, borderRadius: '50%', overflow: 'hidden', scrollSnapAlign: 'center', background: it.glyph ? 'rgba(0,0,0,0.42)' : 'rgba(255,255,255,0.18)', boxShadow: '0 0 0 2px rgba(255,255,255,0.75), 0 2px 8px rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', opacity: i === curIdx ? 0 : 1, transition: 'opacity 120ms' }}>
+                {it.glyph ? <img src={it.glyph} alt="" draggable={false} style={{ width: '74%', height: '74%', display: 'block' }} /> : it.thumb ? <img src={it.thumb} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', filter: it.css || 'none' }} /> : <CamIcon k={it.icon || 'none'} size={26} />}
               </div>
             ))}
           </div>
@@ -752,8 +738,8 @@ export function SnapCamera({ onClose, onCapture, onPickGallery, startMode = 'pho
             onPointerDown={ringDown} onPointerMove={ringMove} onPointerUp={ringUp} onPointerCancel={ringUp} onContextMenu={(e) => e.preventDefault()}
             style={{ position: 'absolute', left: '50%', top: '50%', width: 88, height: 88, marginLeft: -44, marginTop: -44, borderRadius: '50%', cursor: 'pointer', touchAction: 'none', transform: holding && !rec ? 'scale(0.94)' : 'none', transition: 'transform 0.12s' }}>
             {!rec && trayItems[curIdx] && (
-              <div style={{ position: 'absolute', inset: 13, borderRadius: '50%', overflow: 'hidden', background: trayItems[curIdx].k === 'none' ? 'transparent' : 'rgba(255,255,255,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {trayItems[curIdx].thumb && <img src={trayItems[curIdx].thumb} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', filter: trayItems[curIdx].css || 'none' }} />}
+              <div style={{ position: 'absolute', inset: 13, borderRadius: '50%', overflow: 'hidden', background: trayItems[curIdx].k === 'none' ? 'transparent' : trayItems[curIdx].glyph ? 'rgba(0,0,0,0.42)' : 'rgba(255,255,255,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {trayItems[curIdx].glyph ? <img src={trayItems[curIdx].glyph} alt="" draggable={false} style={{ width: '74%', height: '74%', display: 'block' }} /> : trayItems[curIdx].thumb ? <img src={trayItems[curIdx].thumb} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', filter: trayItems[curIdx].css || 'none' }} /> : null}
               </div>
             )}
             <svg width="88" height="88" viewBox="0 0 88 88" style={{ position: 'absolute', inset: 0, transform: 'rotate(-90deg)', filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.35))' }}>

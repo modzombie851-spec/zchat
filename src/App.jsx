@@ -318,6 +318,8 @@ export const GulpGamePage = zLazy(() => import('./games/gulp.jsx'), 'GulpGamePag
 export const GulpInviteSheet = zLazy(() => import('./games/gulp.jsx'), 'GulpInviteSheet', 'gulp');
 export const RollGamePage = zLazy(() => import('./games/roll.jsx'), 'RollGamePage', 'roll');
 export const RollInviteSheet = zLazy(() => import('./games/roll.jsx'), 'RollInviteSheet', 'roll');
+export const RaceGamePage = zLazy(() => import('./games/race.jsx'), 'RaceGamePage', 'race');
+export const RaceInviteSheet = zLazy(() => import('./games/race.jsx'), 'RaceInviteSheet', 'race');
 export const G1GolfPage = zLazy(() => import('./areas/games.jsx'), 'G1GolfPage', 'games');
 export const G1SudokuBoard = zLazy(() => import('./areas/games.jsx'), 'G1SudokuBoard', 'games');
 export const G1CrossPage = zLazy(() => import('./areas/games.jsx'), 'G1CrossPage', 'games');
@@ -17586,7 +17588,7 @@ function livePlayRows(force) {
   livePlayCache.job = loadLiveFriends().then((rows) => { livePlayCache.rows = rows || []; livePlayCache.at = Date.now(); livePlayCache.job = null; return livePlayCache.rows; }).catch(() => { livePlayCache.job = null; return livePlayCache.rows; });
   return livePlayCache.job;
 }
-const LIVE_ROOM_MAX = { gulpco: 10, roll: 4 };
+const LIVE_ROOM_MAX = { gulpco: 10, roll: 4, race: 6 };
 function livePlayOf(r) {
   const info = (r && r.info) || {};
   const k = r.game === 'gulp' && info.co ? 'gulpco' : r.game;
@@ -18547,7 +18549,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-export const APP_VERSION = '40.0V';
+export const APP_VERSION = '41.0V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -36376,11 +36378,14 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [leaderboardFor, setLeaderboardFor] = useState(null);
   const [settingsOpenTo, setSettingsOpenTo] = useState(null);
   const [rollGame, setRollGame] = useState(null);
+  const [raceGame, setRaceGame] = useState(null);
+  const [racePick, setRacePick] = useState(null);
   const [watchGame, setWatchGame] = useState(null);
   const openWatch = async (r) => {
     const info = (r && r.info) || {};
     if (!r) return;
     if (r.game === 'roll') { setShowGames(false); setRollGame({ rm: r.room, host: info.h || r.user_id, watch: true }); return; }
+    if (r.game === 'race') { setShowGames(false); setRaceGame({ rm: r.room, host: info.h || r.user_id, watch: true }); return; }
     if (r.game === 'gulp' && info.co && typeof info.rm === 'string') { setShowGames(false); setGulpRoom({ rm: info.rm }); return; }
     if (!info.h || !info.o || !info.g) { showSnack('That game just ended'); return; }
     const [hp, gp] = await Promise.all([cachedProfile(info.h).catch(() => null), cachedProfile(info.o).catch(() => null)]);
@@ -36390,11 +36395,12 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [rollPick, setRollPick] = useState(null);
   const [gulpRoom, setGulpRoom] = useState(null);
   const [gulpPick, setGulpPick] = useState(null);
-  if (typeof window !== 'undefined' && window.__zfake) { window.__zopenGulpRoom = (rm) => setGulpRoom({ rm }); window.__zopenRoll = (rm, host, watch) => setRollGame({ rm, host, watch: !!watch }); }
+  if (typeof window !== 'undefined' && window.__zfake) { window.__zopenGulpRoom = (rm) => setGulpRoom({ rm }); window.__zopenRoll = (rm, host, watch) => setRollGame({ rm, host, watch: !!watch }); window.__zopenRace = (rm, host, watch) => setRaceGame({ rm, host, watch: !!watch }); window.__zraceSolo = () => setRaceGame({ solo: true, rm: 'solo' }); }
   const joinLivePlay = (r) => {
     const info = (r && r.info) || {};
     if (!r) return;
     if (r.game === 'roll') { setRollGame({ rm: r.room, host: info.h || r.user_id }); return; }
+    if (r.game === 'race') { setRaceGame({ rm: r.room, host: info.h || r.user_id }); return; }
     if (r.game === 'gulp' && info.co && typeof info.rm === 'string') { setGulpRoom({ rm: info.rm }); return; }
     openWatch(r);
   };
@@ -36441,9 +36447,19 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       try { await sendGameStateTo(p, st, { quiet: false }); } catch {}
     }
   };
+  const startRaceWith = async (profiles, rmIn) => {
+    const rm = rmIn || newClientId();
+    if (!rmIn) setRaceGame({ rm, host: session.user.id });
+    for (const p of profiles || []) {
+      if (!p || p.is_bot) continue;
+      const st = { g: 'race', id: newClientId(), x: session.user.id, o: p.id, w: null, n: 0, st: 'wait', exp: Date.now() + LIVE_INVITE_MS, sx: 0, so: 0, rm };
+      try { await sendGameStateTo(p, st, { quiet: false }); } catch {}
+    }
+  };
   const startLiveGame = async (profile, kind) => {
     if (!profile || profile.is_bot) return;
     if (kind === 'roll') { startRollWith([profile]); return; }
+    if (kind === 'race') { startRaceWith([profile]); return; }
     if (kind === 'gulpco') { startGulpRoomWith([profile]); return; }
     if (!activeProfileRef.current || activeProfileRef.current.id !== profile.id) await openChat(profile, null);
     const state = newGameState(kind, profile);
@@ -36456,6 +36472,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (!peer || !msg || String(msg.id).startsWith('temp-')) return;
     if (st.x !== session.user.id && st.o !== session.user.id) return;
     if (st.g === 'roll') { setRollGame({ rm: st.rm || st.id, host: st.x }); return; }
+    if (st.g === 'race') { setRaceGame({ rm: st.rm || st.id, host: st.x }); return; }
     if (st.g === 'gulpco') { if (typeof st.rm === 'string') setGulpRoom({ rm: st.rm }); return; }
     setLiveGame({ state: st, messageId: msg.id, peer });
   };
@@ -48097,13 +48114,15 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       {msgSearchOpen != null && (
         <SearchMessagesPage myId={session.user.id} groups={groups} hiddenIds={getHiddenMsgIds()} initialQuery={msgSearchOpen} onClose={() => setMsgSearchOpen(null)} onOpen={openSearchHit} />
       )}
-      {showWhatsNew && <PageGuard name="whats new" onClose={() => setShowWhatsNew(false)}><WhatsNewSheet me={me} onClose={() => setShowWhatsNew(false)} onTry={(g) => { if (g === 'sets') setCollectionOpen(true); else if (g === 'shop') setShopOpen(true); else if (g === 'rooms') setShowGames({ at: Date.now(), room: '' }); else if (g === 'games') setShowGames(true); else if (g === 'camera') setStoryCamera(true); else if (g === 'vibes') setHomeTab('moments'); else if (g === 'map') setMapOpen(true); else if (g === 'song' && me) setProfileOf({ ...me, __song: true }); else if (g === 'ai') setAiStudio({ mode: 'image' }); else if (g === 'chars') setCharsOpen(true); else if (g === 'coins') setWalletOpen(true); else if (g === 'bubbles') setShowBubbleSheet(true); else if (g === 'drops') setCollectionOpen('__drop'); else if (g === 'folders') { setHomeTab('chats'); setFoldersOpen(true); } else if (g === 'styles') setShopOpen('tab:styles'); else if (g === 'communities') setCommunitiesOpen({}); }} /></PageGuard>}
+      {showWhatsNew && <PageGuard name="whats new" onClose={() => setShowWhatsNew(false)}><WhatsNewSheet me={me} onClose={() => setShowWhatsNew(false)} onTry={(g) => { if (g === 'sets') setCollectionOpen(true); else if (g === 'shop') setShopOpen(true); else if (g === 'rooms') setShowGames({ at: Date.now(), room: '' }); else if (g === 'games') setShowGames(true); else if (g === 'camera') setStoryCamera(true); else if (g === 'race') setShowGames(true); else if (g === 'vibes') setHomeTab('moments'); else if (g === 'map') setMapOpen(true); else if (g === 'song' && me) setProfileOf({ ...me, __song: true }); else if (g === 'ai') setAiStudio({ mode: 'image' }); else if (g === 'chars') setCharsOpen(true); else if (g === 'coins') setWalletOpen(true); else if (g === 'bubbles') setShowBubbleSheet(true); else if (g === 'drops') setCollectionOpen('__drop'); else if (g === 'folders') { setHomeTab('chats'); setFoldersOpen(true); } else if (g === 'styles') setShopOpen('tab:styles'); else if (g === 'communities') setCommunitiesOpen({}); }} /></PageGuard>}
       {showGames && (
         <GamesPage key={showGames.at || 'games'} initialGame={showGames.game || null} onClose={() => setShowGames(false)}
           friends={gameFriends}
           onPlayWith={(pp) => { setShowGames(false); setTimeout(() => setGameSheetFor(pp), 120); }}
           onStartLive={(kind) => { setShowGames(false); setTimeout(() => setGamePicker({ kind }), 80); }}
           onRollInvite={() => setRollPick({ rm: null })}
+          onRaceInvite={() => setRacePick({ rm: null })}
+          onRaceSolo={() => { setShowGames(false); setRaceGame({ solo: true, rm: 'solo' }); }}
           onGulpRoom={() => setGulpPick({ rm: null, n: 1 })}
           onWatch={(r, p) => openWatch(r, p)}
           onOpenLeaderboard={(k) => setLeaderboardFor({ game: k || 'all', at: Date.now() })}
@@ -48173,7 +48192,16 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         <RollInviteSheet friends={gameFriends} onClose={() => setRollPick(null)}
           onInvite={(ps) => { const rm = rollPick.rm; setRollPick(null); setShowGames(false); startRollWith(ps, rm); }} />
       )}
-      {liveGame && me && liveGame.state.g !== 'duo' && liveGame.state.g !== 'gulp' && liveGame.state.g !== 'roll' && liveGame.state.g !== 'gulpco' && (
+      {raceGame && me && (
+        <RaceGamePage key={raceGame.rm} solo={!!raceGame.solo} room={raceGame.solo ? null : raceGame} me={me} myId={session.user.id} watch={!!raceGame.watch}
+          onClose={() => { const back = !!raceGame.watch || !!raceGame.solo; setRaceGame(null); if (back) setShowGames(true); }}
+          onInvite={!raceGame.solo && raceGame.host === session.user.id ? () => setRacePick({ rm: raceGame.rm }) : null} />
+      )}
+      {racePick && (
+        <RaceInviteSheet friends={gameFriends} onClose={() => setRacePick(null)}
+          onInvite={(ps) => { const rm = racePick.rm; setRacePick(null); setShowGames(false); startRaceWith(ps, rm); }} />
+      )}
+      {liveGame && me && liveGame.state.g !== 'duo' && liveGame.state.g !== 'gulp' && liveGame.state.g !== 'roll' && liveGame.state.g !== 'gulpco' && liveGame.state.g !== 'race' && (
         <LiveGamePage key={liveGame.state.id} initial={liveGame.state} me={me} peer={liveGame.peer} myId={session.user.id}
           onClose={() => setLiveGame(null)}
           onSaveState={(next) => saveLiveState(liveGame.messageId, next)}
@@ -49137,197 +49165,6 @@ function WnWoodArt({ tall = false }) {
     </>
   );
 }
-function WnFilterArt({ tall = false }) {
-  const rid = React.useId().replace(/[^a-zA-Z0-9]/g, '');
-  const y0 = tall ? -30 : 4;
-  const H = tall ? 206 : 172;
-  const thumbs = [['beach', 'Warm', null], ['coffee', 'Film', null], ['city', 'Mono', `url(#gm${rid})`], ['flowers', 'Peach', null]];
-  return (
-    <>
-      <defs>
-        <filter id={`gm${rid}`}><feColorMatrix type="saturate" values="0" /></filter>
-        <clipPath id={`ph${rid}`}><rect x="8" y="8" width="112" height={H - 74} rx="10" /></clipPath>
-      </defs>
-      <g transform={`translate(96 ${y0})`}>
-        <rect x="0" y="0" width="128" height={H} rx="18" fill="#0F0F10" {...ak} strokeWidth="2.6" />
-        <image href={filterSceneUrl('beach')} x="8" y="8" width="112" height={H - 74} preserveAspectRatio="xMidYMid slice" clipPath={`url(#ph${rid})`} />
-        <rect x="8" y="8" width="112" height={H - 74} rx="10" fill="#FFB347" opacity="0.18" />
-        <text x="10" y={H - 54} fontFamily={WN_FONT} fontWeight="800" fontSize="8" fill="#FFFFFF">Portrait</text>
-        <text x="46" y={H - 54} fontFamily={WN_FONT} fontWeight="700" fontSize="8" fill="rgba(255,255,255,0.55)">Warm</text>
-        <text x="74" y={H - 54} fontFamily={WN_FONT} fontWeight="700" fontSize="8" fill="rgba(255,255,255,0.55)">Film</text>
-        {thumbs.map(([sc, label, flt], i) => (
-          <g key={sc} transform={`translate(${8 + i * 29} ${H - 46})`}>
-            <defs><clipPath id={`t${rid}${i}`}><rect x="0" y="0" width="25" height="30" rx="5" /></clipPath></defs>
-            <image href={filterSceneUrl(sc)} x="0" y="0" width="25" height="30" preserveAspectRatio="xMidYMid slice" clipPath={`url(#t${rid}${i})`} filter={flt || undefined} />
-            {i === 0 && <rect x="-1.5" y="-1.5" width="28" height="33" rx="6.5" fill="none" stroke="#FFFFFF" strokeWidth="1.6" />}
-            <text x="12.5" y="40" textAnchor="middle" fontFamily={WN_FONT} fontWeight="700" fontSize="7" fill="#FFFFFF">{label}</text>
-          </g>
-        ))}
-      </g>
-    </>
-  );
-}
-function WnCamPhone({ tall, rid, children, bgFill }) {
-  const y0 = tall ? -30 : 4;
-  const H = tall ? 206 : 172;
-  return (
-    <>
-      <defs><clipPath id={`cp${rid}`}><rect x="8" y="8" width="112" height={H - 16} rx="12" /></clipPath></defs>
-      <g transform={`translate(96 ${y0})`}>
-        <rect x="0" y="0" width="128" height={H} rx="18" fill="#0F0F10" {...ak} strokeWidth="2.6" />
-        <g clipPath={`url(#cp${rid})`}>
-          <rect x="8" y="8" width="112" height={H - 16} fill={bgFill} />
-          {children(H)}
-        </g>
-      </g>
-    </>
-  );
-}
-function WnCamFace({ cx, cy, s = 1, shirt = '#3A6FD8', skin = '#B9825D', hair = '#2B1D16' }) {
-  return (
-    <g transform={`translate(${cx} ${cy}) scale(${s})`}>
-      <path d="M-40 70c4-30 20-40 40-40s36 10 40 40z" fill={shirt} />
-      <rect x="-8" y="18" width="16" height="16" rx="4" fill={skin} />
-      <ellipse cx="0" cy="0" rx="23" ry="27" fill={skin} />
-      <path d="M-23 -4a23 25 0 0 1 46 0c-7-11-15-14-23-14s-16 3-23 14z" fill={hair} />
-      <path d="M-12 2q4-4 8 0M4 2q4-4 8 0" fill="none" stroke={hair} strokeWidth="2.4" strokeLinecap="round" />
-      <path d="M-7 12q7 6 14 0" fill="none" stroke="#7A3B2E" strokeWidth="2.2" strokeLinecap="round" />
-    </g>
-  );
-}
-function WnCamCarousel({ H, items, ring = 2 }) {
-  const y = H - 30;
-  return (
-    <g>
-      {items.map((it, i) => (
-        <g key={i} transform={`translate(${22 + i * 21} ${y})`}>
-          {i === ring ? <circle cx="0" cy="0" r="12.5" fill="none" stroke="#FFFFFF" strokeWidth="2.6" /> : <circle cx="0" cy="0" r="8.6" fill="rgba(255,255,255,0.22)" stroke="rgba(255,255,255,0.8)" strokeWidth="1.2" />}
-          <g transform={`scale(${i === ring ? 1.25 : 1})`}>{it}</g>
-        </g>
-      ))}
-    </g>
-  );
-}
-const wnMiniFace = (extra) => (<g><circle cx="0" cy="0.6" r="5.6" fill="#F4D2B8" /><path d="M-5.6 -0.4a5.6 4.6 0 0 1 11.2 0z" fill="#3A2A24" />{extra}</g>);
-function WnLensArt({ tall = false }) {
-  const rid = React.useId().replace(/[^a-zA-Z0-9]/g, '');
-  return (
-    <>
-      <defs><linearGradient id={`lb${rid}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#FFD9C2" /><stop offset="1" stopColor="#F2A88C" /></linearGradient></defs>
-      <WnCamPhone tall={tall} rid={rid} bgFill={`url(#lb${rid})`}>
-        {(H) => {
-          const fy = (H - 44) * 0.5;
-          return (
-            <>
-              <circle cx="26" cy="26" r="18" fill="#FFFFFF" opacity="0.35" />
-              <WnCamFace cx={64} cy={fy} />
-              <path d={`M42 ${fy - 26}c-12-4-18 8-16 22 1 9 6 15 12 13 5-10 6-24 4-35z`} fill="#8B5A2B" stroke="#5E3A1A" strokeWidth="1.4" />
-              <path d={`M86 ${fy - 26}c12-4 18 8 16 22-1 9-6 15-12 13-5-10-6-24-4-35z`} fill="#8B5A2B" stroke="#5E3A1A" strokeWidth="1.4" />
-              <ellipse cx="64" cy={fy + 7} rx="6.5" ry="4.6" fill="#1F1A17" />
-              <circle cx="62" cy={fy + 5.6} r="1.6" fill="#FFFFFF" opacity="0.7" />
-              <path d={`M58.5 ${fy + 15}q5.5 15 11 0z`} fill="#F07A9A" stroke="#C9506E" strokeWidth="1.2" />
-              <path d={`M100 ${fy - 36}l1.6 3.4 3.6.6-2.6 2.6.6 3.6-3.2-1.7-3.2 1.7.6-3.6-2.6-2.6 3.6-.6z`} fill="#FFFFFF" />
-              <path d={`M26 ${fy - 12}l1.2 2.5 2.7.4-2 1.9.5 2.7-2.4-1.3-2.4 1.3.5-2.7-2-1.9 2.7-.4z`} fill="#FFFFFF" />
-              <rect x="44" y={H - 62} width="40" height="13" rx="6.5" fill="rgba(0,0,0,0.38)" />
-              <text x="64" y={H - 52.6} textAnchor="middle" fontFamily={WN_FONT} fontWeight="800" fontSize="7.6" fill="#FFFFFF">Puppy</text>
-              <WnCamCarousel H={H} items={[
-                wnMiniFace(<path d="M-4 3.2h8" stroke="#3A2A24" strokeWidth="1" />),
-                wnMiniFace(<><path d="M-3 4.2l-1.6-3 3 .6zM3 4.2l1.6-3-3 .6z" fill="#E5484D" /></>),
-                wnMiniFace(<><path d="M-6.4 -2.6c-3-1-4.4 2-4 5.4.3 2 1.6 3 2.8 2.8 1.2-2.6 1.6-5.6 1.2-8.2zM6.4 -2.6c3-1 4.4 2 4 5.4-.3 2-1.6 3-2.8 2.8-1.2-2.6-1.6-5.6-1.2-8.2z" fill="#8B5A2B" /><ellipse cx="0" cy="2.4" rx="1.6" ry="1.1" fill="#1F1A17" /></>),
-                wnMiniFace(<path d="M-5 -4.6l2-3.4 3 2.4 3-2.4 2 3.4z" fill="#FFC23D" stroke="#C88A12" strokeWidth="0.6" />),
-                wnMiniFace(<><path d="M-4.8 -6.4l1.4 2.4h-2.8zM4.8 -6.4l1.4 2.4h-2.8z" fill="#F3A6C8" /><circle cx="-2.4" cy="1.4" r="1.6" fill="#FFFFFF" /><circle cx="2.4" cy="1.4" r="1.6" fill="#FFFFFF" /></>),
-              ]} />
-            </>
-          );
-        }}
-      </WnCamPhone>
-    </>
-  );
-}
-function WnBgSwapArt({ tall = false }) {
-  const rid = React.useId().replace(/[^a-zA-Z0-9]/g, '');
-  return (
-    <WnCamPhone tall={tall} rid={rid} bgFill="#5FA8E0">
-      {(H) => {
-        const fy = (H - 44) * 0.52;
-        return (
-          <>
-            <image href={filterSceneUrl('beach')} x="8" y="8" width="112" height={H - 16} preserveAspectRatio="xMidYMid slice" />
-            <WnCamFace cx={64} cy={fy} shirt="#F2B632" skin="#C68B5E" />
-            <path d={`M41 ${fy - 4}a23 27 0 0 1 46 0`} fill="none" stroke="#FFFFFF" strokeWidth="1.4" strokeDasharray="3 3" opacity="0.9" />
-            <WnCamCarousel H={H} items={[
-              <circle key="n" cx="0" cy="0" r="5" fill="none" stroke="#FFFFFF" strokeWidth="1.4" />,
-              <g key="b">{[[-3, -2], [2, -3], [3, 2], [-2, 3], [0, 0]].map(([x, y], i) => <circle key={i} cx={x} cy={y} r="1.3" fill="#FFFFFF" />)}</g>,
-              <g key="s"><circle cx="0" cy="0" r="7.6" fill="#7EC8F0" /><path d="M-7.6 2.4h15.2v3a7.6 7.6 0 0 1-15.2 0z" fill="#F2D29B" /><circle cx="2.4" cy="-2.4" r="2" fill="#FFF3B0" /></g>,
-              <g key="c"><circle cx="0" cy="0" r="7.6" fill="#3B3A7A" /><path d="M-6 6v-6h3v-3h3v4h2v-6h3v11z" fill="#1E1D45" /><circle cx="3" cy="-4" r="1" fill="#FFE07A" /></g>,
-              <g key="p"><rect x="-6" y="-5" width="12" height="10" rx="2" fill="none" stroke="#FFFFFF" strokeWidth="1.4" /><path d="M-6 3l3.4-3.2 2.6 2.4 2-1.8 4 3.4" fill="none" stroke="#FFFFFF" strokeWidth="1.2" /></g>,
-            ]} />
-          </>
-        );
-      }}
-    </WnCamPhone>
-  );
-}
-function WnSoundCamArt({ tall = false }) {
-  const rid = React.useId().replace(/[^a-zA-Z0-9]/g, '');
-  return (
-    <>
-      <defs><linearGradient id={`sb${rid}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#B9A7F5" /><stop offset="1" stopColor="#F2A3C4" /></linearGradient></defs>
-      <WnCamPhone tall={tall} rid={rid} bgFill={`url(#sb${rid})`}>
-        {(H) => {
-          const fy = (H - 44) * 0.55;
-          const r = 15, cyc = H - 30, len = 2 * Math.PI * r;
-          return (
-            <>
-              <WnCamFace cx={64} cy={fy} shirt="#22A55B" skin="#9C6644" />
-              <rect x="26" y="17" width="76" height="16" rx="8" fill="rgba(0,0,0,0.42)" />
-              <path d="M34 29v-7l6-1.2v6.4" fill="none" stroke="#FFFFFF" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-              <circle cx="32.6" cy="29" r="1.8" fill="#FFFFFF" /><circle cx="38.6" cy="27.8" r="1.8" fill="#FFFFFF" />
-              <text x="45" y="28.4" fontFamily={WN_FONT} fontWeight="800" fontSize="7.8" fill="#FFFFFF">Morning train</text>
-              <rect x="50" y="38" width="28" height="12" rx="6" fill="rgba(0,0,0,0.42)" />
-              <circle cx="56" cy="44" r="2.2" fill="#FF3B30" />
-              <text x="60.5" y="47" fontFamily={WN_FONT} fontWeight="800" fontSize="7" fill="#FFFFFF">0:07</text>
-              <circle cx="64" cy={cyc} r={r} fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="3.6" />
-              <circle cx="64" cy={cyc} r={r} fill="none" stroke="#FF3B30" strokeWidth="3.6" strokeLinecap="round" strokeDasharray={`${len * 0.38} ${len}`} transform={`rotate(-90 64 ${cyc})`} />
-              <rect x="57" y={cyc - 7} width="14" height="14" rx="3.4" fill="#FF3B30" />
-              <circle cx="30" cy={cyc} r="9" fill="rgba(0,0,0,0.38)" />
-              <path d={`M26.6 ${cyc - 0.6}h6.8v5.2h-6.8zM28 ${cyc - 0.6}v-2.2a2 2 0 0 1 4 0v2.2`} fill="none" stroke="#FFFFFF" strokeWidth="1.3" strokeLinejoin="round" />
-            </>
-          );
-        }}
-      </WnCamPhone>
-    </>
-  );
-}
-function WnCamToolsArt({ tall = false }) {
-  const rid = React.useId().replace(/[^a-zA-Z0-9]/g, '');
-  const btn = (y, inner, on, badge) => (
-    <g transform={`translate(104 ${y})`}>
-      <circle cx="0" cy="0" r="9" fill={on ? '#FFFFFF' : 'rgba(0,0,0,0.4)'} />
-      <g fill="none" stroke={on ? '#111114' : '#FFFFFF'} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">{inner}</g>
-      {badge && <g><circle cx="6.6" cy="6.6" r="4" fill="#FFFFFF" stroke="#111114" strokeWidth="0.8" /><text x="6.6" y="8.6" textAnchor="middle" fontFamily={WN_FONT} fontWeight="800" fontSize="5.6" fill="#111114">{badge}</text></g>}
-    </g>
-  );
-  return (
-    <WnCamPhone tall={tall} rid={rid} bgFill="#2D3A55">
-      {(H) => (
-        <>
-          <image href={filterSceneUrl('city')} x="8" y="8" width="112" height={H - 16} preserveAspectRatio="xMidYMid slice" opacity="0.9" />
-          {[1, 2].map((i) => <path key={`v${i}`} d={`M${8 + (112 * i) / 3} 8v${H - 16}`} stroke="rgba(255,255,255,0.45)" strokeWidth="0.8" />)}
-          {[1, 2].map((i) => <path key={`h${i}`} d={`M8 ${8 + ((H - 16) * i) / 3}h112`} stroke="rgba(255,255,255,0.45)" strokeWidth="0.8" />)}
-          {btn(24, <path d="M-4.6 -2h6.6l-1.8-1.8M4.6 2h-6.6l1.8 1.8" />)}
-          {btn(46, <path d="M0.8 -5l-4.4 6.2h3.2l-.8 4.6 4.6-6.4h-3.2z" />, true)}
-          {btn(68, <g><circle cx="0" cy="0.8" r="4.4" /><path d="M0 -1v2l1.6 1M-1.6 -5.4h3.2" /></g>, true, '3')}
-          {btn(90, <path d="M3.6 1.6A4.6 4.6 0 1 1 -1.6 -3.6a3.6 3.6 0 0 0 5.2 5.2z" />, true)}
-          {btn(112, <path d="M-4.4 -4.4h8.8v8.8h-8.8zM-1.5 -4.4v8.8M1.5 -4.4v8.8M-4.4 -1.5h8.8M-4.4 1.5h8.8" />)}
-          <circle cx="64" cy={H - 30} r="14" fill="none" stroke="#FFFFFF" strokeWidth="3.2" />
-          <rect x="22" y={H - 62} width="34" height="13" rx="6.5" fill="rgba(0,0,0,0.4)" />
-          <text x="39" y={H - 52.6} textAnchor="middle" fontFamily={WN_FONT} fontWeight="800" fontSize="7.6" fill="#FFFFFF">2.0x</text>
-        </>
-      )}
-    </WnCamPhone>
-  );
-}
 function WnMenuArt({ tall = false }) {
   const y0 = tall ? -30 : 6;
   const H = tall ? 206 : 170;
@@ -49443,15 +49280,12 @@ export const WN_THUMBS = {
   gulp38: { bg: 'sky', draw: () => <WnGulpBigArt /> },
   talk39: { bg: 'sky', draw: () => <WnTalkArt /> },
   wood39: { bg: 'night', draw: () => <WnWoodArt /> },
-  filter39: { bg: 'peach', draw: () => <WnFilterArt /> },
   menu39: { bg: 'lilac', draw: () => <WnMenuArt /> },
   attach39: { bg: 'mint', draw: () => <WnAttachArt /> },
   join39: { bg: 'sky', draw: () => <WnChatsJoinArt /> },
   skills39: { bg: 'sky', draw: () => <WnSkillsArt /> },
-  lens40: { bg: 'peach', draw: () => <WnLensArt /> },
-  bg40: { bg: 'sky', draw: () => <WnBgSwapArt /> },
-  sound40: { bg: 'pink', draw: () => <WnSoundCamArt /> },
-  tools40: { bg: 'night', draw: () => <WnCamToolsArt /> },
+  race41: { bg: 'sky', draw: () => <WnBg src="/race-art.webp" /> },
+  grid41: { bg: 'sky', draw: () => <WnBg src="/race-grid.webp" /> },
   duo32: { bg: 'night', draw: () => (<>
     <rect x="16" y="128" width="288" height="60" fill="#3A2E24" />
     <path d="M118 132 V60 Q160 14 202 60 V132 Z" fill="#1E1626" {...ak} />
@@ -50030,10 +49864,8 @@ Object.assign(WN_SCENES, {
   gulp38h: { bg: 'sky', draw: () => <WnGulpBigArt tall /> },
   talk39h: { bg: 'sky', draw: () => <WnTalkArt tall /> },
   wood39h: { bg: 'night', draw: () => <WnWoodArt tall /> },
-  filter39h: { bg: 'peach', draw: () => <WnFilterArt tall /> },
-  lens40h: { bg: 'peach', draw: () => <WnLensArt tall /> },
-  bg40h: { bg: 'sky', draw: () => <WnBgSwapArt tall /> },
-  sound40h: { bg: 'pink', draw: () => <WnSoundCamArt tall /> },
+  race41h: { bg: 'sky', draw: () => <WnBg tall src="/race-art.webp" x0="-77" /> },
+  grid41h: { bg: 'sky', draw: () => <WnBg tall src="/race-grid.webp" x0="-60" /> },
 });
 
 function WnBoardPin({ x, y, color = ART_C.coral }) {
@@ -50632,7 +50464,7 @@ export function parseGameMessage(content) {
     if (st.g === 'gem') return Array.isArray(st.d) && st.d.length === 36 ? st : null;
     if (st.g === 'fade') return Array.isArray(st.b) && st.b.length === 9 ? st : null;
     if (st.g === 'tug' || st.g === 'qrace' || st.g === 'rrace' || st.g === 'duo' || st.g === 'gulp') return typeof st.x === 'string' && typeof st.o === 'string' ? st : null;
-    if (st.g === 'roll' || st.g === 'gulpco') return typeof st.x === 'string' && typeof st.o === 'string' && typeof st.rm === 'string' && st.rm.length <= 64 ? st : null;
+    if (st.g === 'roll' || st.g === 'gulpco' || st.g === 'race') return typeof st.x === 'string' && typeof st.o === 'string' && typeof st.rm === 'string' && st.rm.length <= 64 ? st : null;
     if (G1_KEYS.includes(st.g)) return g1Valid(st) ? st : null;
     return null;
   } catch { return null; }
@@ -57541,22 +57373,39 @@ export function applyPhotoFilter(ctx, w, h, k) {
   ctx.putImageData(img, 0, 0);
   paintFilterFx(ctx, w, h, k);
 }
-const FILTER_SCENES = {
-  beach: "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 60 80\" preserveAspectRatio=\"xMidYMid slice\"><defs><linearGradient id=\"a\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\"><stop offset=\"0\" stop-color=\"#5FA8E0\"/><stop offset=\".75\" stop-color=\"#F7CF9C\"/><stop offset=\"1\" stop-color=\"#F9B97F\"/></linearGradient><linearGradient id=\"b\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\"><stop offset=\"0\" stop-color=\"#2479B3\"/><stop offset=\"1\" stop-color=\"#49B4D6\"/></linearGradient></defs><rect width=\"60\" height=\"48\" fill=\"url(#a)\"/><circle cx=\"41\" cy=\"38\" r=\"8\" fill=\"#FFE6A6\"/><circle cx=\"41\" cy=\"38\" r=\"12\" fill=\"#FFE6A6\" opacity=\".25\"/><rect y=\"46\" width=\"60\" height=\"16\" fill=\"url(#b)\"/><path d=\"M3 49h16M27 50h24M8 54h14M34 55h18M1 58h12\" stroke=\"#BDE7F6\" stroke-width=\".9\" stroke-linecap=\"round\" opacity=\".75\"/><path d=\"M0 62q16-4 32-1t28 0v19H0z\" fill=\"#EFCF98\"/><path d=\"M0 68q20-3 60 2v10H0z\" fill=\"#E5BE83\"/><path d=\"M15 44.5l5-8.5v8.5z\" fill=\"#FFFFFF\"/><path d=\"M12.5 45h10l-1.6 1.8h-6.8z\" fill=\"#D9482B\"/><path d=\"M48 80c-1-9 1-17 5-24\" stroke=\"#6B4A2B\" stroke-width=\"1.6\" fill=\"none\"/><path d=\"M53 56c-6-3-10-1-12 2 4-1 8-1 12-2zm0 0c3-5 8-6 11-4-4 0-8 2-11 4zm0 0c-2-5-6-7-10-6 4 2 7 4 10 6zm0 0c5-1 9 2 10 6-4-3-7-4-10-6z\" fill=\"#2F7A45\"/></svg>",
-  city: "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 60 80\" preserveAspectRatio=\"xMidYMid slice\"><defs><linearGradient id=\"a\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\"><stop offset=\"0\" stop-color=\"#25305A\"/><stop offset=\".55\" stop-color=\"#B55A7C\"/><stop offset=\"1\" stop-color=\"#F3A167\"/></linearGradient></defs><rect width=\"60\" height=\"80\" fill=\"url(#a)\"/><circle cx=\"16\" cy=\"18\" r=\"3.4\" fill=\"#FFF1D2\" opacity=\".9\"/><circle cx=\"44\" cy=\"10\" r=\".6\" fill=\"#FFFFFF\"/><circle cx=\"52\" cy=\"22\" r=\".5\" fill=\"#FFFFFF\"/><circle cx=\"30\" cy=\"7\" r=\".5\" fill=\"#FFFFFF\"/><path d=\"M0 80V52h7v-9h7v13h4V36h10v18h4V44h6v-7h7v19h4V47h11v33z\" fill=\"#1C2140\"/><path d=\"M0 80V62h10v-6h8v10h6v-4h9v6h7V58h8v8h12v14z\" fill=\"#141831\"/><g fill=\"#FFD27A\"><rect x=\"20\" y=\"40\" width=\"1.6\" height=\"1.6\"/><rect x=\"24\" y=\"40\" width=\"1.6\" height=\"1.6\"/><rect x=\"20\" y=\"45\" width=\"1.6\" height=\"1.6\"/><rect x=\"24\" y=\"49\" width=\"1.6\" height=\"1.6\"/><rect x=\"40\" y=\"41\" width=\"1.6\" height=\"1.6\"/><rect x=\"40\" y=\"46\" width=\"1.6\" height=\"1.6\"/><rect x=\"51\" y=\"50\" width=\"1.6\" height=\"1.6\"/><rect x=\"55\" y=\"50\" width=\"1.6\" height=\"1.6\"/><rect x=\"51\" y=\"55\" width=\"1.6\" height=\"1.6\"/><rect x=\"2\" y=\"56\" width=\"1.6\" height=\"1.6\"/><rect x=\"9\" y=\"47\" width=\"1.6\" height=\"1.6\"/></g><g fill=\"#FFB86B\" opacity=\".9\"><rect x=\"13\" y=\"66\" width=\"2\" height=\"2\"/><rect x=\"28\" y=\"68\" width=\"2\" height=\"2\"/><rect x=\"44\" y=\"62\" width=\"2\" height=\"2\"/><rect x=\"50\" y=\"70\" width=\"2\" height=\"2\"/></g></svg>",
-  flowers: "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 60 80\" preserveAspectRatio=\"xMidYMid slice\"><defs><linearGradient id=\"a\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\"><stop offset=\"0\" stop-color=\"#9ACD72\"/><stop offset=\"1\" stop-color=\"#3F7A35\"/></linearGradient><g id=\"p\"><ellipse cx=\"0\" cy=\"-4\" rx=\"3\" ry=\"4.2\"/><ellipse cx=\"0\" cy=\"-4\" rx=\"3\" ry=\"4.2\" transform=\"rotate(72)\"/><ellipse cx=\"0\" cy=\"-4\" rx=\"3\" ry=\"4.2\" transform=\"rotate(144)\"/><ellipse cx=\"0\" cy=\"-4\" rx=\"3\" ry=\"4.2\" transform=\"rotate(216)\"/><ellipse cx=\"0\" cy=\"-4\" rx=\"3\" ry=\"4.2\" transform=\"rotate(288)\"/></g></defs><rect width=\"60\" height=\"80\" fill=\"url(#a)\"/><g fill=\"#2F6A2C\"><ellipse cx=\"10\" cy=\"44\" rx=\"7\" ry=\"2.6\" transform=\"rotate(-30 10 44)\"/><ellipse cx=\"46\" cy=\"30\" rx=\"7\" ry=\"2.6\" transform=\"rotate(25 46 30)\"/><ellipse cx=\"34\" cy=\"66\" rx=\"8\" ry=\"2.8\" transform=\"rotate(-18 34 66)\"/><ellipse cx=\"52\" cy=\"58\" rx=\"6\" ry=\"2.4\" transform=\"rotate(40 52 58)\"/></g><use href=\"#p\" transform=\"translate(18 26) scale(1.25)\" fill=\"#F47BA6\"/><circle cx=\"18\" cy=\"26\" r=\"2.6\" fill=\"#FFD54F\"/><use href=\"#p\" transform=\"translate(42 46) scale(1.35)\" fill=\"#FFFFFF\"/><circle cx=\"42\" cy=\"46\" r=\"2.8\" fill=\"#F2B705\"/><use href=\"#p\" transform=\"translate(16 60) scale(1.1)\" fill=\"#E5484D\"/><circle cx=\"16\" cy=\"60\" r=\"2.3\" fill=\"#FFE08A\"/><use href=\"#p\" transform=\"translate(48 14) scale(.95)\" fill=\"#F7A7C6\"/><circle cx=\"48\" cy=\"14\" r=\"2\" fill=\"#FFD54F\"/><use href=\"#p\" transform=\"translate(30 38) scale(.8)\" fill=\"#FFB3C8\"/><circle cx=\"30\" cy=\"38\" r=\"1.7\" fill=\"#FFE08A\"/><use href=\"#p\" transform=\"translate(54 74) scale(1)\" fill=\"#FFFFFF\"/><circle cx=\"54\" cy=\"74\" r=\"2\" fill=\"#F2B705\"/></svg>",
-  mountain: "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 60 80\" preserveAspectRatio=\"xMidYMid slice\"><defs><linearGradient id=\"a\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\"><stop offset=\"0\" stop-color=\"#7DBBEB\"/><stop offset=\"1\" stop-color=\"#E4F3FF\"/></linearGradient><linearGradient id=\"b\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\"><stop offset=\"0\" stop-color=\"#5DA6DA\"/><stop offset=\"1\" stop-color=\"#2E78B0\"/></linearGradient></defs><rect width=\"60\" height=\"80\" fill=\"url(#a)\"/><path d=\"M-4 58L18 22l10 14 8-10 28 32z\" fill=\"#8A9FC0\"/><path d=\"M18 22l-6 10 4-1 3 3 3-4 3 3z\" fill=\"#FFFFFF\"/><path d=\"M36 26l-4 5 3-.5 2 2 2-2.6z\" fill=\"#FFFFFF\"/><path d=\"M-4 62l20-18 12 10 10-8 26 16z\" fill=\"#5E7499\"/><rect y=\"60\" width=\"60\" height=\"20\" fill=\"url(#b)\"/><path d=\"M6 66h14M30 68h20M12 73h18\" stroke=\"#A9D6F5\" stroke-width=\".9\" stroke-linecap=\"round\" opacity=\".7\"/><g fill=\"#2D5B43\"><path d=\"M4 62l3.5-9 3.5 9z\"/><path d=\"M10 62l3-7.5 3 7.5z\"/><path d=\"M47 62l3.5-10 3.5 10z\"/><path d=\"M53 62l3-8 3 8z\"/></g><path d=\"M8 13q3-3 7-1 2-3 6-1 3 0 3 3H8z\" fill=\"#FFFFFF\" opacity=\".9\"/></svg>",
-  food: "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 60 80\" preserveAspectRatio=\"xMidYMid slice\"><rect width=\"60\" height=\"80\" fill=\"#C98A55\"/><path d=\"M0 18h60M0 38h60M0 58h60\" stroke=\"#A86F40\" stroke-width=\"1.2\"/><circle cx=\"30\" cy=\"40\" r=\"21\" fill=\"#F3EEE8\"/><circle cx=\"30\" cy=\"40\" r=\"16.5\" fill=\"#FFFFFF\"/><g transform=\"translate(24 36)\"><circle r=\"7\" fill=\"#FF9F2E\"/><circle r=\"5.8\" fill=\"#FFC062\"/><path d=\"M0 0L0-5.8M0 0L5 -2.9M0 0L5 2.9M0 0L0 5.8M0 0L-5 2.9M0 0L-5-2.9\" stroke=\"#FFE3B0\" stroke-width=\".8\"/></g><g fill=\"#D72638\"><path d=\"M37 41c-3-2-3-6 0-6 1 0 2 .6 2.6 1.6.6-1 1.6-1.6 2.6-1.6 3 0 3 4 0 6l-2.6 3z\"/><path d=\"M33 49c-2.6-1.7-2.6-5 0-5 .9 0 1.7.5 2.2 1.3.5-.8 1.3-1.3 2.2-1.3 2.6 0 2.6 3.3 0 5l-2.2 2.6z\"/></g><g fill=\"#3E9B4F\"><ellipse cx=\"39.6\" cy=\"35\" rx=\"2.2\" ry=\".9\"/><ellipse cx=\"35.2\" cy=\"44\" rx=\"1.8\" ry=\".8\"/><ellipse cx=\"22\" cy=\"48\" rx=\"3.6\" ry=\"1.4\" transform=\"rotate(-25 22 48)\"/></g><g fill=\"#4A2D7A\"><circle cx=\"27\" cy=\"50\" r=\"1.6\"/><circle cx=\"29.6\" cy=\"51.4\" r=\"1.6\"/><circle cx=\"26.4\" cy=\"52.8\" r=\"1.6\"/></g></svg>",
-  coffee: "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 60 80\" preserveAspectRatio=\"xMidYMid slice\"><defs><radialGradient id=\"a\" cx=\".5\" cy=\".45\" r=\".7\"><stop offset=\"0\" stop-color=\"#9C6A45\"/><stop offset=\"1\" stop-color=\"#5E3A24\"/></radialGradient></defs><rect width=\"60\" height=\"80\" fill=\"url(#a)\"/><ellipse cx=\"31\" cy=\"44\" rx=\"20\" ry=\"18\" fill=\"#EFE7DD\"/><ellipse cx=\"31\" cy=\"44\" rx=\"15\" ry=\"13.6\" fill=\"#FFFFFF\"/><circle cx=\"31\" cy=\"43\" r=\"11\" fill=\"#8A5634\"/><circle cx=\"31\" cy=\"43\" r=\"9.4\" fill=\"#A9703F\"/><path d=\"M31 47.5c-4.6-3-6-5.6-4-7.5 1.6-1.4 3.2-.4 4 1 .8-1.4 2.4-2.4 4-1 2 1.9.6 4.5-4 7.5z\" fill=\"#F1DCC0\"/><path d=\"M45 40q6-1 6 3t-6 3\" fill=\"none\" stroke=\"#FFFFFF\" stroke-width=\"2.4\"/><circle cx=\"13\" cy=\"69\" r=\"7\" fill=\"#D69A55\"/><circle cx=\"13\" cy=\"69\" r=\"5.6\" fill=\"#E3AE6B\"/><g fill=\"#5A3420\"><circle cx=\"11\" cy=\"67\" r=\"1\"/><circle cx=\"15.4\" cy=\"68.2\" r=\"1.1\"/><circle cx=\"12.4\" cy=\"71.6\" r=\"1\"/><circle cx=\"16\" cy=\"71.4\" r=\".8\"/></g><path d=\"M47 18l8 10\" stroke=\"#C9C3BA\" stroke-width=\"2.2\" stroke-linecap=\"round\"/><ellipse cx=\"45.5\" cy=\"16\" rx=\"2.4\" ry=\"3.4\" transform=\"rotate(-38 45.5 16)\" fill=\"#D8D2C9\"/></svg>",
-  forest: "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 60 80\" preserveAspectRatio=\"xMidYMid slice\"><defs><linearGradient id=\"a\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\"><stop offset=\"0\" stop-color=\"#F6E7C1\"/><stop offset=\".5\" stop-color=\"#BFDDB9\"/><stop offset=\"1\" stop-color=\"#5E9A68\"/></linearGradient></defs><rect width=\"60\" height=\"80\" fill=\"url(#a)\"/><circle cx=\"38\" cy=\"22\" r=\"10\" fill=\"#FFF6D8\" opacity=\".85\"/><g fill=\"#A5C9A3\"><path d=\"M2 50l6-20 6 20z\"/><path d=\"M16 48l5-16 5 16z\"/><path d=\"M40 50l6-22 6 22z\"/><path d=\"M50 48l5-15 5 15z\"/></g><g fill=\"#5B9467\"><path d=\"M-2 62l8-26 8 26z\"/><path d=\"M12 62l7-22 7 22z\"/><path d=\"M30 62l8-28 8 28z\"/><path d=\"M46 62l7-20 7 20z\"/></g><path d=\"M0 62h60v18H0z\" fill=\"#3E6F48\"/><path d=\"M26 80q2-9 8-18\" fill=\"none\" stroke=\"#D9C38E\" stroke-width=\"3.6\" stroke-linecap=\"round\"/><g fill=\"#2C5236\"><path d=\"M-4 80l7-24 7 24z\"/><path d=\"M50 80l7-26 7 26z\"/></g></svg>",
-  sky: "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 60 80\" preserveAspectRatio=\"xMidYMid slice\"><defs><linearGradient id=\"a\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\"><stop offset=\"0\" stop-color=\"#9DB8EE\"/><stop offset=\".55\" stop-color=\"#E6B9E2\"/><stop offset=\"1\" stop-color=\"#FFD3B5\"/></linearGradient></defs><rect width=\"60\" height=\"80\" fill=\"url(#a)\"/><circle cx=\"44\" cy=\"54\" r=\"7\" fill=\"#FFF0C2\"/><circle cx=\"44\" cy=\"54\" r=\"11\" fill=\"#FFF0C2\" opacity=\".3\"/><g fill=\"#FFFFFF\"><path d=\"M4 30q0-5 5-5 2-5 8-4 4-3 8 1 5 0 5 5 0 3-3 3H7q-3 0-3 0z\" opacity=\".95\"/><path d=\"M30 14q1-4 5-4 3-4 8-2 5 0 5 4 3 1 2 4H31q-2 0-1-2z\" opacity=\".9\"/><path d=\"M-2 66q1-4 6-4 3-4 9-2 5-1 6 3 4 1 3 5H0z\" opacity=\".95\"/><path d=\"M36 72q1-3 5-3 3-4 8-2 5-1 6 3 3 1 3 4H36z\" opacity=\".9\"/></g><path d=\"M18 44l2-1.2 2 1.2M24 40l1.6-1 1.6 1\" stroke=\"#6E5A8F\" stroke-width=\".8\" fill=\"none\" stroke-linecap=\"round\"/></svg>",
-};
-const sceneUrlCache = {};
-export function filterSceneUrl(k) {
-  if (!sceneUrlCache[k]) sceneUrlCache[k] = `data:image/svg+xml;utf8,${encodeURIComponent(FILTER_SCENES[k] || FILTER_SCENES.beach)}`;
-  return sceneUrlCache[k];
+function useMediaThumb(src, video) {
+  const [thumb, setThumb] = useState(null);
+  useEffect(() => {
+    setThumb(null);
+    if (!src) return undefined;
+    let alive = true;
+    const done = (el, w, h) => {
+      if (!alive || !w || !h) return;
+      try {
+        const k = 180 / Math.max(1, Math.min(w, h));
+        const c = document.createElement('canvas');
+        c.width = Math.max(1, Math.round(w * k)); c.height = Math.max(1, Math.round(h * k));
+        c.getContext('2d').drawImage(el, 0, 0, c.width, c.height);
+        setThumb(c.toDataURL('image/jpeg', 0.82));
+      } catch {}
+    };
+    if (video) {
+      const v = document.createElement('video');
+      v.muted = true; v.playsInline = true; v.preload = 'auto';
+      v.onloadeddata = () => { try { v.currentTime = Math.min(0.3, (v.duration || 1) / 2); } catch { done(v, v.videoWidth, v.videoHeight); } };
+      v.onseeked = () => done(v, v.videoWidth, v.videoHeight);
+      v.src = src;
+      return () => { alive = false; try { v.removeAttribute('src'); v.load(); } catch {} };
+    }
+    const im = new Image();
+    im.onload = () => done(im, im.naturalWidth, im.naturalHeight);
+    im.src = src;
+    return () => { alive = false; };
+  }, [src, video]);
+  return thumb;
 }
-export function FilterStrip({ value, onPick, big = false, lens = false }) {
+export function FilterStrip({ value, onPick, big = false, lens = false, src = null, video = false }) {
+  const thumb = useMediaThumb(src, video);
   const rowRef = useRef(null);
   const firstRef = useRef(true);
   const cur = value || 'none';
@@ -57620,7 +57469,7 @@ export function FilterStrip({ value, onPick, big = false, lens = false }) {
           return (
             <div key={f.k} data-filter={f.k} data-grp={f.g} data-gs={gap || i === 0 ? f.g : undefined} role="button" aria-label={`Filter ${f.label}`} aria-pressed={on} onClick={pick(f.k)} style={{ width: tw + 6, marginLeft: gap ? 8 : 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer', flexShrink: 0, WebkitTapHighlightColor: 'transparent' }}>
               <div style={{ position: 'relative', width: tw, height: th, borderRadius: rad, overflow: 'hidden', background: '#222', boxShadow: on ? '0 0 0 2px rgba(0, 0, 0, 0.55), 0 0 0 4px #FFFFFF' : '0 2px 8px rgba(0, 0, 0, 0.3)', transform: on && !still ? 'scale(1.05)' : 'none', transition: still ? 'none' : 'transform 180ms ease, box-shadow 180ms ease' }}>
-                <img src={filterSceneUrl(f.s)} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', filter: photoFilterCss(f.k) }} />
+                {thumb ? <img src={thumb} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', filter: photoFilterCss(f.k) }} /> : <div style={{ width: '100%', height: '100%', background: 'linear-gradient(160deg, #3A3D44, #1E2024)', filter: photoFilterCss(f.k) }} />}
                 <FilterFx k={f.k} />
               </div>
               <span style={{ fontSize: 11.5, lineHeight: '14px', fontWeight: on ? 800 : 600, color: on ? '#FFFFFF' : 'rgba(255, 255, 255, 0.8)', textShadow: '0 1px 4px rgba(0, 0, 0, 0.65)', whiteSpace: 'nowrap' }}>{f.label}</span>
@@ -59728,7 +59577,7 @@ function svgMarkup(node) {
   return `<${node.type}${attrs}>${svgMarkup(node.props.children)}</${node.type}>`;
 }
 const gameArtSrcs = new Map();
-const GAME_ART_FILES = { duo: '/duo-art.webp', gulp: '/gulp-art.webp', gulpco: '/gulp-art.webp', roll: '/roll-art.webp' };
+const GAME_ART_FILES = { duo: '/duo-art.webp', gulp: '/gulp-art.webp', gulpco: '/gulp-art.webp', roll: '/roll-art.webp', race: '/race-art.webp' };
 function gameArtSrc(kIn) {
   const key = String(kIn == null ? '' : kIn);
   if (GAME_ART_FILES[key]) return GAME_ART_FILES[key];
@@ -59752,14 +59601,15 @@ export function GameArt({ k: kIn, width = 160, height = 100, radius = 14, style 
   return <img src={src} alt="" aria-hidden="true" draggable={false} decoding="async" style={{ display: 'block', width, height, borderRadius: radius, flexShrink: 0, objectFit: 'cover', ...style }} />;
 }
 
-export const LIVE_GAME_KEYS = ['roll', 'gulpco', 'duo', 'gulp', 'tug', 'qrace', 'rrace'];
-Object.assign(GAME_TITLES, { roll: 'Roll Squad', gulpco: 'Gulp room', duo: 'Two Torches', gulp: 'Gulp', tug: 'Tug of war', qrace: 'Quiz race', rrace: 'Reaction race' });
-Object.assign(FRIEND_GAME_SUBS, { roll: 'Live, up to four friends roll together', gulpco: 'Live, up to ten friends, join any time', duo: 'Live, endless temples together', gulp: 'Live, eat smaller fish and grow', tug: 'Live, tap faster than them', qrace: 'Live, fastest right answer', rrace: 'Live, first to tap on green' });
-Object.assign(GAME_ART_BG, { roll: ['#6EC6FF', '#4FA83A'], duo: ['#3B2A48', '#120C1C'], gulp: ['#1C6FA8', '#082A4C'], gulpco: ['#1C6FA8', '#082A4C'], tug: ['#F97316', '#E11D48'], qrace: ['#7C3AED', '#2563EB'], rrace: ['#10B981', '#0EA5E9'] });
+export const LIVE_GAME_KEYS = ['race', 'roll', 'gulpco', 'duo', 'gulp', 'tug', 'qrace', 'rrace'];
+Object.assign(GAME_TITLES, { race: 'Island Rally', roll: 'Roll Squad', gulpco: 'Gulp room', duo: 'Two Torches', gulp: 'Gulp', tug: 'Tug of war', qrace: 'Quiz race', rrace: 'Reaction race' });
+Object.assign(FRIEND_GAME_SUBS, { race: 'Live, up to six friends race in 3D', roll: 'Live, up to four friends roll together', gulpco: 'Live, up to ten friends, join any time', duo: 'Live, endless temples together', gulp: 'Live, eat smaller fish and grow', tug: 'Live, tap faster than them', qrace: 'Live, fastest right answer', rrace: 'Live, first to tap on green' });
+Object.assign(GAME_ART_BG, { race: ['#7FB4E0', '#3A4B63'], roll: ['#6EC6FF', '#4FA83A'], duo: ['#3B2A48', '#120C1C'], gulp: ['#1C6FA8', '#082A4C'], gulpco: ['#1C6FA8', '#082A4C'], tug: ['#F97316', '#E11D48'], qrace: ['#7C3AED', '#2563EB'], rrace: ['#10B981', '#0EA5E9'] });
 Object.assign(GAME_RULES, {
   duo: { how: ['You carry the orange torch, your friend carries the blue one. Move with the joystick.', 'Orange walks through lava and fire. Blue wades through water, lights hidden stones and reads hidden codes.', 'Pull levers, hold doors on the plates, jump through glowing rings, cross spikes when they drop and keep moving on cracked floors.', 'Play the story or endless temples that are new every time. You share three hearts.', 'Talk with voice, quick messages and emojis. You can mute your friend any time.'], win: 'Stand on your own glowing doors at the same time to finish. Finish missions for stars.' },
   gulp: { how: ['You are a small fish with the number 2. Swim with the joystick.', 'Touch fish with a number the same as yours or smaller to eat them and grow. Any part of you works, even your tail. Small fish swim away when you get close.', 'Fish with bigger numbers can eat you. Hunters chase you for a moment, then give up. Dash to get away.', 'Suck pulls the fish in front of you into your mouth. Grow bigger to unlock a shield, a shock wave and frenzy.', 'Grab bubbles for a shield, double food, a magnet or speed. If you are bigger than your friend you can eat them too.'], win: 'Grow as big as you can, there is no top size. Each of you has five lives and gets one back when you grow into a new fish. Whoever keeps their lives longer wins the round.' },
   gulpco: { how: ['A fish room for up to ten friends. Anyone you invite can join or leave any time.', 'Swim with the joystick and eat fish with a number the same as yours or smaller.', 'Nobody eats anyone in the room. If a big fish gets you, you come back a bit smaller.', 'Turn your mic on to talk. Tap the people button to mute anyone.'], win: 'Grow together and see who gets the biggest.' },
+  race: { how: ['Pick a ride: sports car, hatchback, jeep or tuk tuk. Your colour comes from your spot on the grid.', 'Your car speeds up by itself. Hold the left and right arrows to steer, or turn on tilt to steer with your phone.', 'Hold Drift while you turn to slide round corners. Drifting fills the ring around Boost. Tap Boost for a burst of speed.', 'Grass and sand slow you down. Bump other cars to push past them.', 'Talk with your mic and send emojis while you race. Empty spots can be filled with bots.'], win: 'Finish the laps first. Your best lap is saved.' },
   roll: { how: ['Hold the arrows to roll your ball. Tap jump, hold it to jump higher.', 'Land on top of enemies to bop them. Spiky ones hurt from every side.', 'Springs throw you high. Flags save where you come back after a pop.', 'Some gates need two buttons pressed at the same time. Team up.', 'Grab coins and find the three stars hidden in every level.'], win: 'Everyone has to reach the portal to clear the level. There are five worlds with six levels each.' },
   tug: { how: ['You both play at the same moment. Open the game and wait for your friend to join.', 'When the countdown ends, tap the big button as fast as you can.', 'Every tap pulls the rope toward you.'], win: 'After 15 seconds, whoever pulled the rope to their side wins.' },
   qrace: { how: ['You both play at the same moment and see the same question together.', 'Tap the right answer before your friend does.', 'A wrong answer locks you out of that question.'], win: 'Seven questions. Whoever scores more wins.' },
@@ -60208,7 +60058,9 @@ function LiveGameCard({ state, myId, peerName, onOpen, onRematch }) {
   const ended = state.st === 'done' || state.st === 'gone' || (state.st === 'wait' && !waiting);
   return (
     <GameCardShell k={state.g} width={236} live title={GAME_TITLES[state.g]} status={status} hot={hot}>
-      {state.g === 'roll' ? (
+      {state.g === 'race' ? (
+        <div style={{ textAlign: 'center', fontSize: 13, fontWeight: 800, color: theme.ink, padding: '2px 0 4px' }}>Race in 3D, up to six friends</div>
+      ) : state.g === 'roll' ? (
         <div style={{ textAlign: 'center', fontSize: 13, fontWeight: 800, color: theme.ink, padding: '2px 0 4px' }}>Roll together, up to four friends</div>
       ) : state.g === 'gulpco' ? (
         <div style={{ textAlign: 'center', fontSize: 13, fontWeight: 800, color: theme.ink, padding: '2px 0 4px' }}>Swim together, up to ten friends</div>

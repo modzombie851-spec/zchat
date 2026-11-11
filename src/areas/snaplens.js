@@ -401,35 +401,31 @@ export function drawBigEyes(ctx, G, src, cache) {
   }
 }
 
-export function synthFace(cx, cy, s, roll, open) {
-  const pts = {};
-  const put = (i, x, y) => { const c = Math.cos(roll), n = Math.sin(roll); pts[i] = { x: cx + (x * c - y * n) * s, y: cy + (x * n + y * c) * s }; };
-  put(LM.eyeR, -0.5, 0); put(LM.eyeL, 0.5, 0);
-  put(LM.top, 0, -1.3); put(LM.chin, 0, 1.85); put(LM.nose, 0, 0.62); put(LM.bridge, 0, 0.05);
-  put(LM.lipU, 0, 1.06 - (open || 0) * 0.08); put(LM.lipD, 0, 1.1 + (open || 0) * 0.28);
-  put(LM.mouthR, -0.36, 1.1); put(LM.mouthL, 0.36, 1.1);
-  put(LM.edgeR, -1.05, 0.25); put(LM.edgeL, 1.05, 0.25);
-  put(LM.cheekR, -0.62, 0.62); put(LM.cheekL, 0.62, 0.62);
-  put(LM.browR, -0.5, -0.32); put(LM.browL, 0.5, -0.32);
-  OVAL.forEach((i, q) => { const a = q / OVAL.length * TAU - Math.PI / 2; put(i, Math.cos(a) * 1.08, 0.28 + Math.sin(a) * 1.58); });
-  return (i) => pts[i] || pts[LM.nose];
-}
+const LENS_ICONS = {
+  puppy: '<path d="M8.6 6.2C6 4.4 3 6 3.2 9.6c.2 2.6 1.4 4.6 3.2 5"/><path d="M15.4 6.2C18 4.4 21 6 20.8 9.6c-.2 2.6-1.4 4.6-3.2 5"/><path d="M7 10.5c0-2.6 2.2-4.3 5-4.3s5 1.7 5 4.3v3.3c0 3-2.2 5.2-5 5.2s-5-2.2-5-5.2z"/><ellipse cx="12" cy="13.6" rx="1.6" ry="1.1" fill="#fff" stroke="none"/><path d="M12 14.7v1.6"/>',
+  kitty: '<path d="M5.5 11.5V4.8l4 3.2M18.5 11.5V4.8l-4 3.2"/><path d="M5.5 11.5C5.5 16 8.4 19 12 19s6.5-3 6.5-7.5c0-2.4-2.9-3.5-6.5-3.5s-6.5 1.1-6.5 3.5z"/><path d="M2.5 13.2l4 .4M2.8 16l3.8-1M21.5 13.2l-4 .4M21.2 16l-3.8-1"/>',
+  bunny: '<path d="M9.4 9.8C8 8.4 7.4 2.6 9.2 2.4s2 5.4 1.8 7.2M14.6 9.8c1.4-1.4 2-7.2.2-7.4s-2 5.4-1.8 7.2"/><circle cx="12" cy="14.6" r="5.6"/><path d="M10.8 15.8l1.2.8 1.2-.8"/>',
+  bear: '<circle cx="6.6" cy="7.4" r="2.6"/><circle cx="17.4" cy="7.4" r="2.6"/><circle cx="12" cy="13.4" r="6.4"/><ellipse cx="12" cy="15.4" rx="2.6" ry="2"/><circle cx="12" cy="14.7" r=".7" fill="#fff" stroke="none"/>',
+  hearts: '<path d="M7 17.2S2.6 14.2 2.6 11c0-1.6 1.2-2.8 2.6-2.8 1 0 1.6.5 1.8 1.1.2-.6.9-1.1 1.8-1.1 1.4 0 2.6 1.2 2.6 2.8 0 3.2-4.4 6.2-4.4 6.2z" fill="#fff"/><path d="M17 17.2s-4.4-3-4.4-6.2c0-1.6 1.2-2.8 2.6-2.8 1 0 1.6.5 1.8 1.1.2-.6.9-1.1 1.8-1.1 1.4 0 2.6 1.2 2.6 2.8 0 3.2-4.4 6.2-4.4 6.2z" fill="#fff"/>',
+  crown: '<path d="M4 17.5L3 7.5l5 4 4-6 4 6 5-4-1 10z"/><path d="M4.5 20h15"/>',
+  flowers: '<circle cx="5.5" cy="13" r="1.3" fill="#fff"/><circle cx="12" cy="9.5" r="1.3" fill="#fff"/><circle cx="18.5" cy="13" r="1.3" fill="#fff"/><path d="M5.5 10.2v.4M5.5 15.4v.4M2.7 13h.4M7.9 13h.4M12 6.7v.4M12 11.9v.4M9.2 9.5h.4M14.4 9.5h.4M18.5 10.2v.4M18.5 15.4v.4M15.7 13h.4M20.9 13h.4"/><path d="M3.5 18c2.8-3 5.6-4.4 8.5-4.4s5.7 1.4 8.5 4.4"/>',
+  shades: '<path d="M2.5 9.5h19"/><path d="M3.4 9.5h7.1v2.6c0 2-1.4 3.4-3.5 3.4S3.4 14 3.4 12z" fill="#fff"/><path d="M13.5 9.5h7.1v2.6c0 2-1.4 3.4-3.6 3.4s-3.5-1.4-3.5-3.4z" fill="#fff"/>',
+  nerd: '<circle cx="7" cy="12" r="3.6"/><circle cx="17" cy="12" r="3.6"/><path d="M10.6 11.4c.9-.7 1.9-.7 2.8 0M3.4 11.2L2 10M20.6 11.2L22 10"/>',
+  blush: '<ellipse cx="6.5" cy="13.5" rx="3" ry="1.8" fill="#fff" fill-opacity=".55" stroke="none"/><ellipse cx="17.5" cy="13.5" rx="3" ry="1.8" fill="#fff" fill-opacity=".55" stroke="none"/><path d="M5 13.4l1-1M7 14.4l1-1M16 13.4l1-1M18 14.4l1-1"/><path d="M12 4.5v3M10.5 6h3"/>',
+  bigeyes: '<circle cx="7.2" cy="12" r="4.4"/><circle cx="16.8" cy="12" r="4.4"/><circle cx="8" cy="12.6" r="1.8" fill="#fff" stroke="none"/><circle cx="17.6" cy="12.6" r="1.8" fill="#fff" stroke="none"/>',
+  rainbow: '<path d="M3 17a9 9 0 0 1 18 0"/><path d="M6.2 17a5.8 5.8 0 0 1 11.6 0"/><path d="M9.4 17a2.6 2.6 0 0 1 5.2 0"/>',
+  stars: '<path d="M12 3.5l1.3 2.7 3 .4-2.2 2 .5 3-2.6-1.4-2.6 1.4.5-3-2.2-2 3-.4z"/><path d="M5.2 12.4l.8 1.6 1.7.3-1.2 1.2.3 1.7-1.6-.8-1.5.8.3-1.7-1.2-1.2 1.7-.3z"/><path d="M18.8 12.4l.8 1.6 1.7.3-1.2 1.2.3 1.7-1.6-.8-1.5.8.3-1.7-1.2-1.2 1.7-.3z"/><path d="M4 21c4-2.6 12-2.6 16 0"/>',
+  devil: '<path d="M6.5 11.5C4 10.4 3 7.4 3.8 4c1.2 2.4 3.4 3.4 5.4 3.6"/><path d="M17.5 11.5c2.5-1.1 3.5-4.1 2.7-7.5-1.2 2.4-3.4 3.4-5.4 3.6"/><path d="M6.8 14.5c0-3 2.3-5.4 5.2-5.4s5.2 2.4 5.2 5.4"/>',
+  angel: '<ellipse cx="12" cy="6" rx="6.4" ry="2.2"/><path d="M7.4 13.8c0-2.8 2-4.6 4.6-4.6s4.6 1.8 4.6 4.6v1.4"/><path d="M3 12.5c1.6.2 2.9 1.4 3.4 3M21 12.5c-1.6.2-2.9 1.4-3.4 3"/>',
+  mustache: '<path d="M12 12.4c-1.2-2.2-3.6-3-5.6-1.8-1.4.8-2.2 2.4-3.9 2.2.8 2.6 3.6 3.6 6 2.8 1.6-.5 2.8-1.6 3.5-3.2.7 1.6 1.9 2.7 3.5 3.2 2.4.8 5.2-.2 6-2.8-1.7.2-2.5-1.4-3.9-2.2-2-1.2-4.4-.4-5.6 1.8z" fill="#fff"/>',
+  clown: '<circle cx="12" cy="12" r="4.2" fill="#fff"/><path d="M4.5 6.5c1 .6 1.6 1.6 1.6 2.8M19.5 6.5c-1 .6-1.6 1.6-1.6 2.8M6.5 18.5c1.6 1.2 3.4 1.8 5.5 1.8s3.9-.6 5.5-1.8"/>',
+};
 const thumbCache = new Map();
 export function lensThumb(k) {
   if (thumbCache.has(k)) return thumbCache.get(k);
-  if (typeof document === 'undefined') return '';
-  const N = 120;
-  const cv = document.createElement('canvas'); cv.width = N; cv.height = N;
-  const c = cv.getContext('2d');
-  c.fillStyle = '#F4D2B8'; c.beginPath(); c.ellipse(60, 66, 34, 42, 0, 0, TAU); c.fill();
-  c.fillStyle = '#3A2A24'; c.beginPath(); c.ellipse(60, 34, 36, 18, 0, Math.PI, TAU); c.fill();
-  c.fillStyle = '#2B2540'; c.beginPath(); c.arc(48, 62, 3.6, 0, TAU); c.arc(72, 62, 3.6, 0, TAU); c.fill();
-  c.strokeStyle = '#B5625A'; c.lineWidth = 2.6; c.lineCap = 'round'; c.beginPath(); c.arc(60, 82, 7, 0.2, Math.PI - 0.2); c.stroke();
-  const P = synthFace(60, 62, 24, 0, k === 'rainbow' || k === 'puppy' || k === 'bunny' ? 0.9 : 0);
-  const G = geomOf(P, k === 'rainbow' || k === 'puppy' || k === 'bunny' ? 0.9 : 0);
-  if (k === BIG_EYES) { c.fillStyle = '#FFFFFF'; for (const x of [48, 72]) { c.beginPath(); c.arc(x, 62, 9, 0, TAU); c.fill(); } c.fillStyle = '#2B2540'; for (const x of [48, 72]) { c.beginPath(); c.arc(x, 63, 5.4, 0, TAU); c.fill(); } }
-  else drawLens(c, k, G, 0.6);
-  const url = cv.toDataURL('image/png');
+  const body = LENS_ICONS[k] || LENS_ICONS.bigeyes;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-4 -4 32 32" width="96" height="96"><g fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${body}</g></svg>`;
+  const url = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
   thumbCache.set(k, url);
   return url;
 }

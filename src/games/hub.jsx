@@ -202,7 +202,7 @@ function OnlineCard({ online, onOpen }) {
   );
 }
 
-export function GamesPage({ onClose, onChallenge, onShareScore, initialGame, friends, onPlayWith, onStartLive, onRollInvite, onGulpRoom, onWatch, onOpenLeaderboard, onPlayBot, myId, me, onRoomHost, onRoomGuest, initialRoom }) {
+export function GamesPage({ onClose, onChallenge, onShareScore, initialGame, friends, onPlayWith, onStartLive, onRollInvite, onRaceInvite, onRaceSolo, onGulpRoom, onWatch, onOpenLeaderboard, onPlayBot, myId, me, onRoomHost, onRoomGuest, initialRoom }) {
   injectHubCss();
   useBackClose(true, onClose);
   const { theme } = useTheme();
@@ -298,6 +298,20 @@ export function GamesPage({ onClose, onChallenge, onShareScore, initialGame, fri
             </>
           )}
           <div style={{ position: 'relative', borderRadius: 22, overflow: 'hidden', margin: '6px 0 4px', boxShadow: '0 10px 24px rgba(0,0,0,0.22)' }}>
+            <GameArt k="race" width="100%" height={168} radius={0} style={{ width: '100%' }} />
+            <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(10,16,30,0) 34%, rgba(10,16,30,0.86) 100%)' }} />
+            <div style={{ position: 'absolute', left: 14, right: 14, bottom: 12, display: 'flex', alignItems: 'flex-end', gap: 10 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 19, fontWeight: 900, color: '#FFFFFF' }}>Island Rally</div>
+                <div style={{ fontSize: 12.5, fontWeight: 600, color: 'rgba(255,255,255,0.85)', lineHeight: 1.35 }}>Real 3D racing for up to six friends, with mic. Drift, boost and bump your way to first.</div>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
+                {onRaceInvite && <GameButton small color="gold" label="Invite friends" onClick={() => { tap(); noteRecent('race'); onRaceInvite(); }} />}
+                {onRaceSolo && <GameButton small color="white" label="Race bots" onClick={() => { tap(); noteRecent('race'); onRaceSolo(); }} />}
+              </div>
+            </div>
+          </div>
+          <div style={{ position: 'relative', borderRadius: 22, overflow: 'hidden', margin: '10px 0 4px', boxShadow: '0 10px 24px rgba(0,0,0,0.22)' }}>
             <GameArt k="roll" width="100%" height={168} radius={0} style={{ width: '100%' }} />
             <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(8,30,20,0) 34%, rgba(8,30,20,0.84) 100%)' }} />
             <div style={{ position: 'absolute', left: 14, right: 14, bottom: 12, display: 'flex', alignItems: 'flex-end', gap: 10 }}>

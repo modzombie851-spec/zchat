@@ -3658,7 +3658,7 @@ export function MediaComposer({ files, recipientName, onCancel, onSend: onSendBa
       )}
       {mode === 'filter' && (
         <div style={{ padding: '10px 0', paddingBottom: 'calc(16px + env(safe-area-inset-bottom))', flexShrink: 0 }}>
-          <FilterStrip value={cur.filter} big onPick={(k) => updateItem(cur.id, { filter: k })} />
+          <FilterStrip value={cur.filter} big src={cur.url} video={cur.kind === 'video'} onPick={(k) => updateItem(cur.id, { filter: k })} />
           <div style={{ fontSize: 12.5, color: 'rgba(255, 255, 255, 0.6)', textAlign: 'center', paddingTop: 12 }}>Swipe the photo to try them</div>
         </div>
       )}
