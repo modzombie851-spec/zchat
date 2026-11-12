@@ -2,12 +2,13 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Avatar, Portal, useBackClose, hapticTap, FONT, Spinner } from '../App.jsx';
 import { useRoomLink } from './relay.jsx';
 import { EMOTES, Sheet, injectCss, useGameChat, ChatSheet } from './livekit.jsx';
-import { GBtn, GHold, GPill, GPanel, GChip, GTitle, GIcon, GHudBtn, GHudPanel, GHint, GStat, GNotices, useNotices, useWatchNotices, stagePoint, injectKitCss, kitTap, pressProps, maxDpr, newBudget, budgetTick, INK, useCtlLook, useGameStage, GControlsPanel, GVolBars, GLobby, GSlot, GLobbySheet , GTalkers } from './gamekit.jsx';
+import { GBtn, GHold, GPill, GPanel, GChip, GTitle, GIcon, GHudBtn, GHudPanel, GHint, GStat, GNotices, useNotices, useWatchNotices, stagePoint, injectKitCss, kitTap, pressProps, maxDpr, newBudget, budgetTick, INK, useCtlLook, useGameStage, GControlsPanel, GVolBars, GLobby, GSlot, GLobbySheet, GTalkers, GWatchBar } from './gamekit.jsx';
 import { Sfx } from './sfx.js';
 import { setWatchAllowed, useLiveBeacon, useGamePrivacy } from './live.js';
 import { WORLDS, LEVEL_N, BALLS, R, levelOf, levelName, makeWorld, mkBall, stepBall, interact, applyEvent, pressedButtons, gatesToOpen, stepPlates, foePos, clamp, demoSetup, demoStep, demoStarts, clipStart, clipRun, DEMO_DT } from './rollengine.js';
 import { render, drawBall, updateParts, burst, dust, popText, clearChunks, buildRollMini, drawRollMini } from './rolldraw.js';
 import { useTalking } from './talk.js';
+import { mkNet, netPush, netRead } from './netlerp.js';
 
 const BEST_KEY = (uid) => `zchat-roll-best-${uid || 'me'}`;
 const MINI_W = 168, MINI_H = 36;
@@ -89,6 +90,8 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
   const [lvSheet, setLvSheet] = useState(false);
   const [sheetW, setSheetW] = useState(0);
   const [follow, setFollow] = useState(null);
+  const [camK, setCamK] = useState(null);
+  const camKRef = useRef(null);
   const gamePriv = useGamePrivacy();
   const allowWatch = gamePriv.show && gamePriv.watch;
   const setAllowWatch = () => {};
@@ -235,7 +238,8 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
         if (typeof m.at === 'number') { if (m.at < (b.netAt || 0)) return; b.netAt = m.at; }
         if (m.d && !(b.dead > 0)) { burst(partsRef.current, b.x, b.y, BALLS[rosterRef.current.indexOf(m.from) % 4].body, 16, 6, 'shard'); }
         b.dead = m.d ? 1 : 0; b.home = !!m.h; b.look = m.lk || 1;
-        b.nt = { x: m.x, y: m.y, vx: m.vx || 0, vy: m.vy || 0, at: performance.now() };
+        const nx = Number(m.x), ny = Number(m.y);
+        if (Number.isFinite(nx) && Number.isFinite(ny)) netPush(b.nb || (b.nb = mkNet()), m.at, [nx, ny, Number(m.vx) || 0, Number(m.vy) || 0]);
         if (m.ht != null && !isHost && m.from === room.host) { const target = m.ht - W.t; if (Math.abs(target - W.clk) > 0.5) W.clk = target; else W.clk += (target - W.clk) * 0.2; }
       }),
       relay.on('ev', (m) => { const W = WR.current; if (!W || m.i !== W.L.index || !m.e) return; applyEvent(W, m.e); if (m.e.k === 'home' && balls.current[m.e.who]) balls.current[m.e.who].home = true; }),
@@ -389,12 +393,10 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
           interact(W, mine, emit);
         }
         for (const b of all) {
-          if (b === mine || !b.nt) continue;
-          const T = b.nt;
-          const age = Math.min(0.2, (performance.now() - T.at) / 1000);
-          const tx = T.x + T.vx * age, ty = T.y + T.vy * age;
-          if (Math.hypot(tx - b.x, ty - b.y) > 3) { b.x = tx; b.y = ty; } else { const k = 1 - Math.exp(-step * 16); b.x += (tx - b.x) * k; b.y += (ty - b.y) * k; }
-          b.vx = T.vx; b.vy = T.vy; b.a += b.vx * step / R;
+          if (b === mine || !b.nb) continue;
+          const v = netRead(b.nb, b.nv || (b.nv = [0, 0, 0, 0]), { vel: [[0, 2], [1, 3]], snap: 3, ext: 140, base: 70 });
+          if (v) { b.x = v[0]; b.y = v[1]; b.vx = v[2]; b.vy = v[3]; }
+          b.a += b.vx * step / R;
           b.blink -= step; if (b.blink < -0.12) b.blink = 2 + Math.random() * 3;
         }
         stepPlates(W, all, step);
@@ -458,7 +460,11 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
       }
       const s = Math.round(clamp((cw > ch ? ch / 10 : cw / 10.5), 30, 58));
       let fb = mine && playing() && !mine.home ? mine : null;
-      if (!fb) { const fk = followRef.current && balls.current[followRef.current] && !balls.current[followRef.current].home ? followRef.current : rosterRef.current.find((k) => balls.current[k] && !balls.current[k].home && !(balls.current[k].dead > 0)); fb = fk ? balls.current[fk] : mine; }
+      if (!fb) {
+        const fk = followRef.current && balls.current[followRef.current] && !balls.current[followRef.current].home ? followRef.current : rosterRef.current.find((k) => balls.current[k] && !balls.current[k].home && !(balls.current[k].dead > 0));
+        fb = fk ? balls.current[fk] : mine;
+        if (fk && fk !== camKRef.current) { camKRef.current = fk; setCamK(fk); }
+      }
       const C = cam.current;
       if (fb) {
         const lead = clamp(fb.vx * 0.32, -2.2, 2.2);
@@ -687,9 +693,8 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
               </>
             )}
             {!playing() && (
-              <div style={{ position: 'absolute', left: 0, right: 0, bottom: bottom(18), display: 'flex', justifyContent: 'center', gap: 8, flexWrap: 'wrap', padding: '0 14px' }}>
-                <GHudPanel style={{ height: 32, padding: '0 11px', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 800 }}><GIcon k="eye" size={14} color="#CFE6FF" ink="rgba(0,0,0,0.3)" />Watching</GHudPanel>
-                {roster.map((k, i) => <GPill key={k} small text={nameOf(k)} color={['gold', 'green', 'blue', 'purple'][i % 4]} onPress={() => setFollow(k)} height={40} />)}
+              <div style={{ position: 'absolute', left: 0, right: 0, bottom: bottom(16), display: 'flex', justifyContent: 'center', padding: '0 14px', zIndex: 3 }}>
+                <GWatchBar ids={roster.filter((k) => !hud.home.includes(k)).length ? roster.filter((k) => !hud.home.includes(k)) : roster} cur={camK} nameOf={nameOf} colorOf={(k) => BALLS[Math.max(0, roster.indexOf(k)) % 4].body} onPick={(k) => { setFollow(k); camKRef.current = k; setCamK(k); }} />
               </div>
             )}
             {quick && (

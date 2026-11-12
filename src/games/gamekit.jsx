@@ -65,6 +65,7 @@ const ICON = {
   map: 'M3 6.5 8.5 4l7 2.5L21 4v13.5L15.5 20l-7-2.5L3 20zM8.5 4v13.5M15.5 6.5V20',
   hand: 'M8 13V6.5a1.6 1.6 0 0 1 3.2 0V11M11.2 11V5a1.6 1.6 0 0 1 3.2 0v6M14.4 11V6.5a1.6 1.6 0 0 1 3.2 0V14c0 4-2.7 7-6.6 7-2.6 0-4.4-1.3-5.8-3.5l-2.2-3.6c-.8-1.3.9-2.6 2-1.5L8 15.4',
   sword: 'M20.5 3.5L19.6 7.9 11.2 16.3 7.7 12.8 16.1 4.4ZM6.2 11.9L7.6 10.5 13.5 16.4 12.1 17.8ZM8.6 15.4L10 16.8 6.6 20.2 5.2 18.8Z',
+  hammer: 'M12.1 4.1L19.9 11.9 16.2 15.6 8.4 7.8ZM3.6 18.6L12.1 10.1 13.9 11.9 5.4 20.4Z',
   pause: 'M8 5v14M16 5v14',
   play: 'M7 4l13 8-13 8z',
   replay: 'M5 12a7 7 0 1 0 2-5M5 4v4h4',
@@ -96,7 +97,7 @@ const ICON = {
   door: 'M10 4H5v16h5M14 8l4 4-4 4M18 12H9',
   enter: 'M14 4h5v16h-5M9 8l4 4-4 4M13 12H4',
 };
-const FILLED = new Set(['rocket', 'drop', 'dash', 'shield', 'bolt', 'flame', 'up', 'left', 'right', 'play', 'star', 'heart', 'crown', 'bomb', 'sword']);
+const FILLED = new Set(['rocket', 'drop', 'dash', 'shield', 'bolt', 'flame', 'up', 'left', 'right', 'play', 'star', 'heart', 'crown', 'bomb', 'sword', 'hammer']);
 
 export function GIcon({ k, size = 26, color = '#FFFFFF', ink = 'rgba(0,0,0,0.34)', stroke, line = false, halo = true }) {
   const d = ICON[k] || ICON.star;
@@ -324,6 +325,40 @@ export function GJoy({ view, knobRef, color = 'blue', idle, R = 52, alpha = 1, f
   if (view) return base(view.x, view.y, 1);
   if (idle) return base(idle.x, idle.y, 0.55);
   return null;
+}
+
+export function GWatchBar({ ids, cur, nameOf, colorOf, onPick, style }) {
+  injectKitCss();
+  const list = (ids || []).filter(Boolean);
+  if (!list.length) return null;
+  const i = Math.max(0, list.indexOf(cur));
+  const k = list[i];
+  const go = (d) => { kitTap('click'); onPick(list[(i + d + list.length) % list.length]); };
+  const dot = (id, size) => <span style={{ width: size, height: size, borderRadius: size / 2, flexShrink: 0, background: colorOf ? colorOf(id) : '#FFFFFF', boxShadow: '0 0 0 1.5px rgba(255,255,255,0.85)' }} />;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, fontFamily: FONT, color: '#FFFFFF', ...style }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {list.length > 1 && <GBtn icon="chevl" color="dark" size={40} fast={false} label="Watch the player before" onPress={() => go(-1)} />}
+        <div aria-live="polite" style={{ height: 40, minWidth: 168, maxWidth: 260, padding: '0 14px', boxSizing: 'border-box', borderRadius: 20, background: 'rgba(10,14,26,0.78)', boxShadow: `0 0 0 2px ${INK}, inset 0 0 0 1.5px rgba(255,255,255,0.16)`, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          <GIcon k="eye" size={15} color="#CFE6FF" ink="transparent" />
+          <span style={{ fontSize: 11.5, fontWeight: 800, color: 'rgba(255,255,255,0.7)' }}>Watching</span>
+          {dot(k, 10)}
+          <span style={{ fontSize: 14.5, fontWeight: 900, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nameOf(k)}</span>
+        </div>
+        {list.length > 1 && <GBtn icon="chevr" color="dark" size={40} fast={false} label="Watch the next player" onPress={() => go(1)} />}
+      </div>
+      {list.length > 2 && !(typeof window !== 'undefined' && window.innerHeight < 430) && (
+        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', justifyContent: 'center', maxWidth: 'min(560px, 100%)' }}>
+          {list.map((id) => (
+            <button key={id} type="button" className="zgk-btn" aria-pressed={id === k} aria-label={`Watch ${nameOf(id)}`} {...pressProps(() => { kitTap('click'); onPick(id); })}
+              style={{ height: 28, padding: '0 10px 0 7px', border: 'none', borderRadius: 14, display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', fontFamily: FONT, fontSize: 11.5, fontWeight: 900, color: id === k ? INK : '#FFFFFF', background: id === k ? 'linear-gradient(180deg, #FFE27A, #F5B321)' : 'rgba(10,14,26,0.66)' }}>
+              {dot(id, 8)}{nameOf(id)}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function GTalkers({ ids, nameOf, top = 10 }) {

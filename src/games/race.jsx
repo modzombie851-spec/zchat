@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Avatar, Portal, useBackClose, FONT, Spinner } from '../App.jsx';
 import { useRoomLink } from './relay.jsx';
 import { EMOTES, Sheet, injectCss, useGameChat, ChatSheet } from './livekit.jsx';
-import { GBtn, GPill, GPanel, GChip, GTitle, GIcon, GHudBtn, GHudPanel, GNotices, useNotices, useWatchNotices, injectKitCss, kitTap, pressProps, maxDpr, INK, useCtlLook, useGameStage, GControlsPanel, GVolBars, GLobby, GSlot, GLobbySheet, GSwitchRow, GSeg , GTalkers } from './gamekit.jsx';
+import { GBtn, GPill, GPanel, GChip, GTitle, GIcon, GHudBtn, GHudPanel, GNotices, useNotices, useWatchNotices, injectKitCss, kitTap, pressProps, maxDpr, INK, useCtlLook, useGameStage, GControlsPanel, GVolBars, GLobby, GSlot, GLobbySheet, GSwitchRow, GSeg , GTalkers, GWatchBar } from './gamekit.jsx';
 import { Sfx } from './sfx.js';
 import { setWatchAllowed, useLiveBeacon, useGamePrivacy } from './live.js';
 import { createRenderer, m4, MeshBuilder } from './race3d.js';
@@ -12,6 +12,7 @@ import { carMesh, wheelMesh, WHEELS, fxMeshes } from './racecars.js';
 import { SkillIcon, NitroIcon, SteerArrow, PedalArt, skillFace, skillGlow, MapSelect } from './raceui.jsx';
 import { CARS, CAR_KEYS, COLORS, BOT_NAMES, MAX_RACERS, LAPS, SKILLS, SKILL_KEYS, EN_MAX, BOTTLE_BACK, DRINKS, drinkUse, RACER_SKILLS, COP_SKILLS, BUST_R, BUST_V, cutOf, carAt, driveCar, ROCKET_V, SPIN_ROCKET, SPIN_OIL, SLOW_SHOCK, SHIELD_T, mkCar, stepCar, airStep, launchCar, groundSlope, collide, botInput, botSkill, rocketStep, standings, lapOf, fmtRace, clamp } from './raceengine.js';
 import { useTalking } from './talk.js';
+import { mkNet, netPush, netRead } from './netlerp.js';
 
 const CAR_PREF = 'zchat-race-car';
 const TILT_PREF = 'zchat-race-tilt';
@@ -213,6 +214,8 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
   const [mapSheet, setMapSheet] = useState(false);
   const [optSheet, setOptSheet] = useState(false);
   const [follow, setFollow] = useState(null);
+  const [camK, setCamK] = useState(null);
+  const camKRef = useRef(null);
   const gamePriv = useGamePrivacy();
   const allowWatch = gamePriv.show && gamePriv.watch;
   const setAllowWatch = () => {};
@@ -687,7 +690,9 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
         const c = g.cars[m.from];
         if (!c || m.from === kindOf()) return;
         if (typeof m.at === 'number') { if (m.at < (c.netAt || 0)) return; c.netAt = m.at; }
-        g.net[m.from] = { s: num(m.s, c.s), x: clamp(num(m.x), -20, 20), v: clamp(num(m.v), 0, 90), y: clamp(num(m.y), -1.2, 1.2), at: performance.now(), sc: Number.isInteger(m.c) && m.c >= 0 ? m.c : -1, ss: num(m.ss), sx: clamp(num(m.sx), -12, 12) };
+        const NN = { s: num(m.s, c.s), x: clamp(num(m.x), -20, 20), v: clamp(num(m.v), 0, 90), y: clamp(num(m.y), -1.2, 1.2), at: performance.now(), sc: Number.isInteger(m.c) && m.c >= 0 ? m.c : -1, ss: num(m.ss), sx: clamp(num(m.sx), -12, 12) };
+        g.net[m.from] = NN;
+        netPush(c.nb || (c.nb = mkNet()), m.at, [NN.s, NN.x, NN.v, NN.y, NN.sc, NN.ss, NN.sx]);
         c.drift = clamp(num(m.d), 0, 1); c.boostT = m.b ? 0.3 : 0; c.steer = clamp(num(m.st), -1, 1); c.brake = m.k ? 1 : 0;
         const sp = clamp(num(m.sp), 0, 3); if (sp > 0 && c.spin <= 0) c.spinMax = Math.max(sp, 0.9); c.spin = sp;
         c.shield = clamp(num(m.sh), 0, SHIELD_T);
@@ -701,7 +706,9 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
           const k = g.ids[a[0]];
           const c = k && g.cars[k];
           if (!c) continue;
-          g.net[k] = { s: num(a[1], c.s), x: clamp(num(a[2]), -20, 20), v: clamp(num(a[3]), 0, 90), y: clamp(num(a[4]), -1.2, 1.2), at: performance.now(), sc: Number.isInteger(a[13]) && a[13] >= 0 ? a[13] : -1, ss: num(a[14]), sx: clamp(num(a[15]), -12, 12) };
+          const NB = { s: num(a[1], c.s), x: clamp(num(a[2]), -20, 20), v: clamp(num(a[3]), 0, 90), y: clamp(num(a[4]), -1.2, 1.2), at: performance.now(), sc: Number.isInteger(a[13]) && a[13] >= 0 ? a[13] : -1, ss: num(a[14]), sx: clamp(num(a[15]), -12, 12) };
+          g.net[k] = NB;
+          netPush(c.nb || (c.nb = mkNet()), m.at, [NB.s, NB.x, NB.v, NB.y, NB.sc, NB.ss, NB.sx]);
           c.drift = Number(a[5]) || 0; c.boostT = a[6] ? 0.3 : 0; if (Number(a[7]) > 0 && !c.fin) c.fin = Number(a[7]);
           const sp = clamp(num(a[8]), 0, 3); if (sp > 0 && c.spin <= 0) c.spinMax = Math.max(sp, 0.9); c.spin = sp;
           c.shield = clamp(num(a[9]), 0, SHIELD_T);
@@ -1072,10 +1079,22 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
         if (g.spikes.length) g.spikes = g.spikes.filter((o) => now < o.until);
         if (g.blocks.length) g.blocks = g.blocks.filter((o) => now < o.until);
         for (const c of all) if (c.id !== myK && !(isHost && g.bots.includes(c.id))) { if (c.spin > 0) c.spin = Math.max(0, c.spin - step); if (c.shield > 0) c.shield = Math.max(0, c.shield - step); if (step > 0) airStep(c, T, step, fx); }
+        const spect = watch || !g.ids.includes(myK);
         for (const k of Object.keys(g.net)) {
           const c = g.cars[k], N = g.net[k];
           if (!c || k === myK) continue;
-          const age = Math.min(0.35, (now - N.at) / 1000);
+          if (spect && c.nb && c.nb.buf.length) {
+            const v = netRead(c.nb, c.nv || (c.nv = [0, 0, 0, 0, -1, 0, 0]), { same: [4], lin: [0, 1, 5, 6], ext: 220, base: 100, cap: 460 });
+            if (v) {
+              const sci = Math.round(v[4]);
+              c.s = v[0]; c.x = v[1]; c.v = v[2]; c.yaw = v[3];
+              if (sci >= 0 && T.cuts && T.cuts[sci]) { c.sc = sci; c.ss = v[5]; c.sx = v[6]; } else c.sc = -1;
+              c.wheel = (c.wheel + (c.v * step) / 0.34) % (Math.PI * 2);
+              continue;
+            }
+          }
+          const lastT = c.nb && c.nb.buf.length ? c.nb.buf[c.nb.buf.length - 1].t : 0;
+          const age = Math.min(0.35, Math.max(0, lastT ? (Date.now() - lastT) / 1000 : (now - N.at) / 1000));
           if (N.sc >= 0 && T.cuts && T.cuts[N.sc]) {
             const tss = N.ss + N.v * Math.cos(N.y) * age;
             if (c.sc !== N.sc || Math.abs(tss - c.ss) > 20) { c.sc = N.sc; c.ss = tss; c.sx = N.sx; } else { const kk = 1 - Math.exp(-step * 10); c.ss += (tss - c.ss) * kk; c.sx += (N.sx - c.sx) * kk; }
@@ -1333,6 +1352,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
       } else {
         const fk = followRef.current && g.cars[followRef.current] ? followRef.current : playing ? myK : standings(all)[0].id;
         const c = g.cars[fk] || all[0];
+        if (!playing && c.id !== camKRef.current) { camKRef.current = c.id; setCamK(c.id); }
         const want = c.hdCam != null ? c.hdCam : 0;
         if (!g.cam || g.camFor !== c.id) g.cam = { yaw: want, x: c.wx, y: c.wy, z: c.wz }, g.camFor = c.id;
         const Cm = g.cam;
@@ -1755,9 +1775,8 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
                 </>
               )}
               {!inRace() && phase !== 'done' && (
-                <div style={{ position: 'absolute', left: 0, right: 0, bottom: bottom(14), display: 'flex', justifyContent: 'center', gap: 8, flexWrap: 'wrap', padding: '0 14px', zIndex: 3 }}>
-                  <GHudPanel style={{ height: 32, padding: '0 11px', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 800 }}><GIcon k="eye" size={14} color="#CFE6FF" ink="rgba(0,0,0,0.3)" />Watching</GHudPanel>
-                  {raceIds.filter((k) => !g0.bots.includes(k)).map((k) => <GPill key={k} small text={nameOf(k)} color={follow === k ? 'gold' : 'white'} onPress={() => setFollow(k)} height={38} />)}
+                <div style={{ position: 'absolute', left: 0, right: 0, bottom: bottom(14), display: 'flex', justifyContent: 'center', padding: '0 14px', zIndex: 3 }}>
+                  <GWatchBar ids={raceIds} cur={camK} nameOf={nameOf} colorOf={slotColor} onPick={(k) => { setFollow(k); camKRef.current = k; setCamK(k); }} />
                 </div>
               )}
               {quick && (

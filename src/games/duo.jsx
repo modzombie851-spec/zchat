@@ -5,7 +5,7 @@ import { setWatchAllowed, useLiveBeacon, useGamePrivacy } from './live.js';
 import { EMOTES, SignalBars, PingChip, SpeakerIcon, SmileIcon, Check, Heart, MicIcon, ChatIcon, SwapIcon, HandIcon, btnBase, Btn, RoundBtn, Sheet, Stars, injectCss, useVoice, setKitTap } from './livekit.jsx';
 import { LIVES, GLYPHS, GLYPH_NAMES, STORY_N, ENDLESS, ATK_CD, levelDef, makeWorld, stepWorld, buddyInput, applyEvent, snapshot, mergeSnapshot, sameLevel, syncClock, setNet, nearDial, nearMirror, turnMirror, foeRows, setFoes, tryCode, hintFor, aimTarget, clamp, missionsFor, parTime, spikeAmt, crumbleState, demoInputs, demoDuoWorld } from './duoengine.js';
 import { Snd, THEMES, buildStatic, buildMini, drawDuoMini, render, updateParts, dust, puffs, embers, glints, part, ring, glyph, drawExplorer , setDuoLite } from './duodraw.js';
-import { GC, GBtn, GPill, GPanel, GChip, GTitle, GJoy, GIcon, GHudBtn, GHudPanel, GHudSkill, GHint, GStat, GNotices, useNotices, useWatchNotices, injectKitCss, kitTap, pressProps, INK, newBudget, budgetTick, useCtlLook, useGameStage, stagePoint, GControlsPanel, GLobby, GSlot, GLobbySheet, GVolBars, GSeg , GTalkers } from './gamekit.jsx';
+import { GC, GBtn, GPill, GPanel, GChip, GTitle, GJoy, GIcon, GHudBtn, GHudPanel, GHudSkill, GHint, GStat, GNotices, useNotices, useWatchNotices, injectKitCss, kitTap, pressProps, INK, newBudget, budgetTick, useCtlLook, useGameStage, stagePoint, GControlsPanel, GLobby, GSlot, GLobbySheet, GVolBars, GSeg , GTalkers, GWatchBar } from './gamekit.jsx';
 import { Sfx } from './sfx.js';
 import { useTalking } from './talk.js';
 
@@ -898,10 +898,8 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
           </div>
         )}
         {phase === 'play' && watch && (
-          <div style={{ position: 'absolute', left: 0, right: 0, bottom: bottom(18), display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, padding: '0 14px', flexWrap: 'wrap' }}>
-            <GHudPanel style={{ height: 32, padding: '0 11px', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 800 }}><GIcon k="eye" size={14} color="#CFE6FF" ink="rgba(0,0,0,0.35)" />Follow</GHudPanel>
-            <GPill small text={hostFirst} color={active === 'sun' ? 'orange' : 'white'} height={40} onPress={() => { setActive('sun'); cam.current.init = false; }} />
-            <GPill small text={peerFirst} color={active === 'moon' ? 'blue' : 'white'} height={40} onPress={() => { setActive('moon'); cam.current.init = false; }} />
+          <div style={{ position: 'absolute', left: 0, right: 0, bottom: bottom(16), display: 'flex', justifyContent: 'center', padding: '0 14px', zIndex: 3 }}>
+            <GWatchBar ids={['sun', 'moon']} cur={active} nameOf={(k) => (k === 'sun' ? hostFirst : peerFirst)} colorOf={(k) => (k === 'sun' ? '#FF9A2E' : '#3E9BFF')} onPick={(k) => { if (k !== active) { setActive(k); cam.current.init = false; } }} />
           </div>
         )}
         {phase === 'play' && !watch && <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', opacity: 1 - look.see }}><GJoy flat view={joyView} knobRef={knobRef} color={actKind === 'sun' ? 'orange' : 'blue'} idle={{ x: joyX, y: joyY }} R={joyR} /></div>}

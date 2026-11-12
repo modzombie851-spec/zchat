@@ -1,5 +1,4 @@
 import { MeshBuilder, m4, hexRgb } from './race3d.js';
-import { TILE, C_WALL, C_CRATE, C_BUSH, C_WATER, C_PAD, C_HOME } from './siegeengine.js';
 
 const MAT = { paint: 0.553, glass: 0.665, chrome: 0.705, metal: 0.745, alloy: 0.72, plastic: 0.14, trim: 0.22, matte: 0, light: 1, glow: 0.92, flat: 0.82 };
 const H32 = (n) => { let x = (n | 0) * 374761393; x = (x ^ (x >>> 13)) * 1274126177; return ((x ^ (x >>> 16)) >>> 0) / 4294967296; };
@@ -177,7 +176,129 @@ function heroMira() {
   ball(b, 0.36, 1.66, 0.2, 0.12, '#8CFFE0', MAT.glow, 12);
   return { body: b.build(), leg: l.build(), hip: [0.14, 0.52] };
 }
-const HERO_FN = { blaze: heroBlaze, pip: heroPip, boom: heroBoom, mira: heroMira };
+
+function hammer(b, p0, p1, headL, col, band) {
+  const d = [p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]], L = Math.hypot(d[0], d[1], d[2]);
+  withT(b, basis(p0, d), () => {
+    b.smoothCyl(0, -0.08, 0, 0.042, L + 0.1, 10, '#6B4A2E', MAT.matte);
+    for (let i = 0; i < 4; i++) b.smoothCyl(0, 0.05 + i * 0.07, 0, 0.048, 0.035, 10, '#3A2A1E', MAT.matte, { cap: false });
+    sq(b, 0, L + 0.02, 0, headL / 2, 0.16, 0.16, 0.35, 0.35, col, MAT.metal, 14, 7);
+    for (const s of [-1, 1]) { b.smoothCyl(s * headL * 0.32, L + 0.02, 0, 0.17, 0.06, 14, band, MAT.trim, { cap: false }); }
+    for (const s of [-1, 1]) withT(b, rot(s * headL / 2, L + 0.02, 0, 0, 0, Math.PI / 2), () => b.smoothCyl(0, -0.03, 0, 0.13, 0.06, 14, '#8A919E', MAT.metal));
+  });
+}
+function heroRex() {
+  const b = new MeshBuilder(), l = new MeshBuilder();
+  leg(l, '#3A4558', '#4A3426', '#1E1A18', 0.42);
+  sq(b, 0, 0.55, 0, 0.31, 0.14, 0.23, 0.7, 0.9, '#3A4558', MAT.matte);
+  sq(b, 0, 0.84, 0, 0.4, 0.32, 0.3, 0.55, 0.8, '#C8442E', MAT.trim);
+  sq(b, 0, 0.88, 0.2, 0.2, 0.2, 0.09, 0.6, 0.8, '#E86A4E', MAT.trim);
+  b.cyl(0, 0.6, 0, 0.34, 0.08, 18, '#3A2A1E', MAT.plastic);
+  b.box(0, 0.6, 0.33, 0.13, 0.09, 0.04, '#C9A04A', MAT.metal);
+  sq(b, 0, 1.33, 0.02, 0.38, 0.34, 0.35, 0.78, 0.9, SKIN.b, MAT.matte, 16, 10);
+  sq(b, 0, 1.53, -0.04, 0.37, 0.18, 0.34, 0.7, 0.9, '#3A2418', MAT.trim, 16, 8);
+  for (let i = 0; i < 7; i++) { const a = -0.9 + i * 0.3; cone(b, [Math.sin(a) * 0.22, 1.6, -0.05 + Math.cos(a) * 0.12], [Math.sin(a) * 0.3, 1.78, -0.12 + Math.cos(a) * 0.05], 0.09, 7, '#2E1C12', MAT.trim); }
+  b.smoothCyl(0, 1.42, -0.01, 0.395, 0.09, 22, '#D23A2A', MAT.trim, { cap: false });
+  for (const s of [-1, 1]) tube(b, [s * 0.05, 1.46, -0.38], [s * 0.18, 1.3, -0.56], 0.05, 0.02, 7, '#D23A2A', MAT.trim, false);
+  eyes(b, 1.27, 0.335, 0.13);
+  for (const s of [-1, 1]) withT(b, rot(s * 0.13, 1.37, 0.34, 0, 0, s * -0.3), () => b.box(0, 0, 0, 0.15, 0.04, 0.03, '#2E1C12', MAT.matte));
+  withT(b, rot(0.02, 1.14, 0.335, 0, 0, -0.06), () => b.box(0, 0, 0, 0.14, 0.03, 0.02, '#7A2E22', MAT.matte));
+  ball(b, 0.03, 1.2, 0.36, 0.05, '#E8A27A', MAT.matte, 8);
+  arm(b, [-0.42, 0.95, 0.02], [-0.06, 0.8, 0.4], SKIN.b, SKIN.b, 0.095);
+  arm(b, [0.42, 0.95, 0.02], [0.26, 0.86, 0.36], SKIN.b, SKIN.b, 0.095);
+  for (const s of [-1, 1]) sq(b, s * 0.44, 1.02, 0, 0.15, 0.12, 0.15, 0.7, 0.8, '#C8442E', MAT.trim, 10, 6);
+  hammer(b, [0.06, 0.72, 0.36], [0.3, 1.38, 0.66], 0.62, '#5E6670', '#E0533A');
+  return { body: b.build(), leg: l.build(), hip: [0.17, 0.52] };
+}
+function heroVolt() {
+  const b = new MeshBuilder(), l = new MeshBuilder();
+  leg(l, '#33415C', '#2B2F3A', '#F2C230', 0.42);
+  sq(b, 0, 0.54, 0, 0.29, 0.14, 0.22, 0.7, 0.9, '#33415C', MAT.matte);
+  sq(b, 0, 0.8, 0, 0.32, 0.28, 0.25, 0.6, 0.85, '#3A5A8C', MAT.trim);
+  sq(b, 0, 0.98, 0.02, 0.3, 0.1, 0.24, 0.6, 0.85, '#F2C230', MAT.trim);
+  for (const s of [-1, 1]) b.box(s * 0.14, 0.62, 0.22, 0.06, 0.42, 0.04, '#2E4A72', MAT.trim);
+  b.cyl(0, 0.6, 0, 0.31, 0.07, 16, '#5A3E26', MAT.plastic);
+  for (const [px, pc] of [[-0.24, '#7A5A36'], [0.24, '#7A5A36'], [0.1, '#C9A04A']]) b.box(px, 0.5, 0.27, 0.11, 0.13, 0.06, pc, MAT.matte);
+  sq(b, 0, 1.28, 0.01, 0.36, 0.33, 0.34, 0.8, 0.9, SKIN.a, MAT.matte, 16, 10);
+  sq(b, 0, 1.47, -0.01, 0.4, 0.22, 0.38, 0.6, 0.6, '#F2C230', MAT.paint, 18, 9);
+  b.smoothCyl(0, 1.38, -0.01, 0.46, 0.04, 22, '#E0A61E', MAT.paint);
+  b.box(0, 1.56, -0.01, 0.06, 0.12, 0.62, '#E0A61E', MAT.paint);
+  for (const s of [-1, 1]) withT(b, rot(s * 0.13, 1.52, 0.32, 0, Math.PI / 2 - 0.3), () => { b.smoothCyl(0, 0, 0, 0.085, 0.06, 14, '#3A2A22', MAT.plastic); b.smoothCyl(0, 0.06, 0, 0.066, 0.01, 14, '#FFB43A', MAT.glass); });
+  eyes(b, 1.24, 0.33, 0.125);
+  withT(b, rot(0, 1.12, 0.335, 0, 0, 0), () => b.box(0, 0, 0, 0.12, 0.025, 0.02, '#7A3A2A', MAT.matte));
+  for (const s of [-1, 1]) ball(b, s * 0.2, 1.17, 0.3, 0.04, '#F2A08A', MAT.matte, 8);
+  arm(b, [-0.34, 0.92, 0.02], [-0.12, 0.82, 0.38], '#F2C230', SKIN.a);
+  arm(b, [0.34, 0.92, 0.0], [0.2, 0.8, 0.3], '#F2C230', SKIN.a);
+  withT(b, rot(0.06, 0.86, 0.42, 0, Math.PI / 2), () => {
+    b.smoothCyl(0, -0.12, 0, 0.1, 0.36, 14, '#4A4F57', MAT.metal);
+    for (let i = 0; i < 4; i++) b.smoothCyl(0, 0.0 + i * 0.07, 0, 0.12, 0.03, 14, '#C87A3A', MAT.metal, { cap: false });
+    b.smoothCyl(0, 0.24, 0, 0.05, 0.1, 10, '#2B2F36', MAT.metal);
+  });
+  ball(b, 0.06, 0.86, 0.78, 0.08, '#8FE8FF', MAT.glow, 10);
+  b.box(0.06, 0.92, 0.3, 0.09, 0.07, 0.12, '#2B2F36', MAT.metal);
+  return { body: b.build(), leg: l.build(), hip: [0.15, 0.52] };
+}
+function heroKai() {
+  const b = new MeshBuilder(), l = new MeshBuilder();
+  leg(l, '#6E6A4A', '#5A3E26', '#2A1E14', 0.42);
+  sq(b, 0, 0.54, 0, 0.29, 0.14, 0.22, 0.7, 0.9, '#6E6A4A', MAT.matte);
+  sq(b, 0, 0.8, 0, 0.33, 0.29, 0.26, 0.6, 0.85, '#3FA2F0', MAT.trim);
+  b.box(0, 0.58, 0.22, 0.04, 0.42, 0.03, '#2E7AC0', MAT.trim);
+  b.smoothCyl(0, 1.0, 0, 0.27, 0.1, 18, '#E8DCC8', MAT.matte, { r2: 0.24 });
+  b.cyl(0, 0.6, 0, 0.31, 0.06, 16, '#5A3E26', MAT.plastic);
+  b.smoothCyl(0, 1.06, 0.01, 0.23, 0.08, 16, '#D84A3A', MAT.matte, { r2: 0.21 });
+  tube(b, [0.12, 1.08, -0.18], [0.3, 0.86, -0.4], 0.05, 0.035, 7, '#D84A3A', MAT.matte, false);
+  sq(b, 0, 1.3, 0.01, 0.36, 0.33, 0.34, 0.8, 0.9, SKIN.c, MAT.matte, 16, 10);
+  sq(b, 0, 1.43, -0.04, 0.39, 0.26, 0.38, 0.7, 0.85, '#7A4E2E', MAT.trim, 16, 9);
+  for (const s of [-1, 1]) sq(b, s * 0.34, 1.24, -0.02, 0.07, 0.17, 0.13, 0.7, 0.8, '#7A4E2E', MAT.trim, 10, 6);
+  b.smoothCyl(0, 1.5, -0.02, 0.4, 0.05, 20, '#5A3820', MAT.trim, { cap: false });
+  for (const s of [-1, 1]) withT(b, rot(s * 0.14, 1.52, 0.31, 0, Math.PI / 2 - 0.5), () => { b.smoothCyl(0, 0, 0, 0.1, 0.07, 14, '#3A3F46', MAT.metal); b.smoothCyl(0, 0.07, 0, 0.078, 0.012, 14, '#9BE7FF', MAT.glass); });
+  eyes(b, 1.25, 0.33, 0.125);
+  withT(b, rot(0.03, 1.12, 0.335, 0, 0, -0.15), () => b.box(0, 0, 0, 0.12, 0.025, 0.02, '#6A2E22', MAT.matte));
+  arm(b, [-0.34, 0.92, 0.02], [-0.24, 0.7, 0.24], '#3FA2F0', SKIN.c);
+  arm(b, [0.34, 0.92, 0.0], [0.3, 1.0, 0.22], '#3FA2F0', SKIN.c);
+  withT(b, rot(0.3, 1.18, 0.05, 0, Math.PI / 2), () => {
+    b.smoothCyl(0, -0.5, 0, 0.13, 1.05, 14, '#5E7A3A', MAT.paint);
+    b.smoothCyl(0, 0.52, 0, 0.15, 0.07, 14, '#2B2F36', MAT.metal, { cap: false });
+    disc(b, 0, 0.55, 0, 0.11, 12, '#141414', MAT.matte);
+    b.smoothCyl(0, -0.56, 0, 0.15, 0.06, 14, '#2B2F36', MAT.metal);
+    b.box(0, 0.1, -0.16, 0.08, 0.2, 0.12, '#2B2F36', MAT.metal);
+  });
+  b.box(0.3, 1.18, 0.4, 0.04, 0.04, 0.12, '#E8E4DC', MAT.paint);
+  for (const s of [-1, 1]) {
+    b.smoothCyl(s * 0.13, 0.62, -0.32, 0.1, 0.5, 14, '#B9C2CC', MAT.metal);
+    ball(b, s * 0.13, 1.12, -0.32, 0.1, '#B9C2CC', MAT.metal, 10);
+    b.smoothCyl(s * 0.13, 0.5, -0.32, 0.07, 0.12, 12, '#2B2F36', MAT.metal);
+    b.box(s * 0.13, 0.62, -0.46, 0.03, 0.22, 0.12, '#3FA2F0', MAT.trim);
+  }
+  b.box(0, 0.86, -0.27, 0.36, 0.24, 0.08, '#4A4F57', MAT.metal);
+  return { body: b.build(), leg: l.build(), hip: [0.15, 0.52] };
+}
+function crystal(b, x, y, z, w, h, col, mat = MAT.glow) { sq(b, x, y, z, w, h, w, 2.4, 2.4, col, mat, 6, 4); }
+function heroIvy() {
+  const b = new MeshBuilder(), l = new MeshBuilder();
+  leg(l, '#DDEEFF', '#7FD7FF', '#4A8CB8', 0.42);
+  b.revolve(0, 0, 0, [[0.42, 0.34], [0.38, 0.44], [0.3, 0.6], [0.24, 0.74]], 18, '#7FC8EE', MAT.trim);
+  b.cyl(0, 0.34, 0, 0.425, 0.05, 18, '#F2FAFF', MAT.matte, { r2: 0.415 });
+  sq(b, 0, 0.83, 0, 0.27, 0.24, 0.21, 0.6, 0.85, '#5FB4E4', MAT.trim);
+  sq(b, 0, 0.84, 0.16, 0.1, 0.14, 0.07, 0.7, 0.8, '#F2FAFF', MAT.matte);
+  sq(b, 0, 0.95, -0.24, 0.34, 0.42, 0.08, 0.8, 0.9, '#3E8CC4', MAT.trim, 14, 8);
+  sq(b, 0, 1.28, 0.01, 0.36, 0.33, 0.34, 0.8, 0.9, SKIN.d, MAT.matte, 16, 10);
+  sq(b, 0, 1.33, -0.07, 0.41, 0.4, 0.38, 0.8, 0.9, '#E6F2FF', MAT.trim, 16, 10);
+  sq(b, 0, 1.5, 0.14, 0.34, 0.12, 0.2, 0.6, 0.8, '#E6F2FF', MAT.trim, 14, 7);
+  for (let i = 0; i < 6; i++) ball(b, 0.3 + Math.sin(i * 0.5) * 0.04, 1.1 - i * 0.11, -0.2 - i * 0.02, 0.075 - i * 0.006, i % 2 ? '#D2E6FA' : '#E6F2FF', MAT.trim, 9);
+  for (const [x, hgt] of [[-0.14, 0.12], [0, 0.18], [0.14, 0.12]]) crystal(b, x, 1.62 + hgt * 0.4, 0.12, 0.05, hgt, '#9FEAFF');
+  eyes(b, 1.25, 0.33, 0.12, '#1E3A5A', 1.1);
+  for (const s of [-1, 1]) ball(b, s * 0.2, 1.16, 0.29, 0.04, '#B8D8F8', MAT.matte, 8);
+  withT(b, rot(0, 1.12, 0.335, 0, 0, 0), () => b.box(0, 0, 0, 0.07, 0.02, 0.02, '#5A6A9A', MAT.matte));
+  arm(b, [-0.3, 0.92, 0.0], [-0.28, 0.66, 0.16], '#5FB4E4', SKIN.d, 0.068);
+  arm(b, [0.3, 0.92, 0.0], [0.36, 0.84, 0.22], '#5FB4E4', SKIN.d, 0.068);
+  tube(b, [0.36, 0.08, 0.24], [0.36, 1.55, 0.2], 0.033, 0.028, 8, '#B9D6EE', MAT.metal);
+  for (let i = 0; i < 3; i++) { const a = (i / 3) * Math.PI * 2; tube(b, [0.36, 1.5, 0.2], [0.36 + Math.cos(a) * 0.1, 1.68, 0.2 + Math.sin(a) * 0.1], 0.018, 0.01, 6, '#B9D6EE', MAT.metal); }
+  crystal(b, 0.36, 1.78, 0.2, 0.09, 0.2, '#8FF0FF');
+  return { body: b.build(), leg: l.build(), hip: [0.14, 0.52] };
+}
+const HERO_FN = { blaze: heroBlaze, pip: heroPip, boom: heroBoom, mira: heroMira, rex: heroRex, volt: heroVolt, kai: heroKai, ivy: heroIvy };
 export function heroMeshes(key) { return (HERO_FN[key] || heroBlaze)(); }
 
 function robotGrunt() {
@@ -320,220 +441,40 @@ export function fxSiege() {
   const discM = new MeshBuilder(); disc(discM, 0, 0, 0, 1, 40, '#FFFFFF', MAT.flat);
   const beam = (col) => { const m = new MeshBuilder(); m.quad([-0.5, 0, 0], [0.5, 0, 0], [0.5, 0, 1], [-0.5, 0, 1], col, MAT.light); m.quad([0, -0.5, 0], [0, 0.5, 0], [0, 0.5, 1], [0, -0.5, 1], col, MAT.light); return m.build(); };
   const shadow = new MeshBuilder(); disc(shadow, 0, 0, 0, 1, 24, '#000000', MAT.flat);
-  return { bomb: bomb.build(), mega: mega.build(), missile: missile.build(), hp: hp.build(), pw: pw.build(), su: su.build(), strip: strip.build(), fanBlaze: fan(0.6), fanWave: fan(1.0), ring: ringM.build(), disc: discM.build(), beamR: beam('#FF5A3A'), beamB: beam('#7FE9FF'), beamW: beam('#FFFFFF'), blob: shadow.build() };
+  const rocket = new MeshBuilder();
+  withT(rocket, rot(0, 0, 0, 0, Math.PI / 2), () => {
+    rocket.smoothCyl(0, -0.28, 0, 0.09, 0.46, 12, '#E8E4DC', MAT.paint);
+    cone(rocket, [0, 0.18, 0], [0, 0.4, 0], 0.09, 12, '#D84A3A', MAT.paint);
+    for (let i = 0; i < 4; i++) withT(rocket, rot(0, -0.24, 0, (i / 4) * Math.PI * 2), () => rocket.box(0, 0, 0.11, 0.02, 0.16, 0.1, '#3FA2F0', MAT.paint));
+  });
+  const mine = new MeshBuilder();
+  mine.cyl(0, 0, 0, 0.3, 0.08, 16, '#2B2F36', MAT.trim);
+  ring(mine, 0, 0.081, 0, 0.2, 0.3, 16, (i) => (i % 2 ? '#F2C14E' : '#22252B'), MAT.paint);
+  sq(mine, 0, 0.09, 0, 0.11, 0.07, 0.11, 0.8, 0.8, '#FF3A2A', MAT.glow, 10, 5);
+  const tower = new MeshBuilder();
+  tower.cyl(0, 0, 0, 0.55, 0.16, 16, '#3A3F46', MAT.trim);
+  tower.cyl(0, 0.16, 0, 0.42, 0.1, 16, '#F2C230', MAT.paint);
+  tower.smoothCyl(0, 0.26, 0, 0.14, 1.3, 12, '#6A6E75', MAT.metal, { r2: 0.1 });
+  for (let i = 0; i < 5; i++) tower.smoothCyl(0, 0.5 + i * 0.18, 0, 0.24 - i * 0.025, 0.05, 14, '#C87A3A', MAT.metal);
+  ball(tower, 0, 1.68, 0, 0.24, '#8FE8FF', MAT.glow, 14);
+  for (let i = 0; i < 3; i++) { const a = (i / 3) * Math.PI * 2; tube(tower, [Math.cos(a) * 0.3, 0.26, Math.sin(a) * 0.3], [Math.cos(a) * 0.5, 0, Math.sin(a) * 0.5], 0.04, 0.04, 6, '#3A3F46', MAT.trim); }
+  const bubble = new MeshBuilder();
+  sq(bubble, 0, 0, 0, 1, 1, 1, 1, 1, '#7FE9FF', MAT.flat, 22, 14);
+  const sh = new MeshBuilder();
+  withT(sh, rot(0, 0, 0, 0, Math.PI / 2), () => { sq(sh, 0, 0, 0, 0.3, 0.06, 0.36, 0.5, 1.2, '#3FA2F0', MAT.paint, 16, 6); sq(sh, 0, 0.05, 0, 0.18, 0.04, 0.22, 0.5, 1.2, '#CFF2FF', MAT.glow, 12, 4); });
+  const rf = new MeshBuilder();
+  for (let i = -1; i <= 1; i++) { rf.smoothCyl(i * 0.14, -0.2, 0, 0.06, 0.28, 10, '#C9A04A', MAT.metal); cone(rf, [i * 0.14, 0.08, 0], [i * 0.14, 0.24, 0], 0.06, 10, '#FF8A2E', MAT.paint); }
+  const sp = new MeshBuilder();
+  const bolt = [[-0.08, 0.3], [0.14, 0.3], [0.02, 0.05], [0.16, 0.05], [-0.1, -0.32], [0.0, -0.06], [-0.14, -0.06]];
+  for (const zz of [-0.05, 0.05]) { const q = (p) => [p[0], p[1], zz]; sp.tri(q(bolt[0]), q(bolt[1]), q(bolt[2]), '#7BF27B', MAT.glow); sp.tri(q(bolt[0]), q(bolt[2]), q(bolt[6]), '#7BF27B', MAT.glow); sp.tri(q(bolt[6]), q(bolt[3]), q(bolt[4]), '#7BF27B', MAT.glow); sp.tri(q(bolt[6]), q(bolt[2]), q(bolt[3]), '#7BF27B', MAT.glow); }
+  ring(sp, 0, 0, 0, 0.3, 0.36, 20, '#2E9C4A', MAT.paint);
+
+  return { bomb: bomb.build(), mega: mega.build(), missile: missile.build(), hp: hp.build(), pw: pw.build(), su: su.build(), strip: strip.build(), fanBlaze: fan(0.6), fanWave: fan(1.0), ring: ringM.build(), disc: discM.build(), beamR: beam('#FF5A3A'), beamB: beam('#7FE9FF'), beamW: beam('#FFFFFF'), blob: shadow.build(), rocket: rocket.build(), mine: mine.build(), tower: tower.build(), bubble: bubble.build(), sh: sh.build(), rf: rf.build(), sp: sp.build() };
 }
 
-const THEME = {
-  yard: {
-    floorA: '#C4AF8A', floorB: '#BBA682', grout: '#94846A', out: '#8C8070', outB: '#7D7264', bushA: '#4FAE3E', bushB: '#7BCB4E', water: '#2BB5A5', rim: '#8A919E', rimTop: '#F2C14E',
-    env: { sunDir: [-0.42, 0.8, -0.43], sunCol: [2.55, 2.25, 1.86], skyCol: [0.4, 0.43, 0.5], gndCol: [0.32, 0.28, 0.23], fog: '#D8CDB8', horizon: '#E9DFCB', zenith: '#6F9AD0', fogDen: 0.0035, exposure: 0.86, shadowRange: 32 },
-  },
-  ruins: {
-    floorA: '#7EBF55', floorB: '#76B64D', grout: '#5A9440', out: '#3F6B2E', outB: '#365E27', bushA: '#2FA84F', bushB: '#5FD06A', water: '#37C2D0', rim: '#A39C86', rimTop: '#7DBD52',
-    env: { sunDir: [-0.36, 0.84, -0.4], sunCol: [2.5, 2.4, 2.05], skyCol: [0.4, 0.5, 0.48], gndCol: [0.24, 0.32, 0.18], fog: '#C9DDC0', horizon: '#DCE9D3', zenith: '#5E9CCB', fogDen: 0.0035, exposure: 0.9, shadowRange: 32 },
-  },
-};
+export { MAT, hsh, mix, shade, sq, ball, basis, withT, tube, cone, rot, ring, disc };
+
 const lin = (h) => hexRgb(h).map((v) => v ** 2.2);
-export function arenaEnv(A) {
-  const T = (THEME[A.theme] || THEME.yard).env;
-  const s = T.sunDir, L = Math.hypot(s[0], s[1], s[2]);
-  return { sunDir: [s[0] / L, s[1] / L, s[2] / L], sunCol: T.sunCol, skyCol: T.skyCol, gndCol: T.gndCol, fogCol: lin(T.fog), fogSun: hexRgb('#FFF1D8'), fogSunLin: lin('#FFF1D8'), horizon: hexRgb(T.horizon), zenith: hexRgb(T.zenith), fogDen: T.fogDen, exposure: T.exposure, shadowRange: T.shadowRange, clouds: 0, time: 0 };
-}
-
-const CAR_COLS = ['#C8402F', '#3B6FB6', '#2E9C8F', '#E3B341', '#E8E4DC', '#7A4FA8', '#5C6370'];
-function junkBlock(m, x, z, h, seed) {
-  let y = 0;
-  const layers = Math.max(2, Math.round(h / 0.62));
-  const lh = h / layers;
-  for (let i = 0; i < layers; i++) {
-    const c = CAR_COLS[Math.floor(hsh(seed, i, 1) * CAR_COLS.length)];
-    const ox = (hsh(seed, i, 2) - 0.5) * 0.14, oz = (hsh(seed, i, 3) - 0.5) * 0.14;
-    const w = 1.86 - hsh(seed, i, 4) * 0.1;
-    m.box(x + ox, y, z + oz, w, lh * 0.82, w, shade(c, 0.85 + hsh(seed, i, 5) * 0.25), MAT.paint, { taper: 0.04 });
-    m.box(x + ox * 0.5, y + lh * 0.82, z + oz * 0.5, w - 0.1, lh * 0.18, w - 0.1, '#2B2F36', MAT.metal);
-    if (hsh(seed, i, 6) < 0.5) m.box(x + ox + (hsh(seed, i, 7) - 0.5) * 0.8, y + lh * 0.25, z + oz + w / 2 - 0.02, 0.5, lh * 0.3, 0.05, '#1B2433', MAT.glass);
-    y += lh;
-  }
-  if (hsh(seed, 9, 9) < 0.35) { for (let k = 0; k < 2; k++) withT(m, rot(x + (hsh(seed, k, 11) - 0.5) * 0.6, y + 0.12 + k * 0.24, z + (hsh(seed, k, 12) - 0.5) * 0.6, 0), () => { m.smoothCyl(0, 0, 0, 0.42, 0.22, 16, '#22252B', MAT.plastic, { cap: true }); ring(m, 0, 0.222, 0, 0.18, 0.42, 16, '#2B2F36', MAT.plastic); disc(m, 0, 0.221, 0, 0.18, 12, '#7A808C', MAT.metal); }); }
-}
-function crate(m, x, z, seed) {
-  const h = 1.42;
-  m.box(x, 0, z, 1.9, h, 1.9, '#4E5866', MAT.metal, { taper: 0.03 });
-  const pc = hsh(seed, 1) < 0.5 ? '#76879C' : '#6E8299';
-  for (const [dx, dz, sx, sz] of [[0, 0.95, 1.6, 0.04], [0, -0.95, 1.6, 0.04], [0.95, 0, 0.04, 1.6], [-0.95, 0, 0.04, 1.6]]) m.box(x + dx, 0.12, z + dz, sx, h - 0.24, sz, pc, MAT.paint);
-  m.box(x, h, z, 1.66, 0.04, 1.66, pc, MAT.paint);
-  m.box(x, h + 0.04, z - 0.5, 1.66, 0.012, 0.22, '#F2C14E', MAT.flat);
-  for (const [dx, dz] of [[0.95, 0.95], [-0.95, 0.95], [0.95, -0.95], [-0.95, -0.95]]) m.box(x + dx * 0.98, 0, z + dz * 0.98, 0.14, h + 0.03, 0.14, '#3B4049', MAT.metal);
-  withT(m, rot(x, h * 0.5, z + 0.975, 0, 0, 0.62), () => m.box(0, -0.85, 0, 0.1, 1.7, 0.03, '#3B4049', MAT.metal));
-}
-function stone(m, x, z, h, seed, moss) {
-  const t = 0.05 + hsh(seed, 1) * 0.06;
-  m.box(x, 0, z, 1.96, h, 1.96, mix('#A39C86', '#B5AE96', hsh(seed, 2)), MAT.matte, { taper: t });
-  m.box(x + (hsh(seed, 3) - 0.5) * 0.5, h * 0.45, z + 0.985, 0.9, 0.06, 0.02, '#7E7864', MAT.matte);
-  m.box(x - 0.985, h * 0.6, z + (hsh(seed, 4) - 0.5) * 0.5, 0.02, 0.06, 0.8, '#7E7864', MAT.matte);
-  if (moss) m.box(x, h, z, 1.96 - t * 2, 0.1, 1.96 - t * 2, mix('#5E9E3B', '#78B84A', hsh(seed, 5)), MAT.matte, { taper: 0.08 });
-  if (hsh(seed, 6) < 0.3) for (let k = 0; k < 3; k++) ball(m, x + (hsh(seed, k, 7) - 0.5) * 1.6, h * (0.3 + hsh(seed, k, 8) * 0.5), z + 0.99, 0.08, '#4E8C34', MAT.matte, 6);
-}
-function bushCell(m, x, z, seed, T) {
-  const n = 5;
-  for (let i = 0; i < n; i++) {
-    const a = (i / n) * Math.PI * 2 + hsh(seed, i) * 0.8, d = i === 0 ? 0 : 0.5 + hsh(seed, i, 2) * 0.25;
-    const r = 0.5 + hsh(seed, i, 3) * 0.2;
-    const c = mix(T.bushA, T.bushB, 0.15 + hsh(seed, i, 4) * 0.4);
-    sq(m, x + Math.cos(a) * d, 0.5 + hsh(seed, i, 5) * 0.25, z + Math.sin(a) * d, r, r * 0.95, r, 0.9, 0.9, c, MAT.matte, 10, 6);
-  }
-  sq(m, x, 1.0, z, 0.55, 0.32, 0.55, 0.9, 0.9, mix(T.bushA, T.bushB, 0.7), MAT.matte, 10, 6);
-}
-function palm(m, x, z, s, seed) {
-  tube(m, [x, 0, z], [x + 0.4 * s, 4.6 * s, z + 0.2 * s], 0.32 * s, 0.22 * s, 10, '#8A6A45', MAT.matte);
-  for (let i = 0; i < 7; i++) { const a = (i / 7) * Math.PI * 2 + hsh(seed, i); const tx = x + 0.4 * s, ty = 4.6 * s, tz = z + 0.2 * s; sq(m, tx + Math.cos(a) * 1.2 * s, ty - 0.2 * s, tz + Math.sin(a) * 1.2 * s, 1.3 * s, 0.25 * s, 0.5 * s, 0.9, 0.9, mix('#2F8A3E', '#4FAE3E', hsh(seed, i, 2)), MAT.matte, 10, 5); }
-  ball(m, x + 0.4 * s, 4.6 * s, z + 0.2 * s, 0.55 * s, '#2F8A3E', MAT.matte, 10);
-}
-function bigTree(m, x, z, s, seed) {
-  tube(m, [x, 0, z], [x, 3.2 * s, z], 0.45 * s, 0.32 * s, 10, '#6B4E33', MAT.matte);
-  for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2 + hsh(seed, i) * 0.7, d = 1.2 * s; sq(m, x + Math.cos(a) * d, 3.6 * s + hsh(seed, i, 2) * 0.8 * s, z + Math.sin(a) * d, 1.5 * s, 1.1 * s, 1.5 * s, 0.9, 0.9, mix('#2E7D38', '#4FAE3E', hsh(seed, i, 3)), MAT.matte, 10, 6); }
-  sq(m, x, 4.8 * s, z, 1.7 * s, 1.2 * s, 1.7 * s, 0.9, 0.9, '#3F9A45', MAT.matte, 10, 6);
-}
-function junkPile(m, x, z, s, seed) {
-  for (let i = 0; i < 9; i++) {
-    const a = hsh(seed, i) * Math.PI * 2, d = hsh(seed, i, 2) * 1.6 * s;
-    const c = CAR_COLS[Math.floor(hsh(seed, i, 3) * CAR_COLS.length)];
-    const w = (0.8 + hsh(seed, i, 4) * 1.2) * s;
-    withT(m, rot(x + Math.cos(a) * d, (1 - d / (1.7 * s)) * 1.4 * s, z + Math.sin(a) * d, hsh(seed, i, 5) * 3, (hsh(seed, i, 6) - 0.5) * 0.8, (hsh(seed, i, 7) - 0.5) * 0.8), () => m.box(0, -w * 0.3, 0, w, w * 0.55, w * 0.8, shade(c, 0.8), MAT.paint));
-  }
-}
-function container(m, x, z, yaw, col) {
-  withT(m, rot(x, 0, z, yaw), () => {
-    m.box(0, 0, 0, 2.4, 2.5, 6, col, MAT.paint);
-    for (let i = -5; i <= 5; i++) m.box(0, 0.1, i * 0.52, 2.46, 2.3, 0.1, shade(col, 0.82), MAT.paint);
-    m.box(0, 2.5, 0, 2.3, 0.05, 5.9, shade(col, 0.9), MAT.paint);
-  });
-}
-function crane(m, x, z) {
-  m.box(x, 0, z, 1.6, 0.6, 1.6, '#3B4049', MAT.metal);
-  for (let i = 0; i < 6; i++) { m.box(x, 0.6 + i * 1.5, z, 0.9, 1.5, 0.9, '#E3B341', MAT.paint); m.box(x, 0.6 + i * 1.5 + 1.4, z, 1.0, 0.1, 1.0, '#2B2F36', MAT.metal); }
-  m.box(x - 1.2, 9.6, z - 0.4, 7, 0.6, 0.8, '#E3B341', MAT.paint);
-  m.box(x + 2.6, 8.2, z - 0.4, 0.06, 1.4, 0.06, '#22252B', MAT.metal);
-  m.box(x - 4.2, 9.0, z - 0.6, 1.4, 1.2, 1.2, '#3B4049', MAT.metal);
-}
-function temple(m, x, z, s) {
-  for (let i = 0; i < 4; i++) { const w = (6 - i * 1.3) * s; m.box(x, i * 1.1 * s, z, w, 1.1 * s, w, mix('#A39C86', '#8E8772', i / 4), MAT.matte, { taper: 0.1 }); m.box(x, (i + 1) * 1.1 * s, z, w - 0.2, 0.08, w - 0.2, '#5E9E3B', MAT.matte); }
-  m.box(x, 4.4 * s, z + 1.0 * s, 1.0 * s, 1.0 * s, 0.1, '#2B2620', MAT.matte);
-}
-
-export function arenaMeshes(A) {
-  const T = THEME[A.theme] || THEME.yard;
-  const g = new MeshBuilder(), p = new MeshBuilder(), w = new MeshBuilder(), deco = new MeshBuilder();
-  const W = A.W, Hh = A.H;
-  const yard = A.theme === 'yard';
-  const M0 = 22;
-  const ox0 = -M0, ox1 = A.wx + M0, oz0 = -M0 - 6, oz1 = A.wz + 10;
-  const step = 4;
-  for (let x = ox0; x < ox1; x += step) for (let z = oz0; z < oz1; z += step) {
-    const inside = x >= 0 && x < A.wx && z >= 0 && z < A.wz;
-    if (inside) continue;
-    const c = mix(T.out, T.outB, hsh(x, z, 3) * 0.8);
-    g.quad([x, -0.02, z], [x, -0.02, z + step], [x + step, -0.02, z + step], [x + step, -0.02, z], c, MAT.matte);
-  }
-  for (let r = 0; r < Hh; r++) for (let c = 0; c < W; c++) {
-    const v = A.cells[r * W + c];
-    const x = c * TILE, z = r * TILE;
-    if (v === C_WATER) continue;
-    g.quad([x, -0.01, z], [x, -0.01, z + TILE], [x + TILE, -0.01, z + TILE], [x + TILE, -0.01, z], T.grout, MAT.matte);
-    const base = (r + c) % 2 ? T.floorA : T.floorB;
-    const col = shade(base, 0.96 + hsh(c, r, 1) * 0.08);
-    const e = 0.06;
-    g.quad([x + e, 0, z + e], [x + e, 0, z + TILE - e], [x + TILE - e, 0, z + TILE - e], [x + TILE - e, 0, z + e], v === C_BUSH ? shade(col, 0.82) : col, MAT.matte);
-    if (v === C_WALL || v === C_CRATE) continue;
-    const k = hsh(c, r, 7);
-    if (yard) {
-      if (k < 0.12) sq(deco, x + 0.5 + hsh(c, r, 8) * 1, 0.004, z + 0.5 + hsh(c, r, 9) * 1, 0.35 + hsh(c, r, 10) * 0.3, 0.002, 0.25 + hsh(c, r, 11) * 0.25, 1, 1, '#4A4238', MAT.glass, 10, 3);
-      else if (k < 0.2) { withT(deco, rot(x + 1, 0.006, z + 1, hsh(c, r, 12) * 3), () => { deco.box(-0.4, 0, 0, 0.8, 0.004, 0.04, '#8A7A60', MAT.matte); deco.box(0.1, 0, 0.12, 0.5, 0.004, 0.035, '#8A7A60', MAT.matte); }); }
-      else if (k < 0.24) { const bx = x + 0.4 + hsh(c, r, 13) * 1.2, bz = z + 0.4 + hsh(c, r, 14) * 1.2; deco.cyl(bx, 0, bz, 0.07, 0.05, 6, '#7A808C', MAT.metal); }
-    } else {
-      if (k < 0.18) for (let f = 0; f < 3; f++) { const fx = x + 0.3 + hsh(c, r, 20 + f) * 1.4, fz = z + 0.3 + hsh(c, r, 30 + f) * 1.4; const fc = ['#FFFFFF', '#FFD24A', '#FF8CBF'][Math.floor(hsh(c, r, 40 + f) * 3)]; ball(deco, fx, 0.06, fz, 0.06, fc, MAT.matte, 6); }
-      else if (k < 0.26) { const sx = x + 0.4 + hsh(c, r, 13) * 1.2, sz = z + 0.4 + hsh(c, r, 14) * 1.2; sq(deco, sx, 0.03, sz, 0.18, 0.08, 0.14, 0.8, 0.8, '#A39C86', MAT.matte, 8, 5); }
-      else if (k < 0.34) { for (let f = 0; f < 4; f++) { const fx = x + 0.3 + hsh(c, r, 50 + f) * 1.4, fz = z + 0.3 + hsh(c, r, 60 + f) * 1.4; withT(deco, rot(fx, 0, fz, hsh(c, r, 70 + f) * 3), () => { deco.tri([-0.05, 0, 0], [0.05, 0, 0], [0, 0.22, 0.03], '#5FA844', MAT.matte); }); } }
-    }
-  }
-  const lowS = 0.75, midS = 1.75, highN = 2.7;
-  for (let r = 0; r < Hh; r++) for (let c = 0; c < W; c++) {
-    const v = A.cells[r * W + c];
-    const x = (c + 0.5) * TILE, z = (r + 0.5) * TILE, sd = r * 131 + c * 7;
-    if (v === C_WALL) {
-      const border = r === 0 || r === Hh - 1 || c === 0 || c === W - 1;
-      const h = !border ? (yard ? 1.6 : 1.55) : r === Hh - 1 ? lowS : r === 0 ? highN : midS;
-      if (yard) {
-        if (border && r === Hh - 1) { p.box(x, 0, z, 1.98, h, 1.98, '#8E949C', MAT.matte, { taper: 0.05, top: '#7B8189' }); p.box(x, h, z - 0.78, 1.9, 0.012, 0.16, c % 2 ? '#E8B83C' : '#2B2F36', MAT.flat); }
-        else junkBlock(p, x, z, h, sd);
-      } else {
-        if (border && r === Hh - 1) stone(p, x, z, h, sd, true);
-        else stone(p, x, z, h, sd, !border || hsh(sd, 3) < 0.7);
-        if (border && r === 0 && c % 3 === 1) { tube(p, [x, h, z], [x, h + 1.0, z], 0.42, 0.36, 10, '#B5AE96', MAT.matte); p.box(x, h + 1.0, z, 1.0, 0.18, 1.0, '#A39C86', MAT.matte); }
-      }
-    } else if (v === C_CRATE) {
-      if (yard) crate(p, x, z, sd); else stone(p, x, z, 1.3, sd, true);
-    } else if (v === C_WATER) {
-      w.quad([x - 1, -0.16, z - 1], [x - 1, -0.16, z + 1], [x + 1, -0.16, z + 1], [x + 1, -0.16, z - 1], T.water, MAT.glass);
-      g.quad([x - 1, -0.5, z - 1], [x - 1, -0.5, z + 1], [x + 1, -0.5, z + 1], [x + 1, -0.5, z - 1], shade(T.water, 0.45), MAT.matte);
-      for (const [dc, dr, ex, ez] of [[1, 0, 1, 0], [-1, 0, -1, 0], [0, 1, 0, 1], [0, -1, 0, -1]]) {
-        const nv = A.cells[(r + dr) * W + (c + dc)];
-        if (nv === C_WATER) continue;
-        const rx = x + ex * 0.92, rz = z + ez * 0.92;
-        p.box(rx, -0.5, rz, ex ? 0.2 : 2.0, 0.62, ez ? 0.2 : 2.0, T.rim, MAT.matte);
-        if (yard) p.box(rx, 0.12, rz, ex ? 0.21 : 2.0, 0.03, ez ? 0.21 : 2.0, T.rimTop, MAT.flat);
-        else p.box(rx, 0.12, rz, ex ? 0.24 : 2.0, 0.06, ez ? 0.24 : 2.0, '#5E9E3B', MAT.matte);
-      }
-      if (!yard && hsh(c, r, 77) < 0.7) for (let k = 0; k < 2; k++) { const lx = x + (hsh(c, r, 80 + k) - 0.5) * 1.3, lz = z + (hsh(c, r, 90 + k) - 0.5) * 1.3; sq(deco, lx, -0.145, lz, 0.28, 0.01, 0.28, 1, 1, '#4FAE3E', MAT.matte, 10, 3); if (k === 0) ball(deco, lx + 0.08, -0.11, lz, 0.06, '#FF8CBF', MAT.matte, 6); }
-    } else if (v === C_PAD) {
-      deco.cyl(x, 0, z, 0.86, 0.04, 24, '#3B4049', MAT.metal);
-      ring(deco, x, 0.041, z, 0.62, 0.86, 16, (i) => (i % 2 ? '#F2C14E' : '#22252B'), MAT.paint);
-      disc(deco, x, 0.042, z, 0.62, 20, '#5C6370', MAT.metal);
-      for (let i = 0; i < 4; i++) { const a = (i / 4) * Math.PI * 2 + Math.PI / 4; deco.box(x + Math.cos(a) * 0.98, 0, z + Math.sin(a) * 0.98, 0.16, 0.12, 0.16, '#2B2F36', MAT.metal); }
-      for (let i = 0; i < 3; i++) deco.box(x, 0.043, z - 0.3 + i * 0.3, 0.9, 0.004, 0.06, '#2B2F36', MAT.matte);
-    } else if (v === C_HOME) {
-      ring(deco, x, 0.006, z, 0.6, 0.72, 28, '#5AA8FF', MAT.flat);
-      ring(deco, x, 0.006, z, 0.3, 0.36, 20, '#5AA8FF', MAT.flat);
-    }
-  }
-  const bushes = A.clusters.map((list) => {
-    const m = new MeshBuilder();
-    let sx = 0, sz = 0;
-    for (const { c, r } of list) { const x = (c + 0.5) * TILE, z = (r + 0.5) * TILE; bushCell(m, x, z, r * 31 + c * 17, T); sx += x; sz += z; }
-    const cx = sx / list.length, cz = sz / list.length;
-    let rad = 0; for (const { c, r } of list) rad = Math.max(rad, Math.hypot((c + 0.5) * TILE - cx, (r + 0.5) * TILE - cz));
-    return { data: m.build(), bs: [cx, 0.8, cz, rad + 1.6], cells: list.map(({ c, r }) => r * W + c) };
-  });
-  const out = new MeshBuilder();
-  const spots = [];
-  for (let i = 0; i < 70; i++) {
-    const side = i % 4;
-    const u = hsh(i, 5);
-    let x, z;
-    if (side === 0) { x = -M0 + u * (A.wx + M0 * 2); z = -3 - hsh(i, 6) * (M0 - 4); }
-    else if (side === 1) { x = -2.5 - hsh(i, 7) * (M0 - 4); z = -M0 + u * (A.wz + M0 + 6); }
-    else if (side === 2) { x = A.wx + 2.5 + hsh(i, 7) * (M0 - 4); z = -M0 + u * (A.wz + M0 + 6); }
-    else { x = -M0 + u * (A.wx + M0 * 2); z = A.wz + 2.5 + hsh(i, 6) * 6; }
-    if (spots.some((s) => Math.hypot(s[0] - x, s[1] - z) < 4.2)) continue;
-    spots.push([x, z]);
-    const s = 0.8 + hsh(i, 8) * 0.6, kind = hsh(i, 9);
-    if (yard) {
-      if (side === 3) { if (kind < 0.5) { for (let k = 0; k < 3; k++) withT(out, rot(x, k * 0.24, z, 0), () => { out.smoothCyl(0, 0, 0, 0.42, 0.22, 14, '#22252B', MAT.plastic); disc(out, 0, 0.222, 0, 0.42, 14, '#2B2F36', MAT.plastic); }); } else { out.cyl(x, 0, z, 0.36, 1.0, 14, kind < 0.75 ? '#C8402F' : '#3B6FB6', MAT.paint); out.cyl(x, 0.3, z, 0.37, 0.06, 14, '#2B2F36', MAT.metal); } }
-      else if (kind < 0.45) junkPile(out, x, z, s * 1.4, i);
-      else if (kind < 0.7) container(out, x, z, hsh(i, 10) * 3, CAR_COLS[Math.floor(hsh(i, 11) * 4)]);
-      else junkBlock(out, x, z, 1.2 + hsh(i, 12) * 1.8, i * 3);
-    } else {
-      if (side === 3) { bushCell(out, x, z, i, T); }
-      else if (kind < 0.55) bigTree(out, x, z, s, i);
-      else if (kind < 0.8) palm(out, x, z, s, i);
-      else stone(out, x, z, 1.2 + hsh(i, 12) * 1.4, i, true);
-    }
-  }
-  if (yard) { crane(out, A.wx * 0.72, -9); container(out, A.wx * 0.25, -8, 0.2, '#2E9C8F'); }
-  else { temple(out, A.wx * 0.5, -12, 1.4); }
-  return { ground: g.build(), props: p.build(), water: w.build(), deco: deco.build(), outer: out.build(), bushes };
-}
-
 export function heroThumbEnv() {
   return { sunDir: [-0.35, 0.75, 0.56], sunCol: [2.5, 2.35, 2.15], skyCol: [0.5, 0.52, 0.6], gndCol: [0.32, 0.3, 0.34], fogCol: lin('#20263A'), fogSun: hexRgb('#FFFFFF'), fogSunLin: lin('#FFFFFF'), horizon: hexRgb('#2A3350'), zenith: hexRgb('#141A2C'), fogDen: 0.0001, exposure: 1.0, time: 0, shadowRange: 3, clouds: 0, shadows: false };
 }

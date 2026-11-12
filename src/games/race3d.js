@@ -229,9 +229,33 @@ precision highp float;
 precision highp sampler2DShadow;
 in vec3 vPos; in vec3 vNor; in vec4 vCol; in vec4 vLight;
 uniform vec3 uSunDir, uSunCol, uSkyCol, uGndCol, uFogCol, uFogSun, uCam, uHor, uZen, uTint;
-uniform float uFogDen, uShadowOn, uExposure, uMode, uAlpha;
+uniform float uFogDen, uShadowOn, uExposure, uMode, uAlpha, uDetail;
 uniform sampler2DShadow uShadow;
 out vec4 o;
+float dh(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+float dn(vec2 p) { vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f); return mix(mix(dh(i), dh(i + vec2(1.0, 0.0)), u.x), mix(dh(i + vec2(0.0, 1.0)), dh(i + vec2(1.0, 1.0)), u.x), u.y); }
+vec3 detail(vec3 base, float k, vec3 p, vec3 n) {
+  vec2 q = abs(n.y) > 0.6 ? p.xz : (abs(n.x) > abs(n.z) ? p.zy : p.xy);
+  float a = dn(q * 2.1), b = dn(q * 7.3 + 11.0), c = dh(floor(q * 26.0));
+  float g;
+  if (k < 0.15) g = 0.86 + 0.2 * a + 0.16 * (b - 0.5) - step(0.93, c) * 0.16 + step(c, 0.04) * 0.1;
+  else if (k < 0.25) g = 0.9 + 0.13 * a + 0.12 * (b - 0.5) - step(0.95, c) * 0.1 + step(c, 0.03) * 0.06;
+  else if (k < 0.35) g = 0.95 + 0.06 * a + step(0.988, c) * 0.3;
+  else if (k < 0.5) {
+    vec2 w = k < 0.425 ? q : q.yx;
+    float row = floor(w.y * 2.5), pl = dh(vec2(row, 3.0));
+    float gr = dn(vec2(w.x * 0.8 + pl * 9.0, w.y * 16.0));
+    float e = 0.5 - abs(fract(w.y * 2.5) - 0.5);
+    float ej = fract(w.x * 0.41 + pl * 0.73); ej = min(ej, 1.0 - ej);
+    g = 0.83 + 0.2 * gr + 0.14 * (pl - 0.5) - (1.0 - smoothstep(0.0, 0.05, e)) * 0.3 - (1.0 - smoothstep(0.0, 0.012, ej)) * 0.22;
+  }
+  else if (k < 0.55) g = 0.9 + 0.1 * dn(vec2(q.x * 26.0, q.y * 1.4)) + 0.08 * (a - 0.5);
+  else if (k < 0.65) g = 0.88 + 0.1 * a + 0.2 * (c - 0.5);
+  else if (k < 0.75) g = 0.8 + 0.24 * a + 0.14 * (b - 0.5) + step(0.97, c) * 0.12;
+  else if (k < 0.85) g = 0.93 + 0.08 * a + 0.05 * (b - 0.5) + 0.05 * sin(q.x * 2.6 + q.y * 0.9 + a * 5.0);
+  else g = 0.82 + 0.26 * b + 0.12 * (a - 0.5);
+  return base * mix(1.0, g, uDetail);
+}
 float shadowAt(vec4 lp, float nl) {
   vec3 p = lp.xyz / lp.w * 0.5 + 0.5;
   if (p.x < 0.0 || p.x > 1.0 || p.y < 0.0 || p.y > 1.0 || p.z > 1.0) return 1.0;
@@ -256,6 +280,7 @@ void main() {
   vec3 base = pow(vCol.rgb, vec3(2.2));
   if (uMode > 2.5) base = pow(uTint, vec3(2.2));
   float mat = vCol.a;
+  if (mat < -0.001) { float k = -mat; base = detail(base, k, vPos, n); mat = k > 0.45 && k < 0.55 ? 0.09 : k > 0.25 && k < 0.35 ? 0.07 : 0.0; }
   vec3 v = normalize(uCam - vPos);
   float d = length(uCam - vPos);
   float nv = max(dot(n, v), 0.0);
@@ -591,6 +616,7 @@ export function createRenderer(canvas, opts = {}) {
     gl.uniform1f(P.u.uFogDen, env.fogDen);
     gl.uniform1f(P.u.uShadowOn, useShadow ? 1 : 0);
     gl.uniform1f(P.u.uExposure, env.exposure || 1);
+    gl.uniform1f(P.u.uDetail, env.detail || 0);
     gl.uniform1f(P.u.uMode, 0);
     gl.uniform1f(P.u.uAlpha, 1);
     gl.activeTexture(gl.TEXTURE0);

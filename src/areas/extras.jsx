@@ -6575,23 +6575,24 @@ function WnSegments({ total, at, onArt, dark }) {
 }
 
 const WN_HIGHLIGHTS = [
-  { k: 'siege45', art: 'siege45h', go: 'siege', cta: 'Play now', title: 'Scrap Siege', text: 'A new live game for up to four friends. Pick Blaze, Pip, Boom or Mira and hold off waves of robots, with a boss every five waves. Bot friends join when you play alone.' },
-  { k: 'police45', art: 'police45h', go: 'race', cta: 'Play now', title: 'Police chases', text: 'Play Island Rally as a racer or as the police. Bust racers with spike strips, roadblocks and rams, or add police to any race. Up to eight players now.' },
-  { k: 'cuts45', art: 'cuts45h', go: 'race', cta: 'Play now', title: 'Shortcuts and new skills', text: 'Dirt road shortcuts on every map, seven new skills like mines, EMP and ghost, and five kinds of energy drinks.' },
-  { k: 'talk45', art: 'talk45h', go: 'games', cta: 'Open Games', title: 'See who is talking', text: 'When a friend talks in a live game, their name lights up at the top of the screen.' },
+  { k: 'squad46', art: 'squad46h', go: 'siege', cta: 'Play now', title: 'Scrap Siege for ten', text: 'Up to ten friends in one squad now, on five big maps: Scrap yard, Jungle temple, Frost base, Lava foundry and Harbor docks.' },
+  { k: 'heroes46', art: 'heroes46h', go: 'siege', cta: 'Play now', title: 'Four new heroes', text: 'Rex, Volt, Kai and Ivy join the fight. Every hero has a gadget, everyone can dash to dodge, and robots drop shields, rapid fire and speed.' },
+  { k: 'levels46', art: 'levels46h', go: 'siege', cta: 'Play now', title: 'Hero levels and upgrades', text: 'Earn scrap in every game and level your heroes up to 10. Every second wave, pick an upgrade that lasts the whole game.' },
+  { k: 'watch46', art: 'watch46h', go: 'games', cta: 'Open Games', title: 'Smoother watching', text: 'Watching friends play is smooth in every live game now, and you can switch who you watch. In Scrap Siege you also see who got you.' },
 ];
 const WN_SECTIONS = [
   { title: 'Games', items: [
-    { art: 'siege45', title: 'Scrap Siege', text: 'Four heroes against waves of robots.' },
-    { art: 'police45', title: 'Police chases', text: 'Race or chase in Island Rally, now for eight.' },
-    { art: 'cuts45', title: 'Shortcuts and new skills', text: 'Dirt roads, seven skills and new drinks.' },
-    { art: 'talk45', title: 'See who is talking', text: 'Names light up when friends talk.' },
+    { art: 'squad46', title: 'Scrap Siege for ten', text: 'Ten friends and five big maps.' },
+    { art: 'heroes46', title: 'Four new heroes', text: 'Gadgets, dash and power ups.' },
+    { art: 'levels46', title: 'Hero levels and upgrades', text: 'Level up with scrap, pick upgrades.' },
+    { art: 'watch46', title: 'Smoother watching', text: 'Smooth views and switch who you watch.' },
   ] },
 ];
 const WN_NEW_COUNT = WN_SECTIONS.reduce((n, sec) => n + sec.items.length, 0);
 const WN_SUMMARY = `${WN_NEW_COUNT} new things to try.`;
 
 const WN_EARLIER = [
+  { title: 'Scrap Siege and police chases', text: 'A live robot fight for four friends, police and shortcuts in Island Rally, new skills and drinks, and names that light up when friends talk.' },
   { title: 'Explosions, a new Gulp and longer levels', text: 'Fireballs and lightning in Island Rally, a brand new Gulp with 15 hard levels, longer Roll Squad and Two Torches levels, and music in every lobby.' },
   { title: 'New game lobbies and watching friends', text: 'Watch and join any game, Island Rally jumps and crashes, Roll Squad team levels and new lobbies with the game playing behind.' },
   { title: 'Attack race and three new maps', text: 'Rockets, oil, shock and shields in Island Rally, plus Tea hills, City lights and Lion rock and rebuilt cars.' },

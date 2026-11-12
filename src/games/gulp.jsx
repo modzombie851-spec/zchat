@@ -3,7 +3,7 @@ import { Avatar, Portal, useBackClose, hapticTap, FONT, Spinner } from '../App.j
 import { useGameLink, useRoomRelay, useWatchChannel, useMeshRoom } from './relay.jsx';
 import { setWatchAllowed, useLiveBeacon, useGamePrivacy } from './live.js';
 import { EMOTES, PingChip, Sheet, injectCss, useVoice } from './livekit.jsx';
-import { GC, GBtn, GPill, GPanel, GChip, GTitle, GJoy, GIcon, GControlsPanel, GHudBtn, GHudPanel, GHudSkill, GFeed, GRibbon, GHint, GIconCap, GStat, GNotices, useNotices, useWatchNotices, GSkillArt, useCtlLook, useGameStage, useJoystick, injectKitCss, kitTap, pressProps, maxDpr, INK, GVolBars, GLobby, GSlot, GLobbySheet , weakPhone , GTalkers } from './gamekit.jsx';
+import { GC, GBtn, GPill, GPanel, GChip, GTitle, GJoy, GIcon, GControlsPanel, GHudBtn, GHudPanel, GHudSkill, GFeed, GRibbon, GHint, GIconCap, GStat, GNotices, useNotices, useWatchNotices, GSkillArt, useCtlLook, useGameStage, useJoystick, injectKitCss, kitTap, pressProps, maxDpr, INK, GVolBars, GLobby, GSlot, GLobbySheet , weakPhone , GTalkers, GWatchBar } from './gamekit.jsx';
 import { Sfx } from './sfx.js';
 import { WW, WH, LIVES, MAXN, STAGES, SKILLS, SKILL_KEYS, SPECIES, rOf, viewOf, stageOf, clamp, makeGame, spawnFish, hostStep, applyGuestEvent, snap, applySnap, guestFollow, setNet, followNet, movePlayer, tickPlayer, canEat, canTake, canOpen, chestGain, eatGain, botInput, useSkill, addPlayer, dropPlayer, adoptHost } from './gulpengine.js';
 import { render, makeDeco, updateParts, bubbles, floatText, burst, bits, ring, zap, drawRadar, placeName, drawBadge, drawSpecies, fmtN, PLAYER_PAL, SLOT_KEYS, warmSprites } from './gulpdraw.js';
@@ -1131,10 +1131,8 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
                 </div>
               )}
               {isWatch && (
-                <div style={{ position: 'absolute', left: 0, right: 0, bottom: bottom(18), display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, padding: '0 14px', flexWrap: 'wrap' }}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 800, color: '#FFFFFF', textShadow: shadow }}><GIcon k="eye" size={13} color="#FFFFFF" line stroke={2} />Follow</span>
-                  <GPill small text={hostFirst} color={followK === 'sun' ? 'orange' : 'white'} height={38} onPress={() => { setFollowK('sun'); cam.current.init = false; }} />
-                  <GPill small text={peerFirst} color={followK === 'moon' ? 'blue' : 'white'} height={38} onPress={() => { setFollowK('moon'); cam.current.init = false; }} />
+                <div style={{ position: 'absolute', left: 0, right: 0, bottom: bottom(16), display: 'flex', justifyContent: 'center', padding: '0 14px', zIndex: 3 }}>
+                  <GWatchBar ids={['sun', 'moon']} cur={followK} nameOf={(k) => (k === 'sun' ? hostFirst : peerFirst)} colorOf={(k) => (k === 'sun' ? '#FF9A2E' : '#3E9BFF')} onPick={(k) => { if (k !== followK) { setFollowK(k); cam.current.init = false; } }} />
                 </div>
               )}
               {!isWatch && <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', opacity: see }}><GJoy flat view={J.view} knobRef={J.knob} idle={{ x: land ? 116 : 96, y: Ht - (land ? 98 : 132) }} R={J.R} /></div>}

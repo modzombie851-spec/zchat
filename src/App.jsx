@@ -18588,7 +18588,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-export const APP_VERSION = '45.0V';
+export const APP_VERSION = '46.0V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -49464,6 +49464,10 @@ export const WN_THUMBS = {
   rally44: { bg: 'sky', draw: () => <WnBg src="/race-fx.webp" /> },
   levels44: { bg: 'sky', draw: () => <WnBg src="/roll-storm.webp" /> },
   music44: { bg: 'sky', draw: () => <WnBg src="/lobby-music.webp" /> },
+  squad46: { bg: 'sky', draw: () => <WnBg src="/siege-squad.webp" /> },
+  heroes46: { bg: 'sky', draw: () => <WnBg src="/siege-heroes.webp" /> },
+  levels46: { bg: 'night', draw: () => <WnBg src="/siege-levels.webp" /> },
+  watch46: { bg: 'sky', draw: () => <WnBg src="/siege-watch.webp" /> },
   siege45: { bg: 'sky', draw: () => <WnBg src="/siege-art.webp" /> },
   police45: { bg: 'night', draw: () => <WnBg src="/race-police.webp" /> },
   cuts45: { bg: 'sky', draw: () => <WnBg src="/race-cuts.webp" /> },
@@ -50057,6 +50061,10 @@ Object.assign(WN_SCENES, {
   rally44h: { bg: 'sky', draw: () => <WnBg tall src="/race-fx.webp" x0="-120" /> },
   levels44h: { bg: 'sky', draw: () => <WnBg tall src="/roll-storm.webp" x0="-70" /> },
   music44h: { bg: 'sky', draw: () => <WnBg tall src="/lobby-music.webp" x0="-90" /> },
+  squad46h: { bg: 'sky', draw: () => <WnBg tall src="/siege-squad.webp" x0="-80" /> },
+  heroes46h: { bg: 'sky', draw: () => <WnBg tall src="/siege-heroes.webp" x0="-70" /> },
+  levels46h: { bg: 'night', draw: () => <WnBg tall src="/siege-levels.webp" x0="-100" /> },
+  watch46h: { bg: 'sky', draw: () => <WnBg tall src="/siege-watch.webp" x0="-77" /> },
   siege45h: { bg: 'sky', draw: () => <WnBg tall src="/siege-art.webp" x0="-55" /> },
   police45h: { bg: 'night', draw: () => <WnBg tall src="/race-police.webp" x0="-30" /> },
   cuts45h: { bg: 'sky', draw: () => <WnBg tall src="/race-cuts.webp" x0="-77" /> },
@@ -59839,7 +59847,7 @@ export function GameArt({ k: kIn, width = 160, height = 100, radius = 14, style 
 
 export const LIVE_GAME_KEYS = ['siege', 'race', 'roll', 'gulpco', 'duo', 'gulp', 'tug', 'qrace', 'rrace'];
 Object.assign(GAME_TITLES, { siege: 'Scrap Siege', race: 'Island Rally', roll: 'Roll Squad', gulpco: 'Gulp room', duo: 'Two Torches', gulp: 'Gulp', tug: 'Tug of war', qrace: 'Quiz race', rrace: 'Reaction race' });
-Object.assign(FRIEND_GAME_SUBS, { siege: 'Live, up to four friends against robot waves', race: 'Live, up to eight friends, four maps', roll: 'Live, up to four friends roll together', gulpco: 'Live, up to ten friends, join any time', duo: 'Live, endless temples together', gulp: 'Live, eat smaller fish and grow', tug: 'Live, tap faster than them', qrace: 'Live, fastest right answer', rrace: 'Live, first to tap on green' });
+Object.assign(FRIEND_GAME_SUBS, { siege: 'Live, up to ten friends against robot waves', race: 'Live, up to eight friends, four maps', roll: 'Live, up to four friends roll together', gulpco: 'Live, up to ten friends, join any time', duo: 'Live, endless temples together', gulp: 'Live, eat smaller fish and grow', tug: 'Live, tap faster than them', qrace: 'Live, fastest right answer', rrace: 'Live, first to tap on green' });
 Object.assign(GAME_ART_BG, { siege: ['#D9A54A', '#3A2E22'], race: ['#7FB4E0', '#3A4B63'], roll: ['#6EC6FF', '#4FA83A'], duo: ['#3B2A48', '#120C1C'], gulp: ['#1C6FA8', '#082A4C'], gulpco: ['#1C6FA8', '#082A4C'], tug: ['#F97316', '#E11D48'], qrace: ['#7C3AED', '#2563EB'], rrace: ['#10B981', '#0EA5E9'] });
 Object.assign(GAME_RULES, {
   siege: { how: ['Pick a hero: Blaze blasts up close, Pip snipes from far away, Boom throws bombs over walls and Mira heals friends with her orb.', 'Move with the left stick. Tap the red button to shoot the closest robot, or drag it to aim.', 'Hitting robots charges your super. When the gold button glows, tap it or drag it to aim.', 'Robots come in waves from the hatches. A boss shows up every 5 waves.', 'If a friend goes down, stand next to them to revive them. Grab health, power and super drops.', 'Hide in bushes so robots lose sight of you. Talk with your mic or send emojis.'], win: 'Survive 15 waves together, or go endless and see how far you get.' },
@@ -60298,7 +60306,7 @@ function LiveGameCard({ state, myId, peerName, onOpen, onRematch }) {
       {state.g === 'race' ? (
         <div style={{ textAlign: 'center', fontSize: 13, fontWeight: 800, color: theme.ink, padding: '2px 0 4px' }}>Race in 3D, up to eight friends</div>
       ) : state.g === 'siege' ? (
-        <div style={{ textAlign: 'center', fontSize: 13, fontWeight: 800, color: theme.ink, padding: '2px 0 4px' }}>Fight robot waves, up to four friends</div>
+        <div style={{ textAlign: 'center', fontSize: 13, fontWeight: 800, color: theme.ink, padding: '2px 0 4px' }}>Fight robot waves, up to ten friends</div>
       ) : state.g === 'roll' ? (
         <div style={{ textAlign: 'center', fontSize: 13, fontWeight: 800, color: theme.ink, padding: '2px 0 4px' }}>Roll together, up to four friends</div>
       ) : state.g === 'gulpco' ? (
