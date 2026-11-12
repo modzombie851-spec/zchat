@@ -5,7 +5,8 @@ import { Sfx } from './sfx.js';
 import { Sheet, injectCss } from './livekit.jsx';
 import { GPill, GPanel, GTitle, GIcon, GHudBtn, GNotices, useNotices, useJoystick, GJoy, injectKitCss, kitTap, pressProps, useCtlLook, useGameStage, GControlsPanel, GLobby, GLobbySheet, GSeg, GFeed, GSkin, GChatFeed, useChatFeed, TOUCHY, weakPhone } from './gamekit.jsx';
 import { makeSim, collide, rayBlocked, WEAPONS, WKEYS, THROW, ZT, ZKEYS, SURV, SURV_GUN, hitDamage, PETS, ACID } from './zsim.js';
-import { makeView, OUTFIT_SWATCH, TIERS } from './zview.js';
+import { makeView, OUTFIT_SWATCH, TIERS, ZMODEL } from './zview.js';
+import { sampleClip, blendInto, blendMask, poseSkin } from './zmodel.js';
 import { makeRig, poseHuman, finishHuman, poseZombie, poseDog, solve, ZSTYLE } from './zrig.js';
 import { handFrames, gunMesh } from './zguns.js';
 import { fpItems, muzzleWorld } from './zfp.js';
@@ -38,18 +39,36 @@ const FIRES = [[-14, 1.2, 0.8], [-13, -26, 0.3], [36, -3, 0.55], [-52, -1.5, 0.9
 const SMOKES = [[-52, -1.5, 1], [65, -50, 1.3], [-40, -30, 0.9], [46.5, -66, 0.8]];
 const STAINS = [[-6, 0.5, 1.4], [0, -1.8, 0.9], [9, 1.2, 1.1], [18, -0.6, 1.6], [30, 2, 1.0], [-20, -2.6, 1.2], [44, -14, 1.0], [5, -20, 1.3], [-10, -32, 0.9], [-2, -6, 0.8], [26, -24, 1.1]];
 function scenery(g, V) {
-  if (g.scn && g.scn.V === V) return g.scn;
-  const corpses = CORPSES.map(([x, z, yaw, k, id, mode]) => { const H = V.zomb(k, id, 1); const rig = makeRig(H.joints); poseZombie(rig, { k, sty: ZSTYLE(id, k), t: 0, dead: { t: 3, mode, side: id % 2 ? 1 : -1 } }); return { x, z, yaw, k, id, y: floorH(x, z), bones: new Float32Array(solve(rig)), M: m4.pose(x, floorH(x, z), z, yaw) }; });
-  g.scn = { V, corpses };
+  const zm = V.zm, zn = zm ? zm.n : -1;
+  if (g.scn && g.scn.V === V && g.scn.zn === zn) return g.scn;
+  const corpses = CORPSES.map(([x, z, yaw, k, id, mode]) => {
+    const y = floorH(x, z);
+    const ck = zm && mzPick(zm, k, id), md = ck && zm[ck];
+    if (md) {
+      const S = mzNew(md, k), cn = mode === 0 ? 'dying' : 'death', c = zm.anims.clips[cn];
+      mzPlay(S, cn, c.dur - 0.02, true); S.prev = null; S.fade = 1; S.rate = 0;
+      S.s = ((MZ_TALL[k] || (ZT[k] || ZT.walker).h) / md.M.top) * S.sv;
+      mzPose(md, zm.anims, S);
+      mzMatrix(S, x, y, z, yaw, S.s);
+      const W = S.W, M = S.M;
+      const px = M[0] * W[3] + M[4] * W[7] + M[8] * W[11] + M[12], pz = M[2] * W[3] + M[6] * W[7] + M[10] * W[11] + M[14];
+      return { x, z, yaw, k, id, y, md, S, px, pz };
+    }
+    const H = V.zomb(k, id, 1); const rig = makeRig(H.joints);
+    poseZombie(rig, { k, sty: ZSTYLE(id, k), t: 0, dead: { t: 3, mode, side: id % 2 ? 1 : -1 } });
+    return { x, z, yaw, k, id, y, bones: new Float32Array(solve(rig)), M: m4.pose(x, y, z, yaw), px: x + Math.sin(yaw) * 0.4, pz: z + Math.cos(yaw) * 0.4 };
+  });
+  g.scn = { V, zn, corpses };
   return g.scn;
 }
 function drawScenery(g, V, items, parts, lights, at, t, inView) {
   const S = scenery(g, V);
   for (const c of S.corpses) {
     const d = Math.hypot(c.x - at[0], c.z - at[2]);
-    parts.push({ x: c.x + Math.sin(c.yaw) * 0.4, y: c.y + 0.02, z: c.z + Math.cos(c.yaw) * 0.4, size: 1.0, alpha: 0.85, type: 22, dw: -1, seed: (c.id % 13) / 13 });
-    if (d > 70 || !inView(c.x, c.y + 0.3, c.z, 1.2)) continue;
-    items.push({ mesh: V.zomb(c.k, c.id, d < V.tier.near ? 1 : 0).mesh, model: c.M, bones: c.bones, cast: false });
+    parts.push({ x: c.px, y: c.y + 0.02, z: c.pz, size: 1.0, alpha: 0.85, type: 22, dw: -1, seed: (c.id % 13) / 13 });
+    if (d > 70 || !inView(c.x, c.y + 0.3, c.z, 1.6)) continue;
+    if (c.md) items.push({ mesh: c.md.mesh, model: c.S.M, skin: c.S.skin, tex: c.md.tex, nrm: c.md.nrm, col: c.S.col, cast: false });
+    else items.push({ mesh: V.zomb(c.k, c.id, d < V.tier.near ? 1 : 0).mesh, model: c.M, bones: c.bones, cast: false });
   }
   for (const [x, z, k] of STAINS) parts.push({ x, y: floorH(x, z) + 0.015, z, size: k, alpha: 0.7, type: 22, dw: -1, seed: ((x * 13 + z * 7) % 10 + 10) % 10 / 10 });
   for (const [x, z, k] of FIRES) {
@@ -120,7 +139,13 @@ function rayZ(o, d, maxD, list) {
       best = { A, t, head: hx * fx + hz * fz > 0.35 && y > 0.25 };
       continue;
     }
-    const r = T.r * 1.08, h = T.h;
+    if (A.hd) {
+      const hx = A.hd[0] - o[0], hy = A.hd[1] - o[1], hz = A.hd[2] - o[2];
+      const tc = hx * d[0] + hy * d[1] + hz * d[2];
+      const hr = A.hr || 0.15;
+      if (tc > 0.2 && tc < maxD && (!best || tc < best.t) && hx * hx + hy * hy + hz * hz - tc * tc < hr * hr) { best = { A, t: tc, head: true }; continue; }
+    }
+    const r = T.r * 1.08, h = A.hd ? A.top : T.h;
     const fx = o[0] - A.x, fz = o[2] - A.z;
     const a = d[0] * d[0] + d[2] * d[2], b = 2 * (fx * d[0] + fz * d[2]), c = fx * fx + fz * fz - r * r;
     const disc = b * b - 4 * a * c;
@@ -131,9 +156,99 @@ function rayZ(o, d, maxD, list) {
     if (t < 0.2 || t > maxD || (best && t > best.t)) continue;
     const y = o[1] + d[1] * t - A.y;
     if (y < 0 || y > h) continue;
-    best = { A, t, head: y > h * 0.82 };
+    best = { A, t, head: !A.hd && y > h * 0.82 };
   }
   return best;
+}
+
+const MZ_HEAD = 5;
+const MZ_UPPER = Array.from({ length: 43 }, (_, i) => i + 1);
+const MZ_FADE = 0.22;
+const MZ_TALL = { crawler: 1.75 };
+const MZ_HIT = { attack: 0.8, m_swipe: 1.07, m_punch: 0.1, bite: 0.75 };
+const MZ_LOW = new Set(['crawl', 'bite', 'death', 'dying', 'm_die']);
+function mzPick(zm, k, id) {
+  const L = ZMODEL[k] || ZMODEL.walker;
+  const pref = L[(id * 7 + 3) % L.length];
+  if (zm[pref]) return pref;
+  for (const n of L) if (zm[n]) return n;
+  return k !== 'brute' && zm.zgirl ? 'zgirl' : null;
+}
+function mzNew(md, k) {
+  const nb = md.M.nb, f = () => new Float32Array(nb * 4);
+  const S = { q: f(), q2: f(), q3: f(), q4: f(), hp: [0, 0, 0], hp2: [0, 0, 0], hp3: [0, 0, 0], W: new Float32Array(nb * 12), skin: new Float32Array(nb * 12), cur: k === 'crawler' ? 'crawl' : 'stride', t: Math.random() * 4, rate: 1, prev: null, pt: 0, prate: 1, fade: 1, fdur: MZ_FADE, M: new Float32Array(16), col: new Float32Array(4), sv: 0.95 + Math.random() * 0.09, attN: 0, s: 1, ht: 9, ua: null, ut: 0, ur: 1, uEnd: 0, act: null, actUntil: 0, actMin: 0 };
+  const v = k === 'brute' ? 0.9 : 0.74 + Math.random() * 0.12;
+  S.col[0] = v * (0.96 + Math.random() * 0.1); S.col[1] = v * (0.93 + Math.random() * 0.08); S.col[2] = v * (0.92 + Math.random() * 0.1); S.col[3] = 0;
+  return S;
+}
+function mzPlay(S, clip, t0, force, fdur) {
+  if (S.cur === clip && !force) return;
+  S.prev = S.cur; S.pt = S.t; S.prate = S.rate; S.cur = clip; S.t = t0 || 0; S.fade = 0; S.fdur = fdur || MZ_FADE;
+}
+function mzTick(S, dt) {
+  S.t += dt * S.rate;
+  if (S.prev) { S.pt += dt * S.prate; S.fade += dt / S.fdur; if (S.fade >= 1) { S.prev = null; S.fade = 1; } }
+  S.ht += dt;
+  if (S.ua) { S.ut += dt * S.ur; if (S.ut > S.uEnd + 0.3) S.ua = null; }
+}
+function mzSample(md, C, name, t, q, hp) {
+  const c = C[name];
+  sampleClip(c, md.M.nb, t, q, hp);
+  const k = md.M.hipsH / c.srcH;
+  hp[0] *= k; hp[1] *= k; hp[2] *= k;
+}
+function mzPose(md, anims, S) {
+  const M = md.M, nb = M.nb, C = anims.clips;
+  mzSample(md, C, C[S.cur] ? S.cur : 'stride', S.t, S.q, S.hp);
+  let Q = S.q, HP = S.hp;
+  if (S.prev && C[S.prev]) { mzSample(md, C, S.prev, S.pt, S.q2, S.hp2); blendInto(S.q2, S.hp2, S.q, S.hp, nb, S.fade); Q = S.q2; HP = S.hp2; }
+  const low = MZ_LOW.has(S.cur);
+  if (S.ua && C[S.ua] && !low) {
+    const w = Math.min(1, (S.ut - S.u0) / 0.25) * Math.min(1, Math.max(0, (S.uEnd + 0.3 - S.ut) / 0.3));
+    if (w > 0) { sampleClip(C[S.ua], nb, S.ut, S.q3, S.hp3); blendMask(Q, S.q3, MZ_UPPER, w); }
+  }
+  if (S.ht < 1.05 && C.hit && !low) {
+    const w = Math.min(1, S.ht / 0.08) * (1 - Math.max(0, (S.ht - 0.45) / 0.6)) * 0.9;
+    if (w > 0) { sampleClip(C.hit, nb, S.ht + 0.05, S.q4, S.hp3); blendMask(Q, S.q4, MZ_UPPER, w); }
+  }
+  poseSkin(M, Q, HP, 1, S.W, S.skin);
+}
+function mzUpper(S, clip, t0, rate, end) { S.ua = clip; S.ut = t0; S.u0 = t0; S.ur = rate; S.uEnd = end; }
+function mzLoco(S, md, C, k, v, stun) {
+  const nat = (n) => C[n].speed * (md.M.hipsH / C[n].srcH) * S.s;
+  let want;
+  if (k === 'crawler') want = 'crawl';
+  else if (k === 'brute') want = v < 0.1 ? 'm_idle' : v < 2.6 ? 'stride' : 'm_run';
+  else { const g = S.cur; want = v < 0.1 ? 'idle' : v < (g === 'walk' ? 0.85 : 0.65) ? 'walk' : v < (g === 'run' ? 1.9 : 2.15) ? 'stride' : 'run'; }
+  if (want !== S.cur) {
+    const cur = C[S.cur], nxt = C[want];
+    const ph = cur && cur.loop && nxt.loop ? ((S.t / cur.dur) % 1 + 1) % 1 : Math.random();
+    mzPlay(S, want, ph * nxt.dur, true, 0.3);
+  }
+  const c = C[want];
+  if (c.speed > 0) { const lo = want === 'walk' ? 0.5 : 0.6, hi = want === 'walk' ? 2.4 : want === 'crawl' ? 2.6 : 1.7; S.rate = v < 0.1 ? 0.35 : clamp(v / Math.max(0.05, nat(want)), lo, hi); } else S.rate = 1;
+  if (stun) S.rate *= 0.35;
+}
+function mzMatrix(S, x, y, z, yaw, s) {
+  poseInto(S.M, x, y, z, yaw);
+  const M = S.M;
+  M[0] *= s; M[1] *= s; M[2] *= s; M[4] *= s; M[5] *= s; M[6] *= s; M[8] *= s; M[9] *= s; M[10] *= s;
+}
+function mzHead(S, out) {
+  const W = S.W, o = MZ_HEAD * 12, M = S.M;
+  const lx = W[o + 3] + W[o + 1] * 0.09, ly = W[o + 7] + W[o + 5] * 0.09, lz = W[o + 11] + W[o + 9] * 0.09;
+  out[0] = M[0] * lx + M[4] * ly + M[8] * lz + M[12];
+  out[1] = M[1] * lx + M[5] * ly + M[9] * lz + M[13];
+  out[2] = M[2] * lx + M[6] * ly + M[10] * lz + M[14];
+  return out;
+}
+function mzImpact(c) {
+  if (c.impact != null) return c.impact;
+  const y0 = c.hp[1];
+  let f = c.nf - 1;
+  for (let i = 0; i < c.nf; i++) if (c.hp[i * 3 + 1] < y0 * 0.4) { f = i; break; }
+  c.impact = f / c.fps;
+  return c.impact;
 }
 
 function arcLand(o, yaw, pitch, speed) {
@@ -371,7 +486,7 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
         else if (by) { const a = Math.atan2(by.x - src.x, by.z - src.z); const rel = Math.abs(angDiff(src.yaw || 0, a)); mode = rel < Math.PI / 2 ? 1 : 0; if (e[3] && Math.random() < 0.5) mode = 2; }
         const sty = A ? A.sty : ZSTYLE(e[1], kk);
         const rig = A ? A.rig : null;
-        g.dying.push({ id: e[1], k: kk, x: src.x, z: src.z, y: floorH(src.x, src.z), yaw: src.yaw || 0, t: 0, mode, side, head: !!e[3], rig, sty, thud: false, M: new Float32Array(16) });
+        g.dying.push({ id: e[1], k: kk, x: src.x, z: src.z, y: floorH(src.x, src.z), yaw: src.yaw || 0, t: 0, mode, side, head: !!e[3], rig, sty, thud: false, M: new Float32Array(16), ma: A && A.ma ? A.ma : null, mk: A && A.ma ? A.mk : null });
         if (g.dying.length > 16) g.dying.shift();
         const y = floorH(src.x, src.z);
         blood(src.x, y + 1.2, src.z, e[3] ? 10 : 6, e[3] ? 1.3 : 1);
@@ -395,7 +510,7 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
       ZA.synth('fire', { pos: [e[1] / 10, floorH(e[1] / 10, e[2] / 10) + 0.4, e[2] / 10], vol: 1.2 });
     } else if (k === 'zh') {
       const A = g.anim.get(e[1]);
-      if (A) { A.att = 0; if (Math.random() < 0.6) ZA.zvoice(A.k, [A.x, A.y + 1.5, A.z], 'attack'); }
+      if (A) { const T0 = e[2] === myId ? g.me : ps && ps.get(e[2]); A.biteDown = !!(T0 && T0.st === 1); A.att = 0; A.attN = (A.attN || 0) + 1; if (Math.random() < 0.6) ZA.zvoice(A.k, [A.x, A.y + 1.5, A.z], 'attack'); }
       if (e[2] === myId) {
         g.hurtT = 0.5;
         ZA.synth('hit', { vol: 0.9 });
@@ -454,7 +569,7 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
       if (A && g.me && Math.hypot(A.x - g.me.x, A.z - g.me.z) < 20) pushFeed('A screamer made them angry', '#FFB86A');
     } else if (k === 'sp') {
       const A = g.anim.get(e[1]);
-      if (A) { A.spit = 0.001; g.fx.push({ spit: true, x0: A.x, y0: A.y + 1.55, z0: A.z, x1: e[2] / 10, z1: e[3] / 10, t: 0, life: 0.85 }); ZA.synth('spit', { pos: [A.x, A.y + 1.5, A.z], vol: 1 }); }
+      if (A) { A.spit = 0.001; A.spitN = (A.spitN || 0) + 1; g.fx.push({ spit: true, x0: A.x, y0: A.y + 1.55, z0: A.z, x1: e[2] / 10, z1: e[3] / 10, t: 0, life: 0.85 }); ZA.synth('spit', { pos: [A.x, A.y + 1.5, A.z], vol: 1 }); }
     } else if (k === 'ah') {
       if (e[1] === myId) { g.hurtT = Math.max(g.hurtT, 0.3); g.acidT = 0.5; ZA.synth('sizzle', { vol: 0.6, len: 0.4 }); }
     }
@@ -474,8 +589,13 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
       const hy = A.k === 'crawler' ? 0.35 : T.h * 0.62;
       const ap = Math.atan2(A.y + hy - cam.pos[1], d);
       const s = Math.hypot(angDiff(g.yaw, ay), (ap - g.pitch) * 0.8);
+      const hx = A.hd ? A.hd[0] : A.x, hz = A.hd ? A.hd[2] : A.z, hY = A.hd ? A.hd[1] : A.y + (A.k === 'crawler' ? 0.45 : T.h * 0.9);
+      const hd = Math.hypot(hx - cam.pos[0], hz - cam.pos[2]);
+      const ay2 = Math.atan2(hx - cam.pos[0], hz - cam.pos[2]), ap2 = Math.atan2(hY - cam.pos[1], hd);
+      const s2 = Math.hypot(angDiff(g.yaw, ay2), (ap2 - g.pitch) * 0.8);
       const lim = bd * (1 + 1.2 / Math.max(2, d));
-      if (s < lim && s < (best ? best.s : 9)) best = { s, ay, ap, A };
+      if (s2 < s && s2 < lim && s2 < (best ? best.s : 9)) best = { s: s2, ay: ay2, ap: ap2, A };
+      else if (s < lim && s < (best ? best.s : 9)) best = { s, ay, ap, A };
     }
     return best;
   };
@@ -692,6 +812,20 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
     for (const Q of MR.zs) {
       Q.ph += dt * 1.9;
       const zx = Q.x + Math.sin(g.menuT * 0.1 + Q.id) * 1.2, zz = Q.z + ((g.menuT * 0.35 + Q.id) % 6);
+      if (V.zm && !Q.mk) Q.mk = mzPick(V.zm, Q.k, Q.id);
+      const qmd = Q.mk && V.zm[Q.mk];
+      if (qmd) {
+        const S = Q.S || (Q.S = mzNew(qmd, Q.k));
+        const want = Q.k === 'crawler' ? 'crawl' : Q.k === 'runner' ? 'stride' : 'walk';
+        if (S.cur !== want) mzPlay(S, want, Math.random() * 2, true);
+        S.rate = want === 'stride' ? 0.55 : want === 'crawl' ? 0.9 : 1.15;
+        S.s = ((MZ_TALL[Q.k] || (ZT[Q.k] || ZT.walker).h) / qmd.M.top) * S.sv;
+        mzTick(S, dt);
+        mzPose(qmd, V.zm.anims, S);
+        mzMatrix(S, zx, floorH(zx, zz), zz, 0.1 + Math.sin(Q.id) * 0.2, S.s);
+        items.push({ mesh: qmd.mesh, model: S.M, skin: S.skin, tex: qmd.tex, nrm: qmd.nrm, col: S.col, cast: false });
+        continue;
+      }
       poseZombie(Q.rig, { k: Q.k, sty: Q.sty, t: g.menuT, ph: Q.ph, mv: Q.k === 'runner' ? 1.2 : 0.9 });
       solve(Q.rig);
       items.push({ mesh: Q.Z.mesh, model: poseInto(Q.M, zx, floorH(zx, zz), zz, 0.1 + Math.sin(Q.id) * 0.2), bones: Q.rig.S, cast: false });
@@ -869,16 +1003,45 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
       if (A.scr > 0) { A.scr += dt / 1.5; if (A.scr > 1) A.scr = 0; }
       A.stunV = Math.max(0, (A.stunV || 0) - dt);
       live.add(z1.id);
+      A.hd = null;
       if (drawnZ >= T.zmax || z1.d > 95) continue;
       const r0 = A.k === 'brute' ? 2.2 : 1.3;
       if (!inView(x, A.y + 1, z, r0)) continue;
       drawnZ++;
-      const H = V.zomb(A.k, A.id, z1.d < T.near ? 1 : 0);
-      poseZombie(A.rig, { k: A.k, sty: A.sty, t: g.t + A.off, ph: A.ph, mv: A.mv, att: A.att, hit: A.hit, hitSide: A.hitSide, head: A.head, stun: (z1.fl & 8) || A.stunV > 0 ? 0.4 : 0, scream: A.scr });
-      solve(A.rig);
       const cast = T.shadowN > 0 && shadowN < T.shadowN && z1.d < 26;
       if (cast) shadowN++;
-      items.push({ mesh: H.mesh, model: poseInto(A.M, x, A.y, z, zyaw), bones: A.rig.S, cast });
+      if (V.zm && !A.mk) A.mk = mzPick(V.zm, A.k, A.id);
+      const md = A.mk && V.zm[A.mk];
+      if (md) {
+        const S = A.ma || (A.ma = mzNew(md, A.k));
+        const C = V.zm.anims.clips, K = A.k;
+        S.s = ((MZ_TALL[K] || (ZT[K] || ZT.walker).h) / md.M.top) * S.sv;
+        if ((A.attN || 0) !== S.attN) {
+          S.attN = A.attN || 0;
+          if (K === 'crawler' || A.biteDown) { if (S.cur !== 'bite') mzPlay(S, 'bite', MZ_HIT.bite, true, 0.3); S.rate = 1; S.act = 'bite'; S.actUntil = g.t + 1.6; S.actMin = g.t + 0.8; }
+          else if (K === 'brute') { const n = S.attN % 2 ? 'm_swipe' : 'm_punch'; mzPlay(S, n, MZ_HIT[n], true, 0.16); S.rate = 1.2; S.act = n; S.actUntil = g.t + (n === 'm_swipe' ? 1.25 : 0.85); S.actMin = g.t + 0.45; }
+          else { mzPlay(S, 'attack', MZ_HIT.attack, true, 0.16); S.rate = 1.25; S.act = 'attack'; S.actUntil = g.t + 1.0; S.actMin = g.t + 0.45; }
+        }
+        if (A.scr > 0 && !S.scrOn) { S.scrOn = true; mzUpper(S, 'scream', 0.2, 1.15, C.scream.dur - 0.3); }
+        if (!(A.scr > 0)) S.scrOn = false;
+        if ((A.spitN || 0) !== (S.spitN || 0)) { S.spitN = A.spitN || 0; mzUpper(S, 'scream', 0.55, 1.7, 1.7); }
+        if (K === 'brute' && !S.roared) { S.roared = true; mzUpper(S, 'm_roar', 0.3, 1.1, 3.2); }
+        if (A.hit >= 0.99 && S.ht > 0.15) S.ht = 0;
+        if (S.act && (g.t > S.actUntil || (A.mv > 0.6 && g.t > S.actMin))) S.act = null;
+        if (!S.act) mzLoco(S, md, C, K, A.mv, (z1.fl & 8) || A.stunV > 0);
+        mzTick(S, dt);
+        mzPose(md, V.zm.anims, S);
+        mzMatrix(S, x, A.y, z, zyaw, S.s);
+        A.hd = mzHead(S, A.hdv || (A.hdv = [0, 0, 0]));
+        A.hr = 0.15 * (MZ_TALL[K] || (ZT[K] || ZT.walker).h) / 1.75;
+        A.top = A.hd[1] - A.y + A.hr;
+        items.push({ mesh: md.mesh, model: S.M, skin: S.skin, tex: md.tex, nrm: md.nrm, col: S.col, cast });
+      } else {
+        const H = V.zomb(A.k, A.id, z1.d < T.near ? 1 : 0);
+        poseZombie(A.rig, { k: A.k, sty: A.sty, t: g.t + A.off, ph: A.ph, mv: A.mv, att: A.att, hit: A.hit, hitSide: A.hitSide, head: A.head, stun: (z1.fl & 8) || A.stunV > 0 ? 0.4 : 0, scream: A.scr });
+        solve(A.rig);
+        items.push({ mesh: H.mesh, model: poseInto(A.M, x, A.y, z, zyaw), bones: A.rig.S, cast });
+      }
       parts.push({ x, y: A.y + 0.03, z, size: A.k === 'brute' ? 0.85 : A.k === 'bloater' ? 0.65 : 0.5, alpha: 0.4, type: 21, dw: -1 });
       if (z1.fl & 2) parts.push({ x, y: A.y + 0.8, z, size: 0.8, alpha: 0.55, type: 12, seed: Math.random() });
       if (A.k === 'spitter' && z1.d < 30) parts.push({ x: x + Math.sin(zyaw) * 0.08, y: A.y + 1.5, z: z + Math.cos(zyaw) * 0.08, size: 0.22, alpha: 0.5, type: 25, seed: 0.3 });
@@ -890,6 +1053,30 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
       const d = g.dying[i];
       d.t += dt;
       if (d.t > 10.5) { g.dying.splice(i, 1); continue; }
+      const dm = d.ma && V.zm && V.zm[d.mk];
+      if (dm) {
+        const S = d.ma, C = V.zm.anims.clips;
+        if (!d.mzd) {
+          d.mzd = true; S.ua = null; S.ht = 9; S.act = null;
+          const cn = d.k === 'brute' ? 'm_die' : d.k === 'crawler' ? 'dying' : d.mode === 0 ? 'dying' : 'death';
+          const c = C[cn], t0 = d.k === 'crawler' ? c.dur - 0.02 : cn === 'm_die' ? 0.2 : cn === 'dying' ? 0.3 : 0.25;
+          const rate = d.k === 'crawler' ? 0 : cn === 'm_die' ? 1.2 : cn === 'dying' ? 1.3 : 1.4;
+          mzPlay(S, cn, t0, true, d.k === 'crawler' ? 0.35 : MZ_FADE); S.rate = rate;
+          const k = (dm.M.hipsH / c.srcH) * S.s, L = (c.nf - 1) * 3, lx = c.hp[L] * k, lz = c.hp[L + 2] * k, cy = Math.cos(d.yaw), sy = Math.sin(d.yaw);
+          d.px = d.x + cy * lx + sy * lz; d.pz = d.z - sy * lx + cy * lz;
+          d.imp = rate > 0 ? Math.max(0.3, (mzImpact(c) - t0) / rate) : 0.35;
+          d.pool = d.k === 'brute' ? 1.7 : 1;
+        }
+        mzTick(S, dt);
+        const sink = d.t > 8.5 ? (d.t - 8.5) * 0.3 : 0;
+        if (d.t > d.imp && !d.thud) { d.thud = true; for (let k = 0; k < 8; k++) fxPush({ x: d.px + rnd(-0.6, 0.6), y: d.y + 0.15, z: d.pz + rnd(-0.6, 0.6), size: rnd(0.5, 0.9), alpha: 0.5, type: 24, life: rnd(0.6, 1.1), vy: 0.35, seed: Math.random() }); ZA.synth('thump', { pos: [d.px, d.y, d.pz], vol: 0.6, f: 60 }); }
+        if (d.t > d.imp + 0.1) { const k = clamp((d.t - d.imp - 0.1) / 1.6, 0, 1); parts.push({ x: d.px, y: d.y + 0.02, z: d.pz, size: (0.25 + 0.8 * k) * d.pool, alpha: 0.9 * (1 - clamp((d.t - 8.5) / 1.5, 0, 1)), type: 22, dw: -1, seed: (d.id % 97) / 97 }); }
+        if (!inView(d.x, d.y + 0.5, d.z, 2)) continue;
+        mzPose(dm, V.zm.anims, S);
+        mzMatrix(S, d.x, d.y - sink, d.z, d.yaw, S.s);
+        items.push({ mesh: dm.mesh, model: S.M, skin: S.skin, tex: dm.tex, nrm: dm.nrm, col: S.col, cast: false });
+        continue;
+      }
       if (!d.rig) d.rig = makeRig(V.zomb(d.k, d.id, 1).joints);
       const sink = d.t > 8.5 ? (d.t - 8.5) * 0.3 : 0;
       if (d.t > 0.88 && !d.thud) { d.thud = true; for (let k = 0; k < 8; k++) fxPush({ x: d.x + rnd(-0.6, 0.6), y: d.y + 0.15, z: d.z + rnd(-0.6, 0.6), size: rnd(0.5, 0.9), alpha: 0.5, type: 24, life: rnd(0.6, 1.1), vy: 0.35, seed: Math.random() }); ZA.synth('thump', { pos: [d.x, d.y, d.z], vol: 0.6, f: 60 }); }

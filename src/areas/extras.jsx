@@ -6574,27 +6574,22 @@ function WnSegments({ total, at, onArt, dark }) {
   );
 }
 
-const WN_PHOTOS = { dead48: '/wn48-dead.webp', kinds48: '/wn48-kinds.webp', dog48: '/wn48-dog.webp', invite48: '/wn48-invite.webp', emote48: '/wn48-emote.webp' };
+const WN_PHOTOS = { zombies49: '/wn49-zombies.webp', mutant49: '/wn49-mutant.webp' };
 const WN_HIGHLIGHTS = [
-  { k: 'dead48', art: 'dead48', go: 'zombie', cta: 'Play now', title: 'Dead Town, rebuilt', text: 'First person with your gun and hands on screen, clear round buttons, aim down sights, damage numbers and real gun, reload and zombie sounds.' },
-  { k: 'kinds48', art: 'kinds48', go: 'zombie', cta: 'Play now', title: 'Nine kinds of zombies', text: 'Runners, crawlers, screamers that make the others faster, spitters, riot cops in armour, bloaters and brutes, with torn clothes and blood.' },
-  { k: 'dog48', art: 'dog48', go: 'zombie', cta: 'Play now', title: 'Your own dog', text: 'Pick a dog before you play. It follows you everywhere and goes after zombies on its own.' },
-  { k: 'invite48', art: 'invite48', go: 'zombie', cta: 'Play now', title: 'Invite friends to Dead Town', text: 'Send an invite from the game. Friends join your server right away and take a bot spot.' },
-  { k: 'emote48', art: 'emote48', go: 'zombie', cta: 'Play now', title: 'Emotes and quick emojis', text: 'Wave, cheer, point or dance, send quick emojis, and see where your grenade lands before you throw.' },
+  { k: 'zombies49', art: 'zombies49', go: 'zombie', cta: 'Play now', title: 'Real zombies', text: 'Eleven zombies made by real 3D artists, with recorded moves. They shamble, run, crawl, swipe and scream, fall away from your shot, and headshots land where you see the head.' },
+  { k: 'mutant49', art: 'mutant49', go: 'zombie', cta: 'Play now', title: 'The brute is a mutant', text: 'A giant mutant with blade arms shows up every fifth wave. It roars, swipes and punches, so keep your distance.' },
 ];
 const WN_SECTIONS = [
   { title: 'Dead Town', items: [
-    { art: 'dead48', title: 'Dead Town, rebuilt', text: 'First person, new buttons and real sounds.' },
-    { art: 'kinds48', title: 'Nine kinds of zombies', text: 'Runners, crawlers, spitters and more.' },
-    { art: 'dog48', title: 'Your own dog', text: 'It follows you and fights zombies.' },
-    { art: 'invite48', title: 'Invite friends', text: 'Friends join your server in a tap.' },
-    { art: 'emote48', title: 'Emotes and quick emojis', text: 'Wave, cheer, dance and grenade aim.' },
+    { art: 'zombies49', title: 'Real zombies', text: 'Eleven zombies with recorded moves.' },
+    { art: 'mutant49', title: 'The brute is a mutant', text: 'A giant with blade arms.' },
   ] },
 ];
 const WN_NEW_COUNT = WN_SECTIONS.reduce((n, sec) => n + sec.items.length, 0);
 const WN_SUMMARY = `${WN_NEW_COUNT} new things to try.`;
 
 const WN_EARLIER = [
+  { title: 'Dead Town, rebuilt', text: 'First person with real sounds, nine kinds of zombies, your own dog, invites for friends, emotes and quick emojis.' },
   { title: 'Dead Town and servers near you', text: 'A new 3D zombie game, servers in Asia, USA and Europe, Scrap Siege for 20 players, a new look for every game and chat for everyone.' },
   { title: 'Scrap Siege for ten and four new heroes', text: 'Ten friends on five big maps, gadgets and dash for every hero, hero levels with scrap, upgrades every second wave and smoother watching.' },
   { title: 'Scrap Siege and police chases', text: 'A live robot fight for four friends, police and shortcuts in Island Rally, new skills and drinks, and names that light up when friends talk.' },

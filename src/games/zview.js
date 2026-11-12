@@ -5,8 +5,21 @@ import { survLook, ZLOOKS, zLookIndex, DOGS, SURV_LOOK } from './zlooks.js';
 import { gunMesh, magMesh } from './zguns.js';
 import { buildFP, buildThrowFP, buildBatFP, makeFPState } from './zfp.js';
 import { floorH } from './ztown.js';
+import { loadZAnims, loadZModel } from './zmodel.js';
 
 export const OUTFIT_SWATCH = (sv, i) => { const b = SURV_LOOK[sv] || SURV_LOOK.jay; return b.outfits[i] || b.shirt; };
+export const ZMODEL = {
+  walker: ['zgirl', 'zwar', 'zyaku', 'zpris', 'zsurv', 'zclown'],
+  worker: ['zwar', 'zpris', 'zsurv'],
+  runner: ['zskel', 'zyaku', 'zgirl'],
+  bloater: ['zpump'],
+  brute: ['zmutant'],
+  crawler: ['zgirl', 'zpris', 'zwar'],
+  screamer: ['zclown'],
+  riot: ['zcop'],
+  spitter: ['zpara'],
+};
+const ZORDER = ['zgirl', 'zmutant', 'zwar', 'zcop', 'zskel', 'zpara', 'zclown', 'zpump', 'zyaku', 'zpris', 'zsurv'];
 export const TIERS = [
   { name: 'Fast', dpr: 0.7, shadow: 0, grass: 0, trees: 0.25, zmax: 34, pmax: 12, post: false, near: 9, shadowN: 0 },
   { name: 'Balanced', dpr: 0.9, shadow: 1024, grass: 6500, trees: 0.5, zmax: 56, pmax: 20, post: false, near: 14, shadowN: 10 },
@@ -52,7 +65,20 @@ export function makeView(canvas, tierIdx) {
     if (!c) { c = Object.assign(makeFPState(), buildFP(R, kind, sv, col)); cache.set(k, c); }
     return c;
   };
-  const V = { R, env, statics, surv, zomb, dog, gun, fp, tier: T, cache, dispose: () => { try { R.dispose(); } catch {} } };
+  const V = { R, env, statics, surv, zomb, dog, gun, fp, tier: T, cache, zm: null, dead: false, dispose: () => { V.dead = true; try { R.dispose(); } catch {} } };
+  loadZAnims('/dead').then(async (anims) => {
+    if (V.dead) return;
+    const zm = { anims, n: 0 };
+    V.zm = zm;
+    for (const name of ZORDER) {
+      try {
+        const x = await loadZModel('/dead', name, tierIdx > 0, tierIdx === 0);
+        if (V.dead) return;
+        zm[name] = { M: x.model, mesh: R.tskin(x.model), tex: R.texture(x.img), nrm: x.nrm ? R.texture(x.nrm) : null };
+        zm.n++;
+      } catch {}
+    }
+  }).catch(() => {});
   V.shell = R.mesh(magMesh('shotgun'));
   V.prepHands = (sv, col) => { V.nadeFP = buildThrowFP(R, 'grenade', sv, col); V.molFP = buildThrowFP(R, 'molotov', sv, col); V.batFP = buildBatFP(R, sv, col); };
   return V;
