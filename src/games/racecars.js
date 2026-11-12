@@ -1,4 +1,5 @@
 import { MeshBuilder, hexRgb } from './race3d.js';
+import { DRINKS } from './raceengine.js';
 
 const lerp = (a, b, t) => a + (b - a) * t;
 const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
@@ -365,8 +366,9 @@ function lightsFor(mb, B, type) {
 }
 
 export function carMesh(type, color) {
-  const col = toRgb(color);
+  const col = toRgb(type === 'cop' ? '#F2F4F7' : color);
   if (type === 'tuktuk') return tuktuk(col);
+  if (type === 'cop') return copCar(col);
   const def = DEFS[type] || DEFS.sport;
   const mb = new MeshBuilder();
   const B = makeBody(def);
@@ -414,6 +416,39 @@ export function carMesh(type, color) {
       mb.v.push(z, y + 1.06, -x + rz - 0.2, pv[k + 5], pv[k + 4], -pv[k + 3], pv[k + 6], pv[k + 7], pv[k + 8], pv[k + 9]);
     }
   }
+  return mb.build();
+}
+
+function copCar(col) {
+  const def = DEFS.hatch;
+  const mb = new MeshBuilder();
+  const B = makeBody(def);
+  buildLower(mb, B, def, col);
+  buildArches(mb, B, def);
+  buildCabin(mb, B, def, col);
+  lightsFor(mb, B, 'hatch');
+  const fz = B.z1, rz = B.z0;
+  const NAVY = '#14264A';
+  for (const sx of [-1, 1]) {
+    mb.box(sx * 0.952, 0.6, -0.05, 0.02, 0.2, 2.9, NAVY, MAT.paint);
+    mb.box(sx * 0.958, 0.74, -0.05, 0.02, 0.035, 2.9, '#F2C230', MAT.paint);
+    mb.box(sx * 0.95, 0.88, 0.35, 0.025, 0.1, 0.5, NAVY, MAT.paint);
+  }
+  mb.box(0, 0.9, 1.5, 1.1, 0.02, 0.6, NAVY, MAT.paint);
+  mb.box(0, 1.535, -0.25, 1.12, 0.07, 0.36, '#1A1C21', MAT.plastic);
+  mb.box(-0.29, 1.62, -0.25, 0.5, 0.11, 0.28, '#FF2A33', MAT.light);
+  mb.box(0.29, 1.62, -0.25, 0.5, 0.11, 0.28, '#2A6BFF', MAT.light);
+  mb.box(0, 1.62, -0.25, 0.08, 0.12, 0.3, '#E8ECF2', MAT.chrome);
+  mb.box(0, 0.42, fz + 0.16, 1.2, 0.08, 0.07, '#1A1C21', MAT.metal);
+  mb.box(0, 0.66, fz + 0.16, 0.9, 0.06, 0.06, '#1A1C21', MAT.metal);
+  for (const sx of [-1, 1]) mb.box(sx * 0.42, 0.55, fz + 0.14, 0.07, 0.36, 0.07, '#1A1C21', MAT.metal);
+  exhaust(mb, 0.5, 0.32, rz + 0.02, 0.04, -0.08);
+  mirrorBox(mb, 0.84, 0.99, 0.82, col);
+  mb.box(0, 0.26, fz - 0.02, 1.5, 0.12, 0.1, '#202226', MAT.plastic);
+  grille(mb, fz, 0.4, 0.55, 0.36, 0.3);
+  mb.box(0, 0.28, rz + 0.02, 1.5, 0.14, 0.1, '#202226', MAT.plastic);
+  plate(mb, fz + 0.04, 0.42, true);
+  plate(mb, rz - 0.012, 0.6, false);
   return mb.build();
 }
 
@@ -497,6 +532,7 @@ export const WHEELS = {
   hatch: { list: [[0.8, 0.32, 1.18, 0.32, 0.25, 1], [0.8, 0.32, -1.18, 0.32, 0.25, 0]], rim: '#AEB4BC', spokes: 7 },
   jeep: { list: [[0.88, 0.46, 1.32, 0.46, 0.37, 1], [0.88, 0.46, -1.3, 0.46, 0.37, 0]], rim: '#6A7078', spokes: 6 },
   tuktuk: { list: [[0, 0.3, 1.12, 0.3, 0.2, 1], [0.72, 0.3, -0.85, 0.3, 0.2, 0]], rim: '#B9BEC6', spokes: 4 },
+  cop: { list: [[0.8, 0.32, 1.18, 0.32, 0.25, 1], [0.8, 0.32, -1.18, 0.32, 0.25, 0]], rim: '#2A2D33', spokes: 6 },
 };
 
 export function fxMeshes() {
@@ -510,10 +546,16 @@ export function fxMeshes() {
     rk.quad([ca * 0.15, -0.5, sa * 0.15], [ca * 0.36, -0.58, sa * 0.36], [ca * 0.36, -0.36, sa * 0.36], [ca * 0.15, -0.2, sa * 0.15], '#2A2C31', 0.2);
   }
   rk.setT(null);
-  const bt = new MeshBuilder();
   const prof = [[0, 0], [0.24, 0], [0.29, 0.06], [0.3, 0.16], [0.3, 0.62], [0.24, 0.78], [0.13, 0.9], [0.12, 1.02], [0.13, 1.06]];
-  bt.revolve(0, 0, 0, prof.map(([r, y]) => [r * 1.25, y * 1.25]), 14, '#36E0B0', 0.9, { at: (i) => (i >= 6 ? [hexRgb('#E9EDF2'), 0.72] : i === 3 ? [hexRgb('#F4F6F8'), 0.86] : [hexRgb('#36E0B0'), 0.9]) });
-  bt.revolve(0, 1.32, 0, [[0.17, 0], [0.17, 0.14], [0.0, 0.16]], 12, '#E9EDF2', 0.72);
+  const bottleOf = (body, band, cap) => {
+    const b = new MeshBuilder();
+    b.revolve(0, 0, 0, prof.map(([r, y]) => [r * 1.25, y * 1.25]), 14, body, 0.9, { at: (i) => (i >= 6 ? [hexRgb(cap), 0.72] : i === 3 ? [hexRgb(band), 0.86] : [hexRgb(body), 0.9]) });
+    b.revolve(0, 1.32, 0, [[0.17, 0], [0.17, 0.14], [0.0, 0.16]], 12, cap, 0.72);
+    return b;
+  };
+  const bt = bottleOf('#36E0B0', '#F4F6F8', '#E9EDF2');
+  const bottles = {};
+  for (const k of Object.keys(DRINKS)) bottles[k] = bottleOf(DRINKS[k].col, DRINKS[k].band, DRINKS[k].cap).build();
   const sh = new MeshBuilder();
   sh.blob(0, 0.95, 0.05, 1.55, 1.35, 2.85, '#7FDBFF', 0.9, null, 18, true);
   const oil = new MeshBuilder();
@@ -521,5 +563,19 @@ export function fxMeshes() {
   for (let k = 0; k < n; k++) { const a = (k / n) * Math.PI * 2; const r = 1.9 + Math.sin(k * 2.7) * 0.35 + Math.cos(k * 1.3) * 0.25; pts.push([Math.cos(a) * r * 1.15, 0.04, Math.sin(a) * r * 1.4]); }
   for (let k = 0; k < n; k++) oil.tri([0, 0.045, 0], pts[(k + 1) % n], pts[k], '#0A0A0E', 0.665);
   for (let k = 0; k < 5; k++) { const a = k * 1.3, r = 0.5 + k * 0.25; oil.tri([Math.cos(a) * r, 0.05, Math.sin(a) * r], [Math.cos(a + 0.5) * (r + 0.3), 0.05, Math.sin(a + 0.5) * (r + 0.3)], [Math.cos(a + 0.2) * (r + 0.5), 0.05, Math.sin(a + 0.2) * (r + 0.5)], '#1E1530', 0.69); }
-  return { rocket: rk.build(), bottle: bt.build(), shield: sh.build(), oil: oil.build() };
+  const mn = new MeshBuilder();
+  mn.revolve(0, 0, 0, [[0.62, 0], [0.64, 0.06], [0.58, 0.14], [0.42, 0.24], [0.2, 0.3], [0.0, 0.31]], 16, '#3A3F48', 0.745);
+  mn.revolve(0, 0.29, 0, [[0.09, 0], [0.09, 0.06], [0.0, 0.08]], 10, '#FF2A33', 1);
+  for (let k = 0; k < 6; k++) { const a = (k / 6) * Math.PI * 2; mn.box(Math.cos(a) * 0.5, 0.17, Math.sin(a) * 0.5, 0.1, 0.1, 0.1, '#20242B', 0.745); }
+  const sp = new MeshBuilder();
+  sp.box(0, 0.03, 0, 6, 0.06, 0.42, '#1C1F25', 0.14);
+  sp.box(0, 0.065, 0.17, 6, 0.02, 0.05, '#F2C230', 0.553);
+  sp.box(0, 0.065, -0.17, 6, 0.02, 0.05, '#F2C230', 0.553);
+  for (let k = 0; k < 24; k++) { const x = -2.9 + k * 0.252; for (const z of [-0.08, 0.08]) { sp.tri([x - 0.07, 0.06, z], [x + 0.07, 0.06, z], [x, 0.26, z], '#D9DEE6', 0.705); sp.tri([x - 0.07, 0.06, z], [x, 0.26, z], [x + 0.07, 0.06, z], '#D9DEE6', 0.705); } }
+  const bar = new MeshBuilder();
+  for (let k = 0; k < 5; k++) bar.box(-1.6 + k * 0.8, 0.95, 0, 0.8, 0.32, 0.08, k % 2 ? '#F4F6F8' : '#E5292E', 0.553);
+  for (const x of [-1.7, 1.7]) { bar.box(x, 0.5, 0, 0.08, 1.0, 0.08, '#2A2D33', 0.745); bar.box(x, 0.04, 0, 0.5, 0.08, 0.5, '#2A2D33', 0.745); }
+  bar.box(-1.7, 1.2, 0, 0.18, 0.14, 0.14, '#FFB020', 0.92);
+  bar.box(1.7, 1.2, 0, 0.18, 0.14, 0.14, '#FFB020', 0.92);
+  return { rocket: rk.build(), bottle: bt.build(), bottles, shield: sh.build(), oil: oil.build(), mine: mn.build(), spike: sp.build(), barrier: bar.build() };
 }

@@ -6575,23 +6575,24 @@ function WnSegments({ total, at, onArt, dark }) {
 }
 
 const WN_HIGHLIGHTS = [
-  { k: 'gulp44', art: 'gulp44h', go: 'games', cta: 'Open Games', title: 'A brand new Gulp', text: 'New hand drawn fish with real faces, stronger skills with big effects you can see, and 15 hard new levels for the brave.' },
-  { k: 'rally44', art: 'rally44h', go: 'race', cta: 'Play now', title: 'Explosions and lightning', text: 'Island Rally skills now hit hard: fireballs and smoke, lightning and shock waves, oil splashes and nitro flames. Pick hard bots or race 8 laps.' },
-  { k: 'levels44', art: 'levels44h', go: 'games', cta: 'Open Games', title: 'Longer and harder levels', text: 'Thunder ruins and Shadow keep in Roll Squad with the longest levels yet, and 12 new Two Torches temples with more enemies.' },
-  { k: 'music44', art: 'music44h', go: 'games', cta: 'Open Games', title: 'Music in every lobby', text: 'Each game lobby plays its own song. Chunky new game buttons, and games stay smooth on small phones.' },
+  { k: 'siege45', art: 'siege45h', go: 'siege', cta: 'Play now', title: 'Scrap Siege', text: 'A new live game for up to four friends. Pick Blaze, Pip, Boom or Mira and hold off waves of robots, with a boss every five waves. Bot friends join when you play alone.' },
+  { k: 'police45', art: 'police45h', go: 'race', cta: 'Play now', title: 'Police chases', text: 'Play Island Rally as a racer or as the police. Bust racers with spike strips, roadblocks and rams, or add police to any race. Up to eight players now.' },
+  { k: 'cuts45', art: 'cuts45h', go: 'race', cta: 'Play now', title: 'Shortcuts and new skills', text: 'Dirt road shortcuts on every map, seven new skills like mines, EMP and ghost, and five kinds of energy drinks.' },
+  { k: 'talk45', art: 'talk45h', go: 'games', cta: 'Open Games', title: 'See who is talking', text: 'When a friend talks in a live game, their name lights up at the top of the screen.' },
 ];
 const WN_SECTIONS = [
   { title: 'Games', items: [
-    { art: 'gulp44', title: 'A brand new Gulp', text: 'New fish, stronger skills and 15 hard levels.' },
-    { art: 'rally44', title: 'Explosions and lightning', text: 'Fire, smoke, lightning, hard bots and 8 laps.' },
-    { art: 'levels44', title: 'Longer and harder levels', text: 'Two new Roll Squad worlds and 12 new temples.' },
-    { art: 'music44', title: 'Music in every lobby', text: 'A song for each lobby and new game buttons.' },
+    { art: 'siege45', title: 'Scrap Siege', text: 'Four heroes against waves of robots.' },
+    { art: 'police45', title: 'Police chases', text: 'Race or chase in Island Rally, now for eight.' },
+    { art: 'cuts45', title: 'Shortcuts and new skills', text: 'Dirt roads, seven skills and new drinks.' },
+    { art: 'talk45', title: 'See who is talking', text: 'Names light up when friends talk.' },
   ] },
 ];
 const WN_NEW_COUNT = WN_SECTIONS.reduce((n, sec) => n + sec.items.length, 0);
 const WN_SUMMARY = `${WN_NEW_COUNT} new things to try.`;
 
 const WN_EARLIER = [
+  { title: 'Explosions, a new Gulp and longer levels', text: 'Fireballs and lightning in Island Rally, a brand new Gulp with 15 hard levels, longer Roll Squad and Two Torches levels, and music in every lobby.' },
   { title: 'New game lobbies and watching friends', text: 'Watch and join any game, Island Rally jumps and crashes, Roll Squad team levels and new lobbies with the game playing behind.' },
   { title: 'Attack race and three new maps', text: 'Rockets, oil, shock and shields in Island Rally, plus Tea hills, City lights and Lion rock and rebuilt cars.' },
   { title: 'Island Rally', text: 'Real 3D racing for up to six friends with mic, four rides and bots any time.' },

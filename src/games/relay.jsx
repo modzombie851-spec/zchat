@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../supabaseClient.js';
 import { rtKeep, rtDrop, rtReady, gameIceConfig } from '../App.jsx';
+import { talkTap, talkDrop } from './talk.js';
 
 const testHooks = new Set();
 if (typeof window !== 'undefined' && window.__zfake) {
@@ -289,7 +290,7 @@ export function useMeshRoom({ id, myId, enabled = true, meta, fast, audio = fals
     const key = st.peers.map((p) => `${p}:${out[p]}`).join('|');
     if (key !== st.linkKey) { st.linkKey = key; setLinks(out); }
   };
-  const dropAudio = (c) => { if (c && c.audio) { try { c.audio.pause(); } catch {} try { c.audio.srcObject = null; } catch {} c.audio = null; } };
+  const dropAudio = (c) => { if (c && c.p) talkDrop(c.p); if (c && c.audio) { try { c.audio.pause(); } catch {} try { c.audio.srcObject = null; } catch {} c.audio = null; } };
   const closeConn = (p) => {
     const st = S.current;
     const c = st.conns.get(p);
@@ -317,6 +318,7 @@ export function useMeshRoom({ id, myId, enabled = true, meta, fast, audio = fals
     const stream = e.streams && e.streams[0] ? e.streams[0] : new MediaStream([e.track]);
     if (!c.audio) { const a = new Audio(); a.autoplay = true; a.playsInline = true; c.audio = a; }
     c.audio.srcObject = stream;
+    talkTap(p, stream);
     c.audio.muted = !!st.muted[p];
     try { c.audio.volume = st.vols && st.vols[p] != null ? st.vols[p] : 1; } catch {}
     const r = c.audio.play();
@@ -325,7 +327,7 @@ export function useMeshRoom({ id, myId, enabled = true, meta, fast, audio = fals
   const mkConn = (p, peerSid, tries) => {
     const st = S.current;
     const pc = new RTCPeerConnection(st.ice || undefined);
-    const c = { pc, sid: peerSid, state: 'new', tries: tries || 0, at: Date.now(), dcU: null, dcR: null, tr: null, audio: null, dead: false };
+    const c = { pc, sid: peerSid, state: 'new', tries: tries || 0, at: Date.now(), dcU: null, dcR: null, tr: null, audio: null, dead: false, p };
     st.conns.set(p, c);
     c.dcU = pc.createDataChannel('u', { negotiated: true, id: 1, ordered: false, maxRetransmits: 0 });
     c.dcR = pc.createDataChannel('r', { negotiated: true, id: 2, ordered: true });
@@ -538,6 +540,7 @@ export function useMeshRoom({ id, myId, enabled = true, meta, fast, audio = fals
       cloud(env('bye', {}));
       for (const p of [...st.conns.keys()]) closeConn(p);
       if (st.track) { try { st.track.stop(); } catch {} st.track = null; }
+      talkDrop(myId);
       const ch = st.ch;
       if (ch) { try { const r = ch.untrack(); if (r && r.catch) r.catch(() => {}); } catch {} }
       st.ok = false;
@@ -563,6 +566,7 @@ export function useMeshRoom({ id, myId, enabled = true, meta, fast, audio = fals
       st.track = null;
       for (const c of st.conns.values()) if (c.tr && !c.dead) { try { await c.tr.sender.replaceTrack(null); } catch {} }
       try { t.stop(); } catch {}
+      talkDrop(myId);
       setMic({ on: false, err: '' });
       send('mic', { on: false });
       return;
@@ -573,6 +577,7 @@ export function useMeshRoom({ id, myId, enabled = true, meta, fast, audio = fals
       const t = stream.getAudioTracks()[0];
       if (!st.alive) { try { t.stop(); } catch {} return; }
       st.track = t;
+      talkTap(myId, stream);
       for (const c of st.conns.values()) if (c.tr && !c.dead) { try { await c.tr.sender.replaceTrack(t); } catch {} }
       setMic({ on: true, err: '' });
       send('mic', { on: true });

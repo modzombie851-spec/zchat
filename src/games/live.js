@@ -86,7 +86,7 @@ export async function loadLiveFriends() {
   return Array.isArray(d) ? d : [];
 }
 
-export const LIVE_ROOM_MAX = { gulpco: 10, roll: 4, race: 6 };
+export const LIVE_ROOM_MAX = { gulpco: 10, roll: 4, race: 8, siege: 4 };
 export function liveKind(r, max = LIVE_ROOM_MAX) {
   const info = (r && r.info) || {};
   const k = r && r.game === 'gulp' && info.co ? 'gulpco' : (r && r.game) || '';

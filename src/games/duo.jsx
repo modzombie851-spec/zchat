@@ -5,8 +5,9 @@ import { setWatchAllowed, useLiveBeacon, useGamePrivacy } from './live.js';
 import { EMOTES, SignalBars, PingChip, SpeakerIcon, SmileIcon, Check, Heart, MicIcon, ChatIcon, SwapIcon, HandIcon, btnBase, Btn, RoundBtn, Sheet, Stars, injectCss, useVoice, setKitTap } from './livekit.jsx';
 import { LIVES, GLYPHS, GLYPH_NAMES, STORY_N, ENDLESS, ATK_CD, levelDef, makeWorld, stepWorld, buddyInput, applyEvent, snapshot, mergeSnapshot, sameLevel, syncClock, setNet, nearDial, nearMirror, turnMirror, foeRows, setFoes, tryCode, hintFor, aimTarget, clamp, missionsFor, parTime, spikeAmt, crumbleState, demoInputs, demoDuoWorld } from './duoengine.js';
 import { Snd, THEMES, buildStatic, buildMini, drawDuoMini, render, updateParts, dust, puffs, embers, glints, part, ring, glyph, drawExplorer , setDuoLite } from './duodraw.js';
-import { GC, GBtn, GPill, GPanel, GChip, GTitle, GJoy, GIcon, GHudBtn, GHudPanel, GHudSkill, GHint, GStat, GNotices, useNotices, useWatchNotices, injectKitCss, kitTap, pressProps, INK, newBudget, budgetTick, useCtlLook, useGameStage, stagePoint, GControlsPanel, GLobby, GSlot, GLobbySheet, GVolBars, GSeg } from './gamekit.jsx';
+import { GC, GBtn, GPill, GPanel, GChip, GTitle, GJoy, GIcon, GHudBtn, GHudPanel, GHudSkill, GHint, GStat, GNotices, useNotices, useWatchNotices, injectKitCss, kitTap, pressProps, INK, newBudget, budgetTick, useCtlLook, useGameStage, stagePoint, GControlsPanel, GLobby, GSlot, GLobbySheet, GVolBars, GSeg , GTalkers } from './gamekit.jsx';
 import { Sfx } from './sfx.js';
+import { useTalking } from './talk.js';
 
 const dbud = newBudget();
 const PHRASES = ['Wait for me', 'Go ahead', 'Over here', 'Hold the plate', 'Come closer, I need light', 'On three', 'Nice one', 'Sorry', 'I will get the lever', 'Follow me'];
@@ -95,6 +96,7 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
   const relay = watch ? wrelay : relay0;
   const here = solo ? true : relay.here;
   const voice = useVoice(solo || watch ? null : relay, !solo && !watch, host && !solo);
+  const talking = useTalking(!solo && !watch, { peer: voice.peerMuted });
   const gamePriv = useGamePrivacy();
   const allowWatch = gamePriv.show && gamePriv.watch;
   const setAllowWatch = () => {};
@@ -1014,6 +1016,7 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
             </div>
           </Sheet>
         )}
+        <GTalkers ids={talking} nameOf={(k) => (k === 'me' ? 'You' : peerFirst)} top={top(phase === 'play' ? 46 : 50)} />
         <GNotices items={notes} style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', ...(phase === 'pick' ? { top: top(64) } : land ? (intro ? { bottom: bottom(64) } : { top: top(46) }) : { bottom: bottom(armB + 14) }), width: land ? 'min(52%, 420px)' : 'calc(100% - 40px)', zIndex: 30 }} />
         {chatSheet}
         {sheet && sheet.k === 'voice' && !solo && !watch && (

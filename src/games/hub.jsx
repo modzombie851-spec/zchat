@@ -203,7 +203,7 @@ function OnlineCard({ online, onOpen }) {
   );
 }
 
-export function GamesPage({ onClose, onChallenge, onShareScore, initialGame, friends, onPlayWith, onStartLive, onRollInvite, onRaceInvite, onRaceSolo, onGulpRoom, onWatch, onJoinLive, onOpenLeaderboard, onPlayBot, myId, me, onRoomHost, onRoomGuest, initialRoom, playToo }) {
+export function GamesPage({ onClose, onChallenge, onShareScore, initialGame, friends, onPlayWith, onStartLive, onRollInvite, onRaceInvite, onRaceSolo, onSiegeInvite, onSiegeSolo, onGulpRoom, onWatch, onJoinLive, onOpenLeaderboard, onPlayBot, myId, me, onRoomHost, onRoomGuest, initialRoom, playToo }) {
   injectHubCss();
   injectCastCss();
   useBackClose(true, onClose);
@@ -311,12 +311,26 @@ export function GamesPage({ onClose, onChallenge, onShareScore, initialGame, fri
             </>
           )}
           <div style={{ position: 'relative', borderRadius: 22, overflow: 'hidden', margin: '6px 0 4px', boxShadow: '0 10px 24px rgba(0,0,0,0.22)' }}>
+            <GameArt k="siege" width="100%" height={168} radius={0} style={{ width: '100%' }} />
+            <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(12,18,10,0) 18%, rgba(12,18,10,0.5) 52%, rgba(12,18,10,0.9) 100%)' }} />
+            <div style={{ position: 'absolute', left: 14, right: 14, bottom: 12, display: 'flex', alignItems: 'flex-end', gap: 10 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 19, fontWeight: 900, color: '#FFFFFF' }}>Scrap Siege</div>
+                <div style={{ fontSize: 12.5, fontWeight: 600, color: 'rgba(255,255,255,0.85)', lineHeight: 1.35 }}>Up to four friends pick a hero and hold off waves of robots, with a boss every five waves.</div>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
+                {onSiegeInvite && <GameButton small color="gold" label="Invite friends" onClick={() => { tap(); noteRecent('siege'); onSiegeInvite(); }} />}
+                {onSiegeSolo && <GameButton small color="white" label="Play with bots" onClick={() => { tap(); noteRecent('siege'); onSiegeSolo(); }} />}
+              </div>
+            </div>
+          </div>
+          <div style={{ position: 'relative', borderRadius: 22, overflow: 'hidden', margin: '10px 0 4px', boxShadow: '0 10px 24px rgba(0,0,0,0.22)' }}>
             <GameArt k="race" width="100%" height={168} radius={0} style={{ width: '100%' }} />
             <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(10,16,30,0) 34%, rgba(10,16,30,0.86) 100%)' }} />
             <div style={{ position: 'absolute', left: 14, right: 14, bottom: 12, display: 'flex', alignItems: 'flex-end', gap: 10 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 19, fontWeight: 900, color: '#FFFFFF' }}>Island Rally</div>
-                <div style={{ fontSize: 12.5, fontWeight: 600, color: 'rgba(255,255,255,0.85)', lineHeight: 1.35 }}>Race up to six friends on four maps, or switch on Attack race with rockets, oil and shields.</div>
+                <div style={{ fontSize: 12.5, fontWeight: 600, color: 'rgba(255,255,255,0.85)', lineHeight: 1.35 }}>Race up to eight friends on four maps, or switch on Attack race with rockets, oil and shields.</div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
                 {onRaceInvite && <GameButton small color="gold" label="Invite friends" onClick={() => { tap(); noteRecent('race'); onRaceInvite(); }} />}
@@ -330,7 +344,7 @@ export function GamesPage({ onClose, onChallenge, onShareScore, initialGame, fri
             <div style={{ position: 'absolute', left: 14, right: 14, bottom: 12, display: 'flex', alignItems: 'flex-end', gap: 10 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 19, fontWeight: 900, color: '#FFFFFF' }}>Roll Squad</div>
-                <div style={{ fontSize: 12.5, fontWeight: 600, color: 'rgba(255,255,255,0.85)', lineHeight: 1.35 }}>Up to four friends roll and team up through 54 longer levels with plates, bridges and team gates.</div>
+                <div style={{ fontSize: 12.5, fontWeight: 600, color: 'rgba(255,255,255,0.85)', lineHeight: 1.35 }}>Up to four friends roll and team up through 66 longer levels with plates, bridges and team gates.</div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
                 {onRollInvite && <GameButton small color="gold" label="Invite friends" onClick={() => { tap(); noteRecent('roll'); onRollInvite(); }} />}

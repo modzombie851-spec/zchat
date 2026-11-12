@@ -1,5 +1,6 @@
 import { hexRgb } from './race3d.js';
 import { fbm, mixc, smooth, hash2 } from './racetrack.js';
+import { drinkOf } from './raceengine.js';
 
 const C = (h) => hexRgb(h);
 const lin = (h) => C(h).map((v) => v ** 2.2);
@@ -393,6 +394,6 @@ export const MAP_KEYS = ['coast', 'hills', 'city', 'rock'];
 export function bottleSpots(T) {
   const out = [];
   const gap = 230;
-  for (let s = 180; s < T.total - 60; s += gap) for (const x of [-3.8, 0, 3.8]) out.push({ s: s + (x === 0 ? 0 : 1.5), x });
+  for (let s = 180; s < T.total - 60; s += gap) for (const x of [-3.8, 0, 3.8]) out.push({ s: s + (x === 0 ? 0 : 1.5), x, k: drinkOf(out.length) });
   return out;
 }

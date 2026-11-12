@@ -400,7 +400,8 @@ void main() {
     else if (t < 16.5) { a = (1.0 - smoothstep(0.0, 1.0, r)) * vInfo.x; c = vec3(1.0, 0.94, 0.8) * 2.4; add = 1.0; }
     else if (t < 17.5) { float e = 1.0 - smoothstep(0.55, 0.95, r); float hi = 1.0 - smoothstep(0.0, 0.3, length(vUv - vec2(-0.3, 0.35))); a = e * vInfo.x; c = vec3(0.04, 0.04, 0.06) + hi * 0.55; }
     else if (t < 18.5) { float e = 1.0 - smoothstep(0.35 + n * 0.35, 1.0, r); a = e * vInfo.x * 0.7; c = mix(vec3(0.72, 0.72, 0.74), vec3(0.92, 0.92, 0.94), n); }
-    else { float core = 1.0 - smoothstep(0.0, 0.5, r); c = mix(vec3(0.22, 0.32, 1.0), vec3(0.72, 0.9, 1.0), core) * 1.5; a = (1.0 - smoothstep(0.1 + n * 0.3, 1.0, r)) * vInfo.x; add = 1.0; }
+    else if (t < 19.5) { float core = 1.0 - smoothstep(0.0, 0.5, r); c = mix(vec3(0.22, 0.32, 1.0), vec3(0.72, 0.9, 1.0), core) * 1.5; a = (1.0 - smoothstep(0.1 + n * 0.3, 1.0, r)) * vInfo.x; add = 1.0; }
+    else { float core = 1.0 - smoothstep(0.0, 0.35, r); c = mix(vec3(0.12, 0.32, 1.0), vec3(0.8, 0.9, 1.0), core) * 1.8; a = (core * 0.9 + (1.0 - smoothstep(0.0, 1.0, r)) * 0.6) * vInfo.x; add = 1.0; }
     float d0 = length(uCam - vPos);
     a *= smoothstep(1.2, 5.5, d0);
     float f0 = 1.0 - exp(-pow(d0 * uFogDen, 1.35));

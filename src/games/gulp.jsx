@@ -3,11 +3,12 @@ import { Avatar, Portal, useBackClose, hapticTap, FONT, Spinner } from '../App.j
 import { useGameLink, useRoomRelay, useWatchChannel, useMeshRoom } from './relay.jsx';
 import { setWatchAllowed, useLiveBeacon, useGamePrivacy } from './live.js';
 import { EMOTES, PingChip, Sheet, injectCss, useVoice } from './livekit.jsx';
-import { GC, GBtn, GPill, GPanel, GChip, GTitle, GJoy, GIcon, GControlsPanel, GHudBtn, GHudPanel, GHudSkill, GFeed, GRibbon, GHint, GIconCap, GStat, GNotices, useNotices, useWatchNotices, GSkillArt, useCtlLook, useGameStage, useJoystick, injectKitCss, kitTap, pressProps, maxDpr, INK, GVolBars, GLobby, GSlot, GLobbySheet , weakPhone } from './gamekit.jsx';
+import { GC, GBtn, GPill, GPanel, GChip, GTitle, GJoy, GIcon, GControlsPanel, GHudBtn, GHudPanel, GHudSkill, GFeed, GRibbon, GHint, GIconCap, GStat, GNotices, useNotices, useWatchNotices, GSkillArt, useCtlLook, useGameStage, useJoystick, injectKitCss, kitTap, pressProps, maxDpr, INK, GVolBars, GLobby, GSlot, GLobbySheet , weakPhone , GTalkers } from './gamekit.jsx';
 import { Sfx } from './sfx.js';
 import { WW, WH, LIVES, MAXN, STAGES, SKILLS, SKILL_KEYS, SPECIES, rOf, viewOf, stageOf, clamp, makeGame, spawnFish, hostStep, applyGuestEvent, snap, applySnap, guestFollow, setNet, followNet, movePlayer, tickPlayer, canEat, canTake, canOpen, chestGain, eatGain, botInput, useSkill, addPlayer, dropPlayer, adoptHost } from './gulpengine.js';
 import { render, makeDeco, updateParts, bubbles, floatText, burst, bits, ring, zap, drawRadar, placeName, drawBadge, drawSpecies, fmtN, PLAYER_PAL, SLOT_KEYS, warmSprites } from './gulpdraw.js';
 import { GULP_LEVELS, goalText, rulesText, goalProgress, starsFor, readLevels, saveLevel, pickMission, missionProgress, missionLabel, missionShort, REWARDS } from './gulplevels.js';
+import { useTalking } from './talk.js';
 
 const QUICK = ['Come here', 'Run', 'Big fish', 'Nice one', 'Watch out', 'Good game'];
 const PHRASES = ['Come here', 'Run', 'Big fish behind you', 'Nice one', 'Watch out', 'Good game', 'Rematch', 'Sorry'];
@@ -79,6 +80,7 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
   const relay = isRoom ? mesh : isWatch ? wrelay : relay0;
   const here = isSolo ? true : relay.here;
   const voice = useVoice(isDuel ? relay0 : null, isDuel, host && isDuel);
+  const talking = useTalking(isDuel || isRoom, isRoom ? mesh.muted : { peer: voice.peerMuted });
   const gamePriv = useGamePrivacy();
   const allowWatch = gamePriv.show && gamePriv.watch;
   const setAllowWatch = () => {};
@@ -1370,6 +1372,7 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
             </Sheet>
           )}
 
+          <GTalkers ids={talking} nameOf={(k) => (k === 'me' || k === mine ? 'You' : k === 'peer' ? nameOf(theirs) : nameOf(k))} top={top(phase === 'play' ? (land ? 58 : 96) : 50)} />
           <GNotices items={notes} style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', ...(phase !== 'play' ? { top: top(64) } : land ? { top: top(100) } : { bottom: bottom(armB + 40) }), width: land ? 'min(52%, 420px)' : 'calc(100% - 40px)', zIndex: 30 }} />
           {chatSheet}
         </div>

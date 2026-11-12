@@ -1,26 +1,62 @@
 export const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 export const LAPS = 3;
-export const MAX_RACERS = 6;
+export const MAX_RACERS = 8;
 export const CAR_KEYS = ['sport', 'hatch', 'jeep', 'tuktuk'];
 export const CARS = {
   sport: { name: 'Sports car', vmax: 49, acc: 10.5, turn: 1.15, grip: 1, boost: 1, mass: 1, len: 2.2 },
   hatch: { name: 'Hatchback', vmax: 47.5, acc: 11.5, turn: 1.25, grip: 1.05, boost: 1.05, mass: 0.95, len: 1.95 },
   jeep: { name: 'Jeep', vmax: 46.5, acc: 10, turn: 1.1, grip: 1.1, boost: 1, mass: 1.35, len: 2.1 },
   tuktuk: { name: 'Tuk tuk', vmax: 44.5, acc: 12.5, turn: 1.45, grip: 1.15, boost: 1.3, mass: 0.75, len: 1.45 },
+  cop: { name: 'Police car', vmax: 50.5, acc: 11.5, turn: 1.22, grip: 1.08, boost: 1.05, mass: 1.25, len: 2.0 },
 };
-export const COLORS = ['#FFC23D', '#FF5146', '#3D8BFF', '#3FC67E', '#A979FF', '#FF7EB9'];
-export const BOT_NAMES = ['Kasun', 'Ishara', 'Amaya', 'Ravi', 'Dulani', 'Tharaka'];
+export const COLORS = ['#FFC23D', '#FF5146', '#3D8BFF', '#3FC67E', '#A979FF', '#FF7EB9', '#FF8A2A', '#2BC7D6'];
+export const BOT_NAMES = ['Kasun', 'Ishara', 'Amaya', 'Ravi', 'Dulani', 'Tharaka', 'Nethmi', 'Sahan'];
 export const SKILLS = {
   rocket: { name: 'Rocket', cost: 35, cd: 6, icon: 'rocket', key: '1' },
   shield: { name: 'Shield', cost: 25, cd: 9, icon: 'shield', key: '2' },
   oil: { name: 'Oil', cost: 20, cd: 5, icon: 'drop', key: '3' },
   shock: { name: 'Shock', cost: 40, cd: 10, icon: 'bolt', key: '4' },
+  mine: { name: 'Mine', cost: 25, cd: 6, text: 'Drop a mine behind you' },
+  emp: { name: 'EMP', cost: 30, cd: 9, text: 'Stop the car ahead from using skills and nitro' },
+  ghost: { name: 'Ghost', cost: 30, cd: 12, text: 'Nothing can hit you for a few seconds' },
+  hop: { name: 'Super jump', cost: 20, cd: 6, text: 'Jump over oil, mines and cars' },
+  spike: { name: 'Spike strip', cost: 30, cd: 8, text: 'Throw spikes in front of a racer' },
+  block: { name: 'Roadblock', cost: 40, cd: 14, text: 'Block the road ahead of the leader' },
+  ram: { name: 'Ram', cost: 20, cd: 7, text: 'Speed up and smash into racers' },
 };
+SKILLS.rocket.text = 'A rocket that chases the car ahead';
+SKILLS.shield.text = 'Block one hit';
+SKILLS.oil.text = 'Leave oil that spins cars';
+SKILLS.shock.text = 'Shock every car close to you';
 export const SKILL_KEYS = ['rocket', 'shield', 'oil', 'shock'];
+export const RACER_SKILLS = ['rocket', 'shield', 'oil', 'shock', 'mine', 'emp', 'ghost', 'hop'];
+export const COP_SKILLS = ['spike', 'emp', 'block', 'ram'];
+export const BUST_R = 4.6;
+export const BUST_V = 12.5;
 export const EN_START = 40;
 export const EN_MAX = 100;
 export const BOTTLE_EN = 34;
 export const BOTTLE_BACK = 6;
+export const DRINKS = {
+  en: { name: 'Energy drink', col: '#36E0B0', band: '#F4F6F8', cap: '#E9EDF2', glow: 3 },
+  nitro: { name: 'Nitro drink', col: '#2F7BFF', band: '#DCEAFF', cap: '#C9D6E8', glow: 6 },
+  shield: { name: 'Shield drink', col: '#8EE6FF', band: '#FFFFFF', cap: '#D7F6FF', glow: 6 },
+  rage: { name: 'Rage drink', col: '#FF3D4E', band: '#FFE1E1', cap: '#2A1A1C', glow: 8 },
+  gold: { name: 'Gold drink', col: '#FFC23D', band: '#FFF2C7', cap: '#7A5410', glow: 7 },
+};
+export const DRINK_KEYS = ['en', 'nitro', 'shield', 'rage', 'gold'];
+export function drinkOf(i) {
+  const row = Math.floor(i / 3), lane = i % 3;
+  if (row % 4 === 3 && lane === 1) return 'gold';
+  return ['en', 'nitro', 'en', 'shield', 'en', 'rage'][(row * 2 + lane) % 6];
+}
+export function drinkUse(c, k) {
+  if (k === 'nitro') { c.meter = 1; c.boostT = Math.max(c.boostT || 0, 0.9); }
+  else if (k === 'rage') { c.en = Math.min(EN_MAX, c.en + 20); c.rage = 8; }
+  else if (k === 'gold') { c.en = EN_MAX; if (c.cd) for (const q in c.cd) c.cd[q] = 0; }
+  else if (k === 'shield') c.en = Math.min(EN_MAX, c.en + 10);
+  else c.en = Math.min(EN_MAX, c.en + BOTTLE_EN);
+}
 export const ROCKET_V = 96;
 export const SPIN_ROCKET = 1.35;
 export const SPIN_OIL = 0.95;
@@ -90,7 +126,7 @@ export function gridSpot(slot) {
 }
 export function mkCar(id, slot, type) {
   const g = gridSpot(slot);
-  return { id, slot, type: CARS[type] ? type : 'sport', s: g.s, x: g.x, v: 0, yaw: 0, steer: 0, drift: 0, meter: 0, boostT: 0, bump: 0, fin: 0, lapAt: 0, lapBest: 0, lap: 0, wall: 0, en: EN_START, cd: { rocket: 0, shield: 0, oil: 0, shock: 0 }, shield: 0, spin: 0, spinMax: 1, slow: 0, wheel: 0, brake: 0 };
+  return { id, slot, type: CARS[type] ? type : 'sport', s: g.s, x: g.x, v: 0, yaw: 0, steer: 0, drift: 0, meter: 0, boostT: 0, bump: 0, fin: 0, lapAt: 0, lapBest: 0, lap: 0, wall: 0, en: EN_START, cd: {}, shield: 0, spin: 0, spinMax: 1, slow: 0, wheel: 0, brake: 0 };
 }
 
 export function lapOf(c, T, laps) { return clamp(Math.floor(Math.max(0, c.s) / T.total) + 1, 1, laps); }
@@ -110,21 +146,29 @@ export function stepCar(c, T, inp, dt, o = {}) {
   const braking = pedal && !drifting && !!inp.brake;
   c.brake = braking ? 1 : 0;
   c.drift += ((drifting ? 1 : 0) - c.drift) * Math.min(1, dt * (drifting ? 5 : 2.6));
-  if (!spinning && inp.boost && c.meter >= 0.3 && c.boostT <= 0) {
+  if (c.hold > 0) { c.hold = Math.max(0, c.hold - dt); c.v = Math.max(0, c.v - 40 * dt); return c; }
+  if (!spinning && inp.boost && c.meter >= 0.3 && c.boostT <= 0 && !(c.emp > 0)) {
     c.boostT = 1.1 + c.meter * 1.7;
     c.meter = 0;
     if (fx) fx.push({ k: 'boost', id: c.id });
   }
   if (c.boostT > 0) c.boostT = Math.max(0, c.boostT - dt);
   if (c.shield > 0) c.shield = Math.max(0, c.shield - dt);
+  if (c.ghost > 0) c.ghost = Math.max(0, c.ghost - dt);
+  if (c.emp > 0) c.emp = Math.max(0, c.emp - dt);
+  if (c.flat > 0) c.flat = Math.max(0, c.flat - dt);
+  if (c.ram > 0) { c.ram = Math.max(0, c.ram - dt); c.boostT = Math.max(c.boostT, 0.15); }
   if (c.slow > 0) c.slow = Math.max(0, c.slow - dt);
-  if (c.cd) for (const k of SKILL_KEYS) if (c.cd[k] > 0) c.cd[k] = Math.max(0, c.cd[k] - dt);
+  if (c.cd) { const cdt = c.rage > 0 ? dt * 2 : dt; for (const k in c.cd) if (c.cd[k] > 0) c.cd[k] = Math.max(0, c.cd[k] - cdt); }
+  if (c.rage > 0) c.rage = Math.max(0, c.rage - dt);
   const w = T.w;
   const off = Math.abs(c.x) > w + 1.4;
   let vmax = spec.vmax * (o.mul || 1);
   if (c.boostT > 0) vmax += 15;
   if (off) vmax *= 0.56;
   if (c.slow > 0) vmax *= 0.55;
+  if (c.emp > 0) vmax *= 0.86;
+  if (c.flat > 0) vmax *= 0.62;
   vmax *= 1 - c.drift * 0.07;
   vmax *= 1 - clamp(p.slope * 0.9, -0.04, 0.08);
   if (spinning) {
@@ -223,21 +267,37 @@ export function botInput(c, T, all, t, skill = 1, seek = null) {
   return { steer, drift, boost };
 }
 
-export function botSkill(c, all, rockets, rnd, dt) {
-  if (c.fin || c.spin > 0) return null;
-  const can = (k) => c.en >= SKILLS[k].cost && c.cd[k] <= 0;
-  if (can('shield') && c.shield <= 0 && rockets.some((r) => r.tg === c.id && r.s < c.s && c.s - r.s < 50) && rnd() < 0.65) return { k: 'shield' };
+export function botSkill(c, all, rockets, rnd, dt, o = {}) {
+  if (c.fin || c.spin > 0 || c.busted || c.emp > 0) return null;
+  const kit = c.kit || SKILL_KEYS;
+  const has = (k) => kit.includes(k);
+  const can = (k) => has(k) && c.en >= SKILLS[k].cost && !(c.cd[k] > 0);
+  const incoming = rockets.some((r) => r.tg === c.id && r.s < c.s && c.s - r.s < 50);
+  if (incoming && can('shield') && c.shield <= 0 && rnd() < 0.65) return { k: 'shield' };
+  if (incoming && can('ghost') && rnd() < 0.5) return { k: 'ghost' };
+  if (o.danger && can('hop') && rnd() < 0.5) return { k: 'hop' };
+  if (o.danger && can('ghost') && rnd() < 0.4) return { k: 'ghost' };
   if (rnd() > dt * 1.1) return null;
+  const foe = o.foe || (() => true);
   let ahead = null, best = 1e9, behind = 0, close = 0;
-  for (const o of all) {
-    if (o === c || o.fin) continue;
-    const ds = o.s - c.s;
-    if (ds > 8 && ds < 110 && ds < best) { best = ds; ahead = o; }
-    if (ds < -3 && ds > -24 && Math.abs(o.x - c.x) < 4.5) behind++;
-    if (Math.abs(ds) < 17 && Math.abs(o.x - c.x) < 9) close++;
+  for (const q of all) {
+    if (q === c || q.fin || q.busted || !foe(q)) continue;
+    const ds = q.s - c.s;
+    if (ds > 6 && ds < 110 && ds < best) { best = ds; ahead = q; }
+    if (ds < -3 && ds > -24 && Math.abs(q.x - c.x) < 4.5) behind++;
+    if (Math.abs(ds) < 17 && Math.abs(q.x - c.x) < 9) close++;
+  }
+  if (c.cop) {
+    if (ahead && best < 18 && can('ram')) return { k: 'ram', tg: ahead.id };
+    if (ahead && best < 90 && can('emp')) return { k: 'emp', tg: ahead.id };
+    if (ahead && best < 120 && can('spike')) return { k: 'spike', tg: ahead.id };
+    if (ahead && best < 150 && can('block') && rnd() < 0.5) return { k: 'block', tg: ahead.id };
+    return null;
   }
   if (can('rocket') && ahead) return { k: 'rocket', tg: ahead.id };
+  if (can('emp') && ahead && best < 80) return { k: 'emp', tg: ahead.id };
   if (can('shock') && close >= 2) return { k: 'shock' };
+  if (can('mine') && behind > 0) return { k: 'mine' };
   if (can('oil') && behind > 0) return { k: 'oil' };
   return null;
 }
@@ -245,13 +305,15 @@ export function botSkill(c, all, rockets, rnd, dt) {
 export function rocketStep(r, cars, dt) {
   r.life -= dt;
   r.age = (r.age || 0) + dt;
+  const t0 = r.tg ? cars[r.tg] : null;
+  if (t0 && (t0.sc >= 0 || t0.ghost > 0)) r.tg = null;
   const tgt = r.tg ? cars[r.tg] : null;
   r.s += r.v * dt;
   if (tgt && !tgt.fin) { const dx = tgt.x - r.x; r.x += Math.sign(dx) * Math.min(Math.abs(dx), (10 + r.age * 8) * dt); }
   for (const id of Object.keys(cars)) {
     if (id === r.by) continue;
     const c = cars[id];
-    if (c.fin) continue;
+    if (c.fin || c.sc >= 0 || c.ghost > 0 || c.park || c.busted) continue;
     if (Math.abs(c.s - r.s) < 2.1 && Math.abs(c.x - r.x) < 1.6 && (c.air || 0) < 2.2) return c;
   }
   return null;
@@ -273,3 +335,42 @@ export const fmtRace = (t) => {
   const m = Math.floor(t / 60), s = t - m * 60;
   return `${m}:${s < 10 ? '0' : ''}${s.toFixed(2)}`;
 };
+
+export const cutOf = (T, c) => (c && c.sc >= 0 && T && T.cuts ? T.cuts[c.sc] || null : null);
+export const carAt = (T, c) => { const P = cutOf(T, c); return P ? P.at(c.ss, c.sx) : T.at(c.s, c.x); };
+const wrapA = (a) => { let d = a; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2; return d; };
+export function driveCar(T, c, inpOf, dt, o) {
+  const P = cutOf(T, c);
+  if (P) {
+    const base = c.cutBase;
+    c.s = c.ss; c.x = c.sx;
+    stepCar(c, P, inpOf(P), dt, { ...o, mul: (o.mul || 1) * 0.95 });
+    c.ss = c.s; c.sx = c.x;
+    if (c.ss >= P.total - 0.2) {
+      const e = P.S[P.N - 1], q = T.at(P.s1, P.side * (T.w + 0.3));
+      const dh = wrapA(e.heading - q.heading);
+      c.sc = -1; c.s = base + P.arc + (c.ss - P.total); c.x = P.side * (T.w + 0.3) + c.sx * Math.cos(dh); c.yaw = clamp(c.yaw + dh, -0.85, 0.85);
+    } else if (c.ss < -0.5) {
+      c.sc = -1; c.s = base + c.ss; c.x = P.side * (T.w + 0.3) + c.sx;
+    } else { c.s = base + (c.ss / P.total) * P.arc; c.x = P.side * (T.w + 2); }
+    return;
+  }
+  stepCar(c, T, inpOf(T), dt, o);
+  if (!T.cuts || !T.cuts.length || c.inAir) return;
+  const u = ((c.s % T.total) + T.total) % T.total;
+  for (let i = 0; i < T.cuts.length; i++) {
+    const C = T.cuts[i];
+    if (u > C.s0 - 10 && u < C.s0 + 8 && c.x * C.side > T.w - 1.2 && c.yaw * C.side > -0.3) {
+      const pw = T.at(c.s, c.x), e = C.S[0];
+      const dx = pw.x - e.x, dz = pw.z - e.z;
+      c.cutBase = c.s - u + C.s0;
+      c.ss = Math.max(0, dx * e.tx + dz * e.tz);
+      c.sx = clamp(dx * e.rx + dz * e.rz, -C.w, C.w);
+      c.yaw = clamp(c.yaw + wrapA(pw.heading - e.heading), -0.85, 0.85);
+      c.sc = i;
+      c.s = c.cutBase + (c.ss / C.total) * C.arc; c.x = C.side * (T.w + 2);
+      return;
+    }
+  }
+}
+

@@ -37,6 +37,7 @@ export function injectKitCss() {
     '@keyframes zgk-rib{0%{opacity:0;transform:scaleX(.6)}10%{opacity:1;transform:none}80%{opacity:1}100%{opacity:0}}',
     '@keyframes zgk-hint{0%{opacity:0}10%{opacity:1}85%{opacity:1}100%{opacity:0}}',
     '@keyframes zgk-note{0%{opacity:0;transform:translateY(-10px) scale(.96)}7%{opacity:1;transform:none}86%{opacity:1;transform:none}100%{opacity:0;transform:translateY(-4px)}}',
+    '@keyframes zgk-talk{0%,100%{transform:scaleY(.3)}50%{transform:scaleY(1)}}',
   ].join('');
   document.head.appendChild(st);
 }
@@ -323,6 +324,22 @@ export function GJoy({ view, knobRef, color = 'blue', idle, R = 52, alpha = 1, f
   if (view) return base(view.x, view.y, 1);
   if (idle) return base(idle.x, idle.y, 0.55);
   return null;
+}
+
+export function GTalkers({ ids, nameOf, top = 10 }) {
+  injectKitCss();
+  if (!ids || !ids.length) return null;
+  return (
+    <div style={{ position: 'absolute', left: '50%', top, transform: 'translateX(-50%)', zIndex: 8, pointerEvents: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+      {ids.slice(0, 3).map((k) => (
+        <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 7, height: 28, padding: '0 11px 0 4px', borderRadius: 14, background: 'rgba(8,12,22,0.76)', boxShadow: '0 0 0 1.5px rgba(255,255,255,0.16), 0 4px 10px rgba(0,0,0,0.3)', color: '#FFFFFF', fontFamily: FONT, fontSize: 12.5, fontWeight: 800, whiteSpace: 'nowrap', animation: 'zgk-pop .18s ease-out' }}>
+          <span style={{ width: 21, height: 21, borderRadius: 11, background: 'linear-gradient(180deg, #4BE38E, #1FA85B)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: 'inset 0 -2px 0 rgba(0,0,0,0.2)' }}><GIcon k="mic" size={12} color="#FFFFFF" ink="rgba(0,0,0,0.25)" /></span>
+          <span style={{ maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis' }}>{nameOf(k)}</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 2, height: 12 }}>{[0, 1, 2].map((i) => <span key={i} style={{ width: 3, height: 12, borderRadius: 2, background: '#4BE38E', animation: `zgk-talk ${0.46 + i * 0.09}s ease-in-out ${i * 0.11}s infinite` }} />)}</span>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export function GIconCap({ icon, text, label, onPress, on = false }) {

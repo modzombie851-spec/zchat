@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { FONT, hapticTap, gameIceConfig } from '../App.jsx';
+import { talkTap, talkDrop } from './talk.js';
 
 export const EMOTES = ['👍', '😂', '😮', '😅', '❤️', '👋', '🔥', '😡'];
 let kitTap = () => { try { hapticTap(); } catch {} };
@@ -142,6 +143,7 @@ export function useVoice(relay, enabled, host) {
       s.audio.muted = s.muted;
       try { s.audio.volume = s.vol; } catch {}
       s.audio.srcObject = e.streams && e.streams[0] ? e.streams[0] : new MediaStream([e.track]);
+      talkTap('peer', s.audio.srcObject);
       const r = s.audio.play(); if (r && r.catch) r.catch(() => {});
     };
     pc.onicecandidate = (e) => { if (e.candidate) send('rtc', { c: e.candidate.toJSON ? e.candidate.toJSON() : e.candidate }); };
@@ -207,6 +209,7 @@ export function useVoice(relay, enabled, host) {
     try { if (s.track) s.track.stop(); } catch {}
     try { if (s.pc) s.pc.close(); } catch {}
     try { if (s.audio) { s.audio.srcObject = null; } } catch {}
+    talkDrop('peer'); talkDrop('me');
   }, []);
   const toggle = async () => {
     const s = S.current;
@@ -215,6 +218,7 @@ export function useVoice(relay, enabled, host) {
       try { if (s.tr) await s.tr.sender.replaceTrack(null); } catch {}
       try { if (s.track) s.track.stop(); } catch {}
       s.track = null;
+      talkDrop('me');
       setMicOn(false);
       send('mic', { on: false });
       return;
@@ -223,6 +227,7 @@ export function useVoice(relay, enabled, host) {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
       s.track = stream.getAudioTracks()[0];
+      talkTap('me', stream);
       setMicOn(true);
       send('mic', { on: true });
       if (s.tr) { try { await s.tr.sender.replaceTrack(s.track); } catch {} }

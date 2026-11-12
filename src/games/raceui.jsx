@@ -79,6 +79,119 @@ export function SkillIcon({ k, size = 34 }) {
       </svg>
     );
   }
+  if (k === 'mine') {
+    return (
+      <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true" style={{ display: 'block', overflow: 'visible' }}>
+        <defs>
+          <radialGradient id={g('m')} cx="0.36" cy="0.25" r="0.9"><stop offset="0" stopColor="#9AA3B2" /><stop offset="0.5" stopColor="#4C5464" /><stop offset="1" stopColor="#20242C" /></radialGradient>
+          <clipPath id={g('c')}><rect x="9" y="43" width="46" height="6" /></clipPath>
+        </defs>
+        <ellipse cx="32" cy="52" rx="26" ry="8" fill="#171A21" stroke={OUT} strokeWidth="2" />
+        {[-1, 1].map((sx) => <rect key={sx} x={sx < 0 ? 4.5 : 53.5} y="38" width="6" height="7" rx="1.6" fill="#3A404C" stroke={OUT} strokeWidth="1.8" />)}
+        <path d="M9 48 C9 31 19 21 32 21 C45 21 55 31 55 48 Z" fill={`url(#${g('m')})`} stroke={OUT} strokeWidth="2.4" strokeLinejoin="round" />
+        <rect x="9" y="43" width="46" height="6" fill="#F2C230" />
+        <g clipPath={`url(#${g('c')})`}>{[0, 1, 2, 3, 4, 5, 6].map((i) => <path key={i} d={`M${8 + i * 8} 49 L${13 + i * 8} 43 L${17 + i * 8} 43 L${12 + i * 8} 49 Z`} fill="#1B1E25" />)}</g>
+        <path d="M9 43 L55 43 M9 49 L55 49" stroke={OUT} strokeWidth="1.8" />
+        <rect x="27.5" y="13" width="9" height="9" rx="2" fill="#4C5464" stroke={OUT} strokeWidth="2" />
+        <circle cx="32" cy="10" r="5.2" fill="#FF3B3B" stroke={OUT} strokeWidth="2" />
+        <circle cx="30.4" cy="8.4" r="1.6" fill="#FFD0D0" />
+        <path d="M20 5 L24 8 M44 5 L40 8 M32 0.5 L32 3" stroke="#FF6B6B" strokeWidth="2.2" strokeLinecap="round" />
+        <path d="M15 39 C16 31 21 26.5 27 25" stroke="#D3DAE4" strokeWidth="2.4" strokeLinecap="round" fill="none" opacity="0.75" />
+      </svg>
+    );
+  }
+  if (k === 'emp') {
+    return (
+      <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true" style={{ display: 'block', overflow: 'visible' }}>
+        <defs>
+          <radialGradient id={g('e')} cx="0.38" cy="0.32" r="0.75"><stop offset="0" stopColor="#FFFFFF" /><stop offset="0.35" stopColor="#9CF3FF" /><stop offset="1" stopColor="#1863C9" /></radialGradient>
+        </defs>
+        <path d="M5.5 41 C3 34 15 24 31 18.5 C47 13 60 13.5 61 19.5" stroke="#6FE2FF" strokeWidth="3.4" fill="none" strokeLinecap="round" opacity="0.85" />
+        <circle cx="32" cy="32" r="15.5" fill={`url(#${g('e')})`} stroke={OUT} strokeWidth="2.4" />
+        <path d="M33.5 21 L27 32.5 L33 32.5 L29.5 43" stroke="#FFFFFF" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M61 19.5 C62.6 26 50.5 36 35 41.5 C19 47 5 48 3 42" stroke="#6FE2FF" strokeWidth="3.4" fill="none" strokeLinecap="round" />
+        <path d="M50 6 L46.5 12 L51.5 12.5 L47 19.5" stroke="#BFF6FF" strokeWidth="2.4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M13 47 L10 53 L15 53 L11.5 60" stroke="#BFF6FF" strokeWidth="2.4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        <circle cx="26.5" cy="26" r="3" fill="#FFFFFF" opacity="0.85" />
+      </svg>
+    );
+  }
+  if (k === 'ghost') {
+    return (
+      <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true" style={{ display: 'block', overflow: 'visible' }}>
+        <defs>
+          <linearGradient id={g('g')} x1="0" y1="0" x2="0.3" y2="1"><stop offset="0" stopColor="#FFFFFF" /><stop offset="0.6" stopColor="#E6DDFF" /><stop offset="1" stopColor="#B9A4FF" /></linearGradient>
+        </defs>
+        <path d="M3 24 L10 24 M1.5 32 L9 32 M4 40 L10 40" stroke="#E3D9FF" strokeWidth="2.6" strokeLinecap="round" opacity="0.9" />
+        <path d="M15 30 C15 17 22.5 8 32.5 8 C42.5 8 50 17 50 30 L50 53 L44.5 48 L38.8 54 L33 48.2 L27.2 54 L21.3 48 L15 53 Z" fill={`url(#${g('g')})`} stroke={OUT} strokeWidth="2.4" strokeLinejoin="round" />
+        <ellipse cx="26" cy="27.5" rx="3.6" ry="4.8" fill={OUT} />
+        <ellipse cx="39.5" cy="27.5" rx="3.6" ry="4.8" fill={OUT} />
+        <circle cx="27.2" cy="25.8" r="1.3" fill="#FFFFFF" />
+        <circle cx="40.7" cy="25.8" r="1.3" fill="#FFFFFF" />
+        <ellipse cx="32.8" cy="37" rx="2.8" ry="3.4" fill={OUT} />
+        <ellipse cx="21.5" cy="35" rx="3" ry="1.8" fill="#FF9EC4" opacity="0.75" />
+        <ellipse cx="44" cy="35" rx="3" ry="1.8" fill="#FF9EC4" opacity="0.75" />
+        <path d="M20 19 C21.5 15 24.5 12.6 28 11.8" stroke="#FFFFFF" strokeWidth="2.6" strokeLinecap="round" fill="none" />
+      </svg>
+    );
+  }
+  if (k === 'hop') {
+    return (
+      <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true" style={{ display: 'block', overflow: 'visible' }}>
+        <defs>
+          <linearGradient id={g('s')} x1="0" y1="0" x2="1" y2="0"><stop offset="0" stopColor="#FFFFFF" /><stop offset="1" stopColor="#8E98A9" /></linearGradient>
+          <linearGradient id={g('a')} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#B6FF8A" /><stop offset="1" stopColor="#24A644" /></linearGradient>
+        </defs>
+        <rect x="13" y="53" width="38" height="7" rx="3" fill="#3A404C" stroke={OUT} strokeWidth="2" />
+        <path d="M19 52 L45 48 L19 44 L45 40 L19 36" stroke={OUT} strokeWidth="7" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M19 52 L45 48 L19 44 L45 40 L19 36" stroke={`url(#${g('s')})`} strokeWidth="3.6" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        <rect x="13" y="29" width="38" height="7" rx="3" fill="#E5342B" stroke={OUT} strokeWidth="2" />
+        <path d="M32 2.5 L46 17.5 L37.5 17.5 L37.5 26 L26.5 26 L26.5 17.5 L18 17.5 Z" fill={`url(#${g('a')})`} stroke={OUT} strokeWidth="2.2" strokeLinejoin="round" />
+        <path d="M24.5 15 L31.5 7.6" stroke="#E8FFD9" strokeWidth="2.2" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  if (k === 'spike') {
+    return (
+      <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true" style={{ display: 'block', overflow: 'visible' }}>
+        <defs>
+          <linearGradient id={g('t')} x1="0" y1="0" x2="1" y2="0"><stop offset="0" stopColor="#FFFFFF" /><stop offset="0.5" stopColor="#C9D1DC" /><stop offset="1" stopColor="#7C8798" /></linearGradient>
+        </defs>
+        {[0, 1, 2, 3, 4, 5].map((i) => <path key={i} d={`M${7 + i * 9} 39 L${11.5 + i * 9} ${i % 2 ? 22 : 17} L${16 + i * 9} 39 Z`} fill={`url(#${g('t')})`} stroke={OUT} strokeWidth="2" strokeLinejoin="round" />)}
+        <rect x="4" y="38" width="56" height="13" rx="3.5" fill="#2A2E36" stroke={OUT} strokeWidth="2.2" />
+        <rect x="6" y="46" width="52" height="3.4" rx="1.4" fill="#F2C230" />
+        <path d="M8 42 L56 42" stroke="#4A505C" strokeWidth="1.6" />
+      </svg>
+    );
+  }
+  if (k === 'block') {
+    return (
+      <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true" style={{ display: 'block', overflow: 'visible' }}>
+        <defs><clipPath id={g('c')}><rect x="4" y="24" width="56" height="17" rx="3" /></clipPath></defs>
+        <path d="M14 39 L8.5 59 M50 39 L55.5 59" stroke={OUT} strokeWidth="6.4" strokeLinecap="round" />
+        <path d="M14 39 L8.5 59 M50 39 L55.5 59" stroke="#6A7282" strokeWidth="3.2" strokeLinecap="round" />
+        <rect x="4" y="24" width="56" height="17" rx="3" fill="#F4F6F8" />
+        <g clipPath={`url(#${g('c')})`}>{[0, 1, 2, 3, 4].map((i) => <path key={i} d={`M${-2 + i * 14} 41 L${8 + i * 14} 24 L${15 + i * 14} 24 L${5 + i * 14} 41 Z`} fill="#E5342B" />)}</g>
+        <rect x="4" y="24" width="56" height="17" rx="3" fill="none" stroke={OUT} strokeWidth="2.4" />
+        {[12, 52].map((x) => <g key={x}><rect x={x - 2.5} y="18" width="5" height="7" fill="#3A404C" stroke={OUT} strokeWidth="1.6" /><circle cx={x} cy="14" r="5.4" fill="#FFB020" stroke={OUT} strokeWidth="2" /><circle cx={x - 1.6} cy="12.4" r="1.6" fill="#FFF1C2" /></g>)}
+      </svg>
+    );
+  }
+  if (k === 'ram') {
+    return (
+      <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true" style={{ display: 'block', overflow: 'visible' }}>
+        <path d="M44 3 L47 14 L57 9.5 L51.5 19 L61 23 L50.5 26 L54 36 L45 30 L40 38 L38 28" fill="#FFD21F" stroke="#7A3D00" strokeWidth="2" strokeLinejoin="round" />
+        <path d="M7 50 L9 38 C10.5 31 17 27.5 28 27.5 C39 27.5 45.5 31 47 38 L49 50 Z" fill="#F2F4F7" stroke={OUT} strokeWidth="2.4" strokeLinejoin="round" />
+        <path d="M14 37 C15.5 32.6 20 30.6 28 30.6 C36 30.6 40.5 32.6 42 37 Z" fill="#1E2A40" stroke={OUT} strokeWidth="1.8" strokeLinejoin="round" />
+        <rect x="18" y="22" width="9.5" height="5.5" rx="1.6" fill="#FF2A33" stroke={OUT} strokeWidth="1.8" />
+        <rect x="28.5" y="22" width="9.5" height="5.5" rx="1.6" fill="#2A6BFF" stroke={OUT} strokeWidth="1.8" />
+        <rect x="5" y="49" width="46" height="6" rx="2" fill="#1A1C21" stroke={OUT} strokeWidth="2" />
+        <rect x="10.5" y="41" width="7" height="4.5" rx="2" fill="#FFF3C4" stroke={OUT} strokeWidth="1.6" />
+        <rect x="38.5" y="41" width="7" height="4.5" rx="2" fill="#FFF3C4" stroke={OUT} strokeWidth="1.6" />
+        <path d="M14 44 L14 50 M42 44 L42 50" stroke="#1A1C21" strokeWidth="3" />
+      </svg>
+    );
+  }
   return null;
 }
 
@@ -127,7 +240,16 @@ const SKILL_TONE = {
   shield: ['#5CCBFF', '#1E5BC6'],
   oil: ['#8E6BE0', '#2C1950'],
   shock: ['#FFD54A', '#C76A00'],
+  mine: ['#8C95A4', '#2C313B'],
+  emp: ['#5FD8FF', '#164C9C'],
+  ghost: ['#C9B6FF', '#5A3FB0'],
+  hop: ['#7FE38A', '#1F7A35'],
+  spike: ['#9AA4B4', '#2E3440'],
+  block: ['#FF8A7A', '#A3231A'],
+  ram: ['#6FA0FF', '#1B3E8F'],
 };
+const SKILL_GLOW = { rocket: 'rgba(255,110,60,0.55)', shield: 'rgba(80,190,255,0.55)', oil: 'rgba(150,110,240,0.55)', shock: 'rgba(255,210,60,0.55)', mine: 'rgba(255,80,80,0.5)', emp: 'rgba(90,220,255,0.6)', ghost: 'rgba(190,160,255,0.6)', hop: 'rgba(110,230,120,0.55)', spike: 'rgba(220,226,236,0.5)', block: 'rgba(255,120,100,0.55)', ram: 'rgba(90,140,255,0.6)' };
+export const skillGlow = (k) => SKILL_GLOW[k] || 'rgba(255,255,255,0.4)';
 export function skillFace(k, ok) {
   const t = SKILL_TONE[k] || ['#5A6170', '#2A2F39'];
   return ok ? `radial-gradient(circle at 50% 28%, ${t[0]} 0%, ${t[1]} 78%)` : 'radial-gradient(circle at 50% 30%, #4A505C 0%, #23272F 80%)';

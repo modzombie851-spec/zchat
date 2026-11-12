@@ -2,11 +2,12 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Avatar, Portal, useBackClose, hapticTap, FONT, Spinner } from '../App.jsx';
 import { useRoomLink } from './relay.jsx';
 import { EMOTES, Sheet, injectCss, useGameChat, ChatSheet } from './livekit.jsx';
-import { GBtn, GHold, GPill, GPanel, GChip, GTitle, GIcon, GHudBtn, GHudPanel, GHint, GStat, GNotices, useNotices, useWatchNotices, stagePoint, injectKitCss, kitTap, pressProps, maxDpr, newBudget, budgetTick, INK, useCtlLook, useGameStage, GControlsPanel, GVolBars, GLobby, GSlot, GLobbySheet } from './gamekit.jsx';
+import { GBtn, GHold, GPill, GPanel, GChip, GTitle, GIcon, GHudBtn, GHudPanel, GHint, GStat, GNotices, useNotices, useWatchNotices, stagePoint, injectKitCss, kitTap, pressProps, maxDpr, newBudget, budgetTick, INK, useCtlLook, useGameStage, GControlsPanel, GVolBars, GLobby, GSlot, GLobbySheet , GTalkers } from './gamekit.jsx';
 import { Sfx } from './sfx.js';
 import { setWatchAllowed, useLiveBeacon, useGamePrivacy } from './live.js';
 import { WORLDS, LEVEL_N, BALLS, R, levelOf, levelName, makeWorld, mkBall, stepBall, interact, applyEvent, pressedButtons, gatesToOpen, stepPlates, foePos, clamp, demoSetup, demoStep, demoStarts, clipStart, clipRun, DEMO_DT } from './rollengine.js';
 import { render, drawBall, updateParts, burst, dust, popText, clearChunks, buildRollMini, drawRollMini } from './rolldraw.js';
+import { useTalking } from './talk.js';
 
 const BEST_KEY = (uid) => `zchat-roll-best-${uid || 'me'}`;
 const MINI_W = 168, MINI_H = 36;
@@ -503,6 +504,7 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
   const { top, right, bottom, left } = GS.at;
   const hb = land ? 38 : 40;
   const talkOn = !solo && playing();
+  const talking = useTalking(!solo, relay.muted);
   const rowBtns = [
     talkOn && <GHudBtn key="mic" icon={relay.mic.on ? 'mic' : 'micoff'} on={relay.mic.on} size={hb} label={relay.mic.on ? 'Turn your mic off' : 'Turn your mic on'} onPress={relay.toggleMic} />,
     talkOn && <GHudBtn key="ppl" icon="people" on={people} size={hb} label="Players and voice" badge={roster.length > 1 ? roster.length : null} onPress={() => { setQuick(false); setPeople(true); }} />,
@@ -747,6 +749,7 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
             <div style={{ margin: 'auto', width: '100%', display: 'flex', justifyContent: 'center' }}><GControlsPanel sideways wide={land} onClose={() => setCtl(false)} /></div>
           </div>
         )}
+        <GTalkers ids={talking} nameOf={nameOf} top={top(phase === 'play' && land ? 46 : 50)} />
         <GNotices items={notes} style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', ...(phase !== 'play' ? { top: top(64) } : land ? { top: top(46) } : { bottom: bottom(112) }), width: land ? 'min(52%, 420px)' : 'calc(100% - 40px)', zIndex: 30 }} />
         {people && !solo && (
           <Sheet title="Players and voice" text={relay.mic.on ? 'Your mic is on. Everyone in the game can hear you.' : 'Turn your mic on to talk while you play.'} onClose={() => setPeople(false)}>

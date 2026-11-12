@@ -322,6 +322,8 @@ export const RaceGamePage = zLazy(() => import('./games/race.jsx'), 'RaceGamePag
 export const LiveWatchPage = zLazy(() => import('./games/livecast.jsx'), 'LiveWatchPage', 'livecast');
 export const PageCast = zLazy(() => import('./games/livecast.jsx'), 'PageCast', 'livecast');
 export const RaceInviteSheet = zLazy(() => import('./games/race.jsx'), 'RaceInviteSheet', 'race');
+export const SiegeGamePage = zLazy(() => import('./games/siege.jsx'), 'SiegeGamePage', 'siege');
+export const SiegeInviteSheet = zLazy(() => import('./games/siege.jsx'), 'SiegeInviteSheet', 'siege');
 export const G1GolfPage = zLazy(() => import('./areas/games.jsx'), 'G1GolfPage', 'games');
 export const G1SudokuBoard = zLazy(() => import('./areas/games.jsx'), 'G1SudokuBoard', 'games');
 export const G1CrossPage = zLazy(() => import('./areas/games.jsx'), 'G1CrossPage', 'games');
@@ -18586,7 +18588,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-export const APP_VERSION = '44.0V';
+export const APP_VERSION = '45.0V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -36496,6 +36498,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [rollGame, setRollGame] = useState(null);
   const [raceGame, setRaceGame] = useState(null);
   const [racePick, setRacePick] = useState(null);
+  const [siegeGame, setSiegeGame] = useState(null);
+  const [siegePick, setSiegePick] = useState(null);
   const [watchGame, setWatchGame] = useState(null);
   const [castWatch, setCastWatch] = useState(null);
   const openWatch = async (r) => {
@@ -36509,6 +36513,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     }
     if (r.game === 'roll') { setShowGames(false); setRollGame({ rm: r.room, host: info.h || r.user_id, watch: true }); return; }
     if (r.game === 'race') { setShowGames(false); setRaceGame({ rm: r.room, host: info.h || r.user_id, watch: true }); return; }
+    if (r.game === 'siege') { setShowGames(false); setSiegeGame({ rm: r.room, host: info.h || r.user_id, watch: true }); return; }
     if (r.game === 'gulp' && info.co && typeof info.rm === 'string') { setShowGames(false); setGulpRoom({ rm: info.rm }); return; }
     if (!info.h || !info.o || !info.g) { showSnack('That game just ended'); return; }
     const [hp, gp] = await Promise.all([cachedProfile(info.h).catch(() => null), cachedProfile(info.o).catch(() => null)]);
@@ -36518,7 +36523,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [rollPick, setRollPick] = useState(null);
   const [gulpRoom, setGulpRoom] = useState(null);
   const [gulpPick, setGulpPick] = useState(null);
-  if (typeof window !== 'undefined' && window.__zfake) { window.__zopenGulpRoom = (rm) => setGulpRoom({ rm }); window.__zopenRoll = (rm, host, watch) => setRollGame({ rm, host, watch: !!watch }); window.__zopenRace = (rm, host, watch) => setRaceGame({ rm, host, watch: !!watch }); window.__zraceSolo = () => setRaceGame({ solo: true, rm: 'solo' }); }
+  if (typeof window !== 'undefined' && window.__zfake) { window.__zopenGulpRoom = (rm) => setGulpRoom({ rm }); window.__zopenRoll = (rm, host, watch) => setRollGame({ rm, host, watch: !!watch }); window.__zopenRace = (rm, host, watch) => setRaceGame({ rm, host, watch: !!watch }); window.__zraceSolo = () => setRaceGame({ solo: true, rm: 'solo' }); window.__zsiegeSolo = () => setSiegeGame({ solo: true, rm: 'solo' }); window.__zopenSiege = (rm, host, watch) => setSiegeGame({ rm, host, watch: !!watch }); }
   const joinLivePlay = async (r) => {
     const info = (r && r.info) || {};
     if (!r) return;
@@ -36532,6 +36537,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     }
     if (r.game === 'roll') { setRollGame({ rm: r.room, host: info.h || r.user_id }); return; }
     if (r.game === 'race') { setRaceGame({ rm: r.room, host: info.h || r.user_id }); return; }
+    if (r.game === 'siege') { setSiegeGame({ rm: r.room, host: info.h || r.user_id }); return; }
     if (r.game === 'gulp' && info.co && typeof info.rm === 'string') { setGulpRoom({ rm: info.rm }); return; }
     openWatch(r);
   };
@@ -36591,8 +36597,18 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       try { await sendGameStateTo(p, st, { quiet: false }); } catch {}
     }
   };
+  const startSiegeWith = async (profiles, rmIn) => {
+    const rm = rmIn || newClientId();
+    if (!rmIn) setSiegeGame({ rm, host: session.user.id });
+    for (const p of profiles || []) {
+      if (!p || p.is_bot) continue;
+      const st = { g: 'siege', id: newClientId(), x: session.user.id, o: p.id, w: null, n: 0, st: 'wait', exp: Date.now() + LIVE_INVITE_MS, sx: 0, so: 0, rm };
+      try { await sendGameStateTo(p, st, { quiet: false }); } catch {}
+    }
+  };
   const startLiveGame = async (profile, kind) => {
     if (!profile || profile.is_bot) return;
+    if (kind === 'siege') { startSiegeWith([profile]); return; }
     if (kind === 'roll') { startRollWith([profile]); return; }
     if (kind === 'race') { startRaceWith([profile]); return; }
     if (kind === 'gulpco') { startGulpRoomWith([profile]); return; }
@@ -36608,6 +36624,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (st.x !== session.user.id && st.o !== session.user.id) return;
     if (st.g === 'roll') { setRollGame({ rm: st.rm || st.id, host: st.x }); return; }
     if (st.g === 'race') { setRaceGame({ rm: st.rm || st.id, host: st.x }); return; }
+    if (st.g === 'siege') { setSiegeGame({ rm: st.rm || st.id, host: st.x }); return; }
     if (st.g === 'gulpco') { if (typeof st.rm === 'string') setGulpRoom({ rm: st.rm }); return; }
     setLiveGame({ state: st, messageId: msg.id, peer });
   };
@@ -48249,7 +48266,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       {msgSearchOpen != null && (
         <SearchMessagesPage myId={session.user.id} groups={groups} hiddenIds={getHiddenMsgIds()} initialQuery={msgSearchOpen} onClose={() => setMsgSearchOpen(null)} onOpen={openSearchHit} />
       )}
-      {showWhatsNew && <PageGuard name="whats new" onClose={() => setShowWhatsNew(false)}><WhatsNewSheet me={me} onClose={() => setShowWhatsNew(false)} onTry={(g) => { if (g === 'sets') setCollectionOpen(true); else if (g === 'shop') setShopOpen(true); else if (g === 'rooms') setShowGames({ at: Date.now(), room: '' }); else if (g === 'games') setShowGames(true); else if (g === 'camera') setStoryCamera(true); else if (g === 'race') setShowGames(true); else if (g === 'vibes') setHomeTab('moments'); else if (g === 'map') setMapOpen(true); else if (g === 'song' && me) setProfileOf({ ...me, __song: true }); else if (g === 'ai') setAiStudio({ mode: 'image' }); else if (g === 'chars') setCharsOpen(true); else if (g === 'coins') setWalletOpen(true); else if (g === 'bubbles') setShowBubbleSheet(true); else if (g === 'drops') setCollectionOpen('__drop'); else if (g === 'folders') { setHomeTab('chats'); setFoldersOpen(true); } else if (g === 'styles') setShopOpen('tab:styles'); else if (g === 'communities') setCommunitiesOpen({}); }} /></PageGuard>}
+      {showWhatsNew && <PageGuard name="whats new" onClose={() => setShowWhatsNew(false)}><WhatsNewSheet me={me} onClose={() => setShowWhatsNew(false)} onTry={(g) => { if (g === 'sets') setCollectionOpen(true); else if (g === 'shop') setShopOpen(true); else if (g === 'rooms') setShowGames({ at: Date.now(), room: '' }); else if (g === 'games') setShowGames(true); else if (g === 'camera') setStoryCamera(true); else if (g === 'race') setShowGames(true); else if (g === 'siege') setSiegeGame({ solo: true, rm: 'solo' }); else if (g === 'vibes') setHomeTab('moments'); else if (g === 'map') setMapOpen(true); else if (g === 'song' && me) setProfileOf({ ...me, __song: true }); else if (g === 'ai') setAiStudio({ mode: 'image' }); else if (g === 'chars') setCharsOpen(true); else if (g === 'coins') setWalletOpen(true); else if (g === 'bubbles') setShowBubbleSheet(true); else if (g === 'drops') setCollectionOpen('__drop'); else if (g === 'folders') { setHomeTab('chats'); setFoldersOpen(true); } else if (g === 'styles') setShopOpen('tab:styles'); else if (g === 'communities') setCommunitiesOpen({}); }} /></PageGuard>}
       {showGames && (
         <GamesPage key={showGames.at || 'games'} initialGame={showGames.game || null} onClose={() => setShowGames(false)}
           friends={gameFriends}
@@ -48258,6 +48275,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onRollInvite={() => setRollPick({ rm: null })}
           onRaceInvite={() => setRacePick({ rm: null })}
           onRaceSolo={() => { setShowGames(false); setRaceGame({ solo: true, rm: 'solo' }); }}
+          onSiegeInvite={() => setSiegePick({ rm: null })}
+          onSiegeSolo={() => { setShowGames(false); setSiegeGame({ solo: true, rm: 'solo' }); }}
           onGulpRoom={() => setGulpPick({ rm: null, n: 1 })}
           onWatch={(r, p) => openWatch(r, p)}
           onJoinLive={(r) => joinLivePlay(r)}
@@ -48343,7 +48362,16 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         <RaceInviteSheet friends={gameFriends} already={racePick.n} side={!!racePick.side} onClose={() => setRacePick(null)}
           onInvite={(ps) => { const rm = racePick.rm; setRacePick(null); setShowGames(false); startRaceWith(ps, rm); }} />
       )}
-      {liveGame && me && liveGame.state.g !== 'duo' && liveGame.state.g !== 'gulp' && liveGame.state.g !== 'roll' && liveGame.state.g !== 'gulpco' && liveGame.state.g !== 'race' && (
+      {siegeGame && me && (
+        <SiegeGamePage key={siegeGame.rm} solo={!!siegeGame.solo} room={siegeGame.solo ? null : siegeGame} me={me} myId={session.user.id} watch={!!siegeGame.watch}
+          onClose={() => { const back = !!siegeGame.watch || !!siegeGame.solo; setSiegeGame(null); if (back) setShowGames(true); }}
+          onInvite={!siegeGame.solo && siegeGame.host === session.user.id ? (n, side) => setSiegePick({ rm: siegeGame.rm, n, side: !!side }) : null} />
+      )}
+      {siegePick && (
+        <SiegeInviteSheet friends={gameFriends} already={siegePick.n} side={!!siegePick.side} onClose={() => setSiegePick(null)}
+          onInvite={(ps) => { const rm = siegePick.rm; setSiegePick(null); setShowGames(false); startSiegeWith(ps, rm); }} />
+      )}
+      {liveGame && me && liveGame.state.g !== 'duo' && liveGame.state.g !== 'gulp' && liveGame.state.g !== 'roll' && liveGame.state.g !== 'gulpco' && liveGame.state.g !== 'race' && liveGame.state.g !== 'siege' && (
         <LiveGamePage key={liveGame.state.id} initial={liveGame.state} me={me} peer={liveGame.peer} myId={session.user.id}
           onClose={() => setLiveGame(null)}
           onSaveState={(next) => saveLiveState(liveGame.messageId, next)}
@@ -49436,6 +49464,10 @@ export const WN_THUMBS = {
   rally44: { bg: 'sky', draw: () => <WnBg src="/race-fx.webp" /> },
   levels44: { bg: 'sky', draw: () => <WnBg src="/roll-storm.webp" /> },
   music44: { bg: 'sky', draw: () => <WnBg src="/lobby-music.webp" /> },
+  siege45: { bg: 'sky', draw: () => <WnBg src="/siege-art.webp" /> },
+  police45: { bg: 'night', draw: () => <WnBg src="/race-police.webp" /> },
+  cuts45: { bg: 'sky', draw: () => <WnBg src="/race-cuts.webp" /> },
+  talk45: { bg: 'sky', draw: () => <WnBg src="/games-talk.webp" /> },
   attack42: { bg: 'sky', draw: () => <WnBg src="/race-attack.webp" /> },
   maps42: { bg: 'sky', draw: () => <WnBg src="/race-maps.webp" /> },
   cars42: { bg: 'sky', draw: () => <WnBg src="/race-cars.webp" /> },
@@ -50025,6 +50057,10 @@ Object.assign(WN_SCENES, {
   rally44h: { bg: 'sky', draw: () => <WnBg tall src="/race-fx.webp" x0="-120" /> },
   levels44h: { bg: 'sky', draw: () => <WnBg tall src="/roll-storm.webp" x0="-70" /> },
   music44h: { bg: 'sky', draw: () => <WnBg tall src="/lobby-music.webp" x0="-90" /> },
+  siege45h: { bg: 'sky', draw: () => <WnBg tall src="/siege-art.webp" x0="-55" /> },
+  police45h: { bg: 'night', draw: () => <WnBg tall src="/race-police.webp" x0="-30" /> },
+  cuts45h: { bg: 'sky', draw: () => <WnBg tall src="/race-cuts.webp" x0="-77" /> },
+  talk45h: { bg: 'sky', draw: () => <WnBg tall src="/games-talk.webp" x0="-77" /> },
   attack42h: { bg: 'sky', draw: () => <WnBg tall src="/race-attack.webp" x0="-70" /> },
   maps42h: { bg: 'sky', draw: () => <WnBg tall src="/race-maps.webp" x0="-60" /> },
   cars42h: { bg: 'sky', draw: () => <WnBg tall src="/race-cars.webp" x0="-62" /> },
@@ -50626,7 +50662,7 @@ export function parseGameMessage(content) {
     if (st.g === 'gem') return Array.isArray(st.d) && st.d.length === 36 ? st : null;
     if (st.g === 'fade') return Array.isArray(st.b) && st.b.length === 9 ? st : null;
     if (st.g === 'tug' || st.g === 'qrace' || st.g === 'rrace' || st.g === 'duo' || st.g === 'gulp') return typeof st.x === 'string' && typeof st.o === 'string' ? st : null;
-    if (st.g === 'roll' || st.g === 'gulpco' || st.g === 'race') return typeof st.x === 'string' && typeof st.o === 'string' && typeof st.rm === 'string' && st.rm.length <= 64 ? st : null;
+    if (st.g === 'roll' || st.g === 'gulpco' || st.g === 'race' || st.g === 'siege') return typeof st.x === 'string' && typeof st.o === 'string' && typeof st.rm === 'string' && st.rm.length <= 64 ? st : null;
     if (G1_KEYS.includes(st.g)) return g1Valid(st) ? st : null;
     return null;
   } catch { return null; }
@@ -59777,7 +59813,7 @@ function svgMarkup(node) {
   return `<${node.type}${attrs}>${svgMarkup(node.props.children)}</${node.type}>`;
 }
 const gameArtSrcs = new Map();
-const GAME_ART_FILES = { duo: '/duo-art.webp', gulp: '/gulp-art.webp', gulpco: '/gulp-art.webp', roll: '/roll-art.webp', race: '/race-art.webp' };
+const GAME_ART_FILES = { duo: '/duo-art.webp', gulp: '/gulp-art.webp', gulpco: '/gulp-art.webp', roll: '/roll-art.webp', race: '/race-art.webp', siege: '/siege-art.webp' };
 function gameArtSrc(kIn) {
   const key = String(kIn == null ? '' : kIn);
   if (GAME_ART_FILES[key]) return GAME_ART_FILES[key];
@@ -59801,11 +59837,12 @@ export function GameArt({ k: kIn, width = 160, height = 100, radius = 14, style 
   return <img src={src} alt="" aria-hidden="true" draggable={false} decoding="async" style={{ display: 'block', width, height, borderRadius: radius, flexShrink: 0, objectFit: 'cover', ...style }} />;
 }
 
-export const LIVE_GAME_KEYS = ['race', 'roll', 'gulpco', 'duo', 'gulp', 'tug', 'qrace', 'rrace'];
-Object.assign(GAME_TITLES, { race: 'Island Rally', roll: 'Roll Squad', gulpco: 'Gulp room', duo: 'Two Torches', gulp: 'Gulp', tug: 'Tug of war', qrace: 'Quiz race', rrace: 'Reaction race' });
-Object.assign(FRIEND_GAME_SUBS, { race: 'Live, up to six friends, four maps', roll: 'Live, up to four friends roll together', gulpco: 'Live, up to ten friends, join any time', duo: 'Live, endless temples together', gulp: 'Live, eat smaller fish and grow', tug: 'Live, tap faster than them', qrace: 'Live, fastest right answer', rrace: 'Live, first to tap on green' });
-Object.assign(GAME_ART_BG, { race: ['#7FB4E0', '#3A4B63'], roll: ['#6EC6FF', '#4FA83A'], duo: ['#3B2A48', '#120C1C'], gulp: ['#1C6FA8', '#082A4C'], gulpco: ['#1C6FA8', '#082A4C'], tug: ['#F97316', '#E11D48'], qrace: ['#7C3AED', '#2563EB'], rrace: ['#10B981', '#0EA5E9'] });
+export const LIVE_GAME_KEYS = ['siege', 'race', 'roll', 'gulpco', 'duo', 'gulp', 'tug', 'qrace', 'rrace'];
+Object.assign(GAME_TITLES, { siege: 'Scrap Siege', race: 'Island Rally', roll: 'Roll Squad', gulpco: 'Gulp room', duo: 'Two Torches', gulp: 'Gulp', tug: 'Tug of war', qrace: 'Quiz race', rrace: 'Reaction race' });
+Object.assign(FRIEND_GAME_SUBS, { siege: 'Live, up to four friends against robot waves', race: 'Live, up to eight friends, four maps', roll: 'Live, up to four friends roll together', gulpco: 'Live, up to ten friends, join any time', duo: 'Live, endless temples together', gulp: 'Live, eat smaller fish and grow', tug: 'Live, tap faster than them', qrace: 'Live, fastest right answer', rrace: 'Live, first to tap on green' });
+Object.assign(GAME_ART_BG, { siege: ['#D9A54A', '#3A2E22'], race: ['#7FB4E0', '#3A4B63'], roll: ['#6EC6FF', '#4FA83A'], duo: ['#3B2A48', '#120C1C'], gulp: ['#1C6FA8', '#082A4C'], gulpco: ['#1C6FA8', '#082A4C'], tug: ['#F97316', '#E11D48'], qrace: ['#7C3AED', '#2563EB'], rrace: ['#10B981', '#0EA5E9'] });
 Object.assign(GAME_RULES, {
+  siege: { how: ['Pick a hero: Blaze blasts up close, Pip snipes from far away, Boom throws bombs over walls and Mira heals friends with her orb.', 'Move with the left stick. Tap the red button to shoot the closest robot, or drag it to aim.', 'Hitting robots charges your super. When the gold button glows, tap it or drag it to aim.', 'Robots come in waves from the hatches. A boss shows up every 5 waves.', 'If a friend goes down, stand next to them to revive them. Grab health, power and super drops.', 'Hide in bushes so robots lose sight of you. Talk with your mic or send emojis.'], win: 'Survive 15 waves together, or go endless and see how far you get.' },
   duo: { how: ['You carry the orange torch, your friend carries the blue one. Move with the joystick.', 'Orange walks through lava and fire. Blue wades through water, lights hidden stones and reads hidden codes.', 'Pull levers, hold doors on the plates, jump through glowing rings, cross spikes when they drop and keep moving on cracked floors.', 'Play the story or endless temples that are new every time. You share three hearts.', 'Talk with voice, quick messages and emojis. You can mute your friend any time.'], win: 'Stand on your own glowing doors at the same time to finish. Finish missions for stars.' },
   gulp: { how: ['You are a small fish with the number 2. Swim with the joystick.', 'Touch fish with a number the same as yours or smaller to eat them and grow. Any part of you works, even your tail. Small fish swim away when you get close.', 'Fish with bigger numbers can eat you. Hunters chase you for a moment, then give up. Dash to get away.', 'Suck pulls the fish in front of you into your mouth. Grow bigger to unlock a shield, a shock wave and frenzy.', 'Grab bubbles for a shield, double food, a magnet or speed. If you are bigger than your friend you can eat them too.'], win: 'Grow as big as you can, there is no top size. Each of you has five lives and gets one back when you grow into a new fish. Whoever keeps their lives longer wins the round.' },
   gulpco: { how: ['A fish room for up to ten friends. Anyone you invite can join or leave any time.', 'Swim with the joystick and eat fish with a number the same as yours or smaller.', 'Nobody eats anyone in the room. If a big fish gets you, you come back a bit smaller.', 'Turn your mic on to talk. Tap the people button to mute anyone.'], win: 'Grow together and see who gets the biggest.' },
@@ -60259,7 +60296,9 @@ function LiveGameCard({ state, myId, peerName, onOpen, onRematch }) {
   return (
     <GameCardShell k={state.g} width={236} live title={GAME_TITLES[state.g]} status={status} hot={hot}>
       {state.g === 'race' ? (
-        <div style={{ textAlign: 'center', fontSize: 13, fontWeight: 800, color: theme.ink, padding: '2px 0 4px' }}>Race in 3D, up to six friends</div>
+        <div style={{ textAlign: 'center', fontSize: 13, fontWeight: 800, color: theme.ink, padding: '2px 0 4px' }}>Race in 3D, up to eight friends</div>
+      ) : state.g === 'siege' ? (
+        <div style={{ textAlign: 'center', fontSize: 13, fontWeight: 800, color: theme.ink, padding: '2px 0 4px' }}>Fight robot waves, up to four friends</div>
       ) : state.g === 'roll' ? (
         <div style={{ textAlign: 'center', fontSize: 13, fontWeight: 800, color: theme.ink, padding: '2px 0 4px' }}>Roll together, up to four friends</div>
       ) : state.g === 'gulpco' ? (

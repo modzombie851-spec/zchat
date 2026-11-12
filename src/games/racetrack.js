@@ -106,7 +106,137 @@ export function buildTrack(def, step = 2) {
   S.forEach((p) => { minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x); minZ = Math.min(minZ, p.z); maxZ = Math.max(maxZ, p.z); });
   T.bounds = { minX, maxX, minZ, maxZ };
   trackFeatures(T);
+  T.cuts = [];
+  try { T.cuts = findCuts(T); } catch { T.cuts = []; }
   return T;
+}
+
+export function __cutPath(T, i0, i1, side) { return cutPath(T, i0, i1, side); }
+function cutPath(T, i0, i1, side) {
+  const { S, w } = T;
+  const off = side * (w + 0.3);
+  const E = T.at(S[i0].s, off), X = T.at(S[i1].s, off);
+  const a = S[i0], b = S[i1];
+  const chord = Math.hypot(X.x - E.x, X.z - E.z);
+  const k = chord * 0.34;
+  let t0x = a.tx + a.rx * side * 0.42, t0z = a.tz + a.rz * side * 0.42;
+  let t1x = b.tx - b.rx * side * 0.42, t1z = b.tz - b.rz * side * 0.42;
+  const l0 = Math.hypot(t0x, t0z) || 1, l1 = Math.hypot(t1x, t1z) || 1;
+  t0x /= l0; t0z /= l0; t1x /= l1; t1z /= l1;
+  const c1 = [E.x + t0x * k, E.z + t0z * k], c2 = [X.x - t1x * k, X.z - t1z * k];
+  const fine = [];
+  const M = 200;
+  for (let j = 0; j <= M; j++) {
+    const t = j / M, u = 1 - t;
+    fine.push([u * u * u * E.x + 3 * u * u * t * c1[0] + 3 * u * t * t * c2[0] + t * t * t * X.x, u * u * u * E.z + 3 * u * u * t * c1[1] + 3 * u * t * t * c2[1] + t * t * t * X.z]);
+  }
+  const cum = [0];
+  for (let j = 1; j < fine.length; j++) cum.push(cum[j - 1] + Math.hypot(fine[j][0] - fine[j - 1][0], fine[j][1] - fine[j - 1][1]));
+  const L = cum[cum.length - 1];
+  const step = 2;
+  const N = Math.max(8, Math.round(L / step));
+  const P = [];
+  let j = 0;
+  for (let q = 0; q <= N; q++) {
+    const d = (q / N) * L;
+    while (j < cum.length - 2 && cum[j + 1] < d) j++;
+    const t = (d - cum[j]) / Math.max(1e-6, cum[j + 1] - cum[j]);
+    const x = fine[j][0] + (fine[j + 1][0] - fine[j][0]) * t, z = fine[j][1] + (fine[j + 1][1] - fine[j][1]) * t;
+    const u = d / L;
+    const ease = u * u * (3 - 2 * u);
+    P.push({ x, z, y: E.y + (X.y - E.y) * ease, s: d });
+  }
+  const n = P.length;
+  for (let q = 0; q < n; q++) {
+    const A = P[Math.max(0, q - 1)], B = P[Math.min(n - 1, q + 1)];
+    let tx = B.x - A.x, tz = B.z - A.z;
+    const l = Math.hypot(tx, tz) || 1; tx /= l; tz /= l;
+    const p = P[q];
+    p.tx = tx; p.tz = tz; p.rx = tz; p.rz = -tx; p.heading = Math.atan2(tx, tz);
+    p.slope = Math.atan2(B.y - A.y, Math.hypot(B.x - A.x, B.z - A.z) || 1);
+    p.bank = 0;
+  }
+  for (let q = 0; q < n; q++) {
+    const A = P[Math.max(0, q - 2)], B = P[Math.min(n - 1, q + 2)];
+    let dh = B.heading - A.heading;
+    while (dh > Math.PI) dh -= Math.PI * 2;
+    while (dh < -Math.PI) dh += Math.PI * 2;
+    P[q].curv = dh / (Math.max(1, Math.min(n - 1, q + 2) - Math.max(0, q - 2)) * step);
+  }
+  const C = { S: P, N: n, total: L, w: 3.6, step: L / (n - 1), ramps: [], pads: [], s0: S[i0].s, s1: S[i1].s, arc: S[i1].s - S[i0].s, side, i0, i1, cut: true };
+  C.at = (s0, off2 = 0) => {
+    const f = Math.max(0, Math.min(n - 1.0001, s0 / C.step));
+    const i = Math.floor(f), t = f - i;
+    const A = P[i], B = P[Math.min(n - 1, i + 1)];
+    const lerp = (u, v) => u + (v - u) * t;
+    let dh = B.heading - A.heading; while (dh > Math.PI) dh -= Math.PI * 2; while (dh < -Math.PI) dh += Math.PI * 2;
+    const rx = lerp(A.rx, B.rx), rz = lerp(A.rz, B.rz);
+    return { x: lerp(A.x, B.x) + rx * off2, y: lerp(A.y, B.y), z: lerp(A.z, B.z) + rz * off2, heading: A.heading + dh * t, slope: lerp(A.slope, B.slope), bank: 0, i };
+  };
+  let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+  for (const p of P) { x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); z0 = Math.min(z0, p.z); z1 = Math.max(z1, p.z); }
+  C.bb = [x0, z0, x1, z1];
+  return C;
+}
+
+function findCuts(T) {
+  const { S, N, step, total, w, def } = T;
+  const want = def.cuts != null ? def.cuts : 2;
+  if (!want) return [];
+  const cand = [];
+  for (let i0 = 0; i0 < N; i0 += 2) {
+    const u0 = S[i0].s / total;
+    if (u0 < 0.07 || u0 > 0.84) continue;
+    for (let len = 120; len <= 420; len += 10) {
+      const i1 = i0 + Math.round(len / step);
+      if (i1 >= N || S[i1].s / total > 0.93) break;
+      const a = S[i0], b = S[i1];
+      const chord = Math.hypot(b.x - a.x, b.z - a.z);
+      const ratio = chord / len;
+      if (ratio > 0.86 || ratio < 0.22 || len - chord < 40) continue;
+      let turn = 0;
+      for (let k = i0; k < i1; k++) turn += S[k].curv * step;
+      if (Math.abs(turn) > 2.6) continue;
+      cand.push({ i0, i1, gain: len - chord, side: turn > 0 ? 1 : -1 });
+    }
+  }
+  cand.sort((p, q) => q.gain - p.gain);
+  const out = [];
+  const WY = def.water != null ? def.water.y : null;
+  for (const c of cand) {
+    if (out.length >= want) break;
+    if (out.some((o) => Math.abs(S[o.i0].s - S[c.i0].s) < 260 || Math.abs(S[o.i1].s - S[c.i1].s) < 260 || (c.i0 < o.i1 && c.i1 > o.i0))) continue;
+    if ((T.ramps || []).some((r) => r.s0 > S[c.i0].s - 95 && r.s0 < S[c.i1].s + 30) || (T.pads || []).some((r) => Math.abs(r.s0 - S[c.i0].s) < 25 || Math.abs(r.s0 - S[c.i1].s) < 25)) continue;
+    for (const side of [c.side, -c.side]) {
+      const P = cutPath(T, c.i0, c.i1, side);
+      let ok = P.total < (S[c.i1].s - S[c.i0].s) * 0.9;
+      for (let q = 0; ok && q < P.N; q++) {
+        const p = P.S[q];
+        if (Math.abs(p.curv) > 0.07) { ok = false; break; }
+        const n = T.near(p.x, p.z, 4);
+        const end = Math.min(p.s, P.total - p.s);
+        if (end > 4 && n.i >= 0 && n.d < w + Math.min(7, 0.6 + Math.max(0, end - 8) * 0.3)) { ok = false; break; }
+        if (end > 9) {
+          const h = terrainH(T, p.x, p.z);
+          if (Math.abs(h - p.y) > 5.5) { ok = false; break; }
+          if (WY != null && h < WY + 0.8) { ok = false; break; }
+        }
+      }
+      if (ok) { out.push(P); break; }
+    }
+  }
+  return out.sort((p, q) => p.s0 - q.s0);
+}
+
+function cutNear(C, x, z) {
+  if (x < C.bb[0] - 40 || x > C.bb[2] + 40 || z < C.bb[1] - 40 || z > C.bb[3] + 40) return { d: Infinity, k: -1 };
+  let best = Infinity, bk = -1;
+  for (let k = 0; k < C.N; k++) { const q = C.S[k]; const d = (q.x - x) ** 2 + (q.z - z) ** 2; if (d < best) { best = d; bk = k; } }
+  return { d: Math.sqrt(best), k: bk };
+}
+export function onCut(T, x, z, r = 0) {
+  for (const C of T.cuts || []) { const n = cutNear(C, x, z); if (n.d < C.w + 2.5 + r) return true; }
+  return false;
 }
 
 function trackFeatures(T) {
@@ -153,6 +283,19 @@ export function splitTiles(data, size = 150) {
 }
 
 export function terrainH(T, x, z) {
+  const h0 = terrainBase(T, x, z);
+  if (!T.cuts || !T.cuts.length) return h0;
+  let h = h0;
+  for (const C of T.cuts) {
+    const n = cutNear(C, x, z);
+    if (n.d > C.w + 24) continue;
+    const py = C.S[n.k].y - 0.28;
+    h = py + (h - py) * smooth(C.w + 1.6, C.w + 22, n.d);
+  }
+  return h;
+}
+
+function terrainBase(T, x, z) {
   const G = T.def.terrain || {};
   const n = T.near(x, z, 4);
   const far = fbm(x * (G.freq || 0.006) + 3.1, z * (G.freq || 0.006) - 1.7, 4);
@@ -182,6 +325,7 @@ function makeKit(T, props, R, def) {
   const free = (x, z, r, clear = 5) => {
     const n = T.near(x, z, 3);
     if (n.i >= 0 && n.d < w + clear + r) return false;
+    if (onCut(T, x, z, r + 2)) return false;
     for (const q of placed) if ((q[0] - x) ** 2 + (q[1] - z) ** 2 < (q[2] + r) ** 2) return false;
     return true;
   };
@@ -356,6 +500,7 @@ function makeKit(T, props, R, def) {
     for (let i = 0; i < N; i++) {
       const a = S[i];
       for (const sg of [-1, 1]) {
+        if ((T.cuts || []).some((C) => C.side === sg && ((a.s > C.s0 - 14 && a.s < C.s0 + 18) || (a.s > C.s1 - 18 && a.s < C.s1 + 14)))) continue;
         const p0 = T.edge(i, sg * off), p1 = T.edge(i + 1, sg * off);
         const g0 = Math.max(p0[1], gy(p0[0], p0[2]) + 0.05), g1 = Math.max(p1[1], gy(p1[0], p1[2]) + 0.05);
         if (style === 'concrete') {
@@ -437,6 +582,13 @@ function makeKit(T, props, R, def) {
     pb.quad([0, 4.6, -0.4], [0, 1.2, -0.4], [0, 1.4, 2.6], [0, 3.9, 1.2], '#F4EBDD', 0);
     pb.setT(null);
   };
+  if (T.cuts && T.cuts.length) {
+    for (const nm of ['palm', 'tree', 'pine', 'euca', 'bush', 'dryTree', 'rock', 'house', 'lamp', 'building', 'tires', 'flag', 'elephant', 'billboard']) {
+      const f = K[nm];
+      if (typeof f !== 'function') continue;
+      K[nm] = (x, z, ...rest) => (onCut(T, x, z, nm === 'house' || nm === 'building' ? 6 : 1.5) ? undefined : f(x, z, ...rest));
+    }
+  }
   return K;
 }
 
@@ -532,11 +684,49 @@ export function buildWorld(T, opts = {}) {
       road.quad(lf(A), lf(B), lf(Cq), lf(D), col, 0.1);
     }
   }
-  for (let slot = 0; slot < 6; slot++) {
+  for (let slot = 0; slot < 8; slot++) {
     const row = Math.floor(slot / 2), gs = -7 - row * 8.5, gx = slot % 2 ? -3 : 3;
     for (const [a0, a1, b0, b1] of [[gs + 1.6, gs + 1.85, gx - 1.1, gx + 1.1], [gs - 1.4, gs + 1.85, gx - 1.1, gx - 0.92], [gs - 1.4, gs + 1.85, gx + 0.92, gx + 1.1]]) {
       const A = T.at(a0, b0), B = T.at(a1, b0), Cq = T.at(a1, b1), D = T.at(a0, b1);
       road.quad([A.x, A.y + 0.03, A.z], [B.x, B.y + 0.03, B.z], [Cq.x, Cq.y + 0.03, Cq.z], [D.x, D.y + 0.03, D.z], '#F2EFE6', 0.1);
+    }
+  }
+  for (const Cp of T.cuts || []) {
+    const dirtA = C('#A27C54'), dirtB = C('#94704A'), rut = C('#7A5A3A');
+    const edgeAt = (q, off, h) => { const p = Cp.S[q]; return [p.x + p.rx * off, p.y + h, p.z + p.rz * off]; };
+    for (let q = 0; q < Cp.N - 1; q++) {
+      const c = mixc(dirtA, dirtB, hash2(q * 0.71, 4.1));
+      road.quad(edgeAt(q, -Cp.w, 0.04), edgeAt(q + 1, -Cp.w, 0.04), edgeAt(q + 1, Cp.w, 0.04), edgeAt(q, Cp.w, 0.04), c, 0);
+      for (const lx of [-1.6, 1.6]) road.quad(edgeAt(q, lx - 0.32, 0.055), edgeAt(q + 1, lx - 0.32, 0.055), edgeAt(q + 1, lx + 0.32, 0.055), edgeAt(q, lx + 0.32, 0.055), rut, 0);
+      if (q % 3 === 0 && q > 3 && q < Cp.N - 5) for (const sg of [-1, 1]) {
+        const b = edgeAt(q, sg * (Cp.w + 0.9), 0);
+        const gyb = terrainH(T, b[0], b[2]);
+        props.box(b[0], gyb - 0.1, b[2], 0.16, 1.15, 0.16, '#7A5A3A', 0);
+        const b2 = edgeAt(Math.min(Cp.N - 1, q + 3), sg * (Cp.w + 0.9), 0);
+        const gy2 = terrainH(T, b2[0], b2[2]);
+        const A = [b[0], gyb + 0.85, b[2]], B = [b2[0], gy2 + 0.85, b2[2]];
+        props.quad(A, B, [B[0], B[1] + 0.12, B[2]], [A[0], A[1] + 0.12, A[2]], '#8B6844', 0);
+        props.quad(B, A, [A[0], A[1] + 0.12, A[2]], [B[0], B[1] + 0.12, B[2]], '#8B6844', 0);
+      }
+    }
+    for (const [sAt, dir] of [[Cp.s0 - 16, 1], [Cp.s1 + 10, -1]]) {
+      const q = T.at(sAt, Cp.side * (w + 3.2));
+      const gyq = terrainH(T, q.x, q.z);
+      props.setT(rotT(q.heading + (dir < 0 ? Math.PI : 0), q.x, gyq, q.z));
+      props.box(0, 0, 0, 0.14, 2.6, 0.14, '#5A4632', 0);
+      props.box(0, 2.2, 0.08, 2.3, 0.9, 0.08, '#F5B321', 0.2);
+      for (let k = 0; k < 3; k++) {
+        const ax = Cp.side * dir * (-0.7 + k * 0.62);
+        props.box(ax, 2.2, 0.14, 0.14, 0.62, 0.04, '#1B1D21', 0.1);
+        props.box(ax + Cp.side * dir * 0.12, 2.38, 0.14, 0.14, 0.26, 0.04, '#1B1D21', 0.1);
+        props.box(ax + Cp.side * dir * 0.12, 2.02, 0.14, 0.14, 0.26, 0.04, '#1B1D21', 0.1);
+      }
+      props.setT(null);
+    }
+    for (let k = 0; k < 3; k++) {
+      const q = T.at(Cp.s0 - 4 + k * 5, Cp.side * (w + 0.6));
+      props.cyl(q.x, q.y, q.z, 0.28, 0.75, 6, '#FF7A1A', 0.2);
+      props.cyl(q.x, q.y + 0.32, q.z, 0.2, 0.14, 6, '#F4F6F8', 0.2);
     }
   }
   const { minX, maxX, minZ, maxZ } = T.bounds;
@@ -566,6 +756,24 @@ export function buildWorld(T, opts = {}) {
   }
   const K = makeKit(T, props, R, def);
   if (def.barrier) K.barrier(def.barrier);
+  for (let i = 0; i < N; i += 3) {
+    const a = S[i];
+    if (Math.abs(a.curv) < 0.015 || a.s < 40 || a.s > T.total - 40) continue;
+    const sg = a.curv > 0 ? -1 : 1;
+    if ((T.cuts || []).some((Cq) => Cq.side === sg && a.s > Cq.s0 - 30 && a.s < Cq.s1 + 30)) continue;
+    const q = T.edge(i, sg * (w + 4.4));
+    if (onCut(T, q[0], q[2], 1)) continue;
+    K.tires(q[0], q[2], 3 + (i % 2));
+    K.place(q[0], q[2], 0.8);
+    if (i % 12 === 0) { const q2 = T.edge(i, sg * (w + 5.6)); K.tires(q2[0], q2[2], 2); }
+  }
+  for (let i = 40; i < N - 20; i += 70) {
+    const sg = (i / 70) % 2 ? 1 : -1;
+    const q = T.edge(i, sg * (w + 3.4));
+    if (onCut(T, q[0], q[2], 2) || !K.free(q[0], q[2], 1, 0)) continue;
+    K.flag(q[0], q[2], i % 140 === 40 ? '#FFC23D' : '#3FB950');
+    K.place(q[0], q[2], 1);
+  }
   const gant = T.at(0);
   {
     const yaw = gant.heading;

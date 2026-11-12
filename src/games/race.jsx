@@ -2,15 +2,16 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Avatar, Portal, useBackClose, FONT, Spinner } from '../App.jsx';
 import { useRoomLink } from './relay.jsx';
 import { EMOTES, Sheet, injectCss, useGameChat, ChatSheet } from './livekit.jsx';
-import { GBtn, GPill, GPanel, GChip, GTitle, GIcon, GHudBtn, GHudPanel, GNotices, useNotices, useWatchNotices, injectKitCss, kitTap, pressProps, maxDpr, INK, useCtlLook, useGameStage, GControlsPanel, GVolBars, GLobby, GSlot, GLobbySheet, GSwitchRow, GSeg } from './gamekit.jsx';
+import { GBtn, GPill, GPanel, GChip, GTitle, GIcon, GHudBtn, GHudPanel, GNotices, useNotices, useWatchNotices, injectKitCss, kitTap, pressProps, maxDpr, INK, useCtlLook, useGameStage, GControlsPanel, GVolBars, GLobby, GSlot, GLobbySheet, GSwitchRow, GSeg , GTalkers } from './gamekit.jsx';
 import { Sfx } from './sfx.js';
 import { setWatchAllowed, useLiveBeacon, useGamePrivacy } from './live.js';
 import { createRenderer, m4, MeshBuilder } from './race3d.js';
 import { buildTrack, buildWorld } from './racetrack.js';
 import { MAPS, MAP_KEYS, bottleSpots } from './racemaps.js';
 import { carMesh, wheelMesh, WHEELS, fxMeshes } from './racecars.js';
-import { SkillIcon, NitroIcon, SteerArrow, PedalArt, skillFace, MapSelect } from './raceui.jsx';
-import { CARS, CAR_KEYS, COLORS, BOT_NAMES, MAX_RACERS, LAPS, SKILLS, SKILL_KEYS, EN_MAX, BOTTLE_EN, BOTTLE_BACK, ROCKET_V, SPIN_ROCKET, SPIN_OIL, SLOW_SHOCK, SHIELD_T, mkCar, stepCar, airStep, launchCar, groundSlope, collide, botInput, botSkill, rocketStep, standings, lapOf, fmtRace, clamp } from './raceengine.js';
+import { SkillIcon, NitroIcon, SteerArrow, PedalArt, skillFace, skillGlow, MapSelect } from './raceui.jsx';
+import { CARS, CAR_KEYS, COLORS, BOT_NAMES, MAX_RACERS, LAPS, SKILLS, SKILL_KEYS, EN_MAX, BOTTLE_BACK, DRINKS, drinkUse, RACER_SKILLS, COP_SKILLS, BUST_R, BUST_V, cutOf, carAt, driveCar, ROCKET_V, SPIN_ROCKET, SPIN_OIL, SLOW_SHOCK, SHIELD_T, mkCar, stepCar, airStep, launchCar, groundSlope, collide, botInput, botSkill, rocketStep, standings, lapOf, fmtRace, clamp } from './raceengine.js';
+import { useTalking } from './talk.js';
 
 const CAR_PREF = 'zchat-race-car';
 const TILT_PREF = 'zchat-race-tilt';
@@ -18,6 +19,11 @@ const MAP_PREF = 'zchat-race-map';
 const MODE_PREF = 'zchat-race-mode';
 const GFX_PREF = 'zchat-race-gfx';
 const BOTS_PREF = 'zchat-race-bots';
+const KIT_PREF = 'zchat-race-kit';
+const SIDE_PREF = 'zchat-race-side';
+const COPS_PREF = 'zchat-race-cops';
+const readKit = () => { const v = String(readPref(KIT_PREF, '') || '').split(',').filter((k) => RACER_SKILLS.includes(k)); return v.length === 4 && new Set(v).size === 4 ? v : SKILL_KEYS.slice(); };
+const botKit = (i) => { const a = RACER_SKILLS.slice(); const out = []; let h = (i * 2654435761) >>> 0; while (out.length < 4) { h = (h * 1103515245 + 12345) >>> 0; const k = a.splice(h % a.length, 1)[0]; out.push(k); } return out; };
 const BEST_KEY = (uid, map) => (map && map !== 'coast' ? `zchat-race-best-${uid || 'me'}-${map}` : `zchat-race-best-${uid || 'me'}`);
 const readPref = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : v; } catch { return d; } };
 const savePref = (k, v) => { try { localStorage.setItem(k, String(v)); } catch {} };
@@ -26,7 +32,8 @@ const SEND_MS = 100;
 const num = (v, d = 0) => { const n = Number(v); return Number.isFinite(n) ? n : d; };
 const lin = (h) => { const n = parseInt(h.slice(1), 16); return [((n >> 16) / 255) ** 2.2, (((n >> 8) & 255) / 255) ** 2.2, ((n & 255) / 255) ** 2.2]; };
 const srgb = (h) => { const n = parseInt(h.slice(1), 16); return [(n >> 16) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255]; };
-const MODES = { race: 'Race', attack: 'Attack race' };
+const MODES = { race: 'Race', attack: 'Attack', pursuit: 'Police' };
+const skillMode = (m) => m === 'attack' || m === 'pursuit';
 const GFX = [['auto', 'Auto'], ['best', 'Best'], ['fast', 'Fast']];
 const BOTLV = [['easy', 'Easy'], ['normal', 'Normal'], ['hard', 'Hard']];
 const validMap = (k) => (MAPS[k] ? k : 'coast');
@@ -81,6 +88,31 @@ function carThumbs(color) {
   } catch {}
   THUMBS.set(color, out);
   return out;
+}
+
+function sirenSound() {
+  const B = Sfx.bus();
+  if (!B) return null;
+  const { ac, out: bus } = B;
+  try {
+    const o1 = ac.createOscillator(); o1.type = 'square';
+    const o2 = ac.createOscillator(); o2.type = 'triangle';
+    const lfo = ac.createOscillator(); lfo.type = 'triangle'; lfo.frequency.value = 0.5;
+    const lg = ac.createGain(); lg.gain.value = 300;
+    o1.frequency.value = 880; o2.frequency.value = 880;
+    lfo.connect(lg); lg.connect(o1.frequency); lg.connect(o2.frequency);
+    const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 2100;
+    const g1 = ac.createGain(); g1.gain.value = 0.05;
+    const g2 = ac.createGain(); g2.gain.value = 0.2;
+    const out = ac.createGain(); out.gain.value = 0;
+    o1.connect(g1); o2.connect(g2); g1.connect(f); g2.connect(f); f.connect(out); out.connect(bus);
+    o1.start(); o2.start(); lfo.start();
+    let cur = 0;
+    return {
+      set(v) { const t = Math.max(0, Math.min(0.32, v)); if (Math.abs(t - cur) < 0.01) return; cur = t; try { out.gain.setTargetAtTime(t, ac.currentTime, 0.12); } catch {} },
+      stop() { try { o1.stop(); o2.stop(); lfo.stop(); out.disconnect(); } catch {} },
+    };
+  } catch { return null; }
 }
 
 function engineSound() {
@@ -151,12 +183,16 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
   const isHost = solo || (room && room.host === myId);
   const myFirst = String((me && me.name) || 'You').split(' ')[0];
   const [myCar, setMyCar] = useState(() => (CARS[readPref(CAR_PREF, 'sport')] ? readPref(CAR_PREF, 'sport') : 'sport'));
-  const meta = { n: myFirst, a: me && me.avatar, w: watch ? 1 : 0, c: myCar };
+  const [side, setSide] = useState(() => (readPref(SIDE_PREF, 'racer') === 'cop' ? 'cop' : 'racer'));
+  const meta = { n: myFirst, a: me && me.avatar, w: watch ? 1 : 0, c: myCar, sd: side };
   const relay = useRoomLink({ id: solo || !room ? null : `race-${room.rm}`, myId, enabled: !solo && !!room, meta, fast: ['pl', 'bt'], audio: !watch });
   const [phase, setPhase] = useState('menu');
   const [ready, setReady] = useState(false);
   const [mapKey, setMapKey] = useState(() => (isHost ? validMap(readPref(MAP_PREF, 'coast')) : 'coast'));
-  const [mode, setMode] = useState(() => (isHost && readPref(MODE_PREF, 'race') === 'attack' ? 'attack' : 'race'));
+  const [mode, setMode] = useState(() => { const v = readPref(MODE_PREF, 'race'); return isHost && (v === 'attack' || v === 'pursuit') ? v : 'race'; });
+  const [kit, setKit] = useState(readKit);
+  const [copsOn, setCopsOn] = useState(() => readPref(COPS_PREF, '0') === '1');
+  const [kitSheet, setKitSheet] = useState(false);
   const [gfx, setGfx] = useState(() => { const v = readPref(GFX_PREF, 'auto'); return v === 'best' || v === 'fast' ? v : 'auto'; });
   const [roster, setRoster] = useState(solo ? ['me'] : [room && room.host].filter(Boolean));
   const [names, setNames] = useState({});
@@ -201,7 +237,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
   const enTxtRef = useRef(null);
   const tagRefs = useRef({});
   const RR = useRef(null);
-  const G = useRef({ cars: {}, ids: [], bots: [], rid: '', t0: 0, goAt: 0, fins: {}, sendAt: 0, botAt: 0, hudAt: 0, cam: null, parts: [], fx: [], meshes: new Map(), wheelMeshes: {}, net: {}, endAt: 0, resAt: 0, lapSeen: 0, budget: { avg: 16, n: 0, tier: 0, set: false }, eng: null, laps: LAPS, botMeta: {}, mode: 'race', map: 'coast', rockets: [], oils: [], bottles: [], skillQ: [], nonce: 0, hits: 0, warnAt: 0 });
+  const G = useRef({ cars: {}, ids: [], bots: [], rid: '', t0: 0, goAt: 0, fins: {}, sendAt: 0, botAt: 0, hudAt: 0, cam: null, parts: [], fx: [], meshes: new Map(), wheelMeshes: {}, net: {}, endAt: 0, resAt: 0, lapSeen: 0, budget: { avg: 16, n: 0, tier: 0, set: false }, eng: null, laps: LAPS, botMeta: {}, mode: 'race', map: 'coast', rockets: [], oils: [], bottles: [], skillQ: [], nonce: 0, hits: 0, warnAt: 0, role: {}, mines: [], emps: [], spikes: [], blocks: [], busts: {} });
   const hold = useRef({ l: false, r: false, d: false, b: false });
   const keys = useRef(new Set());
   const tiltV = useRef(0);
@@ -213,6 +249,9 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
   const followRef = useRef(follow); followRef.current = follow;
   const myCarRef = useRef(myCar); myCarRef.current = myCar;
   const modeRef = useRef(mode); modeRef.current = mode;
+  const kitRef = useRef(kit); kitRef.current = kit;
+  const sideRef = useRef(side); sideRef.current = side;
+  const copsRef = useRef(copsOn); copsRef.current = copsOn;
   const mapRef = useRef(mapKey); mapRef.current = mapKey;
   const gfxRef = useRef(gfx); gfxRef.current = gfx;
   const metaRef = useRef({});
@@ -263,7 +302,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
     try { R = createRenderer(cv, { shadowSize: g.budget.tier === 0 ? 2048 : 1024 }); } catch { R = null; }
     if (!R) { setFailed(true); return undefined; }
     let fxm = null;
-    try { const F = fxMeshes(); fxm = { rocket: R.mesh(F.rocket), bottle: R.mesh(F.bottle), shield: R.mesh(F.shield), oil: R.mesh(F.oil) }; } catch { fxm = null; }
+    try { const F = fxMeshes(); fxm = { rocket: R.mesh(F.rocket), bottle: R.mesh(F.bottle), bottles: Object.fromEntries(Object.keys(F.bottles).map((k) => [k, R.mesh(F.bottles[k])])), shield: R.mesh(F.shield), oil: R.mesh(F.oil) }; } catch { fxm = null; }
     RR.current = { R, T: null, key: null, world: [], env: null, glows: new Float32Array(0), fx: fxm, bottleSpots: [] };
     const t = setTimeout(() => { try { ensureMap(mapRef.current); setReady(true); } catch { setFailed(true); } }, 60);
     return () => {
@@ -321,16 +360,27 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
     try { ensureMap(mk); } catch {}
     const st = RR.current;
     g.rid = cfg.rid; g.ids = cfg.ids.slice(); g.laps = cfg.laps || LAPS;
-    g.mode = cfg.mode === 'attack' ? 'attack' : 'race'; g.map = mk; g.botLv = cfg.bl === 'hard' || cfg.bl === 'easy' ? cfg.bl : 'normal';
+    g.mode = cfg.mode === 'attack' || cfg.mode === 'pursuit' ? cfg.mode : 'race'; g.map = mk; g.botLv = cfg.bl === 'hard' || cfg.bl === 'easy' ? cfg.bl : 'normal';
+    g.role = {}; for (const k of cfg.ids) g.role[k] = cfg.roles && cfg.roles[k] === 'cop' ? 'cop' : 'racer';
+    g.copsOn = !!cfg.cops; g.mines = []; g.emps = []; g.spikes = []; g.blocks = []; g.busts = {};
     if (g.mode !== modeRef.current) setMode(g.mode);
     g.cars = {}; g.fins = {}; g.parts = []; g.fx = []; g.net = {}; g.endAt = 0; g.resAt = 0; g.lapSeen = 0;
     g.rockets = []; g.oils = []; g.skillQ = []; g.hits = 0; g.warnAt = 0;
     g.bottles = (st && st.bottleSpots ? st.bottleSpots : []).map((b) => ({ ...b, took: {} }));
     g.botMeta = {};
-    cfg.ids.forEach((k, slot) => {
+    const racerIds = cfg.ids.filter((k) => g.role[k] !== 'cop');
+    const copIds = cfg.ids.filter((k) => g.role[k] === 'cop');
+    cfg.ids.forEach((k) => {
       const b = (cfg.bots || []).find((x) => x.id === k);
       if (b) g.botMeta[k] = { n: b.n, skill: b.sk };
-      g.cars[k] = mkCar(k, slot, (cfg.cars && cfg.cars[k]) || (b && b.c) || 'sport');
+      const cop = g.role[k] === 'cop';
+      const slot = cop ? racerIds.length + 1 + copIds.indexOf(k) : racerIds.indexOf(k);
+      const c = mkCar(k, slot, cop ? 'cop' : (cfg.cars && cfg.cars[k]) || (b && b.c) || 'sport');
+      c.cop = cop; c.bust = 0;
+      c.kit = cop ? COP_SKILLS : k === kindOf() ? kitRef.current.slice() : botKit(cfg.ids.indexOf(k) + 3);
+      if (cop && g.mode !== 'pursuit' && st && st.T) { const ci = copIds.indexOf(k); c.s = st.T.total * (0.3 + 0.33 * ci); c.x = (ci % 2 ? -1 : 1) * (st.T.w + 2.2); c.park = true; c.en = EN_MAX; }
+      else if (cop) { c.hold = 2.5; c.en = 60; }
+      g.cars[k] = c;
     });
     g.bots = (cfg.bots || []).map((b) => b.id);
     g.goAt = performance.now() + (cfg.in || 3600);
@@ -338,7 +388,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
     g.cam = null;
     setResult(null); setPaused(false); setQuick(false); setFollow(null); setMapSheet(false);
     setLaps(g.laps);
-    setHud({ pos: Math.max(1, cfg.ids.indexOf(kindOf()) + 1), n: cfg.ids.length, lap: 1, time: 0, order: cfg.ids.slice(), fin: false, en: g.cars[kindOf()] ? g.cars[kindOf()].en : 0, cd: {}, drift: 0, warn: false });
+    setHud({ pos: Math.max(1, racerIds.indexOf(kindOf()) + 1), n: racerIds.length, lap: 1, time: 0, order: racerIds.slice(), fin: false, en: g.cars[kindOf()] ? g.cars[kindOf()].en : 0, cd: {}, drift: 0, warn: false });
     setPhase('count');
     setCount(3);
     hold.current = { l: false, r: false, d: false, b: false };
@@ -352,20 +402,32 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
     const cars = {};
     ids.forEach((k) => { cars[k] = k === kindOf() ? myCarRef.current : CARS[carsOfRef.current[k]] ? carsOfRef.current[k] : metaRef.current[k] && CARS[metaRef.current[k].c] ? metaRef.current[k].c : 'sport'; });
     const bots = [];
+    const pursuit = modeRef.current === 'pursuit';
+    const roles = {};
+    const sideOf = (k) => (k === kindOf() ? sideRef.current : metaRef.current[k] && metaRef.current[k].sd === 'cop' ? 'cop' : 'racer');
+    ids.forEach((k) => { roles[k] = pursuit && sideOf(k) === 'cop' ? 'cop' : 'racer'; });
     const want = solo ? MAX_RACERS : fill ? MAX_RACERS : ids.length;
+    let copNeed = pursuit ? Math.max(0, Math.round(want * 0.375) - ids.filter((k) => roles[k] === 'cop').length) : 0;
+    if (pursuit && ids.every((k) => roles[k] === 'cop')) copNeed = Math.min(copNeed, Math.max(0, want - ids.length - 2));
+    const skOf = (i) => (botLv === 'hard' ? 0.97 + ((i * 37) % 6) / 100 : botLv === 'easy' ? 0.84 + ((i * 37) % 7) / 100 : 0.9 + ((i * 37) % 9) / 100);
     for (let i = ids.length; i < want; i++) {
+      const cop = copNeed > 0;
+      if (cop) copNeed -= 1;
       const id = `bot${i}`;
-      bots.push({ id, n: BOT_NAMES[i % BOT_NAMES.length], c: CAR_KEYS[(i * 3 + 1) % CAR_KEYS.length], sk: botLv === 'hard' ? 0.97 + ((i * 37) % 6) / 100 : botLv === 'easy' ? 0.84 + ((i * 37) % 7) / 100 : 0.9 + ((i * 37) % 9) / 100 });
+      bots.push({ id, n: cop ? `Officer ${BOT_NAMES[i % BOT_NAMES.length]}` : BOT_NAMES[i % BOT_NAMES.length], c: cop ? 'cop' : CAR_KEYS[(i * 3 + 1) % CAR_KEYS.length], sk: skOf(i) });
       ids.push(id);
+      roles[id] = cop ? 'cop' : 'racer';
       cars[id] = bots[bots.length - 1].c;
     }
-    const cfg = { rid: `${Date.now().toString(36)}${Math.floor(Math.random() * 1e4)}`, ids, cars, bots, laps, in: 3600, map: mapRef.current, mode: modeRef.current, bl: botLv };
-    if (!solo) { setRoster(ids.filter((k) => !k.startsWith('bot'))); relay.send('go', cfg); }
+    const cops = !pursuit && copsRef.current;
+    if (cops) for (let j = 0; j < 2; j++) { const id = `cop${j}`; bots.push({ id, n: `Officer ${BOT_NAMES[(j * 3 + 2) % BOT_NAMES.length]}`, c: 'cop', sk: 1 }); ids.push(id); roles[id] = 'cop'; cars[id] = 'cop'; }
+    const cfg = { rid: `${Date.now().toString(36)}${Math.floor(Math.random() * 1e4)}`, ids, cars, bots, laps, in: 3600, map: mapRef.current, mode: modeRef.current, bl: botLv, roles, cops: cops ? 1 : 0 };
+    if (!solo) { setRoster(ids.filter((k) => !k.startsWith('bot') && !k.startsWith('cop'))); relay.send('go', cfg); }
     beginRace(cfg);
   };
   const toMenu = (quiet) => {
     const g = G.current;
-    g.ids = []; g.cars = {}; g.rockets = []; g.oils = [];
+    g.ids = []; g.cars = {}; g.rockets = []; g.oils = []; g.mines = []; g.emps = []; g.spikes = []; g.blocks = [];
     setPhase('menu'); setResult(null); setCount(0);
     if (g.eng) g.eng.set(0, false, 0, false);
     if (!solo && isHost && !quiet) relay.send('menu', {});
@@ -373,15 +435,18 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
   const finishUp = (order) => {
     const g = G.current;
     if (phaseRef.current === 'done') return;
-    const list = order || standings(Object.values(g.cars)).map((c) => [c.id, c.fin || 0]);
+    const list = order || standings(Object.values(g.cars).filter((c) => !c.cop)).map((c) => [c.id, c.fin || 0]);
     const mine = list.findIndex(([k]) => k === kindOf());
     const meC = g.cars[kindOf()];
     const bk = BEST_KEY(uid, g.map);
     const prev = Number(readPref(bk, '0')) || 0;
     if (meC && meC.lapBest && (!prev || meC.lapBest < prev)) savePref(bk, meC.lapBest.toFixed(3));
-    setResult({ list, mine: mine >= 0 ? mine + 1 : 0, best: meC ? meC.lapBest : 0, prev, hits: g.mode === 'attack' ? g.hits : -1, map: g.map });
+    const busted = Object.values(g.cars).filter((c) => !c.cop && c.busted).map((c) => c.id);
+    const copList = Object.values(g.cars).filter((c) => c.cop).map((c) => [c.id, g.busts[c.id] || 0]);
+    const racersN = Object.values(g.cars).filter((c) => !c.cop).length;
+    setResult({ list, mine: mine >= 0 ? mine + 1 : 0, best: meC ? meC.lapBest : 0, prev, hits: skillMode(g.mode) ? g.hits : -1, map: g.map, pursuit: g.mode === 'pursuit', busted, cops: copList, racersN, meCop: !!(meC && meC.cop), meBusted: !!(meC && meC.busted) });
     setPhase('done');
-    if (mine === 0) { Sfx.play('win', { vol: 0.8 }); try { window.dispatchEvent(new CustomEvent('zchat-screen-fx', { detail: 'confetti' })); } catch {} }
+    if (mine === 0 && !(meC && (meC.cop || meC.busted))) { Sfx.play('win', { vol: 0.8 }); try { window.dispatchEvent(new CustomEvent('zchat-screen-fx', { detail: 'confetti' })); } catch {} }
   };
 
   const spawnBurst = (x, y, z, n, type, speed, life, size) => {
@@ -437,7 +502,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
     g.boomAt = g.boomAt || {};
     if (now - (g.boomAt[c.id] || 0) < 1200) return;
     g.boomAt[c.id] = now;
-    const p = st.T.at(c.s, c.x);
+    const p = carAt(st.T, c);
     const cp = g.camPos;
     const near = !!cp && Math.hypot(cp[0] - p.x, cp[1] - p.y, cp[2] - p.z) < 16;
     blast(p.x, p.y + (c.air || 0) + 0.9, p.z, big, p.y, near);
@@ -447,11 +512,17 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
     if (k === 'rocket') { c.spin = SPIN_ROCKET; c.spinMax = SPIN_ROCKET; c.spinTurns = 2; c.v *= 0.5; c.boostT = 0; c.smokeT = 2.6; launchCar(c, 9.2, side, side * 3.6); }
     else if (k === 'oil') { c.spin = SPIN_OIL * 1.3; c.spinMax = SPIN_OIL * 1.3; c.spinTurns = 4; c.v *= 0.78; c.slide = side * 5.2; }
     else if (k === 'shock') { c.slow = SLOW_SHOCK; c.zapT = 1.1; launchCar(c, 3.4, 0, 0); }
+    else if (k === 'mine') { c.spin = SPIN_ROCKET; c.spinMax = SPIN_ROCKET; c.spinTurns = 1.5; c.v *= 0.45; c.boostT = 0; c.smokeT = 2.2; launchCar(c, 10.5, side, side * 2.4); }
+    else if (k === 'emp') { c.emp = 3.2; c.boostT = 0; c.zapT = 1.6; }
+    else if (k === 'spike') { c.flat = 4.5; c.spin = 0.4; c.spinMax = 0.4; c.spinTurns = 0.25; c.v *= 0.8; }
+    else if (k === 'block') { c.spin = 1.1; c.spinMax = 1.1; c.spinTurns = 1.4; c.v *= 0.25; c.smokeT = 1.2; launchCar(c, 3.6, side, side * 1.8); }
+    else if (k === 'ram') { c.spin = 0.75; c.spinMax = 0.75; c.spinTurns = 1; c.v *= 0.6; c.slide = side * 4.2; c.bust = Math.min(0.95, (c.bust || 0) + 0.2); }
   };
+  const HIT_KINDS = ['rocket', 'oil', 'shock', 'mine', 'emp', 'spike', 'block', 'ram'];
   const applyHitRef = useRef(null);
   const applyHit = (c, k, by, local) => {
     const g = G.current;
-    if (!c || c.fin) return false;
+    if (!c || c.fin || c.busted || c.ghost > 0 || c.park) return false;
     let blocked = false;
     if (c.shield > 0) { c.shield = 0; blocked = true; }
     else crashCar(c, k, by);
@@ -460,19 +531,40 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
     return !blocked;
   };
   applyHitRef.current = applyHit;
+  const bustCar = (c, by, local) => {
+    const g = G.current;
+    if (!c || c.busted || c.cop || c.fin) return;
+    const myK = kindOf();
+    if (g.mode === 'pursuit') {
+      c.busted = 1; c.bust = 1; c.hold = 9999; c.boostT = 0;
+      if (by) g.busts[by] = (g.busts[by] || 0) + 1;
+      if (c.id === myK) { say('Busted! The police caught you', 3.2); Sfx.play('die', { vol: 0.8 }); try { navigator.vibrate && navigator.vibrate([60, 40, 60]); } catch {} }
+      else if (by === myK) { say(`You busted ${nameRef(c.id)}`, 2.2); Sfx.play('star', { vol: 0.7 }); }
+      else say(`${nameRef(c.id)} got busted`, 1.8);
+    } else {
+      c.hold = 3; c.bust = 0;
+      if (c.id === myK) { say('Busted! Wait 3 seconds', 2.6); Sfx.play('alert', { vol: 0.7 }); }
+      const cop = by && g.cars[by];
+      if (cop && isHost && g.bots.includes(by)) cop.chaseT = 99;
+    }
+    if (local && !solo) relay.send('bust', { r: g.rid, id: c.id, by });
+  };
   const hitFx = (c, k, by, blocked) => {
     const g = G.current;
     const myK = kindOf();
-    if (k === 'rocket') boom(c, !blocked);
-    { const st = RR.current; if (st && st.T) { const p = st.T.at(c.s, c.x);
+    if (k === 'rocket' || (k === 'mine' && !blocked)) boom(c, !blocked);
+    if (k === 'mine') g.mines = g.mines.filter((m) => !(Math.abs(m.s - c.s) < 7 && Math.abs(m.x - c.x) < 4));
+    { const st = RR.current; if (st && st.T) { const p = carAt(st.T, c);
       if (blocked) { spawnBurst(p.x, p.y + 1, p.z, 10, 6, 7, 0.45, 0.4); P3({ x: p.x, y: p.y + 0.35, z: p.z, max: 0.45, s0: 1.5, s1: 7.5, a0: 1, type: 14, flat: 1 }); P3({ x: p.x, y: p.y + 1.1, z: p.z, max: 0.14, s0: 0.8, s1: 2.6, a0: 0.55, type: 16 }); }
       else if (k === 'oil') { for (let i = 0; i < 14; i++) { const a = Math.random() * 6.283; P3({ x: p.x, y: p.y + 0.4, z: p.z, vx: Math.cos(a) * (3 + Math.random() * 4), vy: 3 + Math.random() * 4, vz: Math.sin(a) * (3 + Math.random() * 4), g: 16, max: 0.6 + Math.random() * 0.4, s0: 0.13, s1: 0.09, a0: 1, type: 17, st: 0.03 }); } for (let i = 0; i < 6; i++) P3({ x: p.x + (Math.random() - 0.5) * 2, y: p.y + 0.4, z: p.z + (Math.random() - 0.5) * 2, vy: 0.8, max: 1.4, s0: 0.8, s1: 3, a0: 0.5, type: 18, fin: 1 }); }
       else if (k === 'shock') { bolts(p.x, p.y + 1.1, p.z, 2.2, 5, 0.9); P3({ x: p.x, y: p.y + 0.9, z: p.z, max: 0.2, s0: 1, s1: 2.6, a0: 0.6, type: 16 }); }
+      else if (k === 'emp') { bolts(p.x, p.y + 1.1, p.z, 2.6, 6, 1); P3({ x: p.x, y: p.y + 1, z: p.z, max: 0.3, s0: 1, s1: 4, a0: 0.9, type: 14 }); P3({ x: p.x, y: p.y + 0.35, z: p.z, max: 0.45, s0: 1, s1: 6, a0: 0.8, type: 14, flat: 1 }); }
+      else if (k === 'spike' || k === 'block' || k === 'ram') { for (let i = 0; i < (k === 'spike' ? 16 : 22); i++) { const a = Math.random() * 6.283; P3({ x: p.x + (Math.random() - 0.5) * 1.6, y: p.y + 0.35, z: p.z + (Math.random() - 0.5) * 2, vx: Math.cos(a) * 8, vy: 2 + Math.random() * 5, vz: Math.sin(a) * 8, g: 16, max: 0.3 + Math.random() * 0.4, s0: 0.08, s1: 0.04, a0: 1, type: 4, st: 0.03 }); } P3({ x: p.x, y: p.y + 0.8, z: p.z, max: 0.14, s0: 0.8, s1: 2.4, a0: 0.7, type: 16 }); if (k === 'block') for (let i = 0; i < 5; i++) P3({ x: p.x + (Math.random() - 0.5) * 2, y: p.y + 0.5, z: p.z + (Math.random() - 0.5) * 2, vy: 1, max: 1.2, s0: 0.7, s1: 2.6, a0: 0.45, type: 18, fin: 1 }); }
     } }
     if (c.id === myK) {
-      Sfx.play(blocked ? 'shield' : k === 'shock' ? 'shock' : 'hurt', { vol: 0.8 });
-      if (!blocked) { g.shake = Math.max(g.shake || 0, k === 'rocket' ? 0.5 : 0.3); try { navigator.vibrate && navigator.vibrate(k === 'rocket' ? 60 : 30); } catch {} }
-      say(blocked ? 'Your shield blocked it' : k === 'rocket' ? `Hit by ${nameRef(by)}` : k === 'oil' ? 'You slid on oil' : `Shocked by ${nameRef(by)}`, 1.6);
+      Sfx.play(blocked ? 'shield' : k === 'shock' || k === 'emp' ? 'shock' : k === 'spike' ? 'break' : 'hurt', { vol: 0.8 });
+      if (!blocked) { g.shake = Math.max(g.shake || 0, k === 'rocket' || k === 'mine' || k === 'block' ? 0.5 : 0.3); try { navigator.vibrate && navigator.vibrate(k === 'rocket' || k === 'mine' ? 60 : 30); } catch {} }
+      say(blocked ? 'Your shield blocked it' : k === 'rocket' ? `Hit by ${nameRef(by)}` : k === 'oil' ? 'You slid on oil' : k === 'mine' ? 'You hit a mine' : k === 'emp' ? 'EMP! No skills or nitro for 3 seconds' : k === 'spike' ? 'Flat tyres! Slow for a few seconds' : k === 'block' ? 'You crashed into a roadblock' : k === 'ram' ? `Rammed by ${nameRef(by)}` : `Shocked by ${nameRef(by)}`, 1.8);
     } else if (by === myK && !blocked) {
       g.hits += 1;
       Sfx.play('combo', { vol: 0.6 });
@@ -505,22 +597,64 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
         const mine = o.id === myK && !watch;
         const bot = isHost && g.bots.includes(o.id);
         if (!mine && !bot) continue;
+        if (o.sc >= 0) continue;
         if (Math.abs(o.s - s) < 20 && Math.abs(o.x - x) < 11) applyHit(o, 'shock', id, true);
       }
+    } else if (k === 'mine') {
+      const now0 = performance.now();
+      g.mines.push({ n, by: id, s: s - 3.4, x, at: now0, until: now0 + 20000 });
+      { const st = RR.current; if (st && st.T) { const p = st.T.at(s - 3.4, x); P3({ x: p.x, y: p.y + 0.3, z: p.z, max: 0.35, s0: 0.6, s1: 3, a0: 0.6, type: 13, flat: 1 }); } }
+      Sfx.play('poof', { vol: id === kindOf() ? 0.6 : 0.3 });
+    } else if (k === 'emp') {
+      const t = tg && g.cars[tg] ? tg : null;
+      if (t) g.emps.push({ n, by: id, tg: t, t: 0 });
+      { const st = RR.current; if (st && st.T) { const p = st.T.at(s, x); P3({ x: p.x, y: p.y + 1.2, z: p.z, max: 0.18, s0: 1, s1: 3, a0: 0.8, type: 15 }); } }
+      Sfx.play('shock', { vol: id === kindOf() ? 0.6 : 0.3 });
+    } else if (k === 'ghost') {
+      if (c) c.ghost = 3.5;
+      { const st = RR.current; if (st && st.T) { const p = st.T.at(s, x); P3({ x: p.x, y: p.y + 0.35, z: p.z, max: 0.5, s0: 1.2, s1: 6, a0: 0.8, type: 14, flat: 1 }); for (let i = 0; i < 12; i++) P3({ x: p.x + (Math.random() - 0.5) * 2.4, y: p.y + 0.4 + Math.random(), z: p.z + (Math.random() - 0.5) * 3, vy: 1.5, max: 0.8, s0: 0.5, s1: 1.4, a0: 0.4, type: 18, fin: 1 }); } }
+      Sfx.play('frost', { vol: id === kindOf() ? 0.6 : 0.3 });
+    } else if (k === 'hop') {
+      if (c && !c.inAir) launchCar(c, 10.5, 0, 0);
+      { const st = RR.current; if (st && st.T) { const p = st.T.at(s, x); P3({ x: p.x, y: p.y + 0.3, z: p.z, max: 0.45, s0: 1, s1: 6, a0: 0.6, type: 13, flat: 1 }); for (let i = 0; i < 8; i++) P3({ x: p.x + (Math.random() - 0.5) * 2.4, y: p.y + 0.3, z: p.z + (Math.random() - 0.5) * 3, vy: 0.8, max: 1.1, s0: 0.8, s1: 2.6, a0: 0.45, type: 18, fin: 1 }); } }
+      Sfx.play('spring', { vol: id === kindOf() ? 0.7 : 0.3 });
+    } else if (k === 'spike') {
+      const st = RR.current;
+      const t = tg && g.cars[tg] ? g.cars[tg] : null;
+      const w0 = st && st.T ? st.T.w : 7;
+      const ss = t ? t.s + 26 + Math.min(20, t.v * 0.4) : s + 40;
+      const sx = clamp(t ? t.x : x, -w0 + 3, w0 - 3);
+      const now0 = performance.now();
+      g.spikes.push({ n, by: id, s: ss, x: sx, hw: 3, until: now0 + 12000, hit: {} });
+      Sfx.play('poof', { vol: id === kindOf() ? 0.6 : 0.3 });
+    } else if (k === 'block') {
+      const st = RR.current;
+      const t = tg && g.cars[tg] ? g.cars[tg] : null;
+      const w0 = st && st.T ? st.T.w : 7;
+      const bs = (t ? t.s : s) + 75;
+      const left = (String(n).charCodeAt(String(n).length - 1) || 0) % 2 === 0;
+      const now0 = performance.now();
+      g.blocks.push({ n, by: id, s: bs, x0: left ? -w0 + 3.6 : -w0 - 0.5, x1: left ? w0 + 0.5 : w0 - 3.6, until: now0 + 15000, hit: {} });
+      Sfx.play('alert', { vol: id === kindOf() || (t && t.id === kindOf()) ? 0.6 : 0.3 });
+    } else if (k === 'ram') {
+      if (c) { c.ram = 1.6; c.boostT = Math.max(c.boostT, 1.6); }
+      Sfx.play('dash', { vol: id === kindOf() ? 0.8 : 0.35 });
     }
     void n;
   };
   const castSkill = (id, k, tg) => {
     const g = G.current;
     const c = g.cars[id];
-    if (!c || c.fin || c.spin > 0) return false;
+    if (!c || c.fin || c.spin > 0 || c.busted || c.hold > 0 || c.park || c.emp > 0) return false;
     const S0 = SKILLS[k];
-    if (!S0 || c.en < S0.cost || c.cd[k] > 0) return false;
+    if (!S0 || !(c.kit || SKILL_KEYS).includes(k) || c.en < S0.cost || c.cd[k] > 0) return false;
     c.en -= S0.cost; c.cd[k] = S0.cd;
     let target = tg || null;
-    if (k === 'rocket' && !target) {
+    if ((k === 'rocket' || k === 'emp' || k === 'spike' || k === 'block') && !target) {
       let best = 1e9;
-      for (const o of Object.values(g.cars)) { if (o.id === id || o.fin) continue; const ds = o.s - c.s; if (ds > 4 && ds < 140 && ds < best) { best = ds; target = o.id; } }
+      const far = k === 'emp' ? 90 : k === 'rocket' ? 140 : 200;
+      for (const o of Object.values(g.cars)) { if (o.id === id || o.fin || o.busted || o.park || (c.cop && o.cop) || (k !== 'rocket' && k !== 'emp' && o.cop)) continue; const ds = o.s - c.s; if (ds > 4 && ds < far && ds < best) { best = ds; target = o.id; } }
+      if (k === 'emp' && !target) { c.en += S0.cost; c.cd[k] = 0; return false; }
     }
     const n = `${id.slice(0, 4)}${(g.nonce += 1)}`;
     spawnSkill(id, k, c.s, c.x, target, n);
@@ -530,7 +664,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
 
   useEffect(() => {
     if (solo || !room) return undefined;
-    const cleanBots = (list) => (Array.isArray(list) ? list.filter((b) => b && typeof b.id === 'string').slice(0, MAX_RACERS).map((b) => ({ id: b.id, n: String(b.n || 'Bot').slice(0, 20), c: b.c, sk: clamp(num(b.sk, 0.95), 0.8, 1.04) })) : []);
+    const cleanBots = (list) => (Array.isArray(list) ? list.filter((b) => b && typeof b.id === 'string').slice(0, MAX_RACERS + 2).map((b) => ({ id: b.id, n: String(b.n || 'Bot').slice(0, 20), c: b.c, sk: clamp(num(b.sk, 0.95), 0.8, 1.04) })) : []);
     const offs = [
       relay.on('*', (m) => { if (m.m) { metaRef.current[m.from] = m.m; setNames((p) => (p[m.from] === m.m.n ? p : { ...p, [m.from]: m.m.n })); if (m.m.c && CARS[m.m.c]) setCarsOf((p) => (p[m.from] ? p : { ...p, [m.from]: m.m.c })); } if (!joinOrder.current.includes(m.from)) joinOrder.current.push(m.from); }),
       relay.on('roster', (m) => {
@@ -541,10 +675,11 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
         if (m.lp) setLaps(clamp(Math.round(num(m.lp, LAPS)), 1, 9));
         if (typeof m.fl === 'number') setFill(!!m.fl);
         if (typeof m.mp === 'string' && MAPS[m.mp] && phaseRef.current === 'menu') setMapKey(m.mp);
-        if (m.md === 'race' || m.md === 'attack') setMode(m.md);
-        if (m.cfg && phaseRef.current === 'menu' && !G.current.ids.length && typeof m.cfg.rid === 'string' && Array.isArray(m.cfg.ids)) beginRace({ rid: m.cfg.rid, ids: m.cfg.ids.filter((k) => typeof k === 'string').slice(0, MAX_RACERS), cars: m.cfg.cars && typeof m.cfg.cars === 'object' ? m.cfg.cars : {}, bots: cleanBots(m.cfg.bots), laps: clamp(Math.round(num(m.cfg.laps, LAPS)), 1, 9), in: 600, map: validMap(m.cfg.map), mode: m.cfg.mode });
+        if (m.md === 'race' || m.md === 'attack' || m.md === 'pursuit') setMode(m.md);
+        if (typeof m.cp === 'number') setCopsOn(!!m.cp);
+        if (m.cfg && phaseRef.current === 'menu' && !G.current.ids.length && typeof m.cfg.rid === 'string' && Array.isArray(m.cfg.ids)) beginRace({ rid: m.cfg.rid, ids: m.cfg.ids.filter((k) => typeof k === 'string').slice(0, MAX_RACERS + 2), cars: m.cfg.cars && typeof m.cfg.cars === 'object' ? m.cfg.cars : {}, bots: cleanBots(m.cfg.bots), laps: clamp(Math.round(num(m.cfg.laps, LAPS)), 1, 9), in: 600, map: validMap(m.cfg.map), mode: m.cfg.mode, roles: m.cfg.roles && typeof m.cfg.roles === 'object' ? m.cfg.roles : {}, cops: m.cfg.cops ? 1 : 0 });
       }),
-      relay.on('go', (m) => { if (isHost || !m || !Array.isArray(m.ids) || typeof m.rid !== 'string') return; beginRace({ rid: m.rid, ids: m.ids.filter((k) => typeof k === 'string').slice(0, MAX_RACERS), cars: m.cars && typeof m.cars === 'object' ? m.cars : {}, bots: cleanBots(m.bots), laps: clamp(Math.round(num(m.laps, LAPS)), 1, 9), in: clamp(num(m.in, 3600), 300, 6000), map: validMap(m.map), mode: m.mode }); }),
+      relay.on('go', (m) => { if (isHost || !m || !Array.isArray(m.ids) || typeof m.rid !== 'string') return; beginRace({ rid: m.rid, ids: m.ids.filter((k) => typeof k === 'string').slice(0, MAX_RACERS + 2), cars: m.cars && typeof m.cars === 'object' ? m.cars : {}, bots: cleanBots(m.bots), laps: clamp(Math.round(num(m.laps, LAPS)), 1, 9), in: clamp(num(m.in, 3600), 300, 6000), map: validMap(m.map), mode: m.mode, roles: m.roles && typeof m.roles === 'object' ? m.roles : {}, cops: m.cops ? 1 : 0 }); }),
       relay.on('menu', () => { if (!isHost) toMenu(true); }),
       relay.on('pl', (m) => {
         const g = G.current;
@@ -552,10 +687,11 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
         const c = g.cars[m.from];
         if (!c || m.from === kindOf()) return;
         if (typeof m.at === 'number') { if (m.at < (c.netAt || 0)) return; c.netAt = m.at; }
-        g.net[m.from] = { s: num(m.s, c.s), x: clamp(num(m.x), -20, 20), v: clamp(num(m.v), 0, 90), y: clamp(num(m.y), -1.2, 1.2), at: performance.now() };
+        g.net[m.from] = { s: num(m.s, c.s), x: clamp(num(m.x), -20, 20), v: clamp(num(m.v), 0, 90), y: clamp(num(m.y), -1.2, 1.2), at: performance.now(), sc: Number.isInteger(m.c) && m.c >= 0 ? m.c : -1, ss: num(m.ss), sx: clamp(num(m.sx), -12, 12) };
         c.drift = clamp(num(m.d), 0, 1); c.boostT = m.b ? 0.3 : 0; c.steer = clamp(num(m.st), -1, 1); c.brake = m.k ? 1 : 0;
         const sp = clamp(num(m.sp), 0, 3); if (sp > 0 && c.spin <= 0) c.spinMax = Math.max(sp, 0.9); c.spin = sp;
         c.shield = clamp(num(m.sh), 0, SHIELD_T);
+        c.bust = clamp(num(m.bu), 0, 1);
         if (Number(m.f) > 0 && !c.fin) c.fin = Number(m.f);
       }),
       relay.on('bt', (m) => {
@@ -565,15 +701,19 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
           const k = g.ids[a[0]];
           const c = k && g.cars[k];
           if (!c) continue;
-          g.net[k] = { s: num(a[1], c.s), x: clamp(num(a[2]), -20, 20), v: clamp(num(a[3]), 0, 90), y: clamp(num(a[4]), -1.2, 1.2), at: performance.now() };
+          g.net[k] = { s: num(a[1], c.s), x: clamp(num(a[2]), -20, 20), v: clamp(num(a[3]), 0, 90), y: clamp(num(a[4]), -1.2, 1.2), at: performance.now(), sc: Number.isInteger(a[13]) && a[13] >= 0 ? a[13] : -1, ss: num(a[14]), sx: clamp(num(a[15]), -12, 12) };
           c.drift = Number(a[5]) || 0; c.boostT = a[6] ? 0.3 : 0; if (Number(a[7]) > 0 && !c.fin) c.fin = Number(a[7]);
           const sp = clamp(num(a[8]), 0, 3); if (sp > 0 && c.spin <= 0) c.spinMax = Math.max(sp, 0.9); c.spin = sp;
           c.shield = clamp(num(a[9]), 0, SHIELD_T);
+          c.bust = clamp(num(a[10]), 0, 1);
+          if (c.cop) { const pk = !!a[11]; if (c.park && !pk) c.chaseT = 0; c.park = pk; }
+          if (a[12] && !c.busted) bustCar(c, null, false);
         }
       }),
+      relay.on('bust', (m) => { const g = G.current; if (!m || m.r !== g.rid || typeof m.id !== 'string') return; const c = g.cars[m.id]; if (!c || m.id === kindOf() || c.busted) return; bustCar(c, typeof m.by === 'string' ? m.by : null, false); }),
       relay.on('sk', (m) => {
         const g = G.current;
-        if (!m || m.r !== g.rid || g.mode !== 'attack' || !SKILLS[m.k]) return;
+        if (!m || m.r !== g.rid || !(skillMode(g.mode) || g.copsOn) || !SKILLS[m.k]) return;
         const id = typeof m.id === 'string' && g.cars[m.id] ? m.id : m.from;
         if (id === kindOf() || (g.bots.includes(id) && m.from !== (room && room.host))) return;
         if (!g.cars[id]) return;
@@ -584,7 +724,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
         if (!m || m.r !== g.rid || typeof m.id !== 'string') return;
         const c = g.cars[m.id];
         if (!c || m.id === kindOf()) return;
-        const k = m.k === 'oil' || m.k === 'shock' ? m.k : 'rocket';
+        const k = HIT_KINDS.includes(m.k) ? m.k : 'rocket';
         const blocked = !!m.b;
         if (blocked) c.shield = 0;
         else crashCar(c, k, typeof m.by === 'string' ? m.by : '');
@@ -614,13 +754,13 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
       next.concat(w).forEach((p) => { nm[p] = p === myId ? myFirst : (metaRef.current[p] && metaRef.current[p].n) || 'Friend'; });
       next.forEach((p) => { cs[p] = p === myId ? myCarRef.current : CARS[carsOfRef.current[p]] ? carsOfRef.current[p] : metaRef.current[p] && CARS[metaRef.current[p].c] ? metaRef.current[p].c : 'sport'; });
       const g = G.current;
-      const cfg = racing && g.ids.length ? { rid: g.rid, ids: g.ids, cars: Object.fromEntries(g.ids.map((k) => [k, g.cars[k] ? g.cars[k].type : 'sport'])), bots: g.bots.map((k) => ({ id: k, n: g.botMeta[k] ? g.botMeta[k].n : 'Bot', c: g.cars[k] ? g.cars[k].type : 'sport', sk: g.botMeta[k] ? g.botMeta[k].skill : 0.95 })), laps: g.laps, map: g.map, mode: g.mode } : null;
-      relay.send('roster', { ids: next, nm, cs, lp: laps, fl: fill ? 1 : 0, mp: mapRef.current, md: modeRef.current, cfg });
+      const cfg = racing && g.ids.length ? { rid: g.rid, ids: g.ids, cars: Object.fromEntries(g.ids.map((k) => [k, g.cars[k] ? g.cars[k].type : 'sport'])), bots: g.bots.map((k) => ({ id: k, n: g.botMeta[k] ? g.botMeta[k].n : 'Bot', c: g.cars[k] ? g.cars[k].type : 'sport', sk: g.botMeta[k] ? g.botMeta[k].skill : 0.95 })), laps: g.laps, map: g.map, mode: g.mode, roles: g.role, cops: g.copsOn ? 1 : 0 } : null;
+      relay.send('roster', { ids: next, nm, cs, lp: laps, fl: fill ? 1 : 0, mp: mapRef.current, md: modeRef.current, cp: copsRef.current ? 1 : 0, cfg });
     };
     tick();
     const iv = setInterval(tick, 1500);
     return () => clearInterval(iv);
-  }, [relay.peers, allowWatch, laps, fill, mapKey, mode]);
+  }, [relay.peers, allowWatch, laps, fill, mapKey, mode, copsOn]);
   useEffect(() => {
     if (solo || !room || isHost) return undefined;
     const w = relay.peers.filter((p) => metaRef.current[p] && metaRef.current[p].w);
@@ -648,6 +788,16 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
   };
   const pickMap = (k) => { if (!isHost || !MAPS[k]) return; kitTap(); setMapKey(k); savePref(MAP_PREF, k); setMapSheet(false); };
   const pickMode = (k) => { if (!isHost || !MODES[k]) return; kitTap(); setMode(k); savePref(MODE_PREF, k); };
+  const pickSide = (k) => { if (k !== 'racer' && k !== 'cop') return; kitTap(); setSide(k); savePref(SIDE_PREF, k); };
+  const toggleKit = (k) => {
+    kitTap();
+    setKit((cur) => {
+      let next = cur.includes(k) ? cur.filter((q) => q !== k) : cur.length >= 4 ? [...cur.slice(1), k] : [...cur, k];
+      if (next.length === 4) savePref(KIT_PREF, next.join(','));
+      if (next.length === 0) next = [k];
+      return next;
+    });
+  };
   const pickGfx = (k) => {
     kitTap(); setGfx(k); savePref(GFX_PREF, k);
     const g = G.current, st = RR.current;
@@ -660,8 +810,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
       if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
       const k = e.key.toLowerCase();
       if (['arrowleft', 'arrowright', 'arrowup', 'arrowdown', 'a', 'd', 'w', 's', ' ', 'shift', 'b'].includes(k)) { keys.current.add(k); e.preventDefault(); }
-      const sk = SKILL_KEYS.find((q) => SKILLS[q].key === k);
-      if (sk && !e.repeat) G.current.skillQ.push(sk);
+      if (['1', '2', '3', '4'].includes(k) && !e.repeat) { const cur = G.current.cars[kindOf()]; const kt = (cur && cur.kit) || kitRef.current; const sk = kt[Number(k) - 1]; if (sk) G.current.skillQ.push(sk); }
     };
     const ku = (e) => keys.current.delete(e.key.toLowerCase());
     window.addEventListener('keydown', kd); window.addEventListener('keyup', ku);
@@ -707,7 +856,8 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
       const now = performance.now();
       const myK = kindOf();
       const playing = g.ids.includes(myK) && !watch;
-      const attack = g.mode === 'attack' && ph !== 'menu';
+      const attack = skillMode(g.mode) && ph !== 'menu';
+      const police = (g.mode === 'pursuit' || g.copsOn) && ph !== 'menu';
       const step = pausedRef.current ? 0 : dt;
       const subs = Math.max(1, Math.ceil(step / 0.034));
       const sdt = step / subs;
@@ -743,22 +893,53 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
       const fx = g.fx;
       const total = T.total;
       const takeBottles = (c) => {
+        if (c.sc >= 0) return;
         for (const b of g.bottles) {
           if (b.took[c.id] > now) continue;
           const ds = (((c.s - b.s) % total) + total) % total;
           if ((ds < 2.6 || ds > total - 1.4) && Math.abs(c.x - b.x) < 1.9) {
             b.took[c.id] = now + BOTTLE_BACK * 1000;
-            c.en = Math.min(EN_MAX, c.en + BOTTLE_EN);
-            if (c.id === myK) { Sfx.play('pick', { vol: 0.7 }); const p = T.at(b.s, b.x); spawnBurst(p.x, p.y + 1.2, p.z, 12, 3, 5, 0.6, 0.55); }
+            const dk = DRINKS[b.k] ? b.k : 'en';
+            drinkUse(c, dk);
+            if (dk === 'shield') { const n = `${c.id.slice(0, 4)}${(g.nonce += 1)}`; spawnSkill(c.id, 'shield', c.s, c.x, null, n); if (!solo) relay.send('sk', { r: g.rid, id: c.id, k: 'shield', s: +c.s.toFixed(2), x: +c.x.toFixed(2), tg: null, n }); }
+            if (c.id === myK) { Sfx.play(dk === 'gold' ? 'coin' : 'pick', { vol: 0.7 }); if (dk !== 'en') say(DRINKS[dk].name, 1.1); const p = T.at(b.s, b.x); spawnBurst(p.x, p.y + 1.2, p.z, dk === 'gold' ? 20 : 12, DRINKS[dk].glow, 5, 0.6, 0.55); }
           }
         }
       };
       const checkOil = (c) => {
+        if (c.ghost > 0 || c.busted || c.park || c.sc >= 0) return;
         for (const o of g.oils) {
-          if (o.hit[c.id] || now > o.until) continue;
+          if (o.hit[c.id] || now > o.until || c.inAir) continue;
           if (c.id === o.by && now - o.at < 2500) continue;
           if (Math.abs(c.s - o.s) < 2.4 && Math.abs(c.x - o.x) < 2.1) { o.hit[c.id] = 1; applyHit(c, 'oil', o.by, true); }
         }
+        for (const m of g.mines) {
+          if (now > m.until || c.inAir || (c.id === m.by && now - m.at < 2200)) continue;
+          if (Math.abs(c.s - m.s) < 2.2 && Math.abs(c.x - m.x) < 1.9) { m.until = 0; applyHit(c, 'mine', m.by, true); }
+        }
+        if (c.cop) return;
+        for (const q of g.spikes) {
+          if (q.hit[c.id] || now > q.until || c.inAir) continue;
+          if (Math.abs(c.s - q.s) < 1.5 && Math.abs(c.x - q.x) < q.hw + 0.7) { q.hit[c.id] = 1; applyHit(c, 'spike', q.by, true); }
+        }
+        for (const q of g.blocks) {
+          if (q.hit[c.id] || now > q.until || c.inAir) continue;
+          if (Math.abs(c.s - q.s) < 2.1 && c.x > q.x0 - 0.7 && c.x < q.x1 + 0.7) { q.hit[c.id] = 1; applyHit(c, 'block', q.by, true); }
+        }
+      };
+      const bustStep = (c, dt0, local) => {
+        if (!police || c.cop || c.fin || c.busted || c.hold > 0) return;
+        let n = 0, by = null;
+        for (const o of all) { if (!o.cop || o.park || o.hold > 0 || o.busted || (o.sc >= 0) !== (c.sc >= 0)) continue; if (Math.abs(o.s - c.s) < BUST_R && Math.abs(o.x - c.x) < 3.3) { n += 1; by = o.id; } }
+        if (n && c.v < BUST_V) c.bust = Math.min(1, (c.bust || 0) + dt0 * 0.5 * n);
+        else c.bust = Math.max(0, (c.bust || 0) - dt0 * 0.35);
+        if (c.bust >= 1 && local) bustCar(c, by, true);
+      };
+      const copRespawn = (c) => {
+        const ahead = all.filter((o) => !o.cop && !o.fin && !o.busted);
+        if (!ahead.length) return;
+        const lead = ahead.reduce((m2, o) => (o.s > m2.s ? o : m2), ahead[0]);
+        c.s = lead.s + 230 + Math.random() * 120; c.x = (Math.random() < 0.5 ? -1 : 1) * (T.w + 2.2); c.v = 0; c.yaw = 0; c.park = true; c.chaseT = 0; c.tg = null;
       };
       if (racing && step > 0) {
         if (attack && playing && ph === 'race') while (g.skillQ.length) { const k = g.skillQ.shift(); if (!castSkill(myK, k)) { const c = g.cars[myK]; if (c && !c.fin) Sfx.play('click', { vol: 0.3 }); } }
@@ -775,9 +956,12 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
               inp = { steer, brake: K.has('shift') || K.has(' ') || K.has('arrowdown') || K.has('s') || H.d, boost: K.has('arrowup') || K.has('w') || K.has('b') || H.b };
               if (sub === subs - 1) H.b = false;
             }
-            stepCar(mine, T, inp, sdt, { fx, mul: mine.fin ? 0.55 : 1 });
-            for (const o of all) if (o !== mine) { const hit = collide(mine, o, solo || (isHost && g.bots.includes(o.id))); if (hit > 0.12) fx.push({ k: 'bump', id: myK, f: hit }); }
-            if (attack && !mine.fin) { takeBottles(mine); checkOil(mine); }
+            const wasCut = mine.sc >= 0;
+            driveCar(T, mine, () => inp, sdt, { fx, mul: mine.fin ? 0.55 : 1 });
+            if (!wasCut && mine.sc >= 0) { say('Shortcut!', 1.2); Sfx.play('dash', { vol: 0.5 }); }
+            for (const o of all) if (o !== mine && !(mine.ghost > 0) && !(o.ghost > 0) && !o.park && !(o.busted && !o.cop) && !(mine.sc >= 0) && !(o.sc >= 0)) { const hit = collide(mine, o, solo || (isHost && g.bots.includes(o.id))); if (hit > 0.12) fx.push({ k: 'bump', id: myK, f: hit }); }
+            if (!mine.fin && !mine.busted) { if (attack) takeBottles(mine); checkOil(mine); bustStep(mine, sdt, true); }
+            if (!mine.cop && !mine.busted && !(mine.sc >= 0)) for (const o of all) { if (o.cop && o.ram > 0 && !(mine.ghost > 0) && !(o.sc >= 0) && Math.abs(o.s - mine.s) < 3.2 && Math.abs(o.x - mine.x) < 2.4 && !(mine.ramAt > now - 1500)) { mine.ramAt = now; applyHit(mine, 'ram', o.id, true); } }
             const lapNow = Math.floor(Math.max(0, mine.s) / total);
             if (lapNow > (mine.lap || 0) && mine.s > 0) {
               const lt = raceT - (mine.lapAt || 0);
@@ -796,7 +980,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
             }
           }
           if (isHost) {
-            const lead = all.filter((c) => !g.bots.includes(c.id)).reduce((m, c) => Math.max(m, c.s), -1e9);
+            const lead = all.filter((c) => !g.bots.includes(c.id) && !c.cop).reduce((m, c) => Math.max(m, c.s), -1e9);
             for (const k of g.bots) {
               const c = g.cars[k];
               if (!c) continue;
@@ -804,13 +988,56 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
               const gap = c.s - lead;
               const band = g.botLv === 'hard' ? (gap > 70 ? 0.97 : gap > 30 ? 0.995 : gap < -90 ? 1.09 : gap < -40 ? 1.05 : 1.01) : g.botLv === 'easy' ? (gap > 30 ? 0.88 : gap > 0 ? 0.94 : gap < -90 ? 1.03 : 1) : (gap > 70 ? 0.9 : gap > 30 ? 0.96 : gap < -90 ? 1.07 : gap < -40 ? 1.03 : 1);
               let seek = null;
+              if (c.busted) { c.v = Math.max(0, c.v - 30 * sdt); continue; }
+              if (c.cop) {
+                if (c.park) {
+                  c.v = 0;
+                  if (all.some((o) => !o.cop && !o.fin && !o.busted && c.s - o.s < 45 && c.s - o.s > -8)) { c.park = false; c.chaseT = 0; c.x = clamp(c.x, -T.w + 1, T.w - 1); c.v = Math.max(c.v, 32); }
+                  continue;
+                }
+                c.chaseT = (c.chaseT || 0) + sdt;
+                c.en = Math.min(EN_MAX, c.en + sdt * 5);
+                let tg = null, bd = 1e9;
+                for (const o of all) { if (o.cop || o.fin || o.busted) continue; const ds = o.s - c.s; const sc = ds >= -6 ? ds : 400 - ds; if (ds > -70 && sc < bd) { bd = sc; tg = o; } }
+                c.tg = tg ? tg.id : null;
+                const ds0 = tg ? tg.s - c.s : 999;
+                if (tg && ds0 < 70) seek = clamp(tg.x, -T.w + 1, T.w - 1);
+                const inp = botInput(c, T, all.filter((o) => o !== tg), raceT, 1, seek);
+                if (tg && ds0 < 70 && ds0 > -6) inp.steer = clamp(inp.steer + clamp((tg.x - c.x) * 0.35, -0.6, 0.6), -1, 1);
+                const cmul = !tg ? 0.95 : ds0 > 25 ? 1.1 : ds0 > 3 ? 1.13 : 1;
+                stepCar(c, T, inp, sdt, { mul: cmul });
+                for (const o of all) if (o !== c && g.bots.includes(o.id)) { const hit = collide(c, o, true); if (hit > 0.12 && c.ram > 0 && !o.cop) applyHit(o, 'ram', c.id, true); }
+                if (sub === 0 && ph === 'race' && raceT > 4) { const d0 = botSkill(c, all, g.rockets, Math.random, step * 1.4, { foe: (q) => !q.cop }); if (d0) castSkill(k, d0.k, d0.tg); }
+                if (g.mode !== 'pursuit' && (c.chaseT > 40 || !tg || ds0 > 160)) copRespawn(c);
+                else if (g.mode === 'pursuit' && tg && ds0 > 260) copRespawn(c);
+                continue;
+              }
               if (attack && c.en < 70) { let bd = 1e9; for (const b of g.bottles) { if (b.took[k] > now) continue; const ds = (((b.s - c.s) % total) + total) % total; if (ds > 6 && ds < 45 && ds < bd) { bd = ds; seek = b.x; } } }
-              const inp = botInput(c, T, all, raceT, sk, seek);
-              stepCar(c, T, inp, sdt, { mul: (c.fin ? 0.55 : sk) * band });
-              for (const o of all) if (o !== c && g.bots.includes(o.id)) collide(c, o, true);
+              let cutGo = null;
+              if (c.sc < 0 && T.cuts && T.cuts.length && !c.fin) {
+                const u = ((c.s % total) + total) % total;
+                const lapN = Math.floor(Math.max(0, c.s) / total);
+                for (let ci = 0; ci < T.cuts.length; ci++) {
+                  const C = T.cuts[ci];
+                  const d = C.s0 - u;
+                  if (d < -5 || d > 70) continue;
+                  const h = (((k.charCodeAt(k.length - 1) * 31 + ci * 17 + lapN * 7) % 100) / 100);
+                  const want = g.botLv === 'hard' ? 0.75 : g.botLv === 'easy' ? 0.25 : 0.5;
+                  if (h < want) cutGo = C;
+                }
+              }
+              driveCar(T, c, (TT) => {
+                if (TT !== T) return botInput(c, TT, [], raceT, sk, null);
+                const inp0 = botInput(c, T, all, raceT, sk, seek);
+                if (cutGo) inp0.steer = clamp((cutGo.side * (T.w + 0.6) - c.x) * 0.22 + c.yaw * -1.6 + inp0.steer * 0.25, -1, 1);
+                return inp0;
+              }, sdt, { mul: (c.fin ? 0.55 : sk) * band });
+              for (const o of all) if (o !== c && g.bots.includes(o.id) && !(c.ghost > 0) && !(o.ghost > 0) && !o.park && !(c.sc >= 0) && !(o.sc >= 0)) { const hit = collide(c, o, true); if (hit > 0.12 && o.cop && o.ram > 0) applyHit(c, 'ram', o.id, true); }
+              if (!c.fin) { checkOil(c); bustStep(c, sdt, true); }
               if (attack && !c.fin) {
-                takeBottles(c); checkOil(c);
-                if (sub === 0 && ph === 'race' && raceT > 6) { const d0 = botSkill(c, all, g.rockets, Math.random, step * (g.botLv === 'hard' ? 1.7 : g.botLv === 'easy' ? 0.55 : 1)); if (d0) castSkill(k, d0.k, d0.tg); }
+                takeBottles(c);
+                const danger = g.oils.concat(g.mines).some((q) => q.s - c.s > 4 && q.s - c.s < 22 && Math.abs(q.x - c.x) < 2.6) || g.spikes.concat(g.blocks).some((q) => q.s - c.s > 4 && q.s - c.s < 30);
+                if (sub === 0 && ph === 'race' && raceT > 6) { const d0 = botSkill(c, all, g.rockets, Math.random, step * (g.botLv === 'hard' ? 1.7 : g.botLv === 'easy' ? 0.55 : 1), { danger, foe: (q) => !q.cop || g.mode === 'pursuit' }); if (d0) castSkill(k, d0.k, d0.tg); }
               }
               if (!c.fin && c.s >= total * g.laps) { c.fin = Math.max(0.01, raceT); g.fins[k] = c.fin; }
             }
@@ -828,12 +1055,35 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
             }
           }
         }
+        for (let i = g.emps.length - 1; i >= 0; i--) {
+          const e = g.emps[i];
+          e.t += step;
+          const a0 = g.cars[e.by], b0 = g.cars[e.tg];
+          if (!a0 || !b0) { g.emps.splice(i, 1); continue; }
+          if (e.t >= 0.42) {
+            g.emps.splice(i, 1);
+            const mineHit = b0.id === myK && playing;
+            const botHit = isHost && g.bots.includes(b0.id);
+            if (mineHit || botHit) applyHit(b0, 'emp', e.by, true);
+          }
+        }
         if (g.oils.length) g.oils = g.oils.filter((o) => now < o.until);
+        if (g.mines.length) g.mines = g.mines.filter((o) => now < o.until);
+        if (g.spikes.length) g.spikes = g.spikes.filter((o) => now < o.until);
+        if (g.blocks.length) g.blocks = g.blocks.filter((o) => now < o.until);
         for (const c of all) if (c.id !== myK && !(isHost && g.bots.includes(c.id))) { if (c.spin > 0) c.spin = Math.max(0, c.spin - step); if (c.shield > 0) c.shield = Math.max(0, c.shield - step); if (step > 0) airStep(c, T, step, fx); }
         for (const k of Object.keys(g.net)) {
           const c = g.cars[k], N = g.net[k];
           if (!c || k === myK) continue;
           const age = Math.min(0.35, (now - N.at) / 1000);
+          if (N.sc >= 0 && T.cuts && T.cuts[N.sc]) {
+            const tss = N.ss + N.v * Math.cos(N.y) * age;
+            if (c.sc !== N.sc || Math.abs(tss - c.ss) > 20) { c.sc = N.sc; c.ss = tss; c.sx = N.sx; } else { const kk = 1 - Math.exp(-step * 10); c.ss += (tss - c.ss) * kk; c.sx += (N.sx - c.sx) * kk; }
+            c.s = N.s; c.x = N.x; c.v = N.v; c.yaw += (N.y - c.yaw) * Math.min(1, step * 10);
+            c.wheel = (c.wheel + (c.v * step) / 0.34) % (Math.PI * 2);
+            continue;
+          }
+          c.sc = -1;
           const ts2 = N.s + N.v * Math.cos(N.y) * age, tx = N.x + N.v * Math.sin(N.y) * age;
           if (Math.abs(ts2 - c.s) > 25) { c.s = ts2; c.x = tx; } else { const kk = 1 - Math.exp(-step * 10); c.s += (ts2 - c.s) * kk + c.v * Math.cos(c.yaw) * step * (1 - kk); c.x += (tx - c.x) * kk; }
           c.v = N.v; c.yaw += (N.y - c.yaw) * Math.min(1, step * 10);
@@ -842,22 +1092,23 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
         if (!solo && playing && g.cars[myK] && now - g.sendAt > SEND_MS) {
           g.sendAt = now;
           const c = g.cars[myK];
-          relay.send('pl', { r: g.rid, s: +c.s.toFixed(2), x: +c.x.toFixed(2), v: +c.v.toFixed(2), y: +c.yaw.toFixed(3), d: +c.drift.toFixed(2), b: c.boostT > 0 ? 1 : 0, k: c.brake ? 1 : 0, st: +c.steer.toFixed(2), sp: c.spin > 0 ? +c.spin.toFixed(2) : 0, sh: c.shield > 0 ? +c.shield.toFixed(1) : 0, f: c.fin ? +c.fin.toFixed(2) : 0, at: Date.now() });
+          relay.send('pl', { r: g.rid, s: +c.s.toFixed(2), x: +c.x.toFixed(2), v: +c.v.toFixed(2), y: +c.yaw.toFixed(3), d: +c.drift.toFixed(2), b: c.boostT > 0 ? 1 : 0, k: c.brake ? 1 : 0, st: +c.steer.toFixed(2), sp: c.spin > 0 ? +c.spin.toFixed(2) : 0, sh: c.shield > 0 ? +c.shield.toFixed(1) : 0, f: c.fin ? +c.fin.toFixed(2) : 0, bu: c.bust > 0.02 ? +c.bust.toFixed(2) : 0, c: c.sc >= 0 ? c.sc : -1, ss: c.sc >= 0 ? +c.ss.toFixed(2) : 0, sx: c.sc >= 0 ? +c.sx.toFixed(2) : 0, at: Date.now() });
         }
         if (!solo && isHost && g.bots.length && now - g.botAt > 120) {
           g.botAt = now;
-          relay.send('bt', { r: g.rid, a: g.bots.map((k) => { const c = g.cars[k]; return c ? [g.ids.indexOf(k), +c.s.toFixed(2), +c.x.toFixed(2), +c.v.toFixed(2), +c.yaw.toFixed(3), +c.drift.toFixed(2), c.boostT > 0 ? 1 : 0, c.fin ? +c.fin.toFixed(2) : 0, c.spin > 0 ? +c.spin.toFixed(2) : 0, c.shield > 0 ? +c.shield.toFixed(1) : 0] : null; }).filter(Boolean) });
+          relay.send('bt', { r: g.rid, a: g.bots.map((k) => { const c = g.cars[k]; return c ? [g.ids.indexOf(k), +c.s.toFixed(2), +c.x.toFixed(2), +c.v.toFixed(2), +c.yaw.toFixed(3), +c.drift.toFixed(2), c.boostT > 0 ? 1 : 0, c.fin ? +c.fin.toFixed(2) : 0, c.spin > 0 ? +c.spin.toFixed(2) : 0, c.shield > 0 ? +c.shield.toFixed(1) : 0, c.bust > 0.02 ? +c.bust.toFixed(2) : 0, c.park ? 1 : 0, c.busted ? 1 : 0, c.sc >= 0 ? c.sc : -1, c.sc >= 0 ? +c.ss.toFixed(2) : 0, c.sc >= 0 ? +c.sx.toFixed(2) : 0] : null; }).filter(Boolean) });
         }
         if (isHost && ph === 'race') {
-          const humans = all.filter((c) => !g.bots.includes(c.id));
-          const done = humans.length && humans.every((c) => c.fin);
-          const first = all.filter((c) => c.fin).reduce((m, c) => Math.min(m, c.fin), Infinity);
+          const racersA = all.filter((c) => !c.cop);
+          const humans = racersA.filter((c) => !g.bots.includes(c.id));
+          const done = (humans.length && humans.every((c) => c.fin || c.busted)) || (racersA.length > 0 && racersA.every((c) => c.fin || c.busted));
+          const first = racersA.filter((c) => c.fin).reduce((m, c) => Math.min(m, c.fin), Infinity);
           if (!g.endAt && (done || (first < Infinity && raceT - first > 30))) g.endAt = now + (done ? 1500 : 0);
           if (g.endAt && now >= g.endAt && !g.resAt) {
             g.resAt = now;
             const goal = total * g.laps;
-            for (const c of all) if (!c.fin && g.bots.includes(c.id)) c.fin = raceT + Math.max(0, goal - c.s) / Math.max(12, c.v || 30);
-            const o = standings(all).map((c) => [c.id, Number(c.fin) > 0 ? +Number(c.fin).toFixed(2) : 0]);
+            for (const c of all) if (!c.fin && !c.busted && !c.cop && g.bots.includes(c.id)) c.fin = raceT + Math.max(0, goal - c.s) / Math.max(12, c.v || 30);
+            const o = standings(all.filter((c) => !c.cop)).map((c) => [c.id, Number(c.fin) > 0 && !c.busted ? +Number(c.fin).toFixed(2) : 0]);
             if (!solo) relay.send('res', { r: g.rid, o });
             finishUp(o);
           }
@@ -874,12 +1125,12 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
         else if (f.k === 'ready') { if (local) Sfx.play('pick', { vol: 0.5 }); }
         else if (f.k === 'wall' || f.k === 'bump') {
           const bc = g.cars[f.id];
-          if (bc && f.f > 0.15) { const bp = T.at(bc.s, bc.x); for (let i = 0; i < Math.round(4 + f.f * 10); i++) { const a = Math.random() * 6.283; P3({ x: bp.x, y: bp.y + 0.6, z: bp.z, vx: Math.cos(a) * 7, vy: 2 + Math.random() * 5, vz: Math.sin(a) * 7, g: 16, max: 0.3 + Math.random() * 0.3, s0: 0.08, s1: 0.04, a0: 1, type: 4, st: 0.03 }); } P3({ x: bp.x, y: bp.y + 0.6, z: bp.z, max: 0.1, s0: 0.6, s1: 1.4, a0: 0.7, type: 16 }); }
+          if (bc && f.f > 0.15) { const bp = carAt(T, bc); for (let i = 0; i < Math.round(4 + f.f * 10); i++) { const a = Math.random() * 6.283; P3({ x: bp.x, y: bp.y + 0.6, z: bp.z, vx: Math.cos(a) * 7, vy: 2 + Math.random() * 5, vz: Math.sin(a) * 7, g: 16, max: 0.3 + Math.random() * 0.3, s0: 0.08, s1: 0.04, a0: 1, type: 4, st: 0.03 }); } P3({ x: bp.x, y: bp.y + 0.6, z: bp.z, max: 0.1, s0: 0.6, s1: 1.4, a0: 0.7, type: 16 }); }
           if (local) { Sfx.play('bump', { vol: 0.35 + f.f * 0.5, gap: 0.2 }); g.shake = Math.max(g.shake || 0, 0.18 + f.f * 0.25); }
         }
         else if (f.k === 'land') {
           const lc = g.cars[f.id];
-          if (lc) { const lp = T.at(lc.s, lc.x); spawnBurst(lp.x, lp.y + (lc.air || 0) + 0.2, lp.z, 5 + Math.round(f.f * 10), 2, 3 + f.f * 5, 1.2, 0.9); if (f.f > 0.3) { P3({ x: lp.x, y: lp.y + 0.3, z: lp.z, max: 0.45, s0: 1.2, s1: 5 + f.f * 4, a0: 0.5, type: 13, flat: 1 }); for (let i = 0; i < 6; i++) P3({ x: lp.x + (Math.random() - 0.5) * 2.4, y: lp.y + 0.3, z: lp.z + (Math.random() - 0.5) * 3, vy: 0.7, max: 1.3, s0: 0.9, s1: 3.2, a0: 0.45, type: 18, fin: 1 }); } }
+          if (lc) { const lp = carAt(T, lc); spawnBurst(lp.x, lp.y + (lc.air || 0) + 0.2, lp.z, 5 + Math.round(f.f * 10), 2, 3 + f.f * 5, 1.2, 0.9); if (f.f > 0.3) { P3({ x: lp.x, y: lp.y + 0.3, z: lp.z, max: 0.45, s0: 1.2, s1: 5 + f.f * 4, a0: 0.5, type: 13, flat: 1 }); for (let i = 0; i < 6; i++) P3({ x: lp.x + (Math.random() - 0.5) * 2.4, y: lp.y + 0.3, z: lp.z + (Math.random() - 0.5) * 3, vy: 0.7, max: 1.3, s0: 0.9, s1: 3.2, a0: 0.45, type: 18, fin: 1 }); } }
           if (local) { Sfx.play('bump', { vol: 0.35 + f.f * 0.55, gap: 0.12 }); g.shake = Math.max(g.shake || 0, 0.16 + f.f * 0.45); try { if (navigator.vibrate) navigator.vibrate(Math.round(10 + f.f * 30)); } catch {} }
         } else if (f.k === 'jump') { if (local) Sfx.play('dash', { vol: 0.4 }); }
         else if (f.k === 'pad') { if (local) { Sfx.play('dash', { vol: 0.85 }); try { if (navigator.vibrate) navigator.vibrate(16); } catch {} } }
@@ -892,8 +1143,30 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
       const pool = g.pool || (g.pool = []);
       let pi = 0;
       const tagPos = {};
+      const glowNow = [];
+      const flash = Math.floor(now / 150) % 2;
+      const copLights = (x, y, z, rx, rz, fx0, fz0) => {
+        for (const sg of [-1, 1]) {
+          const lit = (sg < 0) === (flash === 0);
+          const lx = x + rx * sg * 0.29 - fx0 * 0.25, lz = z + rz * sg * 0.29 - fz0 * 0.25;
+          glowNow.push({ x: lx, y, z: lz, size: lit ? 1.5 : 0.55, alpha: lit ? 0.95 : 0.5, type: sg < 0 ? 8 : 20 });
+        }
+      };
+      const drawCarAt = (type, color, model, ghost) => {
+        const mesh = meshFor(type, color);
+        if (mesh) items.push(ghost ? { mesh, model, blend: 1, alpha: 0.38 } : { mesh, cast: true, model });
+        const wm = wheelsFor(type);
+        if (!wm) return;
+        const W0 = WHEELS[type] || WHEELS.sport;
+        W0.list.forEach((e, idx) => {
+          for (const sg of e[0] === 0 ? [0] : [-1, 1]) {
+            const mm = pool[pi] || (pool[pi] = new Float32Array(16)); pi++;
+            items.push(ghost ? { mesh: wm[idx], model: wheelInto(mm, model, sg * e[0], e[1], e[2], 0, 0), blend: 1, alpha: 0.38 } : { mesh: wm[idx], model: wheelInto(mm, model, sg * e[0], e[1], e[2], 0, 0) });
+          }
+        });
+      };
       for (const c of all) {
-        const p = T.at(c.s, c.x);
+        const p = carAt(T, c);
         const spinA = c.spin > 0 ? (1 - c.spin / Math.max(0.5, c.spinMax || 1)) * Math.PI * 2 * (c.spinTurns || 1.5) : 0;
         const vis = c.drift * c.steer * 0.34 + (c.bump > 0 ? Math.sin(now / 30) * 0.03 : 0) + spinA;
         const hd = p.heading + c.yaw + vis;
@@ -903,24 +1176,29 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
         const color = ph === 'menu' ? COLORS[c.slot % COLORS.length] : slotColor(c.id);
         const mesh = meshFor(c.type, color);
         const roll = -c.steer * clamp(c.v / 45, 0, 1) * 0.035 + p.bank;
-        const rampP = c.inAir ? Math.atan2(c.vy || 0, Math.max(10, c.v)) * 0.55 : Math.atan(groundSlope(T, c.s));
+        const rampP = c.inAir ? Math.atan2(c.vy || 0, Math.max(10, c.v)) * 0.55 : c.sc >= 0 ? 0 : Math.atan(groundSlope(T, c.s));
         const pitch = -p.slope - rampP + (c.brake ? 0.018 : c.boostT > 0 ? -0.012 : 0);
         const ox = Math.sin(fl) * 0.62, oy = (1 - Math.cos(fl)) * 0.62;
         const model = m4.pose(p.x + Math.cos(hd) * ox, p.y + air + oy, p.z - Math.sin(hd) * ox, hd, pitch, roll + fl);
-        if (mesh) items.push({ mesh, cast: true, model });
+        const ghost = c.ghost > 0;
+        if (mesh) items.push(ghost ? { mesh, model, blend: 1, alpha: 0.32 + Math.sin(now / 90) * 0.06 } : { mesh, cast: true, model });
         const wm = wheelsFor(c.type);
         if (wm) {
           const W0 = WHEELS[c.type] || WHEELS.sport;
           W0.list.forEach((e, idx) => {
             for (const sg of e[0] === 0 ? [0] : [-1, 1]) {
               const mm = pool[pi] || (pool[pi] = new Float32Array(16)); pi++;
-              items.push({ mesh: wm[idx], model: wheelInto(mm, model, sg * e[0], e[1], e[2], e[5] ? c.steer * 0.42 : 0, c.wheel || 0) });
+              const wmod = wheelInto(mm, model, sg * e[0], e[1], e[2], e[5] ? c.steer * 0.42 : 0, c.wheel || 0);
+              items.push(ghost ? { mesh: wm[idx], model: wmod, blend: 1, alpha: 0.32 } : { mesh: wm[idx], model: wmod });
             }
           });
         }
         if (c.shield > 0 && st.fx) items.push({ mesh: st.fx.shield, model, blend: 1, alpha: 0.85 * Math.min(1, c.shield * 2) });
         const fxv = Math.sin(hd), fzv = Math.cos(hd), rxv = Math.cos(hd), rzv = -Math.sin(hd);
         const back = (CARS[c.type] || CARS.sport).len;
+        if (c.cop && (!c.park || ph === 'menu') && ph !== 'menu') copLights(p.x, p.y + air + 1.7, p.z, rxv, rzv, fxv, fzv);
+        if (c.flat > 0 && step > 0 && c.v > 6 && P.length < cap && Math.random() < 0.6) for (const sg of [-1, 1]) P.push({ x: p.x - fxv * 1.2 + rxv * sg * 0.8, y: p.y + 0.2, z: p.z - fzv * 1.2 + rzv * sg * 0.8, vx: -fxv * 4 + (Math.random() - 0.5) * 3, vy: 1 + Math.random() * 2, vz: -fzv * 4 + (Math.random() - 0.5) * 3, g: 14, life: 0, max: 0.3, s0: 0.07, s1: 0.03, a0: 1, type: 4, st: 0.03 });
+        if (c.emp > 0 && step > 0 && Math.random() < 0.25) bolts(p.x, p.y + air + 0.9, p.z, 1.4, 1, 0.7);
         if (step > 0 && (c.drift > 0.45 || c.spin > 0) && c.v > 8 && P.length < cap) {
           const dust = st.key === 'rock';
           for (const sg of [-1, 1]) P.push({ x: p.x - fxv * (back - 0.5) + rxv * sg * 0.85, y: p.y + 0.25, z: p.z - fzv * (back - 0.5) + rzv * sg * 0.85, vx: -fxv * 2 + (Math.random() - 0.5), vy: 0.6 + Math.random() * 0.5, vz: -fzv * 2 + (Math.random() - 0.5), life: 0, max: 0.9 + Math.random() * 0.5, s0: 0.4, s1: dust ? 1.7 : 2.3, a0: dust ? 0.42 : 0.4, type: dust ? 2 : 18, fin: dust ? 0 : 1, seed: Math.random() });
@@ -937,10 +1215,42 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
           }
         }
         if (c.shield > 0 && step > 0 && Math.random() < 0.3 && P.length < cap) { const a = Math.random() * Math.PI * 2; P.push({ x: p.x + Math.cos(a) * 1.6, y: p.y + 0.4 + Math.random() * 1.4, z: p.z + Math.sin(a) * 2.2, vx: 0, vy: 1.2, vz: 0, life: 0, max: 0.5, s0: 0.25, s1: 0.05, a0: 0.9, type: 3 }); }
+        if (c.rage > 0 && step > 0 && Math.random() < 0.45 && P.length < cap) { const a = Math.random() * Math.PI * 2; P.push({ x: p.x + Math.cos(a) * 1.1, y: p.y + air + 0.3 + Math.random() * 0.8, z: p.z + Math.sin(a) * 1.6, vx: 0, vy: 1.6, vz: 0, life: 0, max: 0.5, s0: 0.3, s1: 0.06, a0: 1, type: 8 }); }
         if (c.slow > 0 && step > 0 && Math.random() < 0.4 && P.length < cap) P.push({ x: p.x + (Math.random() - 0.5) * 2, y: p.y + 0.6 + Math.random(), z: p.z + (Math.random() - 0.5) * 3, vx: 0, vy: 0.5, vz: 0, life: 0, max: 0.3, s0: 0.35, s1: 0.1, a0: 1, type: 6 });
-        tagPos[c.id] = [p.x, p.y + (c.type === 'jeep' ? 2.4 : c.type === 'tuktuk' ? 2.25 : c.type === 'hatch' ? 2.05 : 1.75), p.z];
+        tagPos[c.id] = [p.x, p.y + (c.type === 'jeep' ? 2.4 : c.type === 'tuktuk' ? 2.25 : c.type === 'hatch' || c.type === 'cop' ? 2.05 : 1.75), p.z];
       }
-      if (attack && st.fx) {
+      if ((attack || police) && st.fx) {
+        for (const m of g.mines) {
+          const p = T.at(m.s, m.x);
+          if (st.fx.mine) items.push({ mesh: st.fx.mine, model: m4.pose(p.x, p.y + 0.02, p.z, p.heading, -p.slope, p.bank) });
+          const bl = Math.floor(now / 380) % 2;
+          glowNow.push({ x: p.x, y: p.y + 0.45, z: p.z, size: bl ? 0.9 : 0.4, alpha: bl ? 0.95 : 0.5, type: 8 });
+        }
+        for (const q of g.spikes) {
+          const p = T.at(q.s, q.x);
+          const k0 = clamp((q.until - now) / 1500, 0, 1);
+          if (st.fx.spike) items.push({ mesh: st.fx.spike, model: m4.pose(p.x, p.y + 0.01, p.z, p.heading, -p.slope, p.bank, 0.4 + 0.6 * k0) });
+        }
+        for (const q of g.blocks) {
+          const cx = (q.x0 + q.x1) / 2;
+          const p = T.at(q.s, cx);
+          if (st.fx.barrier) items.push({ mesh: st.fx.barrier, cast: true, model: m4.pose(p.x, p.y, p.z, p.heading, -p.slope, p.bank, Math.max(0.6, Math.abs(q.x1 - q.x0) / 3.6)) });
+          for (const xx of [q.x0 + 1.4, q.x1 - 1.4]) {
+            const pc = T.at(q.s + 3.2, xx);
+            const h2 = pc.heading + Math.PI / 2;
+            drawCarAt('cop', '#F2F4F7', m4.pose(pc.x, pc.y, pc.z, h2, 0, pc.bank), false);
+            copLights(pc.x, pc.y + 1.7, pc.z, Math.cos(h2), -Math.sin(h2), Math.sin(h2), Math.cos(h2));
+          }
+        }
+        for (const e of g.emps) {
+          const a0 = g.cars[e.by], b0 = g.cars[e.tg];
+          if (!a0 || !b0 || a0.wx == null || b0.wx == null) continue;
+          const u = clamp(e.t / 0.42, 0, 1);
+          const x = a0.wx + (b0.wx - a0.wx) * u, y = a0.wy + 1.2 + Math.sin(u * Math.PI) * 1.4, z = a0.wz + (b0.wz - a0.wz) * u;
+          glowNow.push({ x, y, z, size: 1.3, alpha: 1, type: 15 });
+          glowNow.push({ x, y, z, size: 2.6, alpha: 0.4, type: 20 });
+          if (step > 0 && Math.random() < 0.5) bolts(x, y, z, 1.1, 1, 0.6);
+        }
         for (const r of g.rockets) {
           const p = T.at(r.s, r.x);
           const tg = r.tg && g.cars[r.tg];
@@ -965,8 +1275,9 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
           if (ds > 170 && ds < total - 30) continue;
           const p = T.at(b.s, b.x);
           const bob = Math.sin(now / 320 + b.s) * 0.18;
-          items.push({ mesh: st.fx.bottle, model: m4.pose(p.x, p.y + 0.55 + bob, p.z, now / 600 + b.s, 0, 0, 1) });
-          if (P.length < cap) P.push({ x: p.x, y: p.y + 1.25 + bob, z: p.z, vx: 0, vy: 0, vz: 0, life: 0, max: 0.03, s0: 0.95, s1: 0.95, a0: 0.32 + Math.sin(now / 200 + b.s) * 0.08, type: 3 });
+          const dk = DRINKS[b.k] ? b.k : 'en';
+          items.push({ mesh: (st.fx.bottles && st.fx.bottles[dk]) || st.fx.bottle, model: m4.pose(p.x, p.y + 0.55 + bob, p.z, now / 600 + b.s, 0, 0, dk === 'gold' ? 1.15 : 1) });
+          glowNow.push({ x: p.x, y: p.y + 1.25 + bob, z: p.z, size: dk === 'gold' ? 1.25 : 0.95, alpha: 0.32 + Math.sin(now / 200 + b.s) * 0.08, type: DRINKS[dk].glow });
         }
       }
       const parts = [];
@@ -984,6 +1295,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
         else if (q.flat) pt.dw = -1;
         parts.push(pt);
       }
+      for (const q of glowNow) parts.push(q);
       let camPos, camAt, fov = 1.0;
       const tvCars = ph === 'menu' && (g.menuT || 0) > 1.6 ? all.filter((c) => c.wx != null) : [];
       if (tvCars.length) {
@@ -1050,6 +1362,12 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
       }
       st.env.time = now / 1000;
       g.camPos = camPos;
+      if (police && racing) {
+        let dmin = 1e9;
+        for (const c of all) { if (!c.cop || c.park || c.wx == null) continue; const d = Math.hypot(c.wx - camPos[0], c.wz - camPos[2]); if (d < dmin) dmin = d; }
+        if (dmin < 130 && !pausedRef.current) { if (!g.siren) g.siren = sirenSound(); if (g.siren) g.siren.set(0.3 * clamp(1 - dmin / 130, 0, 1)); }
+        else if (g.siren) g.siren.set(0);
+      } else if (g.siren) g.siren.set(0);
       const VP = st.R.render({ env: st.env, cam: { pos: camPos, at: camAt, fov, shadowAt: [camAt[0], camAt[1] - 1, camAt[2]], far: B.tier >= 2 ? 900 : 1600 }, items, parts });
       const W2 = cv.width / dpr, H2 = cv.height / dpr;
       for (const k of Object.keys(tagRefs.current)) {
@@ -1076,28 +1394,34 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
       const live = racing || ph === 'count';
       if (mc && live && now - (g.miniAt || 0) > 120) {
         g.miniAt = now;
-        drawMini(mc, T, all, myK, (k) => slotColor(k), attack ? g.rockets : null);
+        drawMini(mc, T, all, myK, (k) => (g.cars[k] && g.cars[k].cop ? (flash ? '#FF3B3B' : '#3B7BFF') : slotColor(k)), attack ? g.rockets : null);
       }
       if (live && now - g.hudAt > 180) {
         g.hudAt = now;
-        const ord = standings(all);
+        const ord = standings(all.filter((c) => !c.cop));
         const meIdx = ord.findIndex((c) => c.id === (playing ? myK : ord[0] && ord[0].id));
         const cur = g.cars[myK];
+        const kitNow = (cur && cur.kit) || kitRef.current;
+        const bust = cur && !cur.cop && !cur.busted && police ? Math.round((cur.bust || 0) * 20) / 20 : 0;
+        let tgt = null;
+        if (cur && cur.cop && police) { let bd = 1e9; for (const o of all) { if (o.cop || o.fin || o.busted) continue; const d = o.s - cur.s; const sc = d >= -5 ? d : 1e6; if (sc < bd) { bd = sc; tgt = { n: nameRef(o.id), d: Math.max(0, Math.round(d)), b: Math.round((o.bust || 0) * 20) / 20 }; } } }
+        const copInfo = cur && cur.cop ? { busts: g.busts[myK] || 0, tgt } : null;
+        const busted = !!(cur && cur.busted);
         const lap = cur ? lapOf(cur, T, g.laps) : 1;
         const time = cur && cur.fin ? cur.fin : raceT;
         const order = ord.map((c) => c.id);
         const en = cur ? Math.floor(cur.en) : 0;
-        const cd = cur ? Object.fromEntries(SKILL_KEYS.map((k) => [k, Math.ceil(cur.cd[k] * 2) / 2])) : {};
+        const cd = cur ? Object.fromEntries(kitNow.map((k) => [k, Math.ceil((cur.cd[k] || 0) * 2) / 2])) : {};
         const drift = cur && cur.drift > 0.5 ? 1 : 0;
         const warn = attack && cur && !cur.fin && g.rockets.some((r) => r.tg === myK && r.s < cur.s && cur.s - r.s < 70);
-        setHud((h) => (h.pos === meIdx + 1 && h.lap === lap && Math.floor(h.time * 10) === Math.floor(time * 10) && h.order.join('|') === order.join('|') && h.fin === !!(cur && cur.fin) && h.en === en && h.drift === drift && h.warn === warn && SKILL_KEYS.every((k) => h.cd[k] === cd[k]) ? h : { pos: meIdx + 1, n: ord.length, lap, time, order, fin: !!(cur && cur.fin), en, cd, drift, warn }));
+        setHud((h) => (h.pos === meIdx + 1 && h.lap === lap && Math.floor(h.time * 10) === Math.floor(time * 10) && h.order.join('|') === order.join('|') && h.fin === !!(cur && cur.fin) && h.en === en && h.drift === drift && h.warn === warn && kitNow.every((k) => h.cd[k] === cd[k]) && (h.kit || []).join() === kitNow.join() && h.bust === bust && h.busted === busted && JSON.stringify(h.cop || null) === JSON.stringify(copInfo) ? h : { pos: meIdx + 1, n: ord.length, lap, time, order, fin: !!(cur && cur.fin), en, cd, drift, warn, kit: kitNow, bust, busted, cop: copInfo }));
       }
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
   }, [tilt]);
 
-  useEffect(() => () => { const g = G.current; if (g.eng) { g.eng.stop(); g.eng = null; } Sfx.stopAll(); }, []);
+  useEffect(() => () => { const g = G.current; if (g.eng) { g.eng.stop(); g.eng = null; } if (g.siren) { g.siren.stop(); g.siren = null; } Sfx.stopAll(); }, []);
   useEffect(() => {
     const g = G.current;
     if (paused) g.pauseAt = performance.now();
@@ -1109,7 +1433,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
     return () => document.removeEventListener('visibilitychange', vis);
   }, []);
 
-  const finish = () => { const g = G.current; if (g.eng) { g.eng.stop(); g.eng = null; } Sfx.stopAll(); onClose(); };
+  const finish = () => { const g = G.current; if (g.eng) { g.eng.stop(); g.eng = null; } if (g.siren) { g.siren.stop(); g.siren = null; } Sfx.stopAll(); onClose(); };
   const leave = () => { if ((phase === 'race' || phase === 'count') && !solo && !watch) { setLeaveAsk(true); return; } finish(); };
   useBackClose(true, () => { if (chatOpen) setChatOpen(false); else if (ctl) setCtl(false); else if (optSheet) setOptSheet(false); else if (mapSheet) setMapSheet(false); else if (people) setPeople(false); else if (quick) setQuick(false); else if (leaveAsk) setLeaveAsk(false); else if (paused) setPaused(false); else if (phase === 'race' && solo) setPaused(true); else leave(); });
   const sendEmote = (e) => { setBubbles((p) => ({ ...p, [kindOf()]: { e, at: Date.now() } })); if (!solo) relay.send('emo', { e }); setQuick(false); Sfx.play('pop', { vol: 0.5 }); };
@@ -1138,6 +1462,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
 
   const playingNow = inRace() && (phase === 'race' || phase === 'count');
   const talkOn = !solo && !watch;
+  const talking = useTalking(!solo, relay.muted);
   const hb = 38;
   const rowBtns = [
     talkOn && <GHudBtn key="mic" icon={relay.mic.on ? 'mic' : 'micoff'} on={relay.mic.on} size={hb} label={relay.mic.on ? 'Turn your mic off' : 'Turn your mic on'} onPress={relay.toggleMic} />,
@@ -1149,9 +1474,12 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
   ].filter(Boolean);
   const g0 = G.current;
   const raceIds = phase === 'menu' ? [] : g0.ids;
-  const listOrder = hud.order.length ? hud.order : raceIds;
+  const fullOrder = hud.order.length ? hud.order : raceIds;
+  const listOrder = (() => { if (fullOrder.length <= 6) return fullOrder; const mi = fullOrder.indexOf(kindOf()); if (mi < 5) return fullOrder.slice(0, 6); return [...fullOrder.slice(0, 3), ...fullOrder.slice(mi - 1, mi + 2)]; })();
   const micOf = (k) => (k === kindOf() ? relay.mic.on : !!relay.mics[k]);
-  const attackNow = g0.mode === 'attack' && phase !== 'menu';
+  const meCar = g0.cars[kindOf()];
+  const attackNow = phase !== 'menu' && (skillMode(g0.mode) || !!(meCar && meCar.cop)) && !hud.busted;
+  const hudKit = hud.kit || (meCar && meCar.kit) || kit;
   const bestLap = Number(readPref(BEST_KEY(uid, mapKey), '0'));
   const hostName = names[room && room.host] || 'The host';
 
@@ -1160,7 +1488,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
   const toggleWatchR = () => { const v = !allowWatch; setAllowWatch(v); setWatchAllowed(v); kitTap(); };
   const lobbyUi = phase !== 'menu' ? null : (
     <GLobby GS={GS} title="Island Rally" onClose={finish} closeLabel={solo ? 'Leave' : 'Back to chat'} tint="rgba(8,12,24,0.6)"
-      sub={solo ? 'Race five bots on four maps' : watch ? `Watching ${hostName} and friends` : 'Up to six friends race in 3D'}
+      sub={solo ? 'Race seven bots on four maps' : watch ? `Watching ${hostName} and friends` : 'Up to eight friends race in 3D'}
       badge={bestLap ? <GChip style={{ height: 34, gap: 6 }}><GIcon k="flag" size={14} color="#FFD84E" />{`Best lap ${fmtRace(bestLap)}`}</GChip> : null}
       tools={(
         <>
@@ -1184,7 +1512,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
                 <span style={{ fontSize: 13.5, fontWeight: 900, flex: 1 }}>{watch ? 'Racers' : `Racers ${roster.length} of ${MAX_RACERS}`}</span>
                 {watchers.length > 0 && <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 800, color: '#CFE6FF' }}><GIcon k="eye" size={14} color="#CFE6FF" />{`${watchers.length} watching`}</span>}
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', rowGap: 4, justifyItems: 'center' }}>
                 {Array.from({ length: MAX_RACERS }, (_, i) => {
                   const k = roster[i];
                   if (!k) return <GSlot key={`e${i}`} size={36} empty name={isHost && onInvite && !watch ? 'Invite' : fill && isHost ? 'Bot' : 'Open'} label="Invite a friend" onPress={isHost && onInvite && !watch ? () => onInvite(roster.length, GS.side) : null} />;
@@ -1206,12 +1534,25 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
       main={(
         <GPanel style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 9 }}>
           <Seg value={mode} items={Object.entries(MODES)} onPick={pickMode} disabled={!isHost || watch} />
+          {mode === 'pursuit' && !watch && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 12.5, fontWeight: 900, whiteSpace: 'nowrap' }}>Play as</span>
+              <div style={{ flex: 1 }}><Seg value={side} items={[['racer', 'Racer'], ['cop', 'Police']]} onPick={pickSide} /></div>
+            </div>
+          )}
+          {skillMode(mode) && !watch && !(mode === 'pursuit' && side === 'cop') && (
+            <button type="button" className="zgk-btn" aria-label="Pick your 4 skills" {...pressProps(() => { kitTap(); setKitSheet(true); })}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 8px', border: 'none', borderRadius: 12, background: 'rgba(255,255,255,0.07)', cursor: 'pointer', color: '#FFFFFF', fontFamily: FONT }}>
+              <span style={{ display: 'flex', gap: 4, flex: 1 }}>{kit.map((k) => <span key={k} style={{ width: 30, height: 30, borderRadius: 15, background: skillFace(k, true), display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: 'inset 0 -2px 0 rgba(0,0,0,0.25)' }}><SkillIcon k={k} size={20} /></span>)}</span>
+              <span style={{ height: 26, padding: '0 10px', borderRadius: 13, background: 'linear-gradient(180deg, #FFE27A, #F5B321)', color: '#2A1D05', fontSize: 11.5, fontWeight: 900, display: 'flex', alignItems: 'center' }}>Skills</span>
+            </button>
+          )}
           <button type="button" className="zgk-btn" aria-label={isHost && !watch ? `Map ${MAPS[mapKey].name}. Change map` : `Map ${MAPS[mapKey].name}`} onClick={(e) => { e.stopPropagation(); kitTap(); setMapSheet(true); }}
             style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 5, border: 'none', borderRadius: 12, background: 'rgba(255,255,255,0.07)', cursor: 'pointer', color: '#FFFFFF', fontFamily: FONT, textAlign: 'left' }}>
             <img src={`/race-map-${mapKey}.webp`} alt="" draggable={false} style={{ width: 92, aspectRatio: '16 / 9', objectFit: 'cover', borderRadius: 8, display: 'block', background: '#2A3040', flexShrink: 0 }} />
             <span style={{ flex: 1, minWidth: 0 }}>
               <span style={{ display: 'block', fontSize: 15, fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{MAPS[mapKey].name}</span>
-              <span style={{ display: 'block', fontSize: 11.5, fontWeight: 700, color: 'rgba(255,255,255,0.7)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{mode === 'attack' ? 'Rockets, oil and shields' : `${laps} laps`}</span>
+              <span style={{ display: 'block', fontSize: 11.5, fontWeight: 700, color: 'rgba(255,255,255,0.7)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{mode === 'attack' ? `${laps} laps with skills and drinks` : mode === 'pursuit' ? `${laps} laps, police against racers` : copsOn ? `${laps} laps with police` : `${laps} laps`}</span>
             </span>
             <span style={{ height: 26, padding: '0 10px', borderRadius: 13, background: isHost && !watch ? 'linear-gradient(180deg, #FFE27A, #F5B321)' : 'rgba(10,14,26,0.7)', color: isHost && !watch ? '#2A1D05' : '#FFFFFF', fontSize: 11.5, fontWeight: 900, display: 'flex', alignItems: 'center', flexShrink: 0 }}>{isHost && !watch ? 'Change' : 'See maps'}</span>
           </button>
@@ -1221,6 +1562,28 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
             : <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 44, fontSize: 13.5, fontWeight: 800 }}><Spinner size={16} color="#FFFFFF" />{`${hostName} picks the map and starts`}</div>}
         </GPanel>
       )}>
+      {kitSheet && (
+        <GLobbySheet GS={GS} title="Your skills" width={600} onClose={() => { if (kit.length !== 4) setKit(readKit()); setKitSheet(false); }}>
+          <div style={{ fontSize: 12.5, fontWeight: 800, color: 'rgba(255,255,255,0.75)', marginBottom: 10 }}>{`Pick 4 skills to take into the race. ${kit.length} of 4 picked.`}</div>
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${land ? 4 : 2}, minmax(0, 1fr))`, gap: 8 }}>
+            {RACER_SKILLS.map((k) => {
+              const on = kit.includes(k);
+              const S0 = SKILLS[k];
+              return (
+                <button key={k} type="button" className="zgk-btn" aria-pressed={on} aria-label={`${S0.name}. ${S0.text}`} {...pressProps(() => toggleKit(k))}
+                  style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '10px 6px 8px', borderRadius: 14, border: 'none', cursor: 'pointer', fontFamily: FONT, color: '#FFFFFF', background: on ? 'rgba(255,214,90,0.16)' : 'rgba(255,255,255,0.06)', boxShadow: on ? 'inset 0 0 0 2.5px #FFD45A' : 'inset 0 0 0 1.5px rgba(255,255,255,0.12)' }}>
+                  <span style={{ width: 52, height: 52, borderRadius: 26, background: skillFace(k, true), display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: 'inset 0 2px 0 rgba(255,255,255,0.3), inset 0 -3px 6px rgba(0,0,0,0.35)' }}><SkillIcon k={k} size={34} /></span>
+                  <span style={{ fontSize: 13, fontWeight: 900 }}>{S0.name}</span>
+                  <span style={{ fontSize: 10.5, fontWeight: 700, color: 'rgba(255,255,255,0.72)', textAlign: 'center', lineHeight: 1.25, minHeight: 26 }}>{S0.text}</span>
+                  <span style={{ fontSize: 10.5, fontWeight: 900, color: '#5BF0C2' }}>{`${S0.cost} energy`}</span>
+                  {on && <span style={{ position: 'absolute', top: 6, right: 6, width: 22, height: 22, borderRadius: 11, background: '#FFD45A', color: INK, fontSize: 12, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{kit.indexOf(k) + 1}</span>}
+                </button>
+              );
+            })}
+          </div>
+          <div style={{ marginTop: 12 }}><GPill text="Done" color="gold" wide disabled={kit.length !== 4} onPress={() => setKitSheet(false)} /></div>
+        </GLobbySheet>
+      )}
       {optSheet && (
         <GLobbySheet GS={GS} title="Race settings" width={520} onClose={() => setOptSheet(false)}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -1237,6 +1600,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
               </div>
             )}
             {isHost && !solo && <GSwitchRow label="Fill empty spots with bots" on={fill} onToggle={() => setFill((v) => !v)} />}
+            {isHost && mode !== 'pursuit' && <GSwitchRow label="Police chase the racers" on={copsOn} onToggle={() => { kitTap(); setCopsOn((v) => { savePref(COPS_PREF, v ? '0' : '1'); return !v; }); }} />}
             <GSwitchRow label="Tilt your phone to steer" on={tilt} onToggle={toggleTilt} />
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{ fontSize: 14.5, fontWeight: 900, flex: 1 }}>Graphics</span>
@@ -1259,8 +1623,9 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
               <div key={k} ref={(el) => { tagRefs.current[k] = el; }} style={{ position: 'absolute', left: 0, top: 0, opacity: 0, transformOrigin: '50% 100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, willChange: 'transform' }}>
                 {bubbles[k] && <span style={{ fontSize: 26, lineHeight: 1, animation: 'zgk-pop 0.25s ease-out' }}>{bubbles[k].e}</span>}
                 <span style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 9px 3px 6px', borderRadius: 11, background: 'rgba(10,14,26,0.66)', fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap' }}>
-                  <span style={{ width: 9, height: 9, borderRadius: 5, background: slotColor(k), boxShadow: '0 0 0 1.5px #FFFFFF' }} />
+                  {G.current.cars[k] && G.current.cars[k].cop ? <span style={{ display: 'flex', gap: 2 }}><span style={{ width: 7, height: 7, borderRadius: 4, background: '#FF3B3B' }} /><span style={{ width: 7, height: 7, borderRadius: 4, background: '#3B7BFF' }} /></span> : <span style={{ width: 9, height: 9, borderRadius: 5, background: slotColor(k), boxShadow: '0 0 0 1.5px #FFFFFF' }} />}
                   {nameOf(k)}
+                  {G.current.cars[k] && G.current.cars[k].busted ? <span style={{ fontSize: 10.5, fontWeight: 900, color: '#FF8A8A' }}>Busted</span> : null}
                   {micOf(k) && !relay.muted[k] && <GIcon k="mic" size={12} color="#7BE05A" ink="rgba(0,0,0,0.3)" />}
                 </span>
               </div>
@@ -1270,7 +1635,16 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
           {(phase === 'race' || phase === 'count' || phase === 'done') && (
             <>
               <div style={{ position: 'absolute', left: left(10), top: top(8), display: 'flex', flexDirection: 'column', gap: 5, alignItems: 'flex-start', zIndex: 3, pointerEvents: 'none' }}>
-                {inRace() && (
+                {inRace() && hud.cop && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 6, height: 30, padding: '0 11px 0 6px', borderRadius: 15, background: 'linear-gradient(90deg, #1B3E8F, #142A5C)', boxShadow: 'inset 0 0 0 1.5px rgba(255,255,255,0.25)', fontSize: 14, fontWeight: 900 }}>
+                      <span style={{ display: 'flex', gap: 2 }}><span style={{ width: 9, height: 9, borderRadius: 5, background: '#FF3B3B', boxShadow: '0 0 8px #FF3B3B' }} /><span style={{ width: 9, height: 9, borderRadius: 5, background: '#3B7BFF', boxShadow: '0 0 8px #3B7BFF' }} /></span>
+                      {`Police, ${hud.cop.busts} busted`}
+                    </span>
+                    {hud.cop.tgt && <GHudPanel style={{ height: 24, padding: '0 9px', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 900, whiteSpace: 'nowrap' }}>{`Chase ${hud.cop.tgt.n}, ${hud.cop.tgt.d} m`}<span style={{ width: 44, height: 6, borderRadius: 3, background: 'rgba(255,255,255,0.2)', overflow: 'hidden', display: 'block' }}><span style={{ display: 'block', height: '100%', width: `${Math.round(hud.cop.tgt.b * 100)}%`, background: '#FF4A4A' }} /></span></GHudPanel>}
+                  </div>
+                )}
+                {inRace() && !hud.cop && (
                   <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2, textShadow: '0 2px 8px rgba(0,0,0,0.5)', lineHeight: 1 }}>
                     <span style={{ fontSize: 40, fontWeight: 900 }}>{hud.pos || 1}</span>
                     <span style={{ fontSize: 16, fontWeight: 900, marginBottom: 20 }}>{ordinal(hud.pos || 1).replace(/^\d+/, '')}</span>
@@ -1281,9 +1655,9 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
                   <GHudPanel style={{ height: 24, padding: '0 9px', display: 'flex', alignItems: 'center', fontSize: 12, fontWeight: 900, whiteSpace: 'nowrap' }}>{`Lap ${hud.lap} of ${laps}`}</GHudPanel>
                   <GHudPanel style={{ height: 24, padding: '0 9px', display: 'flex', alignItems: 'center', fontSize: 12, fontWeight: 900, fontVariantNumeric: 'tabular-nums' }}>{fmtRace(phase === 'count' ? 0 : hud.time)}</GHudPanel>
                 </div>
-                {land && listOrder.map((k, i) => (
+                {land && listOrder.map((k) => (
                   <GHudPanel key={k} style={{ height: 21, padding: '0 8px', display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap', background: k === kindOf() ? 'rgba(255,194,61,0.92)' : undefined, color: k === kindOf() ? INK : '#FFFFFF', textShadow: k === kindOf() ? 'none' : undefined, minWidth: 92 }}>
-                    <span style={{ width: 10, fontVariantNumeric: 'tabular-nums' }}>{i + 1}</span>
+                    <span style={{ width: 10, fontVariantNumeric: 'tabular-nums' }}>{fullOrder.indexOf(k) + 1}</span>
                     <span style={{ width: 9, height: 9, borderRadius: 5, background: slotColor(k), boxShadow: '0 0 0 1.4px #FFFFFF' }} />
                     <span style={{ flex: 1 }}>{nameOf(k)}</span>
                     {G.current.cars[k] && G.current.cars[k].fin ? <GIcon k="flag" size={11} color={k === kindOf() ? INK : '#FFFFFF'} ink="transparent" /> : micOf(k) && !relay.muted[k] ? <GIcon k="mic" size={11} color={k === kindOf() ? '#14532D' : '#7BE05A'} ink="transparent" /> : null}
@@ -1303,6 +1677,18 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
                 </div>
               )}
               {toast && <div key={toast.at} style={{ position: 'absolute', left: '50%', top: '30%', transform: 'translateX(-50%)', padding: '9px 18px', borderRadius: 18, background: 'rgba(10,14,26,0.6)', fontSize: 20, fontWeight: 900, whiteSpace: 'nowrap', zIndex: 4, pointerEvents: 'none', animation: 'zgk-pop 0.25s ease-out' }}>{toast.text}</div>}
+ {hud.bust > 0.04 && !hud.busted && (
+                <div aria-live="assertive" style={{ position: 'absolute', left: '50%', top: top(96), transform: 'translateX(-50%)', width: 190, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, zIndex: 4, pointerEvents: 'none' }}>
+                  <span style={{ fontSize: 13, fontWeight: 900, letterSpacing: '0.04em', color: '#FFD6D6', textShadow: '0 2px 6px rgba(0,0,0,0.6)' }}>{hud.bust > 0.6 ? 'Speed up or get busted' : 'Police close behind'}</span>
+                  <span style={{ width: '100%', height: 10, borderRadius: 5, background: 'rgba(10,14,26,0.7)', boxShadow: 'inset 0 0 0 1.5px rgba(255,255,255,0.3)', overflow: 'hidden', display: 'block' }}><span style={{ display: 'block', height: '100%', width: `${Math.round(hud.bust * 100)}%`, background: 'linear-gradient(90deg, #3B7BFF, #FF3B3B)' }} /></span>
+                </div>
+              )}
+              {hud.busted && phase === 'race' && (
+                <div style={{ position: 'absolute', left: '50%', top: '24%', transform: 'translateX(-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, zIndex: 4, pointerEvents: 'none', animation: 'zgk-pop 0.3s ease-out' }}>
+                  <span style={{ fontSize: 44, fontWeight: 900, color: '#FF4A4A', textShadow: '0 4px 18px rgba(0,0,0,0.6), 0 0 2px #FFFFFF' }}>Busted</span>
+                  <span style={{ fontSize: 13.5, fontWeight: 800, padding: '4px 12px', borderRadius: 12, background: 'rgba(10,14,26,0.66)' }}>Watch the rest of the chase</span>
+                </div>
+              )}
               {hud.warn && <div aria-live="assertive" style={{ position: 'absolute', left: '50%', top: top(64), transform: 'translateX(-50%)', padding: '6px 14px', borderRadius: 14, background: 'rgba(214,40,40,0.82)', fontSize: 14, fontWeight: 900, whiteSpace: 'nowrap', zIndex: 4, pointerEvents: 'none', display: 'flex', alignItems: 'center', gap: 6 }}><GIcon k="rocket" size={16} color="#FFFFFF" ink="transparent" />Rocket behind you</div>}
               {inRace() && (
                 <div style={{ position: 'absolute', left: '50%', bottom: bottom(6), transform: 'translateX(-50%)', width: 150, height: 86, zIndex: 3, pointerEvents: 'none' }}>
@@ -1347,14 +1733,15 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
                         <span ref={enTxtRef} style={{ width: 26, fontSize: 12.5, fontWeight: 900, fontVariantNumeric: 'tabular-nums', textAlign: 'right', textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}>0</span>
                       </div>
                       <div style={{ position: 'absolute', right: right(16), bottom: bottom(126), display: 'flex', alignItems: 'flex-end', gap: 10, zIndex: 4, transform: `scale(${look.size})`, transformOrigin: '100% 100%', opacity: 1 - look.see * 0.6 }}>
-                        {SKILL_KEYS.map((k, i) => {
+                        {hudKit.map((k, i) => {
                           const S0 = SKILLS[k];
+                          if (!S0) return null;
                           const cd = hud.cd[k] || 0;
                           const okEn = hud.en >= S0.cost;
                           const ok = okEn && cd <= 0;
                           return (
                             <button key={k} type="button" className="zgk-btn" aria-label={`${S0.name}, uses ${S0.cost} energy`} onPointerDown={skillPress(k)} onClick={(e) => e.stopPropagation()}
-                              style={{ position: 'relative', width: 62, height: 62, borderRadius: '50%', border: 'none', padding: 0, cursor: 'pointer', marginBottom: [0, 10, 16, 18][i] || 0, background: 'linear-gradient(180deg, #E8ECF2 0%, #8A94A5 55%, #4B5262 100%)', boxShadow: ok ? `0 0 16px ${k === 'rocket' ? 'rgba(255,110,60,0.55)' : k === 'shield' ? 'rgba(80,190,255,0.55)' : k === 'oil' ? 'rgba(150,110,240,0.55)' : 'rgba(255,210,60,0.55)'}, 0 6px 14px rgba(0,0,0,0.4)` : '0 6px 14px rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              style={{ position: 'relative', width: 62, height: 62, borderRadius: '50%', border: 'none', padding: 0, cursor: 'pointer', marginBottom: [0, 10, 16, 18][i] || 0, background: 'linear-gradient(180deg, #E8ECF2 0%, #8A94A5 55%, #4B5262 100%)', boxShadow: ok ? `0 0 16px ${skillGlow(k)}, 0 6px 14px rgba(0,0,0,0.4)` : '0 6px 14px rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                               <span style={{ position: 'absolute', inset: 3.5, borderRadius: '50%', background: skillFace(k, okEn), boxShadow: 'inset 0 2px 0 rgba(255,255,255,0.3), inset 0 -3px 6px rgba(0,0,0,0.35)' }} />
                               <span style={{ position: 'relative', display: 'flex', filter: ok ? 'drop-shadow(0 2px 2px rgba(0,0,0,0.45))' : 'grayscale(0.9) brightness(0.8)', opacity: okEn ? 1 : 0.6 }}><SkillIcon k={k} size={36} /></span>
                               {cd > 0 && <span style={{ position: 'absolute', inset: 3.5, borderRadius: '50%', background: `conic-gradient(rgba(5,8,14,0.7) ${(cd / S0.cd) * 360}deg, rgba(0,0,0,0) 0deg)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, fontWeight: 900, textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>{Math.ceil(cd)}</span>}
@@ -1407,14 +1794,22 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
           {phase === 'done' && result && (
             <div style={{ position: 'absolute', inset: 0, zIndex: 20, background: 'rgba(10,8,24,0.42)', display: 'flex', padding: 12, overflowY: 'auto', touchAction: 'pan-x pan-y' }}>
               <GPanel style={{ margin: 'auto', width: '100%', maxWidth: 380, padding: '16px 16px', display: 'flex', flexDirection: 'column', gap: 10, animation: 'zgk-pop 0.35s ease-out', boxSizing: 'border-box' }}>
-                <GTitle text={result.mine ? `You finished ${ordinal(result.mine)}` : 'Race over'} size={28} color={result.mine === 1 ? '#FFE15A' : '#FFFFFF'} />
+                <GTitle text={result.pursuit ? (result.meCop ? `You busted ${(result.cops.find(([k]) => k === kindOf()) || [0, 0])[1]}` : result.meBusted ? 'Busted' : result.mine ? 'You got away' : 'Chase over') : result.mine ? `You finished ${ordinal(result.mine)}` : 'Race over'} size={28} color={result.pursuit ? (result.meBusted ? '#FF8A8A' : '#FFE15A') : result.mine === 1 ? '#FFE15A' : '#FFFFFF'} />
+                {result.pursuit && (() => { const esc = result.racersN - result.busted.length; const win = esc * 2 >= result.racersN; return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '7px 10px', borderRadius: 12, background: win ? 'rgba(255,194,61,0.16)' : 'rgba(59,123,255,0.2)', fontSize: 13.5, fontWeight: 900 }}>{`${win ? 'Racers win' : 'Police win'}. ${esc} of ${result.racersN} got away.`}</div>; })()}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   {result.list.map(([k, t], i) => (
                     <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '6px 9px', borderRadius: 12, background: k === kindOf() ? 'rgba(255,194,61,0.22)' : 'rgba(255,255,255,0.06)' }}>
                       <span style={{ width: 22, fontSize: 14, fontWeight: 900 }}>{i + 1}</span>
                       <span style={{ width: 11, height: 11, borderRadius: 6, background: slotColor(k), boxShadow: '0 0 0 1.5px #FFFFFF' }} />
                       <span style={{ flex: 1, fontSize: 14, fontWeight: 800, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nameOf(k)}</span>
-                      <span style={{ fontSize: 13, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: 'rgba(255,255,255,0.8)' }}>{t ? fmtRace(t) : 'Did not finish'}</span>
+                      <span style={{ fontSize: 13, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: result.busted && result.busted.includes(k) ? '#FF8A8A' : 'rgba(255,255,255,0.8)' }}>{result.busted && result.busted.includes(k) ? 'Busted' : t ? fmtRace(t) : 'Did not finish'}</span>
+                    </div>
+                  ))}
+                  {result.cops && result.cops.length > 0 && result.cops.map(([k, n]) => (
+                    <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '6px 9px', borderRadius: 12, background: k === kindOf() ? 'rgba(59,123,255,0.28)' : 'rgba(59,123,255,0.12)' }}>
+                      <span style={{ width: 22, display: 'flex', gap: 2 }}><span style={{ width: 8, height: 8, borderRadius: 4, background: '#FF3B3B' }} /><span style={{ width: 8, height: 8, borderRadius: 4, background: '#3B7BFF' }} /></span>
+                      <span style={{ flex: 1, fontSize: 14, fontWeight: 800, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nameOf(k)}</span>
+                      <span style={{ fontSize: 13, fontWeight: 800, color: 'rgba(255,255,255,0.8)' }}>{n === 1 ? '1 bust' : `${n} busts`}</span>
                     </div>
                   ))}
                 </div>
@@ -1436,6 +1831,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
               <div style={{ margin: 'auto', width: '100%', display: 'flex', justifyContent: 'center' }}><GControlsPanel sideways wide={land} onClose={() => setCtl(false)} /></div>
             </div>
           )}
+          <GTalkers ids={talking} nameOf={nameOf} top={top(phase === 'count' ? 150 : 50)} />
           <GNotices items={notes} style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: top(phase === 'menu' ? 64 : 92), width: 'min(52%, 420px)', zIndex: 30 }} />
           {people && !solo && (
             <Sheet title="Players and voice" text={relay.mic.on ? 'Your mic is on. Everyone in the race can hear you.' : 'Turn your mic on to talk while you race.'} onClose={() => setPeople(false)}>
@@ -1494,6 +1890,11 @@ function drawMini(mc, T, cars, myK, colorOf, rockets) {
     T.S.forEach((p, i) => { if (i % 4) return; const [a, b] = P(p.x, p.z); if (!i) c.moveTo(a, b); else c.lineTo(a, b); });
     c.closePath();
     c.strokeStyle = 'rgba(255,255,255,0.92)'; c.lineWidth = 6; c.stroke();
+    for (const C of T.cuts || []) {
+      c.beginPath();
+      C.S.forEach((p, i) => { const [a, b] = P(p.x, p.z); if (!i) c.moveTo(a, b); else c.lineTo(a, b); });
+      c.setLineDash([5, 5]); c.strokeStyle = '#E2B878'; c.lineWidth = 3.5; c.stroke(); c.setLineDash([]);
+    }
     const st = P(T.S[0].x, T.S[0].z);
     c.fillStyle = '#FFFFFF'; c.fillRect(st[0] - 5, st[1] - 5, 10, 10);
     MINI.key = T; MINI.cv = cv; MINI.P = P;
