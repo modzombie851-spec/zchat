@@ -30,6 +30,16 @@ function loftZ(m, st, seg, col, mat, e, seed) {
   for (const [k, sg] of [[0, 1], [st.length - 1, -1]]) { const row = P[k], S = st[k]; for (let j = 0; j < seg; j++) { const j1 = (j + 1) % seg; if (sg > 0) m.tri([0, S.yc, S.z], row[j1], row[j], sh(c, 0.85), mat); else m.tri([0, S.yc, S.z], row[j], row[j1], sh(c, 0.85), mat); } }
 }
 
+function rifleMag(m, furn, dark) {
+  let p = [0, -0.018, 0.108], ang = 0;
+  for (let i = 0; i < 5; i++) {
+    ang += 0.075;
+    const P = p, A = ang;
+    withT(m, rot(P[0], P[1], P[2], 0, -A), () => { rb(m, 0, -0.022, 0, 0.0165, 0.0235, 0.03, furn, MAT.plastic, 0.22); for (const s of [-1, 1]) m.box(s * 0.0168, -0.034, -0.006, 0.002, 0.016, 0.04, sh(furn, 0.78), MAT.plastic); });
+    p = [0, P[1] - 0.043 * Math.cos(A), P[2] + 0.043 * Math.sin(A)];
+  }
+  withT(m, rot(p[0], p[1] + 0.004, p[2], 0, -ang), () => rb(m, 0, -0.004, 0, 0.02, 0.009, 0.034, dark, MAT.trim, 0.3));
+}
 function rifle(m, o) {
   const body = C(o.body || '#2A2C30'), furn = C(o.furn || '#30333A'), dark = C('#18191C'), metal = C('#4C5058'), bore = 0.082;
   rb(m, 0, 0.032, 0.06, 0.022, 0.03, 0.13, body, MAT.trim, 0.18);
@@ -53,14 +63,7 @@ function rifle(m, o) {
   zc(m, 0, bore, 0.64, 0.016, 0.06, 10, dark, MAT.metal);
   for (let i = 0; i < 3; i++) for (const s of [-1, 1]) m.box(s * 0.0158, bore - 0.006, 0.648 + i * 0.016, 0.003, 0.012, 0.008, C('#060606'), MAT.matte);
   disc(m, 0, bore, 0.7005, 0.007, C('#050505'), MAT.matte, 10);
-  let p = [0, -0.018, 0.108], ang = 0;
-  for (let i = 0; i < 5; i++) {
-    ang += 0.075;
-    const P = p, A = ang;
-    withT(m, rot(P[0], P[1], P[2], 0, -A), () => { rb(m, 0, -0.022, 0, 0.0165, 0.0235, 0.03, furn, MAT.plastic, 0.22); for (const s of [-1, 1]) m.box(s * 0.0168, -0.034, -0.006, 0.002, 0.016, 0.04, sh(furn, 0.78), MAT.plastic); });
-    p = [0, P[1] - 0.043 * Math.cos(A), P[2] + 0.043 * Math.sin(A)];
-  }
-  withT(m, rot(p[0], p[1] + 0.004, p[2], 0, -ang), () => rb(m, 0, -0.004, 0, 0.02, 0.009, 0.034, dark, MAT.trim, 0.3));
+  if (!o.noMag) rifleMag(m, furn, dark);
   const ga = 0.32;
   withT(m, rot(0, -0.004, -0.012, 0, ga), () => { rb(m, 0, -0.05, 0, 0.0205, 0.058, 0.029, furn, MAT.plastic, 0.35); for (let i = 0; i < 3; i++) ball(m, 0, -0.03 - i * 0.026, 0.028, 0.009, sh(furn, 0.9), MAT.plastic, 6); for (let i = 0; i < 6; i++) for (const s of [-1, 1]) ball(m, s * 0.02, -0.025 - i * 0.014, -0.006 + (i % 2) * 0.008, 0.0035, sh(furn, 0.8), MAT.plastic, 4); });
   tube(m, [0, 0.0, 0.016], [0, -0.03, 0.03], 0.0038, 0.0038, 5, body, MAT.trim, false);
@@ -76,8 +79,7 @@ function rifle(m, o) {
   rb(m, 0, 0.138, 0.04, 0.021, 0.012, 0.05, dark, MAT.trim, 0.25);
   for (const s of [-1, 1]) m.box(s * 0.0195, 0.148, 0.04, 0.006, 0.048, 0.072, dark, MAT.trim);
   m.box(0, 0.193, 0.04, 0.045, 0.007, 0.072, dark, MAT.trim);
-  m.box(0, 0.15, 0.066, 0.033, 0.042, 0.003, C('#8FB4CC'), MAT.glass);
-  ball(m, 0, 0.172, 0.0685, 0.0032, C('#FF3A24'), MAT.glow, 6);
+  if (!o.fp) { m.box(0, 0.15, 0.066, 0.033, 0.042, 0.003, C('#8FB4CC'), MAT.glass); ball(m, 0, 0.172, 0.0685, 0.0032, C('#FF3A24'), MAT.glow, 6); }
   m.box(-0.026, 0.14, 0.03, 0.006, 0.012, 0.012, metal, MAT.metal);
   tube(m, [0.039, bore - 0.004, 0.37], [0.039, bore - 0.004, 0.46], 0.011, 0.0125, 10, dark, MAT.trim);
   disc(m, 0.039, bore - 0.004, 0.4605, 0.011, C('#FFF2D6'), MAT.glow, 10);
@@ -140,7 +142,7 @@ function sniper(m, o) {
   tube(m, [0, bore, -0.04], [0, bore, 0.17], 0.02, 0.02, 12, steel, MAT.metal);
   tube(m, [-0.019, bore, 0.0], [-0.055, 0.068, 0.002], 0.0048, 0.0048, 6, metal, MAT.metal, false);
   ball(m, -0.058, 0.066, 0.002, 0.011, dark, MAT.plastic, 8);
-  rb(m, 0, -0.002, 0.1, 0.017, 0.03, 0.034, dark, MAT.trim, 0.2);
+  if (!o.noMag) rb(m, 0, -0.002, 0.1, 0.017, 0.03, 0.034, dark, MAT.trim, 0.2);
   tube(m, [0, 0.002, 0.016], [0, -0.028, 0.03], 0.0038, 0.0038, 5, dark, MAT.trim, false);
   tube(m, [0, -0.028, 0.03], [0, -0.028, 0.066], 0.0038, 0.0038, 5, dark, MAT.trim, false);
   tube(m, [0, bore, 0.17], [0, bore, 0.96], 0.0135, 0.011, 12, steel, MAT.metal);
@@ -165,6 +167,10 @@ function sniper(m, o) {
   m.box(0, 0.006, 0.44, 0.036, 0.016, 0.03, dark, MAT.trim);
 }
 
+function smgMag(m, dark) {
+  rb(m, 0, -0.065, 0.12, 0.0135, 0.07, 0.021, dark, MAT.trim, 0.25);
+  for (const s of [-1, 1]) m.box(s * 0.0137, -0.07, 0.115, 0.002, 0.09, 0.02, sh(dark, 1.5), MAT.trim);
+}
 function smg(m, o) {
   const body = C(o.body || '#2E3036'), dark = C('#17181B'), metal = C('#4C5058'), bore = 0.07;
   rb(m, 0, 0.045, 0.07, 0.022, 0.04, 0.14, body, MAT.trim, 0.2);
@@ -174,8 +180,7 @@ function smg(m, o) {
   zc(m, 0, bore, 0.21, 0.021, 0.21, 16, dark, MAT.trim);
   for (let i = 0; i < 6; i++) withT(m, rot(0, bore, 0.23 + i * 0.03, 0, Math.PI / 2), () => m.smoothCyl(0, 0, 0, 0.0215, 0.004, 16, sh(dark, 1.6), MAT.trim, { cap: false }));
   disc(m, 0, bore, 0.4205, 0.008, C('#050505'), MAT.matte, 10);
-  rb(m, 0, -0.065, 0.12, 0.0135, 0.07, 0.021, dark, MAT.trim, 0.25);
-  for (const s of [-1, 1]) m.box(s * 0.0137, -0.07, 0.115, 0.002, 0.09, 0.02, sh(dark, 1.5), MAT.trim);
+  if (!o.noMag) smgMag(m, dark);
   rb(m, 0, -0.03, 0.2, 0.0135, 0.04, 0.0145, body, MAT.plastic, 0.4);
   for (let i = 0; i < 4; i++) ball(m, 0, -0.012 - i * 0.017, 0.214, 0.006, sh(body, 0.85), MAT.plastic, 5);
   withT(m, rot(0, 0.0, -0.012, 0, 0.3), () => rb(m, 0, -0.048, 0, 0.0195, 0.055, 0.027, body, MAT.plastic, 0.35));
@@ -185,8 +190,7 @@ function smg(m, o) {
   for (const yy of [0.075, 0.02]) tube(m, [-0.016, yy, -0.07], [-0.016, yy + 0.004, -0.27], 0.0055, 0.0055, 6, metal, MAT.metal, false);
   rb(m, 0, 0.05, -0.275, 0.024, 0.045, 0.01, dark, MAT.matte, 0.3);
   rb(m, 0, 0.115, 0.03, 0.013, 0.018, 0.03, dark, MAT.trim, 0.3);
-  m.box(0, 0.125, 0.051, 0.018, 0.022, 0.002, C('#8FB4CC'), MAT.glass);
-  ball(m, 0, 0.137, 0.052, 0.0028, C('#FF3A24'), MAT.glow, 6);
+  if (!o.fp) { m.box(0, 0.125, 0.051, 0.018, 0.022, 0.002, C('#8FB4CC'), MAT.glass); ball(m, 0, 0.137, 0.052, 0.0028, C('#FF3A24'), MAT.glow, 6); }
 }
 
 function bat(m) {
@@ -251,6 +255,15 @@ export const GUNS = {
   molotov: { name: 'Molotov', build: molotov },
 };
 
+export function magMesh(kind) {
+  const m = new MeshBuilder();
+  if (kind === 'rifle') rifleMag(m, C('#30333A'), C('#18191C'));
+  else if (kind === 'smg') smgMag(m, C('#17181B'));
+  else if (kind === 'sniper') rb(m, 0, -0.002, 0.1, 0.017, 0.03, 0.034, C('#1C1E22'), MAT.trim, 0.2);
+  else if (kind === 'pistol') rb(m, 0, -0.04, -0.03, 0.012, 0.045, 0.018, C('#121316'), MAT.trim, 0.3);
+  else { zc(m, 0, 0, 0, 0.0095, 0.06, 10, C('#C4302A'), MAT.plastic); zc(m, 0, 0, -0.012, 0.0098, 0.012, 10, C('#C9A458'), MAT.metal); }
+  return m.build();
+}
 export function gunMesh(kind, o = {}) { const m = new MeshBuilder(); (GUNS[kind] || GUNS.rifle).build(m, o); return m.build(); }
 export function buildGun(m, kind, o = {}) { (GUNS[kind] || GUNS.rifle).build(m, o); }
 

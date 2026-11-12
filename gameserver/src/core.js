@@ -36,7 +36,7 @@ export class RoomCore {
     if (live.length >= this.cap) { this.sendTo(c, { t: '$full', cap: this.cap }); try { this.io.close(c.ws, 4002, 'full'); } catch {} return false; }
     if (this.zombie) {
       this.ensureSim();
-      this.sim.addPlayer(c.id, { n: c.m && c.m.n, sv: c.m && c.m.sv, col: c.m && c.m.col });
+      this.sim.addPlayer(c.id, { n: c.m && c.m.n, sv: c.m && c.m.sv, col: c.m && c.m.col, w: c.m && c.m.w, pet: c.m && c.m.pet });
       this.sendTo(c, { t: '$hi', me: c.id, at: Date.now(), room: this.name, cap: this.cap, roster: this.sim.roster(), s: this.sim.snap() });
       this.startLoop();
     } else {

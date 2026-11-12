@@ -1,87 +1,157 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Portal, useBackClose, FONT } from '../App.jsx';
-import { createRenderer } from './race3d.js';
+import { Avatar, Portal, useBackClose, FONT } from '../App.jsx';
+import { createRenderer, m4 } from './race3d.js';
 import { Sfx } from './sfx.js';
-import { EMOTES, CHAT_PHRASES, Sheet, injectCss } from './livekit.jsx';
-import { GBtn, GPill, GPanel, GTitle, GIcon, GHudBtn, GHudPanel, GNotices, useNotices, GJoy, useJoystick, injectKitCss, kitTap, pressProps, useCtlLook, useGameStage, GControlsPanel, GLobby, GLobbySheet, GSeg, GFeed, GSkin, GChatFeed, useChatFeed, TOUCHY, weakPhone } from './gamekit.jsx';
-import { makeSim, collide, rayBlocked, WEAPONS, WKEYS, MELEE, THROW, ZT, ZKEYS, SURV, SURV_GUN } from './zsim.js';
-import { makeView, personItems, toWorld, OUTFITS, OUTFIT_SWATCH, TIERS } from './zview.js';
-import { SURVIVORS, survivorMeshes } from './zmesh.js';
-import { floorH } from './ztown.js';
+import { Sheet, injectCss } from './livekit.jsx';
+import { GPill, GPanel, GTitle, GIcon, GHudBtn, GNotices, useNotices, useJoystick, GJoy, injectKitCss, kitTap, pressProps, useCtlLook, useGameStage, GControlsPanel, GLobby, GLobbySheet, GSeg, GFeed, GSkin, GChatFeed, useChatFeed, TOUCHY, weakPhone } from './gamekit.jsx';
+import { makeSim, collide, rayBlocked, WEAPONS, WKEYS, THROW, ZT, ZKEYS, SURV, SURV_GUN, hitDamage, PETS, ACID } from './zsim.js';
+import { makeView, OUTFIT_SWATCH, TIERS } from './zview.js';
+import { makeRig, poseHuman, finishHuman, poseZombie, poseDog, solve, ZSTYLE } from './zrig.js';
+import { handFrames, gunMesh } from './zguns.js';
+import { fpItems, muzzleWorld } from './zfp.js';
+import { SURV_LOOK, survLook, DOGS } from './zlooks.js';
+import { buildBody, buildDog } from './zbody.js';
+import { floorH, TOWN, HOUSES, BARN } from './ztown.js';
+import { ZA } from './zaudio.js';
+import { CBtn, TopBtn, Ico, drawMinimap, EMOTE_LIST, QUICK_EMOJI, QUICK_LINES } from './zhud.jsx';
 import { cloudOn, openCloud, pingRegions, listRooms, bestRegion, REGION_NAMES, REGION_KEYS } from './zcloud.js';
 
-const PREF = { sv: 'zchat-zombie-sv', col: 'zchat-zombie-col', gun: 'zchat-zombie-gun', gfx: 'zchat-zombie-gfx', best: 'zchat-zombie-best' };
+const PREF = { sv: 'zchat-zombie-sv', col: 'zchat-zombie-col', gun: 'zchat-zombie-gun', gfx: 'zchat-zombie-gfx', best: 'zchat-zombie-best', pet: 'zchat-zombie-pet', view: 'zchat-zombie-view', sens: 'zchat-zombie-sens', torch: 'zchat-zombie-torch' };
 const getPref = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : v; } catch { return d; } };
 const setPref = (k, v) => { try { localStorage.setItem(k, String(v)); } catch {} };
-const SV_TEXT = { jay: 'Steady with a rifle', maya: 'Shotgun at close range', tom: 'Big Tom sprays an SMG', rin: 'Sniper, one shot kills', doc: 'Quick pistol, heals a little faster' };
+const SV_TEXT = { jay: 'Steady with a rifle', maya: 'Shotgun at close range', tom: 'Big Tom sprays an SMG', rin: 'Sniper, one shot kills', doc: 'Quick pistol, helps friends up faster' };
+const PET_TEXT = { rex: 'Shepherd, bites hard', luna: 'Husky, fast runner', bear: 'Black lab, never quits', goldie: 'Golden, loyal and brave' };
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const lerp = (a, b, t) => a + (b - a) * t;
 const angLerp = (a, b, t) => { let d = b - a; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2; return a + d * t; };
+const angDiff = (a, b) => { let d = b - a; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2; return d; };
 const fmt = (n) => Math.round(n).toLocaleString('en-US');
+const rnd = (a, b) => a + Math.random() * (b - a);
+const secondOf = (g) => (g === 'pistol' ? 'smg' : 'pistol');
+const ADS_FOV = { rifle: 0.6, smg: 0.68, shotgun: 0.74, pistol: 0.7, sniper: 0.26 };
+const BASE_FOV = 0.94;
+const ROADS = [[-200, -4, 200, 4], [TOWN.sideX - TOWN.sideW, -200, TOWN.sideX + TOWN.sideW, -4]];
+const BLOCKS = (() => { const b = [TOWN.store, [BARN.x - BARN.hw, BARN.z - BARN.hd, BARN.x + BARN.hw, BARN.z + BARN.hd]]; for (const h of HOUSES) b.push([h.x - 5.5, h.z - 5.5, h.x + 5.5, h.z + 5.5]); return b; })();
 
-let noiseBuf = null;
-function gunSound(kind, vol = 1) {
-  const B = Sfx.bus && Sfx.bus();
-  if (!B || vol < 0.04) return;
-  const { ac, out } = B;
-  try {
-    if (!noiseBuf) { noiseBuf = ac.createBuffer(1, ac.sampleRate * 0.5, ac.sampleRate); const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 1.5); }
-    const t = ac.currentTime;
-    const cfg = { pistol: [2400, 0.09, 0.5, 140], smg: [2800, 0.06, 0.38, 160], rifle: [1900, 0.1, 0.55, 110], shotgun: [1200, 0.22, 0.8, 70], sniper: [1500, 0.3, 0.85, 60], boom: [500, 0.9, 1, 45], bat: [900, 0.08, 0.35, 0] }[kind] || [2000, 0.1, 0.5, 120];
-    const src = ac.createBufferSource(); src.buffer = noiseBuf;
-    const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.setValueAtTime(cfg[0], t); f.frequency.exponentialRampToValueAtTime(Math.max(120, cfg[0] * 0.25), t + cfg[1]);
-    const g = ac.createGain(); g.gain.setValueAtTime(cfg[2] * vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + cfg[1] + 0.05);
-    src.connect(f); f.connect(g); g.connect(out); src.start(t); src.stop(t + cfg[1] + 0.08);
-    if (cfg[3]) { const o = ac.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(cfg[3], t); o.frequency.exponentialRampToValueAtTime(cfg[3] * 0.4, t + cfg[1]); const g2 = ac.createGain(); g2.gain.setValueAtTime(0.5 * vol, t); g2.gain.exponentialRampToValueAtTime(0.001, t + cfg[1] + 0.04); o.connect(g2); g2.connect(out); o.start(t); o.stop(t + cfg[1] + 0.06); }
-  } catch {}
+const CORPSES = [[-8, 1.6, 0.4, 'walker', 101, 0], [12, -2.2, 2.2, 'worker', 102, 1], [24.5, 2.6, -1.2, 'walker', 103, 0], [-30, -12, 1.4, 'runner', 104, 1], [40, -30, 0.2, 'walker', 105, 0], [48, -6.5, 2.8, 'riot', 106, 1], [2, -38, -0.6, 'walker', 107, 0], [-18, 16, 1.1, 'worker', 108, 1], [58, -20, -2.2, 'walker', 109, 0], [16, 12, 0.7, 'screamer', 110, 1], [-4, -12, 2.6, 'walker', 111, 0], [-21, -30, 0.9, 'runner', 112, 1]];
+const FIRES = [[-14, 1.2, 0.8], [-13, -26, 0.3], [36, -3, 0.55], [-52, -1.5, 0.9], [46.5, -66, 0.7], [62, 10, 0.45]];
+const SMOKES = [[-52, -1.5, 1], [65, -50, 1.3], [-40, -30, 0.9], [46.5, -66, 0.8]];
+const STAINS = [[-6, 0.5, 1.4], [0, -1.8, 0.9], [9, 1.2, 1.1], [18, -0.6, 1.6], [30, 2, 1.0], [-20, -2.6, 1.2], [44, -14, 1.0], [5, -20, 1.3], [-10, -32, 0.9], [-2, -6, 0.8], [26, -24, 1.1]];
+function scenery(g, V) {
+  if (g.scn && g.scn.V === V) return g.scn;
+  const corpses = CORPSES.map(([x, z, yaw, k, id, mode]) => { const H = V.zomb(k, id, 1); const rig = makeRig(H.joints); poseZombie(rig, { k, sty: ZSTYLE(id, k), t: 0, dead: { t: 3, mode, side: id % 2 ? 1 : -1 } }); return { x, z, yaw, k, id, y: floorH(x, z), bones: new Float32Array(solve(rig)), M: m4.pose(x, floorH(x, z), z, yaw) }; });
+  g.scn = { V, corpses };
+  return g.scn;
 }
+function drawScenery(g, V, items, parts, lights, at, t, inView) {
+  const S = scenery(g, V);
+  for (const c of S.corpses) {
+    const d = Math.hypot(c.x - at[0], c.z - at[2]);
+    parts.push({ x: c.x + Math.sin(c.yaw) * 0.4, y: c.y + 0.02, z: c.z + Math.cos(c.yaw) * 0.4, size: 1.0, alpha: 0.85, type: 22, dw: -1, seed: (c.id % 13) / 13 });
+    if (d > 70 || !inView(c.x, c.y + 0.3, c.z, 1.2)) continue;
+    items.push({ mesh: V.zomb(c.k, c.id, d < V.tier.near ? 1 : 0).mesh, model: c.M, bones: c.bones, cast: false });
+  }
+  for (const [x, z, k] of STAINS) parts.push({ x, y: floorH(x, z) + 0.015, z, size: k, alpha: 0.7, type: 22, dw: -1, seed: ((x * 13 + z * 7) % 10 + 10) % 10 / 10 });
+  for (const [x, z, k] of FIRES) {
+    const y = floorH(x, z) + (k > 0.5 ? 0.6 : 0.4);
+    for (let i = 0; i < 10; i++) { const s0 = (i * 0.37 + t * 1.4) % 1; parts.push({ x: x + Math.sin(i * 2.1 + t) * 0.5 * k, y: y + s0 * 2.4 * k, z: z + Math.cos(i * 1.7 + t) * 0.5 * k, size: (1.3 - s0) * k, alpha: 0.85 * (1 - s0), type: 12, seed: i / 10 }); }
+    lights.push({ p: [x, y + 1, z], r: 6 + k * 6, c: [(2.0 + Math.sin(t * 13 + x) * 0.3) * k * 1.4, 1.1 * k * 1.4, 0.4 * k * 1.4], d: Math.hypot(x - at[0], z - at[2]) });
+  }
+  for (const [x, z, k] of SMOKES) for (let i = 0; i < 9; i++) { const s0 = (i / 9 + t * 0.035) % 1; parts.push({ x: x + s0 * 7 * k, y: floorH(x, z) + 2 + s0 * 28 * k, z: z - s0 * 3 * k, size: (2.5 + s0 * 8) * k, alpha: 0.55 * (1 - s0) * Math.min(1, s0 * 6), type: 11, seed: (i * 0.13) % 1 }); }
+}
+
+function poseInto(o, x, y, z, yaw) { const c = Math.cos(yaw), s = Math.sin(yaw); o[0] = c; o[1] = 0; o[2] = -s; o[3] = 0; o[4] = 0; o[5] = 1; o[6] = 0; o[7] = 0; o[8] = s; o[9] = 0; o[10] = c; o[11] = 0; o[12] = x; o[13] = y; o[14] = z; o[15] = 1; return o; }
 
 const portraitCache = new Map();
 let portraitR = null;
-function portrait(sv, col, gun) {
-  const key = `${sv}:${col}:${gun}`;
-  if (portraitCache.has(key)) return portraitCache.get(key);
+function portrait(kind, key, col, gun) {
+  const k = `${kind}:${key}:${col}:${gun}`;
+  if (portraitCache.has(k)) return portraitCache.get(k);
   let url = '';
   try {
-    if (!portraitR) { const cv = document.createElement('canvas'); cv.width = 168; cv.height = 168; portraitR = { cv, R: createRenderer(cv, { keep: true, shadowSize: 256, aa: true }), cache: new Map() }; }
+    if (!portraitR) { const cv = document.createElement('canvas'); cv.width = 168; cv.height = 168; portraitR = { cv, R: createRenderer(cv, { keep: true, shadowSize: 256, aa: true }), guns: new Map() }; }
     const P = portraitR;
     if (P.R) {
-      const S0 = SURVIVORS.find((s) => s.key === sv) || SURVIVORS[0];
-      const spec = { ...S0, ...(OUTFITS[sv] && OUTFITS[sv][col] ? OUTFITS[sv][col] : {}), gun };
-      let M = P.cache.get(key);
-      if (!M) { const mm = survivorMeshes(spec, 'ready'); M = { body: P.R.mesh(mm.body), leg: P.R.mesh(mm.leg), hip: mm.hip }; P.cache.set(key, M); }
       const items = [];
-      personItems(items, M, 0, 0, 0.35, { y: 0, cast: false });
-      const env = { sunDir: [-0.5, 0.6, 0.62], sunCol: [2.1, 1.85, 1.6], skyCol: [0.5, 0.52, 0.58], gndCol: [0.3, 0.26, 0.2], fogCol: [0.2, 0.2, 0.2], fogSun: [1, 1, 1], fogSunLin: [1, 1, 1], horizon: [0.12, 0.13, 0.1], zenith: [0.2, 0.22, 0.16], fogDen: 0.0001, exposure: 1.0, shadowRange: 3, clouds: 0, cloud: [1, 1, 1], time: 0, detail: 1, shadows: false };
-      P.R.render({ env, cam: { pos: [0.55, 1.5, 1.55], at: [0.02, 1.32, 0], fov: 0.62 }, items, parts: [] });
+      let cam;
+      if (kind === 'dog') {
+        const D = DOGS.find((d) => d.key === key) || DOGS[0];
+        const B = buildDog(D, 1);
+        const rig = makeRig(B.joints, true);
+        poseDog(rig, { t: 1, sit: true });
+        items.push({ mesh: P.R.skin(B.data), model: m4.pose(0, 0, 0, 0.5), bones: new Float32Array(solve(rig)) });
+        cam = { pos: [0.55, 0.85, 1.25], at: [0, 0.62, 0.15], fov: 0.62 };
+      } else {
+        const B = buildBody(survLook(key, col), 1);
+        const rig = makeRig(B.joints);
+        poseHuman(rig, { t: 1, w: gun, aiming: false });
+        const S = finishHuman(rig, handFrames);
+        const M = m4.pose(0, 0, 0, 0.35);
+        items.push({ mesh: P.R.skin(B.data), model: M, bones: new Float32Array(S) });
+        if (rig.gun) { let gm = P.guns.get(gun); if (!gm) { gm = P.R.mesh(gunMesh(gun)); P.guns.set(gun, gm); } items.push({ mesh: gm, model: m4.mul(M, rig.gun) }); }
+        cam = { pos: [0.5, 1.58, 1.35], at: [0.02, 1.4, 0], fov: 0.6 };
+      }
+      const env = { sunDir: [-0.5, 0.6, 0.62], sunCol: [2.0, 1.75, 1.5], skyCol: [0.5, 0.52, 0.58], gndCol: [0.3, 0.26, 0.2], fogCol: [0.2, 0.2, 0.2], fogSun: [1, 1, 1], fogSunLin: [1, 1, 1], horizon: [0.1, 0.11, 0.1], zenith: [0.16, 0.17, 0.15], fogDen: 0.0001, exposure: 1.0, shadowRange: 3, clouds: 0, cloud: [1, 1, 1], time: 0, detail: 0, shadows: false };
+      P.R.render({ env, cam, items, parts: [] });
       url = P.cv.toDataURL('image/png');
+      for (const it of items) if (it.bones) P.R.drop(it.mesh);
     }
   } catch { url = ''; }
-  portraitCache.set(key, url);
+  portraitCache.set(k, url);
   return url;
 }
 
-function rayZombie(ox, oy, oz, dx, dy, dz, maxD, zs, skip) {
+function rayZ(o, d, maxD, list) {
   let best = null;
-  for (const z of zs) {
-    const T = ZT[z.k];
-    const r = T.r * 1.15, h = T.h;
-    const fx = ox - z.x, fz = oz - z.z;
-    const a = dx * dx + dz * dz, b = 2 * (fx * dx + fz * dz), c = fx * fx + fz * fz - r * r;
+  for (const A of list) {
+    const T = ZT[A.k] || ZT.walker;
+    if (A.k === 'crawler') {
+      const fx = Math.sin(A.yaw), fz = Math.cos(A.yaw);
+      const cx = A.x + fx * 0.15, cz = A.z + fz * 0.15, r = 0.5;
+      const ox = o[0] - cx, oz = o[2] - cz;
+      const a = d[0] * d[0] + d[2] * d[2], b = 2 * (ox * d[0] + oz * d[2]), c = ox * ox + oz * oz - r * r;
+      const disc = b * b - 4 * a * c;
+      if (disc < 0 || a < 1e-6) continue;
+      const t = (-b - Math.sqrt(disc)) / (2 * a);
+      if (t < 0.2 || t > maxD || (best && t > best.t)) continue;
+      const y = o[1] + d[1] * t - A.y;
+      if (y < 0 || y > 0.62) continue;
+      const hx = o[0] + d[0] * t - A.x, hz = o[2] + d[2] * t - A.z;
+      best = { A, t, head: hx * fx + hz * fz > 0.35 && y > 0.25 };
+      continue;
+    }
+    const r = T.r * 1.08, h = T.h;
+    const fx = o[0] - A.x, fz = o[2] - A.z;
+    const a = d[0] * d[0] + d[2] * d[2], b = 2 * (fx * d[0] + fz * d[2]), c = fx * fx + fz * fz - r * r;
     const disc = b * b - 4 * a * c;
     if (disc < 0 || a < 1e-6) continue;
     const s = Math.sqrt(disc);
     let t = (-b - s) / (2 * a);
-    if (t < skip) t = (-b + s) / (2 * a);
-    if (t < skip || t > maxD || (best && t > best.t)) continue;
-    const y = oy + dy * t - z.y;
+    if (t < 0.2) t = (-b + s) / (2 * a);
+    if (t < 0.2 || t > maxD || (best && t > best.t)) continue;
+    const y = o[1] + d[1] * t - A.y;
     if (y < 0 || y > h) continue;
-    best = { z, t, head: y > h * 0.8 };
+    best = { A, t, head: y > h * 0.82 };
   }
   return best;
 }
 
-export function ZombieGamePage({ me, myId, onClose }) {
+function arcLand(o, yaw, pitch, speed) {
+  const pts = [];
+  const vh = Math.cos(pitch) * speed, vy = Math.sin(pitch) * speed;
+  let x = o[0], y = o[1], z = o[2], vx = Math.sin(yaw) * vh, vz = Math.cos(yaw) * vh, uy = vy;
+  for (let i = 0; i < 90; i++) {
+    const dt = 0.035;
+    x += vx * dt; z += vz * dt; y += uy * dt; uy -= 9.8 * dt;
+    if (i % 2 === 0) pts.push([x, y, z]);
+    const gy = floorH(x, z);
+    if (y <= gy + 0.05) { pts.push([x, gy + 0.05, z]); return { x, z, pts }; }
+    if (rayBlocked(o[0], o[2], x, z)) { const c = collide(x - vx * dt * 2, z - vz * dt * 2, 0.3); return { x: c[0], z: c[1], pts }; }
+  }
+  return { x, z, pts };
+}
+
+export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], onInvite = null }) {
   injectKitCss();
   injectCss();
   const look = useCtlLook('zombie');
@@ -92,7 +162,11 @@ export function ZombieGamePage({ me, myId, onClose }) {
   const [sv, setSv] = useState(() => { const v = getPref(PREF.sv, 'jay'); return SURV.includes(v) ? v : 'jay'; });
   const [col, setCol] = useState(() => clamp(Number(getPref(PREF.col, 0)) | 0, 0, 3));
   const [gun, setGun] = useState(() => { const v = getPref(PREF.gun, ''); return WEAPONS[v] ? v : SURV_GUN[sv] || 'rifle'; });
+  const [pet, setPet] = useState(() => { const v = getPref(PREF.pet, 'rex'); return PETS.includes(v) || v === 'none' ? v : 'rex'; });
   const [tier, setTier] = useState(() => { const v = Number(getPref(PREF.gfx, -1)); return v >= 0 && v <= 2 ? v : weakPhone() ? 0 : 1; });
+  const [view, setView] = useState(() => (getPref(PREF.view, 'fp') === 'tp' ? 'tp' : 'fp'));
+  const [sens, setSens] = useState(() => clamp(Number(getPref(PREF.sens, 1)) || 1, 0.4, 2.2));
+  const [torch, setTorch] = useState(() => getPref(PREF.torch, '1') !== '0');
   const [pings, setPings] = useState(null);
   const [rooms, setRooms] = useState(null);
   const [mode, setMode] = useState(null);
@@ -107,12 +181,23 @@ export function ZombieGamePage({ me, myId, onClose }) {
   const [chatLog, setChatLog] = useState([]);
   const [chatText, setChatText] = useState('');
   const [loadPct, setLoadPct] = useState(0);
+  const [picked, setPicked] = useState([]);
   const cvRef = useRef(null);
   const wrapRef = useRef(null);
+  const mapRef = useRef(null);
+  const hitRef = useRef(null);
+  const hurtRef = useRef(null);
+  const xhRef = useRef(null);
+  const dmgRef = useRef(null);
+  const dirRef = useRef(null);
+  const tagRef = useRef(null);
+  const hudRef = useRef(null);
+  const scopeRef = useRef(null);
   const G = useRef(null);
-  if (!G.current) G.current = { V: null, keys: new Set(), lookP: new Map(), yaw: Math.PI, pitch: -0.06, fire: false, revHold: false, snaps: [], dying: [], fires: [], fx: [], tr: [], anim: new Map(), panim: new Map(), roster: new Map(), names: {}, me: null, sim: null, net: null, t: 0, sendT: 0, pend: [], pendSh: [], hm: 0, shake: 0, hurtT: 0, menuT: 0, best: Number(getPref(PREF.best, 0)) || 0 };
+  if (!G.current) G.current = { V: null, keys: new Set(), lookP: new Map(), yaw: Math.PI, pitch: -0.04, fire: false, fireL: false, ads: false, revHold: false, snaps: [], dying: [], fires: [], fx: [], tr: [], dn: [], anim: new Map(), panim: new Map(), pets: new Map(), pemo: new Map(), roster: new Map(), me: null, sim: null, net: null, t: 0, sendT: 0, pend: [], pendSh: [], hm: 0, hmKill: 0, hurtT: 0, hurtDirs: [], menuT: 0, best: Number(getPref(PREF.best, 0)) || 0, lights: [], flashT: 0, recP: 0, bloom: 0, thr: null, emo: null, stepPh: 0, voiceT: 0, heartT: 0, seenBrute: new Set(), menuRigs: null, mapT: 0, lastAt: 0 };
   const myFirst = String((me && me.name) || 'You').split(' ')[0].slice(0, 16);
-  const J = useJoystick(wrapRef, { radius: () => (GS.land ? 54 : 50), rot: () => GS.side, zone: (x, y, b) => x < b.width * 0.42 && y > b.height * 0.32, enabled: () => phase === 'play' });
+  const J = useJoystick(wrapRef, { radius: () => (GS.land ? 56 : 50), rot: () => GS.side, zone: (x, y, b) => x < b.width * 0.42 && y > b.height * 0.3, enabled: () => phase === 'play' });
+  const canInvite = cloudOn() && !!onInvite;
 
   useBackClose(true, () => { if (sheet) setSheet(null); else if (phase === 'play') quit(); else onClose(); });
 
@@ -126,13 +211,14 @@ export function ZombieGamePage({ me, myId, onClose }) {
         if (!alive) { if (V) V.dispose(); return; }
         if (!V) { setNetErr('gl'); setPhase('menu'); return; }
         G.current.V = V;
+        G.current.menuRigs = null;
         setLoadPct(100);
         setPhase('menu');
       } catch { if (alive) { setNetErr('gl'); setPhase('menu'); } }
     }, 60);
     return () => { alive = false; clearTimeout(t); };
   }, [tier]);
-  useEffect(() => () => { const g = G.current; if (g.net) g.net.close(); if (g.V) g.V.dispose(); }, []);
+  useEffect(() => () => { const g = G.current; if (g.net) g.net.close(); if (g.V) g.V.dispose(); ZA.stopAll(); }, []);
   useEffect(() => {
     if (phase !== 'menu' || !cloudOn()) return undefined;
     let alive = true;
@@ -142,8 +228,16 @@ export function ZombieGamePage({ me, myId, onClose }) {
     const iv = setInterval(load, 8000);
     return () => { alive = false; clearInterval(iv); };
   }, [phase]);
-  useEffect(() => { if (phase === 'menu') { Sfx.init(); Sfx.music('lobbySiege', true); } else if (phase === 'play') Sfx.music('siege', true); }, [phase]);
-  useEffect(() => () => Sfx.music(null, false), []);
+  useEffect(() => {
+    if (phase === 'menu' || phase === 'play') { Sfx.music(null, false); if (ZA.init()) ZA.ambience(true, phase === 'play' ? 0.3 : 0); }
+  }, [phase]);
+  useEffect(() => () => { ZA.ambience(false); }, []);
+  useEffect(() => {
+    if (phase !== 'menu' || !join || !cloudOn() || G.current.joined) return;
+    G.current.joined = true;
+    const tm = setTimeout(() => start({ reg: join.reg, r: join.r, squad: String(join.r).startsWith('f') }), 300);
+    return () => clearTimeout(tm);
+  }, [phase, join]);
 
   const roomCount = (reg) => (rooms && rooms[reg] ? rooms[reg].reduce((a, r) => a + (r.p || 0), 0) : 0);
   const pickRoom = (reg) => {
@@ -154,6 +248,7 @@ export function ZombieGamePage({ me, myId, onClose }) {
     while (list.some((r) => r.n === n)) n++;
     return n;
   };
+  const newSquad = () => `f${Math.random().toString(36).slice(2, 10).replace(/[^a-z0-9]/g, 'x').padEnd(8, '0')}`;
 
   const nameOf = (id) => { const g = G.current; if (id === myId) return 'You'; const r = g.roster.get(id); return r ? r.n : 'Friend'; };
 
@@ -161,24 +256,30 @@ export function ZombieGamePage({ me, myId, onClose }) {
     const g = G.current;
     if (!g.V) return;
     Sfx.init();
+    ZA.init();
     kitTap();
-    setPref(PREF.sv, sv); setPref(PREF.col, col); setPref(PREF.gun, gun);
-    g.snaps = []; g.dying = []; g.fires = []; g.fx = []; g.tr = []; g.anim.clear(); g.panim.clear(); g.roster.clear(); g.pend = []; g.pendSh = []; g.t = 0; g.sendT = 0; g.lastW = 0; g.over = false;
-    g.me = { x: 0, z: -24, yaw: 0, w: gun, gun, mag: { [gun]: WEAPONS[gun].mag }, rel: 0, fcd: 0, nades: 2, molos: 1, ph: 0, hp: 100, st: 0, rev: 0, kills: 0, pts: 0, mv: 0, swing: 0 };
-    g.yaw = 0; g.pitch = -0.06;
+    setPref(PREF.sv, sv); setPref(PREF.col, col); setPref(PREF.gun, gun); setPref(PREF.pet, pet);
+    g.snaps = []; g.dying = []; g.fires = []; g.fx = []; g.tr = []; g.dn = []; g.anim.clear(); g.panim.clear(); g.pets.clear(); g.pemo.clear(); g.roster.clear(); g.pend = []; g.pendSh = []; g.t = 0; g.sendT = 0; g.over = false; g.seenBrute = new Set(); g.thr = null; g.emo = null; g.hurtDirs = [];
+    const second = secondOf(gun);
+    g.me = { x: 0, z: -24, w: gun, slots: [gun, second], slot: 0, mag: { [gun]: WEAPONS[gun].mag, [second]: WEAPONS[second].mag }, rel: 0, relMax: 1, fcd: 0, nades: 2, molos: 1, ph: 0, hp: 100, st: 0, rev: 0, kills: 0, pts: 0, mv: 0, speed: 0, mcd: 0, swapT: 0, sprint: false, bolt: 0 };
+    g.V.prepHands(sv, col);
+    g.F = g.V.fp(gun, sv, col);
+    g.F.rel = -1; g.F.swap = 0; g.F.thr = -1; g.F.thrHold = 0; g.F.mel = -1; g.F.bolt = -1;
+    g.yaw = 0; g.pitch = -0.04;
     setResult(null); setSheet(null); setNetErr(''); setFeedK([]); setChatLog([]);
+    const meta = { n: myFirst, sv, col, w: gun, pet: pet === 'none' ? '' : pet };
     if (m.solo) {
       const S = makeSim({ botFill: 4, maxAlive: TIERS[tier].zmax, firstBreak: 8 });
-      S.addPlayer(myId, { n: myFirst, sv, col });
+      S.addPlayer(myId, meta);
       const p = S.players.get(myId);
       g.me.x = p.x; g.me.z = p.z;
       g.sim = S; g.simAcc = 0;
-      for (const r of S.roster()) g.roster.set(r[0], { n: r[1], sv: r[2], col: r[3], bot: !!r[4] });
+      for (const r of S.roster()) g.roster.set(r[0], { n: r[1], sv: r[2], col: r[3], bot: !!r[4], pk: r[5] || '' });
       applySnap(S.snap(), performance.now());
     } else {
       g.sim = null;
       g.net = openCloud({
-        g: 'zombie', r: m.r, reg: m.reg, meta: { n: myFirst, sv, col, w: gun },
+        g: 'zombie', r: m.r, reg: m.reg, meta,
         onState: (s) => { if (s.err === 'full') { setNetErr('full'); } else if (s.err === 'lost') setNetErr('lost'); else if (s.ok) setNetErr(''); if (s.rtt) g.rtt = s.rtt; },
         onMsg: (msg) => onNet(msg),
       });
@@ -199,20 +300,25 @@ export function ZombieGamePage({ me, myId, onClose }) {
   const onNet = (m) => {
     const g = G.current;
     if (m.t === '$hi') {
-      for (const r of m.roster || []) g.roster.set(r[0], { n: r[1], sv: r[2], col: r[3], bot: !!r[4] });
+      for (const r of m.roster || []) g.roster.set(r[0], { n: r[1], sv: r[2], col: r[3], bot: !!r[4], pk: r[5] || '' });
       if (m.s) applySnap(m.s, performance.now());
       const p = (m.s && m.s.p || []).find((q) => q[0] === myId);
       if (p && g.me) { g.me.x = p[1] / 10; g.me.z = p[2] / 10; }
       return;
     }
     if (m.t === '$s') {
-      if (m.rs) { g.roster.clear(); for (const r of m.rs) g.roster.set(r[0], { n: r[1], sv: r[2], col: r[3], bot: !!r[4] }); }
+      if (m.rs) { g.roster.clear(); for (const r of m.rs) g.roster.set(r[0], { n: r[1], sv: r[2], col: r[3], bot: !!r[4], pk: r[5] || '' }); }
       applySnap(m, performance.now());
       return;
     }
     if (m.t === 'sh' && Array.isArray(m.sh)) { for (const s of m.sh.slice(0, 4)) remoteShot(m.from, s, m.w); return; }
     if (m.t === 'ct' && typeof m.x === 'string') { const t = m.x.slice(0, 90); pushChat(nameOf(m.from), t, '#9CD4FF'); setChatLog((l) => [...l.slice(-30), { who: nameOf(m.from), t }]); return; }
-    if (m.t === 'emo' && EMOTES.includes(m.e)) { pushChat(nameOf(m.from), m.e, '#9CD4FF'); }
+    if (m.t === 'emo' && typeof m.e === 'string') remoteEmote(m.from, m.e);
+  };
+  const remoteEmote = (id, e) => {
+    const g = G.current;
+    if (EMOTE_LIST.some((q) => q[0] === e)) { g.pemo.set(id, { k: e, t: 0 }); const lab = EMOTE_LIST.find((q) => q[0] === e)[1]; pushChat(nameOf(id), lab, '#9CD4FF'); return; }
+    if (QUICK_EMOJI.includes(e)) { g.pemo.set(id, { emoji: e, t: 0 }); pushChat(nameOf(id), e, '#9CD4FF'); }
   };
 
   const applySnap = (s, at) => {
@@ -221,183 +327,302 @@ export function ZombieGamePage({ me, myId, onClose }) {
     const Z = s.z || [];
     for (let i = 0; i + 6 < Z.length; i += 7) zs.set(Z[i], { id: Z[i], k: ZKEYS[Z[i + 1]] || 'walker', x: Z[i + 2] / 10, z: Z[i + 3] / 10, yaw: Z[i + 4] / 100, hp: Z[i + 5], fl: Z[i + 6] });
     const ps = new Map();
-    for (const p of s.p || []) ps.set(p[0], { id: p[0], x: p[1] / 10, z: p[2] / 10, yaw: p[3] / 100, aim: p[4] / 100, w: p[5], hp: p[6], st: p[7], rev: p[8] / 100, fl: p[9], kills: p[10], pts: p[11] });
-    g.snaps.push({ at, zs, ps });
+    for (const p of s.p || []) ps.set(p[0], { id: p[0], x: p[1] / 10, z: p[2] / 10, yaw: p[3] / 100, aim: p[4] / 100, w: p[5], hp: p[6], st: p[7], rev: p[8] / 100, fl: p[9], kills: p[10], pts: p[11], px: (p[12] || 0) / 10, pz: (p[13] || 0) / 10, pyaw: (p[14] || 0) / 100, pst: p[15] == null ? -1 : p[15] });
+    g.snaps.push({ at, zs, ps, ac: s.ac || [] });
     if (g.snaps.length > 4) g.snaps.shift();
     g.wave = s.w; g.ph = s.ph; g.tl = s.tl; g.zl = s.zl;
     const mine = ps.get(myId);
     if (mine && g.me) {
       const was = g.me.st;
+      if (mine.hp < g.me.hp - 0.5 && mine.st === 0) g.hurtT = Math.max(g.hurtT, 0.35);
       g.me.hp = mine.hp; g.me.st = mine.st; g.me.rev = mine.rev; g.me.kills = mine.kills; g.me.pts = mine.pts;
       if (was !== 0 && mine.st === 0 && Math.hypot(mine.x - g.me.x, mine.z - g.me.z) > 3) { g.me.x = mine.x; g.me.z = mine.z; }
-      if (was === 0 && mine.st === 1) { Sfx.play('pdie', { vol: 0.7 }); }
+      if (was === 0 && mine.st === 1) { ZA.synth('thump', { vol: 0.8, f: 50, len: 0.4 }); g.F && (g.F.rel = -1); g.me.rel = 0; }
     }
-    for (const e of s.ev || []) onEvent(e, ps);
+    for (const z of zs.values()) if (z.k === 'brute' && !g.seenBrute.has(z.id)) { g.seenBrute.add(z.id); ZA.play('stinger', { vol: 0.9 }); pushFeed('A brute is here', '#FF8A7A'); }
+    for (const e of s.ev || []) onEvent(e, ps, zs);
   };
 
-  const fxPush = (p) => { const g = G.current; if (g.fx.length < 260) g.fx.push(p); };
-  const muzzleAt = (id, ps) => {
-    const g = G.current;
-    const p = id === myId && g.me ? { x: g.me.x, z: g.me.z, yaw: g.yaw } : ps ? ps.get(id) : null;
-    if (!p) return null;
-    const r = g.roster.get(id) || { sv: 'jay', col: 0 };
-    const gk = id === myId ? g.me.w : p.w;
-    if (!WEAPONS[gk]) return [p.x, floorH(p.x, p.z) + 1.35, p.z];
-    const M = g.V.surv(r.sv || 'jay', gk, r.col | 0, 'aim');
-    const w = toWorld(p.x, p.z, p.yaw, M.muzzle || [0.1, 1.4, 0.8]);
-    return [w[0], w[1] + floorH(p.x, p.z), w[2]];
-  };
+  const fxPush = (p) => { const g = G.current; if (g.fx.length < 320) g.fx.push(p); };
+  const lightPush = (p, r, c, life) => { const g = G.current; if (g.lights.length < 10) g.lights.push({ p, r, c, life, max: life }); };
   const remoteShot = (id, s, w) => {
-    const g = G.current;
     if (!Array.isArray(s) || s.length < 7) return;
     const o = [s[0] / 10, s[1] / 10, s[2] / 10], d = [s[3] / 100, s[4] / 100, s[5] / 100], L = s[6] / 10;
     tracer(o, [o[0] + d[0] * L, o[1] + d[1] * L, o[2] + d[2] * L]);
     fxPush({ x: o[0], y: o[1], z: o[2], size: 0.5, alpha: 1, type: 16, life: 0.06 });
-    if (g.me) gunSound(w || 'rifle', 0.6 / (1 + Math.hypot(o[0] - g.me.x, o[2] - g.me.z) / 10));
+    lightPush(o, 6, [2.6, 1.6, 0.7], 0.06);
+    ZA.gun(w || 'rifle', { pos: o, vol: 0.8 });
   };
-  const tracer = (a, b) => { const g = G.current; if (g.tr.length < 80) g.tr.push({ a, b, life: 0.07 }); };
+  const tracer = (a, b) => { const g = G.current; if (g.tr.length < 80) g.tr.push({ a, b, life: 0.06 }); };
+  const blood = (x, y, z, n, k = 1) => { for (let i = 0; i < n; i++) fxPush({ x: x + rnd(-0.1, 0.1), y: y + rnd(-0.1, 0.12), z: z + rnd(-0.1, 0.1), size: rnd(0.14, 0.3) * k, alpha: 0.9, type: 23, life: rnd(0.25, 0.5), vy: rnd(-0.6, 0.8), vx: rnd(-1, 1), vz: rnd(-1, 1), seed: Math.random(), grav: 1 }); };
 
-  const onEvent = (e, ps) => {
+  const onEvent = (e, ps, zs) => {
     const g = G.current;
     const k = e[0];
     if (k === 'k') {
+      const A = g.anim.get(e[1]);
       const last = g.snaps.length > 1 ? g.snaps[g.snaps.length - 2].zs.get(e[1]) : null;
-      const cur = g.anim.get(e[1]);
-      const src = cur || last;
-      if (src) g.dying.push({ k: (last && last.k) || (cur && cur.k) || 'walker', x: src.x, z: src.z, yaw: src.yaw || 0, t: 0 });
+      const src = A || last;
+      if (src) {
+        const kk = (A && A.k) || (last && last.k) || 'walker';
+        const by = e[2] === myId && g.me ? g.me : ps && ps.get(e[2]);
+        let mode = 0, side = Math.random() < 0.5 ? 1 : -1;
+        if (e[4] === 'x') mode = 3;
+        else if (by) { const a = Math.atan2(by.x - src.x, by.z - src.z); const rel = Math.abs(angDiff(src.yaw || 0, a)); mode = rel < Math.PI / 2 ? 1 : 0; if (e[3] && Math.random() < 0.5) mode = 2; }
+        const sty = A ? A.sty : ZSTYLE(e[1], kk);
+        const rig = A ? A.rig : null;
+        g.dying.push({ id: e[1], k: kk, x: src.x, z: src.z, y: floorH(src.x, src.z), yaw: src.yaw || 0, t: 0, mode, side, head: !!e[3], rig, sty, thud: false, M: new Float32Array(16) });
+        if (g.dying.length > 16) g.dying.shift();
+        const y = floorH(src.x, src.z);
+        blood(src.x, y + 1.2, src.z, e[3] ? 10 : 6, e[3] ? 1.3 : 1);
+        ZA.zvoice(kk, [src.x, y + 1.4, src.z], 'die');
+        if (e[3]) ZA.play('bone', { pos: [src.x, y + 1.6, src.z], vol: 0.6, rate: 1.3 });
+      }
       g.anim.delete(e[1]);
-      if (e[2] === myId) { g.hm = 0.22; Sfx.play('poof', { vol: 0.45 }); }
+      if (e[2] === myId) { g.hmKill = 0.35; g.hm = 0.25; ZA.synth('click', { f: 4200, vol: 0.35 }); }
     } else if (k === 'ex') {
       const x = e[1] / 10, z = e[2] / 10, r = e[3] / 10, y = floorH(x, z);
-      for (let i = 0; i < 22; i++) { const a = Math.random() * 6.28, d = Math.random() * r * 0.6; fxPush({ x: x + Math.cos(a) * d, y: y + 0.4 + Math.random() * 2.2, z: z + Math.sin(a) * d, size: 1.2 + Math.random() * 1.6, alpha: 0.95, type: 12, life: 0.5 + Math.random() * 0.4, vy: 1.2 }); }
-      for (let i = 0; i < 14; i++) { const a = Math.random() * 6.28, d = Math.random() * r * 0.7; fxPush({ x: x + Math.cos(a) * d, y: y + 1 + Math.random() * 2, z: z + Math.sin(a) * d, size: 2 + Math.random() * 2.4, alpha: 0.7, type: 11, life: 1.6 + Math.random(), vy: 1.6 }); }
-      fxPush({ x, y: y + 1, z, size: r * 1.4, alpha: 1, type: 16, life: 0.12 });
-      if (g.me) { const d = Math.hypot(x - g.me.x, z - g.me.z); gunSound('boom', 1.1 / (1 + d / 12)); g.shake = Math.max(g.shake, clamp(1 - d / 30, 0, 0.8)); }
+      for (let i = 0; i < 26; i++) { const a = Math.random() * 6.28, d = Math.random() * r * 0.6; fxPush({ x: x + Math.cos(a) * d, y: y + 0.4 + Math.random() * 2.2, z: z + Math.sin(a) * d, size: 1.2 + Math.random() * 1.6, alpha: 0.95, type: 12, life: 0.45 + Math.random() * 0.4, vy: 1.2 }); }
+      for (let i = 0; i < 16; i++) { const a = Math.random() * 6.28, d = Math.random() * r * 0.7; fxPush({ x: x + Math.cos(a) * d, y: y + 1 + Math.random() * 2, z: z + Math.sin(a) * d, size: 2 + Math.random() * 2.4, alpha: 0.7, type: 11, life: 1.8 + Math.random(), vy: 1.4 }); }
+      for (let i = 0; i < 14; i++) fxPush({ x, y: y + 0.3, z, size: 0.06, alpha: 1, type: 27, life: 0.6, vx: rnd(-8, 8), vy: rnd(3, 9), vz: rnd(-8, 8), grav: 1 });
+      if (e[4] === 'b') { blood(x, y + 1, z, 22, 2); for (let i = 0; i < 8; i++) fxPush({ x: x + rnd(-1.5, 1.5), y: y + 0.4, z: z + rnd(-1.5, 1.5), size: 1.2, alpha: 0.6, type: 26, life: 2.5, seed: Math.random() }); }
+      lightPush([x, y + 1.2, z], 16, [5, 3, 1.4], 0.35);
+      ZA.play(e[4] === 'b' ? 'boom2' : 'boom', { pos: [x, y + 1, z], ref: 14, roll: 0.6, muff: 80, rev: 0.4 });
+      if (g.me) { const d = Math.hypot(x - g.me.x, z - g.me.z); if (d < 12) g.shake = Math.max(g.shake || 0, (1 - d / 12) * 0.5); }
     } else if (k === 'fi') {
-      g.fires.push({ x: e[1] / 10, z: e[2] / 10, r: e[3] / 10, life: e[4], max: e[4] });
-      Sfx.play('fireball', { vol: 0.6 });
+      g.fires.push({ x: e[1] / 10, z: e[2] / 10, r: e[3] / 10, life: e[4], max: e[4], snd: 0 });
+      ZA.synth('glass', { pos: [e[1] / 10, floorH(e[1] / 10, e[2] / 10) + 0.4, e[2] / 10] });
+      ZA.synth('fire', { pos: [e[1] / 10, floorH(e[1] / 10, e[2] / 10) + 0.4, e[2] / 10], vol: 1.2 });
     } else if (k === 'zh') {
-      if (e[2] === myId) { g.hurtT = 0.45; g.shake = Math.max(g.shake, 0.35); Sfx.play('hit', { vol: 0.6 }); try { navigator.vibrate && navigator.vibrate(30); } catch {} }
-      const a = g.anim.get(e[1]); if (a) a.atk = 0.35;
+      const A = g.anim.get(e[1]);
+      if (A) { A.att = 0; if (Math.random() < 0.6) ZA.zvoice(A.k, [A.x, A.y + 1.5, A.z], 'attack'); }
+      if (e[2] === myId) {
+        g.hurtT = 0.5;
+        ZA.synth('hit', { vol: 0.9 });
+        if (A && g.me) g.hurtDirs.push({ a: Math.atan2(A.x - g.me.x, A.z - g.me.z), t: 1 });
+        try { navigator.vibrate && navigator.vibrate(25); } catch {}
+      } else { const P = g.panim.get(e[2]); if (P) P.hit = 1; }
     } else if (k === 'bs') {
       const p = ps.get(e[1]);
-      const tgt = g.anim.get(e[2]);
-      if (p && tgt) { const o = muzzleAt(e[1], ps); if (o) { tracer(o, [tgt.x, floorH(tgt.x, tgt.z) + 1.2, tgt.z]); fxPush({ x: o[0], y: o[1], z: o[2], size: 0.45, alpha: 1, type: 16, life: 0.06 }); if (g.me) gunSound(p.w, 0.5 / (1 + Math.hypot(p.x - g.me.x, p.z - g.me.z) / 9)); } }
+      const tg = g.anim.get(e[2]);
+      const P = g.panim.get(e[1]);
+      if (p) {
+        const o = P && P.muzzle ? P.muzzle : [p.x, floorH(p.x, p.z) + 1.4, p.z];
+        if (tg) tracer(o, [tg.x, tg.y + 1.2, tg.z]);
+        fxPush({ x: o[0], y: o[1], z: o[2], size: 0.45, alpha: 1, type: 16, life: 0.05 });
+        lightPush(o, 5, [2.4, 1.5, 0.6], 0.05);
+        ZA.gun(p.w, { pos: o, vol: 0.75 });
+        if (P) P.fireT = 0.15;
+      }
     } else if (k === 'dn') {
       pushFeed(`${nameOf(e[1])} is down`, '#FF8A7A');
     } else if (k === 'rv') {
       if (e[2]) pushFeed(`${nameOf(e[2])} helped ${nameOf(e[1])} up`, '#9CF0B4');
-      if (e[1] === myId) Sfx.play('shield', { vol: 0.6 });
+      if (e[1] === myId) ZA.synth('calm', { vol: 0.6 });
     } else if (k === 'w') {
-      g.me && (g.me.nades = 2, g.me.molos = 1);
-      setBanner({ t: `Wave ${e[1]}`, s: e[1] % 5 === 0 ? 'A brute is coming' : 'Hold the town', at: Date.now() });
-      Sfx.play('alert', { vol: 0.7 });
+      if (g.me) { g.me.nades = 2; g.me.molos = 1; }
+      setBanner({ t: `Wave ${e[1]}`, s: e[1] % 5 === 0 ? 'A brute is coming' : 'They are coming', at: Date.now() });
+      ZA.synth('horn', { vol: 0.9 });
+      ZA.ambience(true, 1);
     } else if (k === 'wc') {
-      setBanner({ t: `Wave ${e[1]} cleared`, s: 'Catch your breath', at: Date.now() });
-      Sfx.play('win', { vol: 0.6 });
+      setBanner({ t: `Wave ${e[1]} cleared`, s: 'Reload and catch your breath', at: Date.now() });
+      ZA.synth('calm', { vol: 0.8 });
+      ZA.ambience(true, 0.3);
     } else if (k === 'go') {
       const best = Math.max(g.best, e[1]);
       g.best = best; setPref(PREF.best, best);
       setResult({ wave: e[1], kills: g.me ? g.me.kills : 0, pts: g.me ? g.me.pts : 0, best, at: Date.now() });
-      Sfx.play('die', { vol: 0.7 });
+      ZA.synth('horn', { vol: 0.6 });
     } else if (k === 'rs') {
-      if (e[1] === '*') { setResult(null); if (g.me) { g.me.mag = { [g.me.gun]: WEAPONS[g.me.gun].mag }; } }
+      if (e[1] === '*') { setResult(null); if (g.me) { for (const s0 of g.me.slots) g.me.mag[s0] = WEAPONS[s0].mag; } }
     } else if (k === 'pj') {
       if (g.roster.size < 14 && e[1] !== myId) { const r = g.roster.get(e[1]); if (r && !r.bot) pushNote(`${r.n} joined`, 'join'); }
     } else if (k === 'th') {
       const p = ps.get(e[1]);
-      if (p) g.fx.push({ nade: true, k: e[2], x0: p.x, z0: p.z, x1: e[3] / 10, z1: e[4] / 10, t: 0, life: e[2] === 'grenade' ? THROW.grenade.fuse : 0.9 });
+      if (p && e[1] !== myId) { g.fx.push({ nade: true, k: e[2], x0: p.x, z0: p.z, x1: e[3] / 10, z1: e[4] / 10, t: 0, life: e[2] === 'grenade' ? THROW.grenade.fuse : 0.9 }); const P = g.panim.get(e[1]); if (P) P.thr = 0; ZA.play('whoosh', { pos: [p.x, 1.5, p.z] }); }
     } else if (k === 'm') {
-      const a = g.anim.get(e[1]); if (a) a.swing = 0.3;
+      const P = g.panim.get(e[1]); if (P) P.mel = 0;
+    } else if (k === 'pz') {
+      const A = g.anim.get(e[2]);
+      const D = g.pets.get(e[1]);
+      if (D) { D.bite = 1; if (e[3]) D.leap = 1; }
+      if (A) { A.hit = 1; A.hitSide = Math.random() < 0.5 ? 1 : -1; blood(A.x, A.y + (e[3] ? 1.2 : 0.8), A.z, 4); }
+      if (D && (e[3] || Math.random() < 0.4)) ZA.play(e[3] ? 'd_growl' : ['d_bark1', 'd_bark2', 'd_bark3'][(Math.random() * 3) | 0], { pos: [D.x, 0.6, D.z], vol: e[1] === myId ? 1 : 0.6, dur: e[3] ? 0.9 : 0, vary: 0.06 });
+    } else if (k === 'sc') {
+      const A = g.anim.get(e[1]);
+      if (A) { A.scr = 0.001; ZA.synth('shriek', { pos: [A.x, A.y + 1.6, A.z], vol: 1.1, ref: 8, muff: 60 }); ZA.zvoice('screamer', [A.x, A.y + 1.6, A.z], 'attack'); }
+      if (A && g.me && Math.hypot(A.x - g.me.x, A.z - g.me.z) < 20) pushFeed('A screamer made them angry', '#FFB86A');
+    } else if (k === 'sp') {
+      const A = g.anim.get(e[1]);
+      if (A) { A.spit = 0.001; g.fx.push({ spit: true, x0: A.x, y0: A.y + 1.55, z0: A.z, x1: e[2] / 10, z1: e[3] / 10, t: 0, life: 0.85 }); ZA.synth('spit', { pos: [A.x, A.y + 1.5, A.z], vol: 1 }); }
+    } else if (k === 'ah') {
+      if (e[1] === myId) { g.hurtT = Math.max(g.hurtT, 0.3); g.acidT = 0.5; ZA.synth('sizzle', { vol: 0.6, len: 0.4 }); }
     }
   };
   const pushFeed = (text, colr) => setFeedK((v) => [...v.slice(-4), { id: `${Date.now()}${Math.random()}`, text, col: colr, life: 4.2 }]);
 
-  const fireGun = (g, now) => {
+  const camDir = (g, extraYaw = 0, extraPitch = 0) => { const y = g.yaw + extraYaw, p = g.pitch + extraPitch; return [Math.sin(y) * Math.cos(p), Math.sin(p), Math.cos(y) * Math.cos(p)]; };
+  const assist = (g, W, list) => {
+    if (!TOUCHY) return null;
+    const cam = g.cam;
+    let best = null, bd = g.ads ? 0.085 : 0.06;
+    for (const A of list) {
+      const T = ZT[A.k] || ZT.walker;
+      const d = Math.hypot(A.x - cam.pos[0], A.z - cam.pos[2]);
+      if (d > W.rng + 4 || d < 0.5) continue;
+      const ay = Math.atan2(A.x - cam.pos[0], A.z - cam.pos[2]);
+      const hy = A.k === 'crawler' ? 0.35 : T.h * 0.62;
+      const ap = Math.atan2(A.y + hy - cam.pos[1], d);
+      const s = Math.hypot(angDiff(g.yaw, ay), (ap - g.pitch) * 0.8);
+      const lim = bd * (1 + 1.2 / Math.max(2, d));
+      if (s < lim && s < (best ? best.s : 9)) best = { s, ay, ap, A };
+    }
+    return best;
+  };
+
+  const fireGun = (g) => {
     const M = g.me;
     const W = WEAPONS[M.w];
-    if (!W) return;
-    if (M.rel > 0 || M.fcd > 0) return;
-    if ((M.mag[M.w] == null ? W.mag : M.mag[M.w]) <= 0) { startReload(g); return; }
+    if (!W || M.st !== 0) return;
+    if (M.rel > 0 || M.fcd > 0 || M.swapT > 0 || g.thr || M.bolt > 0) return;
+    if ((M.mag[M.w] == null ? W.mag : M.mag[M.w]) <= 0) { ZA.play('dry', {}); M.fcd = 0.25; startReload(g); return; }
     M.mag[M.w] = (M.mag[M.w] == null ? W.mag : M.mag[M.w]) - 1;
     M.fcd = 1 / W.rate;
     M.fireT = 0.25;
+    M.sprint = false;
     const cam = g.cam;
     if (!cam) return;
-    const zs = [];
-    for (const a of g.anim.values()) zs.push(a);
-    const o = muzzleAt(myId);
-    const hits = [];
-    const sh = [];
+    const list = [];
+    for (const a of g.anim.values()) list.push(a);
+    const hits = [], sh = [];
+    const mz = g.view === 'fp' ? muzzleWorld(g.F, {}, { pos: cam.pos, yaw: g.yaw, pitch: g.pitch, fov: cam.fov, vmFov: 0.98 }) : (g.myMuzzle || cam.pos);
+    const as = W.pel === 1 ? assist(g, W, list) : null;
+    if (as && g.fire) { g.yaw = angLerp(g.yaw, as.ay, 0.12); g.pitch = lerp(g.pitch, as.ap, 0.08); }
+    const sp0 = W.spr * (M.speed > 1 ? 1.5 : 1) * (g.ads ? 0.3 : 1) * (W.pel > 1 ? 1 : 1) + g.bloom * (g.ads ? 0.3 : 1);
+    let killShown = false;
     for (let p = 0; p < W.pel; p++) {
-      const sp = W.spr * (M.mv ? 1.35 : 1) * (TOUCHY ? 0.9 : 1);
-      let yaw = g.yaw + (Math.random() - 0.5) * 2 * sp, pit = g.pitch + (Math.random() - 0.5) * 2 * sp;
-      if (TOUCHY && W.pel === 1 && p === 0) {
-        let best = null, bd = 0.075;
-        for (const z of zs) {
-          const dx = z.x - cam.pos[0], dz = z.z - cam.pos[2], d = Math.hypot(dx, dz);
-          if (d > W.rng + 4) continue;
-          const ay = Math.atan2(dx, dz);
-          let da = ay - g.yaw; while (da > Math.PI) da -= Math.PI * 2; while (da < -Math.PI) da += Math.PI * 2;
-          const ah = Math.atan2(z.y + ZT[z.k].h * 0.6 - cam.pos[1], d) - g.pitch;
-          const s = Math.hypot(da, ah * 0.7);
-          if (s < bd) { bd = s; best = { z, ay, ap: Math.atan2(z.y + ZT[z.k].h * 0.62 - cam.pos[1], d) }; }
-        }
-        if (best) { yaw = lerp(yaw, best.ay, 0.7); pit = lerp(pit, best.ap, 0.7); }
-      }
-      const d = [Math.sin(yaw) * Math.cos(pit), Math.sin(pit), Math.cos(yaw) * Math.cos(pit)];
-      const skip = Math.hypot(cam.pos[0] - M.x, cam.pos[2] - M.z) - 0.2;
-      const hit = rayZombie(cam.pos[0], cam.pos[1], cam.pos[2], d[0], d[1], d[2], W.rng + skip, zs, skip);
-      let end = W.rng + skip;
-      if (hit && !rayBlocked(M.x, M.z, hit.z.x, hit.z.z)) {
+      const sp = W.pel > 1 ? W.spr * (g.ads ? 0.75 : 1) : sp0;
+      let ey = (Math.random() - 0.5) * 2 * sp, ep = (Math.random() - 0.5) * 2 * sp;
+      if (as && p === 0) { ey = angDiff(g.yaw, as.ay) * 0.85 + ey * 0.3; ep = (as.ap - g.pitch) * 0.85 + ep * 0.3; }
+      const d = camDir(g, ey, ep);
+      const hit = rayZ(cam.pos, d, W.rng, list);
+      let end = W.rng;
+      if (hit && !rayBlocked(cam.pos[0], cam.pos[2], hit.A.x, hit.A.z)) {
         end = hit.t;
-        hits.push([hit.z.id, hit.head ? 1 : 0]);
+        hits.push([hit.A.id, hit.head ? 1 : 0]);
         const hx = cam.pos[0] + d[0] * hit.t, hy = cam.pos[1] + d[1] * hit.t, hz = cam.pos[2] + d[2] * hit.t;
-        fxPush({ x: hx, y: hy, z: hz, size: 0.35, alpha: 0.9, type: 16, life: 0.05 });
-        fxPush({ x: hx, y: hy, z: hz, size: 0.5, alpha: 0.55, type: 11, life: 0.35, vy: 0.4 });
-        g.hm = hit.head ? 0.2 : 0.12; g.hmHead = hit.head;
-        const a = g.anim.get(hit.z.id); if (a) a.flinch = 0.12;
+        const dmg = hitDamage(M.w, hit.A.k, hit.head, hit.t);
+        blood(hx, hy, hz, hit.head ? 4 : 2, hit.head ? 1.2 : 0.8);
+        g.hm = 0.16; g.hmHead = hit.head;
+        hit.A.hit = 1; hit.A.head = hit.head; hit.A.hitSide = Math.random() < 0.5 ? 1 : -1;
+        hit.A.hpGuess = (hit.A.hpGuess == null ? (ZT[hit.A.k] || ZT.walker).hp : hit.A.hpGuess) - dmg;
+        if (g.dn.length < 24) g.dn.push({ x: hx + rnd(-0.12, 0.12), y: hy + 0.1, z: hz + rnd(-0.12, 0.12), v: Math.round(dmg), head: hit.head, armor: (ZT[hit.A.k] || {}).armor && !hit.head, t: 0 });
+        if (!killShown) { ZA.synth('hit', { pos: [hx, hy, hz], head: hit.head, vol: 0.9 }); killShown = true; }
+        if ((hit.A.voiceT || 0) < g.t && Math.random() < 0.3) { hit.A.voiceT = g.t + 0.8; ZA.zvoice(hit.A.k, [hit.A.x, hit.A.y + 1.5, hit.A.z], 'hurt'); }
       }
       const tgt = [cam.pos[0] + d[0] * end, cam.pos[1] + d[1] * end, cam.pos[2] + d[2] * end];
-      if (o) { tracer(o, tgt); if (sh.length < 2) { const dd = [tgt[0] - o[0], tgt[1] - o[1], tgt[2] - o[2]]; const L = Math.hypot(dd[0], dd[1], dd[2]) || 1; sh.push([Math.round(o[0] * 10), Math.round(o[1] * 10), Math.round(o[2] * 10), Math.round(dd[0] / L * 100), Math.round(dd[1] / L * 100), Math.round(dd[2] / L * 100), Math.round(L * 10)]); } }
+      if (p < 3) tracer(mz, tgt);
+      if (sh.length < 2) { const dd = [tgt[0] - mz[0], tgt[1] - mz[1], tgt[2] - mz[2]]; const L = Math.hypot(dd[0], dd[1], dd[2]) || 1; sh.push([Math.round(mz[0] * 10), Math.round(mz[1] * 10), Math.round(mz[2] * 10), Math.round(dd[0] / L * 100), Math.round(dd[1] / L * 100), Math.round(dd[2] / L * 100), Math.round(L * 10)]); }
     }
-    if (o) fxPush({ x: o[0], y: o[1], z: o[2], size: W.pel > 1 ? 0.9 : 0.6, alpha: 1, type: 16, life: 0.05 });
-    gunSound(M.w, 0.9);
-    g.kick = (g.kick || 0) + (M.w === 'sniper' ? 0.05 : M.w === 'shotgun' ? 0.04 : 0.012);
+    if (g.view !== 'fp') fxPush({ x: mz[0], y: mz[1], z: mz[2], size: W.pel > 1 ? 0.9 : 0.6, alpha: 1, type: 16, life: 0.05 });
+    fxPush({ x: mz[0], y: mz[1], z: mz[2], size: 0.35, alpha: 0.35, type: 11, life: 0.5, vy: 0.5 });
+    const rt = [Math.cos(g.yaw), 0, -Math.sin(g.yaw)];
+    fxPush({ x: mz[0] - rt[0] * 0.05, y: mz[1] - 0.05, z: mz[2] - rt[2] * 0.05, size: 0.03, alpha: 1, type: 27, life: 0.45, vx: -rt[0] * 2.4 + rnd(-0.4, 0.4), vy: rnd(1.4, 2.4), vz: -rt[2] * 2.4 + rnd(-0.4, 0.4), grav: 1 });
+    lightPush(mz, 7, [3.4, 2.2, 1.0], 0.055);
+    ZA.gun(M.w);
+    const kick = { rifle: 0.0045, smg: 0.0035, shotgun: 0.016, sniper: 0.02, pistol: 0.006 }[M.w] || 0.005;
+    g.recP += kick * (g.ads ? 0.65 : 1);
+    g.yaw += (Math.random() - 0.5) * kick * 0.6;
+    g.bloom = Math.min(W.spr * 2.5, g.bloom + W.spr * 0.35);
+    const F = g.F;
+    if (F) { F.rec = Math.min(1.4, F.rec + (W.auto ? 0.55 : 1)); F.recY = (Math.random() - 0.5) * 0.06; F.flash = 0.05; }
+    if (M.w === 'sniper' && M.mag[M.w] > 0) { M.bolt = 0.75; setTimeout(() => ZA.play('r_cock', { rate: 1.15 }), 220); }
+    if (M.w === 'shotgun' && M.mag[M.w] > 0) { setTimeout(() => ZA.play('r_pump', { rate: 1.25, vol: 0.7 }), 260); }
     if (g.sim) { if (hits.length) g.sim.shoot(myId, M.w, hits); }
     else { g.pend.push(...hits); g.pendSh.push(...sh); }
-    if (M.mag[M.w] <= 0) startReload(g);
+    if (M.mag[M.w] <= 0) setTimeout(() => startReload(G.current), 180);
   };
   const startReload = (g) => {
     const M = g.me, W = WEAPONS[M.w];
-    if (!W || M.rel > 0 || (M.mag[M.w] != null && M.mag[M.w] >= W.mag)) return;
+    if (!W || M.st !== 0 || M.rel > 0 || M.swapT > 0 || (M.mag[M.w] != null && M.mag[M.w] >= W.mag)) return;
     M.rel = W.rel; M.relMax = W.rel;
-    Sfx.play('click', { vol: 0.5 });
+    if (g.F) g.F.rel = 0;
+    ZA.reload(M.w, W.rel);
   };
-  const swing = (g) => {
-    const M = g.me;
-    if (M.fcd > 0) return;
-    M.fcd = 1 / MELEE.bat.rate;
-    M.swing = 0.32;
-    gunSound('bat', 0.7);
-    Sfx.play('swing', { vol: 0.6 });
-    if (g.sim) g.sim.melee(myId, 'bat');
-    else if (g.net) g.net.send({ t: 'ml', k: 'bat' });
-  };
-  const throwIt = (k) => {
+  const swapGun = () => {
     const g = G.current, M = g.me;
-    if (!M || M.st !== 0 || !g.cam) return;
-    if (k === 'grenade' ? M.nades <= 0 : M.molos <= 0) return;
-    const d = [Math.sin(g.yaw), Math.cos(g.yaw)];
-    const dist = clamp(14 + g.pitch * 30, 6, 22);
-    const tx = M.x + d[0] * dist, tz = M.z + d[1] * dist;
-    if (k === 'grenade') M.nades--; else M.molos--;
-    kitTap('swing');
-    if (g.sim) g.sim.throwAt(myId, k, tx, tz);
-    else if (g.net) { g.net.send({ t: 'th', k, x: tx, z: tz }); g.fx.push({ nade: true, k, x0: M.x, z0: M.z, x1: tx, z1: tz, t: 0, life: k === 'grenade' ? THROW.grenade.fuse : 0.9 }); }
+    if (!M || M.st !== 0 || M.swapT > 0 || g.thr) return;
+    ZA.synth('tap', { f: 500, vol: 0.4 });
+    M.rel = 0;
+    M.swapT = 0.5;
+    M.swapTo = M.slot ? 0 : 1;
+    if (g.F) { g.F.rel = -1; g.F.swap = 0.001; }
     syncHud(true);
   };
-  const swap = () => { const g = G.current, M = g.me; if (!M) return; kitTap('click'); M.w = M.w === 'bat' ? M.gun : 'bat'; M.rel = 0; syncHud(true); };
+  const melee = () => {
+    const g = G.current, M = g.me;
+    if (!M || M.st !== 0 || M.mcd > 0 || g.thr) return;
+    M.mcd = 0.62;
+    M.rel = 0;
+    if (g.F) { g.F.rel = -1; g.F.mel = 0; }
+    ZA.synth('swing', { vol: 0.8 });
+    setTimeout(() => {
+      const gg = G.current;
+      if (!gg.me) return;
+      let hitAny = false;
+      for (const A of gg.anim.values()) {
+        const d = Math.hypot(A.x - gg.me.x, A.z - gg.me.z);
+        if (d > 2.6 + (ZT[A.k] || ZT.walker).r) continue;
+        if (Math.abs(angDiff(gg.yaw, Math.atan2(A.x - gg.me.x, A.z - gg.me.z))) > 0.8 && d > 0.9) continue;
+        hitAny = true; A.hit = 1; A.stunV = 0.5;
+        blood(A.x, A.y + 1.3, A.z, 5);
+        if (gg.dn.length < 24) gg.dn.push({ x: A.x, y: A.y + 1.6, z: A.z, v: 60, head: false, t: 0 });
+      }
+      if (hitAny) { ZA.synth('hit', { vol: 1 }); ZA.synth('thump', { vol: 0.6, f: 90 }); gg.hm = 0.15; }
+      if (gg.sim) gg.sim.melee(myId, 'bat');
+      else if (gg.net) gg.net.send({ t: 'ml', k: 'bat' });
+    }, 170);
+  };
+  const throwStart = (k) => {
+    const g = G.current, M = g.me;
+    if (!M || M.st !== 0 || g.thr || M.swapT > 0) return;
+    if (k === 'grenade' ? M.nades <= 0 : M.molos <= 0) return;
+    M.rel = 0;
+    g.thr = { k, t: 0 };
+    if (g.F) { g.F.rel = -1; g.F.thrHold = 0.001; }
+    ZA.play(k === 'grenade' ? 'pin' : 'r_cock', { vol: 0.6, rate: k === 'grenade' ? 1 : 1.6 });
+  };
+  const throwEnd = (cancel) => {
+    const g = G.current, M = g.me, T = g.thr;
+    if (!T) return;
+    g.thr = null;
+    if (g.F) { g.F.thrHold = 0; g.F.thr = cancel ? -1 : 0; }
+    if (cancel || !M || M.st !== 0 || !g.aimLand) return;
+    if (T.k === 'grenade') M.nades--; else M.molos--;
+    g.lastThrowK = T.k;
+    const L = g.aimLand;
+    ZA.play('whoosh', { vol: 0.9 });
+    if (g.sim) g.sim.throwAt(myId, T.k, L.x, L.z);
+    else if (g.net) g.net.send({ t: 'th', k: T.k, x: Math.round(L.x * 10) / 10, z: Math.round(L.z * 10) / 10 });
+    g.fx.push({ nade: true, k: T.k, x0: M.x, z0: M.z, x1: L.x, z1: L.z, t: 0, life: T.k === 'grenade' ? THROW.grenade.fuse : 0.9, arc: L.pts, mine: true });
+    syncHud(true);
+  };
+  const doEmote = (e) => {
+    const g = G.current;
+    setSheet(null);
+    if (!g.me) return;
+    ZA.synth('tap', { f: 900, vol: 0.4 });
+    if (EMOTE_LIST.some((q) => q[0] === e)) { g.emo = { k: e, t: 0 }; const lab = EMOTE_LIST.find((q) => q[0] === e)[1]; pushChat('You', lab); }
+    else if (QUICK_EMOJI.includes(e)) { g.myEmoji = { e, t: 0 }; pushChat('You', e); }
+    if (g.net) g.net.send({ t: 'emo', e });
+  };
+  const sayLine = (t) => {
+    const g = G.current;
+    setSheet(null);
+    pushChat('You', t);
+    if (g.net) g.net.send({ t: 'ct', x: t });
+    setChatLog((l) => [...l.slice(-30), { who: 'You', t }]);
+  };
 
   const hudAt = useRef(0);
   const syncHud = (force) => {
@@ -412,8 +637,12 @@ export function ZombieGamePage({ me, myId, onClose }) {
     if (S && M.st === 0) for (const p of S.ps.values()) if (p.id !== myId && p.st === 1 && Math.hypot(p.x - M.x, p.z - M.z) < 2.2) { near = p.id; break; }
     let alive = 0, total = 0;
     if (S) for (const p of S.ps.values()) { total++; if (p.st === 0) alive++; }
-    setHud({ w: M.w, gun: M.gun, mag: W ? (M.mag[M.w] == null ? W.mag : M.mag[M.w]) : 0, magMax: W ? W.mag : 0, rel: M.rel > 0 ? 1 - M.rel / (M.relMax || 1) : 0, hp: M.hp, st: M.st, rev: M.rev, wave: g.wave || 0, ph: g.ph, tl: g.tl, zl: g.zl, kills: M.kills, pts: M.pts, nades: M.nades, molos: M.molos, near, alive, total, rtt: g.rtt || 0, bleed: M.st === 1 ? Math.max(0, 30 - Math.round((g.downT || 0))) : 0 });
+    const mine = S && S.ps.get(myId);
+    const r = g.roster.get(myId);
+    setHud({ w: M.w, slots: M.slots, slot: M.slot, mag: W ? (M.mag[M.w] == null ? W.mag : M.mag[M.w]) : 0, magMax: W ? W.mag : 0, mag2: M.mag[M.slots[M.slot ? 0 : 1]], rel: M.rel > 0 ? 1 - M.rel / (M.relMax || 1) : 0, hp: M.hp, st: M.st, rev: M.rev, wave: g.wave || 0, ph: g.ph, tl: g.tl, zl: g.zl, kills: M.kills, pts: M.pts, nades: M.nades, molos: M.molos, near, alive, total, rtt: g.rtt || 0, ads: g.ads, aiming: !!g.thr, sprint: M.sprint, pet: mine && mine.pst >= 0 ? (r && r.pk) || pet : null, bleed: M.st === 1 ? Math.max(0, 30 - Math.round(g.downT || 0)) : 0, view: g.view });
   };
+
+  useEffect(() => { G.current.view = view; G.current.sens = sens; G.current.torch = torch; }, [view, sens, torch]);
 
   useEffect(() => {
     if (phase !== 'play' && phase !== 'menu') return undefined;
@@ -434,24 +663,48 @@ export function ZombieGamePage({ me, myId, onClose }) {
     };
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
-  }, [phase, GS.W, GS.H, sv, col, gun]);
+  }, [phase, GS.W, GS.H, sv, col, gun, pet]);
 
   const drawMenu = (g, V, dt) => {
     g.menuT += dt;
     const items = V.statics.slice();
-    const M = V.surv(sv, gun, col, 'ready');
-    personItems(items, M, 1.2, -25.5, 2.9 + Math.PI * 0.08, { walk: 0.04 });
-    const zs = [['walker', -6, -6, 0.4], ['runner', 8, -3, -0.5], ['worker', 2, 2, 0.1], ['walker', -12, 1, 0.6]];
-    zs.forEach(([k, x, z, yaw], i) => { const Z = V.zomb(k); const ph = g.menuT * 1.6 + i; personItems(items, Z, x + Math.sin(g.menuT * 0.2 + i) * 0.8, z + g.menuT * 0.25 % 4, yaw, { walk: Math.sin(ph) * 0.35, roll: Math.sin(ph * 0.5) * 0.06 }); });
+    const parts = [];
+    const key = `${sv}:${col}:${gun}:${pet}`;
+    if (!g.menuRigs || g.menuRigs.key !== key) {
+      const H = V.surv(sv, col, 1);
+      const zs = [['walker', 2], ['runner', 5], ['worker', 9], ['walker', 13], ['crawler', 4], ['screamer', 7]].map(([k, id], i) => { const Z = V.zomb(k, id, 0); return { k, id, Z, rig: makeRig(Z.joints), sty: ZSTYLE(id, k), x: -6 + i * 3.4, z: -2 - (i % 3) * 3, ph: i, M: new Float32Array(16) }; });
+      g.menuRigs = { key, H, rig: makeRig(H.joints), M: new Float32Array(16), zs, dog: pet !== 'none' ? { D: V.dog(pet), rig: null, M: new Float32Array(16) } : null };
+      if (g.menuRigs.dog) g.menuRigs.dog.rig = makeRig(g.menuRigs.dog.D.joints, true);
+    }
+    const MR = g.menuRigs;
+    const px = 1.2, pz = -25.5, pyaw = 2.9 + Math.PI * 0.08;
+    poseHuman(MR.rig, { t: g.menuT, w: gun, aiming: false, look: Math.sin(g.menuT * 0.4) * 0.25 });
+    finishHuman(MR.rig, handFrames);
+    const M0 = poseInto(MR.M, px, floorH(px, pz), pz, pyaw);
+    items.push({ mesh: MR.H.mesh, model: M0, bones: MR.rig.S, cast: true });
+    if (MR.rig.gun && !MR.rig.hideGun) items.push({ mesh: V.gun(gun), model: m4.mul(M0, MR.rig.gun), cast: true });
+    parts.push({ x: px, y: floorH(px, pz) + 0.03, z: pz, size: 0.45, alpha: 0.45, type: 21, dw: -1 });
+    if (MR.dog) {
+      poseDog(MR.dog.rig, { t: g.menuT, sit: true, look: Math.sin(g.menuT * 0.3) * 0.4 });
+      solve(MR.dog.rig);
+      items.push({ mesh: MR.dog.D.mesh, model: poseInto(MR.dog.M, px - 0.9, floorH(px, pz), pz + 0.5, pyaw + 0.6), bones: MR.dog.rig.S, cast: true });
+    }
+    for (const Q of MR.zs) {
+      Q.ph += dt * 1.9;
+      const zx = Q.x + Math.sin(g.menuT * 0.1 + Q.id) * 1.2, zz = Q.z + ((g.menuT * 0.35 + Q.id) % 6);
+      poseZombie(Q.rig, { k: Q.k, sty: Q.sty, t: g.menuT, ph: Q.ph, mv: Q.k === 'runner' ? 1.2 : 0.9 });
+      solve(Q.rig);
+      items.push({ mesh: Q.Z.mesh, model: poseInto(Q.M, zx, floorH(zx, zz), zz, 0.1 + Math.sin(Q.id) * 0.2), bones: Q.rig.S, cast: false });
+    }
+    const lights = [];
+    drawScenery(g, V, items, parts, lights, [px, 0, pz], g.menuT, () => true);
+    lights.sort((p, q) => p.d - q.d);
     const a = 2.9 + Math.sin(g.menuT * 0.08) * 0.18;
-    const cx = 1.2 + Math.sin(a) * 4.9, cz = -25.5 + Math.cos(a) * 4.9;
-    const parts = [{ x: 1.2, y: floorH(1.2, -25.5) + 0.03, z: -25.5, size: 0.45, alpha: 0.45, type: 21, dw: -1 }];
-    fireFx(parts, -14, floorH(-14, 1.2) + 0.4, 1.2, 0.8, g.menuT);
+    const cx = px + Math.sin(a) * 4.6, cz = pz + Math.cos(a) * 4.6;
     const sx = Math.cos(a), sz = -Math.sin(a);
     const off = GS.land ? -1.25 : 0;
-    V.R.render({ env: V.env, cam: { pos: [cx, 1.75, cz], at: [1.2 + sx * off, 1.3 + (GS.land ? 0 : -0.5), -25.5 + sz * off], fov: 0.72, shadowAt: [1.2, 0, -25.5], far: 420 }, items, parts });
+    V.R.render({ env: V.env, cam: { pos: [cx, 1.72, cz], at: [px + sx * off, 1.25 + (GS.land ? 0 : -0.5), pz + sz * off], fov: 0.72, shadowAt: [px, 0, pz], far: 420 }, items, parts, lights: lights.slice(0, 4) });
   };
-  const fireFx = (parts, x, y, z, k, t) => { for (let i = 0; i < 10; i++) { const s = (i * 0.37 + t * 1.4) % 1; parts.push({ x: x + Math.sin(i * 2.1 + t) * 0.5 * k, y: y + s * 2.4 * k, z: z + Math.cos(i * 1.7 + t) * 0.5 * k, size: (1.3 - s) * k, alpha: 0.85 * (1 - s), type: 12, seed: i / 10 }); } };
 
   const step = (g, V, dt, now) => {
     const M = g.me;
@@ -465,29 +718,56 @@ export function ZombieGamePage({ me, myId, onClose }) {
     if (keys.has('KeyD') || keys.has('ArrowRight')) mx += 1;
     const ml = Math.hypot(mx, my);
     if (ml > 1) { mx /= ml; my /= ml; }
+    const Wc = WEAPONS[M.w];
+    const joyRun = J.joy.current.id != null && J.joy.current.mag > 0.97 && my < -0.82;
+    M.sprint = M.st === 0 && (joyRun || (keys.has('ShiftLeft') && my < -0.5)) && !g.fire && !g.fireL && !g.ads && !g.thr && M.rel <= 0 && M.mcd <= 0;
     M.mv = 0;
+    const ox = M.x, oz = M.z;
     if (M.st === 0) {
       const fx = Math.sin(g.yaw), fz = Math.cos(g.yaw), rx = -Math.cos(g.yaw), rz = Math.sin(g.yaw);
-      const sp = 5.2 * (M.w === 'bat' ? 1.08 : M.w === 'sniper' ? 0.9 : 1);
-      const vx = (fx * -my + rx * mx) * sp, vz = (fz * -my + rz * mx) * sp;
-      if (Math.hypot(vx, vz) > 0.1) {
-        const c = collide(M.x + vx * dt, M.z + vz * dt, 0.38);
-        const moved = Math.hypot(c[0] - M.x, c[1] - M.z);
-        M.ph += moved * 2.1; M.x = c[0]; M.z = c[1]; M.mv = 1;
+      const sp = (M.sprint ? 6.4 : 4.7) * (g.ads ? 0.55 : 1) * (g.thr ? 0.7 : 1) * ({ sniper: 0.92, shotgun: 0.97, smg: 1.04, pistol: 1.05 }[M.w] || 1);
+      const tvx = (fx * -my + rx * mx) * sp, tvz = (fz * -my + rz * mx) * sp;
+      M.vx = lerp(M.vx || 0, tvx, Math.min(1, dt * 12)); M.vz = lerp(M.vz || 0, tvz, Math.min(1, dt * 12));
+      if (Math.hypot(M.vx, M.vz) > 0.05) {
+        let nx = M.x + M.vx * dt, nz = M.z + M.vz * dt;
+        for (const A of g.anim.values()) { const r = (ZT[A.k] || ZT.walker).r + 0.32; const dx = nx - A.x, dz = nz - A.z, d = Math.hypot(dx, dz); if (d < r && d > 1e-4) { nx = A.x + dx / d * r; nz = A.z + dz / d * r; } }
+        const c = collide(nx, nz, 0.38);
+        M.x = c[0]; M.z = c[1];
       }
-      M.fcd = Math.max(0, M.fcd - dt);
-      M.fireT = Math.max(0, (M.fireT || 0) - dt);
-      M.swing = Math.max(0, M.swing - dt);
-      if (M.rel > 0) { M.rel -= dt; if (M.rel <= 0) { M.rel = 0; M.mag[M.w] = WEAPONS[M.w] ? WEAPONS[M.w].mag : 0; } }
-      if (g.fire || keys.has('Space')) {
-        if (M.w === 'bat') swing(g);
-        else { const W = WEAPONS[M.w]; if (W && (W.auto || !g.fireLatch)) { fireGun(g, now); g.fireLatch = true; } }
-      } else g.fireLatch = false;
+    } else { M.vx = 0; M.vz = 0; }
+    const moved = Math.hypot(M.x - ox, M.z - oz);
+    M.speed = lerp(M.speed || 0, moved / Math.max(dt, 1e-3), Math.min(1, dt * 10));
+    M.mv = M.speed > 0.4 ? 1 : 0;
+    const F = g.F;
+    M.fcd = Math.max(0, M.fcd - dt);
+    M.mcd = Math.max(0, M.mcd - dt);
+    M.fireT = Math.max(0, (M.fireT || 0) - dt);
+    if (M.bolt > 0) { M.bolt -= dt; if (F) F.bolt = M.bolt > 0 ? 1 - M.bolt / 0.75 : -1; }
+    if (M.swapT > 0) {
+      const was = M.swapT;
+      M.swapT -= dt;
+      if (was > 0.25 && M.swapT <= 0.25) { M.slot = M.swapTo; M.w = M.slots[M.slot]; const nf = V.fp(M.w, sv, col); nf.rel = -1; nf.thr = -1; nf.thrHold = 0; nf.mel = -1; nf.bolt = -1; nf.swap = F ? F.swap : 0.5; g.F = nf; ZA.play('r_cock', { vol: 0.5, rate: 1.3 }); }
+      if (g.F) g.F.swap = M.swapT > 0 ? 1 - M.swapT / 0.5 : 0;
     }
+    if (M.rel > 0) { M.rel -= dt; if (F) F.rel = clamp(1 - M.rel / (M.relMax || 1), 0, 1); if (M.rel <= 0) { M.rel = 0; M.mag[M.w] = WEAPONS[M.w] ? WEAPONS[M.w].mag : 0; if (F) F.rel = -1; } }
+    if (F) {
+      if (F.mel >= 0) { F.mel += dt / 0.55; if (F.mel >= 1) F.mel = -1; }
+      if (F.thr >= 0) { F.thr += dt / 0.45; if (F.thr >= 1) F.thr = -1; }
+      if (g.thr) F.thrHold += dt;
+    }
+    const wantFire = (g.fire || g.fireL || keys.has('Space')) && M.st === 0;
+    if (wantFire) { const W = WEAPONS[M.w]; if (W && (W.auto || !g.fireLatch)) { fireGun(g); g.fireLatch = true; } }
+    else g.fireLatch = false;
+    if (Wc) g.bloom = Math.max(0, g.bloom - dt * Wc.spr * 4);
+    g.recP *= Math.exp(-dt * 7);
     g.downT = M.st === 1 ? (g.downT || 0) + dt : 0;
+    if (g.emo) { g.emo.t += dt; if (g.emo.t > 2.7 || M.st !== 0) g.emo = null; }
+    if (g.myEmoji) { g.myEmoji.t += dt; if (g.myEmoji.t > 3) g.myEmoji = null; }
+    for (const [id, e] of g.pemo) { e.t += dt; if (e.t > 3) g.pemo.delete(id); }
     const rv = g.revHold && hudRef.current && hudRef.current.near ? hudRef.current.near : null;
+    const fl = (M.mv ? 1 : 0) | (M.fireT > 0 || g.ads ? 8 : 0);
     if (g.sim) {
-      g.sim.setPlayer(myId, { x: M.x, z: M.z, yaw: g.yaw, aim: g.pitch, w: M.w, fl: (M.mv ? 1 : 0) | (M.fireT > 0 ? 8 : 0), rv });
+      g.sim.setPlayer(myId, { x: M.x, z: M.z, yaw: g.yaw, aim: g.pitch, w: M.w, fl, rv });
       g.simAcc += dt;
       let n = 0;
       while (g.simAcc >= 1 / 15 && n < 4) { g.sim.step(1 / 15); g.simAcc -= 1 / 15; n++; const s = g.sim.snap(); s.ev = g.sim.takeEvents(); applySnap(s, now); }
@@ -495,10 +775,24 @@ export function ZombieGamePage({ me, myId, onClose }) {
       g.sendT -= dt;
       if (g.sendT <= 0) {
         g.sendT = 0.1;
-        g.net.send({ t: 'p', x: Math.round(M.x * 100) / 100, z: Math.round(M.z * 100) / 100, yaw: Math.round(g.yaw * 100) / 100, aim: Math.round(g.pitch * 100) / 100, w: M.w, fl: (M.mv ? 1 : 0) | (M.fireT > 0 ? 8 : 0), rv, h: g.pend.length ? g.pend.splice(0, 24) : undefined, sh: g.pendSh.length ? g.pendSh.splice(0, 3) : undefined });
+        g.net.send({ t: 'p', x: Math.round(M.x * 100) / 100, z: Math.round(M.z * 100) / 100, yaw: Math.round(g.yaw * 100) / 100, aim: Math.round(g.pitch * 100) / 100, w: M.w, fl, rv, h: g.pend.length ? g.pend.splice(0, 24) : undefined, sh: g.pendSh.length ? g.pendSh.splice(0, 3) : undefined });
         g.pendSh.length = 0;
       }
     }
+    ZA.listen(M.x, floorH(M.x, M.z) + 1.6, M.z, g.yaw);
+    if (M.st === 0 && M.speed > 1) {
+      g.stepPh += moved / (M.sprint ? 0.95 : 0.78);
+      if (g.stepPh >= 1) { g.stepPh -= 1; const road = Math.abs(M.z) < 4.6 || (M.z < -4.6 && M.x > -26 && M.x < 30 && M.z > -48); ZA.synth('step', { grass: !road, vol: M.sprint ? 0.55 : 0.4 }); }
+    }
+    g.voiceT -= dt;
+    if (g.voiceT <= 0) {
+      g.voiceT = 0.35;
+      let pickA = null, pd = 1e9;
+      for (const A of g.anim.values()) { const d = Math.hypot(A.x - M.x, A.z - M.z); if (d < 26 && (A.nextV || 0) < g.t && d < pd) { pd = d; pickA = A; } }
+      if (pickA) { pickA.nextV = g.t + (pickA.k === 'runner' ? rnd(2, 4) : rnd(4, 9)); ZA.zvoice(pickA.k, [pickA.x, pickA.y + 1.5, pickA.z], 'idle'); }
+      if (g.ph === 0 && Math.random() < 0.02) ZA.synth('crow', { pos: [M.x + rnd(-40, 40), 12, M.z + rnd(-40, 40)], vol: 0.6, ref: 20 });
+    }
+    if (M.st === 0 && M.hp < 35) { g.heartT -= dt; if (g.heartT <= 0) { g.heartT = M.hp < 20 ? 0.7 : 0.95; ZA.synth('heart', { vol: 0.8 }); } }
     render(g, V, dt, now);
     syncHud(false);
   };
@@ -506,100 +800,225 @@ export function ZombieGamePage({ me, myId, onClose }) {
   const render = (g, V, dt, now) => {
     const M = g.me;
     const S = g.snaps;
+    if (!S.length) return;
     const delay = g.sim ? 1 / 15 * 1000 : 115;
     const rt = now - delay;
     let a = S[0], b = S[S.length - 1];
     for (let i = 0; i < S.length - 1; i++) if (S[i].at <= rt && S[i + 1].at >= rt) { a = S[i]; b = S[i + 1]; break; }
     const span = Math.max(1, b.at - a.at);
     const f = a === b ? 1 : clamp((rt - a.at) / span, 0, 1);
-    const items = [];
+    const T = V.tier;
+    const items = V.statics.slice();
     const parts = [];
+    const vm = [];
+    const out = M.st === 2;
+    const emoteCam = !!g.emo;
+    const fp = g.view === 'fp' && !out && !emoteCam;
+    let pos, yaw = g.yaw, pitch = g.pitch + g.recP, fov = BASE_FOV;
+    const gy = floorH(M.x, M.z);
+    if (out) {
+      let tgt = null, td = 1e9;
+      for (const p of b.ps.values()) if (p.id !== myId && p.st === 0) { const d = Math.hypot(p.x - M.x, p.z - M.z); if (d < td) { td = d; tgt = p; } }
+      const c = tgt || M;
+      g.specA = (g.specA || 0) + dt * 0.25;
+      pos = [c.x - Math.sin(g.specA) * 5, floorH(c.x, c.z) + 3.2, c.z - Math.cos(g.specA) * 5];
+      yaw = g.specA; pitch = -0.32;
+    } else if (fp) {
+      const bob = M.st === 0 ? Math.abs(Math.sin(g.stepPh * Math.PI)) * 0.025 * clamp(M.speed / 5, 0, 1) * (g.ads ? 0.3 : 1) : 0;
+      pos = [M.x, gy + (M.st === 1 ? 0.5 : 1.62) - bob, M.z];
+      if (g.ads && WEAPONS[M.w]) fov = lerp(BASE_FOV, ADS_FOV[M.w] || 0.7, g.F ? g.F.ads : 1);
+      if (M.sprint) fov = BASE_FOV + 0.04;
+    } else {
+      const fx = Math.sin(g.yaw), fz = Math.cos(g.yaw), rx = -Math.cos(g.yaw), rz = Math.sin(g.yaw);
+      const back = emoteCam ? 3.4 : M.st === 1 ? 3.6 : 3.1, side = emoteCam ? 0 : 0.72;
+      const ea = emoteCam ? g.emo.t * 0.5 + 2.6 : 0;
+      const bx = emoteCam ? Math.sin(g.yaw + ea) : fx, bz = emoteCam ? Math.cos(g.yaw + ea) : fz;
+      const cp = Math.cos(g.pitch);
+      let cx = M.x - bx * back * (emoteCam ? 1 : cp) + rx * side, cz = M.z - bz * back * (emoteCam ? 1 : cp) + rz * side;
+      const cc = collide(cx, cz, 0.3); cx = cc[0]; cz = cc[1];
+      const cy = Math.max(gy + 1.95 - (emoteCam ? 0.2 : Math.sin(g.pitch) * back * 0.9), floorH(cx, cz) + 0.5);
+      pos = [cx, cy, cz];
+      if (emoteCam) { yaw = Math.atan2(M.x - cx, M.z - cz); pitch = Math.atan2(gy + 1.1 - cy, Math.hypot(M.x - cx, M.z - cz)); }
+      if (g.ads && WEAPONS[M.w]) fov = lerp(BASE_FOV, ADS_FOV[M.w] || 0.7, 0.6);
+    }
+    if (g.shake > 0) { g.shake = Math.max(0, g.shake - dt * 2.5); const k = g.shake * 0.02; pitch += Math.sin(g.t * 47) * k; yaw += Math.sin(g.t * 39) * k; }
+    const fwd = [Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch)];
+    g.cam = { pos, fwd, yaw, pitch, fov };
+    const cfov = Math.cos(Math.min(1.45, fov * 1.25));
+    const inView = (x, y, z, r) => { const dx = x - pos[0], dy = y - pos[1], dz = z - pos[2]; const d = Math.hypot(dx, dy, dz); if (d < r + 2) return true; return (dx * fwd[0] + dy * fwd[1] + dz * fwd[2]) / d > cfov - r / d; };
+
     const live = new Set();
-    let drawnZ = 0;
     const zList = [];
     for (const z of b.zs.values()) zList.push(z);
-    if (zList.length > V.tier.zmax) zList.sort((p, q) => Math.hypot(p.x - M.x, p.z - M.z) - Math.hypot(q.x - M.x, q.z - M.z));
+    for (const z of zList) z.d = Math.hypot(z.x - M.x, z.z - M.z);
+    zList.sort((p, q) => p.d - q.d);
+    let drawnZ = 0, shadowN = 0;
     for (const z1 of zList) {
       const z0 = a.zs.get(z1.id) || z1;
-      const x = lerp(z0.x, z1.x, f), z = lerp(z0.z, z1.z, f), yaw = angLerp(z0.yaw, z1.yaw, f);
+      const x = lerp(z0.x, z1.x, f), z = lerp(z0.z, z1.z, f), zyaw = angLerp(z0.yaw, z1.yaw, f);
       let A = g.anim.get(z1.id);
-      if (!A) { A = { id: z1.id, k: z1.k, x, z, yaw, ph: Math.random() * 6, atk: 0, flinch: 0, y: floorH(x, z) }; g.anim.set(z1.id, A); }
-      const mv = Math.hypot(x - A.x, z - A.z);
-      A.ph += mv * (z1.k === 'runner' ? 2.2 : 1.7);
-      A.x = x; A.z = z; A.yaw = yaw; A.k = z1.k; A.y = floorH(x, z); A.fl = z1.fl;
-      A.atk = Math.max(0, A.atk - dt); A.flinch = Math.max(0, A.flinch - dt);
+      if (!A) { const H0 = V.zomb(z1.k, z1.id, 1); A = { id: z1.id, k: z1.k, x, z, yaw: zyaw, y: floorH(x, z), ph: Math.random() * 6, mv: 0, att: -1, hit: 0, hitSide: 1, head: false, scr: 0, spit: 0, sty: ZSTYLE(z1.id, z1.k), rig: makeRig(H0.joints), M: new Float32Array(16), off: Math.random() * 10 }; g.anim.set(z1.id, A); }
+      const mvd = Math.hypot(x - A.x, z - A.z);
+      A.mv = lerp(A.mv, mvd / Math.max(dt, 1e-3), Math.min(1, dt * 6));
+      const stride = A.k === 'runner' ? 2.1 : A.k === 'brute' ? 1.5 : A.k === 'crawler' ? 0.7 : 1.05;
+      A.ph += (mvd / stride) * Math.PI * 2;
+      A.x = x; A.z = z; A.yaw = zyaw; A.y = floorH(x, z); A.fl = z1.fl;
+      if (A.att >= 0) { A.att += dt / (A.k === 'brute' ? 1.0 : 0.62); if (A.att > 1) A.att = -1; }
+      A.hit = Math.max(0, A.hit - dt * 5);
+      if ((z1.fl & 4) && !(A.scr > 0)) A.scr = 0.001;
+      if (A.scr > 0) { A.scr += dt / 1.5; if (A.scr > 1) A.scr = 0; }
+      A.stunV = Math.max(0, (A.stunV || 0) - dt);
       live.add(z1.id);
-      if (drawnZ >= V.tier.zmax) continue;
+      if (drawnZ >= T.zmax || z1.d > 95) continue;
+      const r0 = A.k === 'brute' ? 2.2 : 1.3;
+      if (!inView(x, A.y + 1, z, r0)) continue;
       drawnZ++;
-      const Z = V.zomb(z1.k);
-      const lunge = A.atk > 0 ? Math.sin((A.atk / 0.35) * Math.PI) * 0.35 : 0;
-      personItems(items, Z, x, z, yaw, { walk: Math.sin(A.ph) * (z1.k === 'runner' ? 0.55 : 0.36), roll: Math.sin(A.ph * 0.5) * 0.07 + (A.flinch > 0 ? 0.08 : 0), pitch: lunge - (A.flinch > 0 ? 0.12 : 0), bob: Math.abs(Math.sin(A.ph)) * 0.04, cast: V.tier.shadow > 0 && Math.hypot(x - M.x, z - M.z) < 26 });
-      parts.push({ x, y: A.y + 0.03, z, size: 0.5 * (Z.scale || 1), alpha: 0.42, type: 21, dw: -1 });
-      if (z1.fl & 2) parts.push({ x, y: A.y + 0.8, z, size: 0.8, alpha: 0.5, type: 12, seed: Math.random() });
+      const H = V.zomb(A.k, A.id, z1.d < T.near ? 1 : 0);
+      poseZombie(A.rig, { k: A.k, sty: A.sty, t: g.t + A.off, ph: A.ph, mv: A.mv, att: A.att, hit: A.hit, hitSide: A.hitSide, head: A.head, stun: (z1.fl & 8) || A.stunV > 0 ? 0.4 : 0, scream: A.scr });
+      solve(A.rig);
+      const cast = T.shadowN > 0 && shadowN < T.shadowN && z1.d < 26;
+      if (cast) shadowN++;
+      items.push({ mesh: H.mesh, model: poseInto(A.M, x, A.y, z, zyaw), bones: A.rig.S, cast });
+      parts.push({ x, y: A.y + 0.03, z, size: A.k === 'brute' ? 0.85 : A.k === 'bloater' ? 0.65 : 0.5, alpha: 0.4, type: 21, dw: -1 });
+      if (z1.fl & 2) parts.push({ x, y: A.y + 0.8, z, size: 0.8, alpha: 0.55, type: 12, seed: Math.random() });
+      if (A.k === 'spitter' && z1.d < 30) parts.push({ x: x + Math.sin(zyaw) * 0.08, y: A.y + 1.5, z: z + Math.cos(zyaw) * 0.08, size: 0.22, alpha: 0.5, type: 25, seed: 0.3 });
+      if (A.k === 'bloater' && z1.d < 30) parts.push({ x, y: A.y + 1.1, z, size: 1.1, alpha: 0.18, type: 26, seed: 0.5 });
     }
     for (const id of g.anim.keys()) if (!live.has(id)) g.anim.delete(id);
+
     for (let i = g.dying.length - 1; i >= 0; i--) {
       const d = g.dying[i];
       d.t += dt;
-      if (d.t > 2.6) { g.dying.splice(i, 1); continue; }
-      const Z = V.zomb(d.k);
-      const fall = clamp(d.t / 0.45, 0, 1);
-      personItems(items, Z, d.x, d.z, d.yaw, { fall: fall * fall, sink: Math.max(0, d.t - 1.6) * 0.6, cast: false });
+      if (d.t > 10.5) { g.dying.splice(i, 1); continue; }
+      if (!d.rig) d.rig = makeRig(V.zomb(d.k, d.id, 1).joints);
+      const sink = d.t > 8.5 ? (d.t - 8.5) * 0.3 : 0;
+      if (d.t > 0.88 && !d.thud) { d.thud = true; for (let k = 0; k < 8; k++) fxPush({ x: d.x + rnd(-0.6, 0.6), y: d.y + 0.15, z: d.z + rnd(-0.6, 0.6), size: rnd(0.5, 0.9), alpha: 0.5, type: 24, life: rnd(0.6, 1.1), vy: 0.35, seed: Math.random() }); ZA.synth('thump', { pos: [d.x, d.y, d.z], vol: 0.6, f: 60 }); }
+      if (d.t > 0.9) { const k = clamp((d.t - 0.9) / 1.6, 0, 1); const fx2 = Math.sin(d.yaw) * (d.mode === 1 ? -0.5 : 0.5); parts.push({ x: d.x + fx2, y: d.y + 0.02, z: d.z + Math.cos(d.yaw) * (d.mode === 1 ? -0.5 : 0.5), size: 0.25 + 0.75 * k, alpha: 0.9 * (1 - clamp((d.t - 8.5) / 1.5, 0, 1)), type: 22, dw: -1, seed: (d.id % 97) / 97 }); }
+      if (!inView(d.x, d.y + 0.5, d.z, 1.4)) continue;
+      const H = V.zomb(d.k, d.id, Math.hypot(d.x - M.x, d.z - M.z) < T.near ? 1 : 0);
+      poseZombie(d.rig, { k: d.k, sty: d.sty, t: g.t, dead: { t: d.t, mode: d.mode, side: d.side, head: d.head } });
+      solve(d.rig);
+      items.push({ mesh: H.mesh, model: poseInto(d.M, d.x, d.y - sink, d.z, d.yaw), bones: d.rig.S, cast: false });
     }
-    let pDrawn = 0;
-    const shown = [];
-    for (const p1 of b.ps.values()) {
-      if (p1.id === myId) continue;
-      const p0 = a.ps.get(p1.id) || p1;
-      shown.push({ p0, p1, d: Math.hypot(p1.x - M.x, p1.z - M.z) });
-    }
-    shown.sort((p, q) => p.d - q.d);
-    for (const { p0, p1 } of shown) {
-      if (pDrawn >= V.tier.pmax) break;
-      if (p1.st === 2) continue;
-      pDrawn++;
-      const x = lerp(p0.x, p1.x, f), z = lerp(p0.z, p1.z, f), yaw = angLerp(p0.yaw, p1.yaw, f);
+
+    const tagList = [];
+    const meNow = { id: myId, x: M.x, z: M.z, yaw: g.yaw, aim: g.pitch, w: M.w, hp: M.hp, st: M.st, fl: (M.mv ? 1 : 0) | (M.fireT > 0 || g.ads ? 8 : 0) };
+    const drawPlayer = (p1, x, z, pyaw, isMe) => {
       let A = g.panim.get(p1.id);
-      if (!A) { A = { ph: 0, x, z }; g.panim.set(p1.id, A); }
-      A.ph += Math.hypot(x - A.x, z - A.z) * 2.1; A.x = x; A.z = z;
-      A.seen = g.t;
-      const r = g.roster.get(p1.id) || { sv: 'jay', col: 0 };
-      const wk = WEAPONS[p1.w] ? p1.w : 'bat';
-      const P = V.surv(r.sv || 'jay', wk === 'bat' ? 'bat' : wk, r.col | 0, p1.fl & 8 ? 'aim' : 'ready');
-      personItems(items, P, x, z, yaw, { walk: p1.fl & 1 ? Math.sin(A.ph) * 0.42 : 0, bob: p1.fl & 1 ? Math.abs(Math.sin(A.ph)) * 0.04 : 0, lie: p1.st === 1 });
-      parts.push({ x, y: floorH(x, z) + 0.03, z, size: 0.45, alpha: 0.42, type: 21, dw: -1 });
+      const r = isMe ? { sv, col } : g.roster.get(p1.id) || { sv: 'jay', col: 0 };
+      const dist = Math.hypot(x - M.x, z - M.z);
+      const Hh = V.surv(r.sv || 'jay', r.col | 0, dist < T.near ? 1 : 0);
+      if (!A) { A = { x, z, ph: 0, mv: 0, rig: makeRig(Hh.joints), M: new Float32Array(16), hit: 0, thr: -1, mel: -1, fireT: 0 }; g.panim.set(p1.id, A); }
+      const mvd = Math.hypot(x - A.x, z - A.z);
+      A.mv = lerp(A.mv, mvd / Math.max(dt, 1e-3), Math.min(1, dt * 8));
+      const mdir = mvd > 1e-3 ? angDiff(pyaw, Math.atan2(x - A.x, z - A.z)) : A.mdir || 0;
+      A.mdir = mdir;
+      A.ph += (mvd / (A.mv > 3 ? 1.9 : 1.35)) * Math.PI * 2;
+      A.x = x; A.z = z; A.seen = g.t;
+      A.hit = Math.max(0, A.hit - dt * 4);
+      if (A.thr >= 0) { A.thr += dt / 0.6; if (A.thr > 1) A.thr = -1; }
+      if (A.mel >= 0) { A.mel += dt / 0.5; if (A.mel > 1) A.mel = -1; }
+      A.fireT = Math.max(0, A.fireT - dt);
+      if (!inView(x, 1, z, 1.5)) return;
+      if (!isMe && Math.hypot(x - pos[0], z - pos[2]) < 0.8) return;
+      const emo = isMe ? g.emo : g.pemo.get(p1.id);
+      const wk = WEAPONS[p1.w] ? p1.w : 'rifle';
+      poseHuman(A.rig, { t: g.t + (p1.id.length || 0), ph: A.ph, mv: A.mv, mdir, aim: p1.aim || 0, w: p1.st === 0 ? wk : null, aiming: !!(p1.fl & 8) || A.fireT > 0, st: p1.st, kneel: !!(p1.fl & 4) && p1.st === 0, emo: emo && emo.k ? emo : null, thr: A.thr, hit: A.hit });
+      finishHuman(A.rig, handFrames);
+      const yy = floorH(x, z);
+      const Mw = poseInto(A.M, x, yy, z, pyaw);
+      items.push({ mesh: Hh.mesh, model: Mw, bones: A.rig.S, cast: T.shadow > 0 && dist < 30 });
+      if (A.rig.gun && !A.rig.hideGun && p1.st === 0) {
+        const Gm = m4.mul(Mw, A.rig.gun);
+        items.push({ mesh: V.gun(wk), model: Gm, cast: T.shadow > 0 && dist < 20 });
+        const mzl = [0, 0.08, wk === 'sniper' ? 1.0 : wk === 'shotgun' ? 0.8 : wk === 'pistol' ? 0.16 : wk === 'smg' ? 0.43 : 0.7];
+        const w0 = m4.apply(Gm, mzl[0], mzl[1], mzl[2]);
+        A.muzzle = [w0[0], w0[1], w0[2]];
+        if (isMe) g.myMuzzle = A.muzzle;
+      }
+      parts.push({ x, y: yy + 0.03, z, size: 0.45, alpha: 0.42, type: 21, dw: -1 });
+      if (!isMe && dist < 45) tagList.push({ x, y: yy + 2.05, z, n: r.n || 'Friend', bot: !!r.bot, st: p1.st, emoji: emo && emo.emoji ? emo.emoji : null });
+      if (isMe && g.myEmoji) tagList.push({ x, y: yy + 2.05, z, n: '', emoji: g.myEmoji.e, me: true });
+    };
+    const shown = [];
+    for (const p1 of b.ps.values()) { if (p1.id === myId) continue; shown.push({ p1, d: Math.hypot(p1.x - M.x, p1.z - M.z) }); }
+    shown.sort((p, q) => p.d - q.d);
+    let pDrawn = 0;
+    for (const { p1 } of shown) {
+      if (pDrawn >= T.pmax) break;
+      if (p1.st === 2) continue;
+      const p0 = a.ps.get(p1.id) || p1;
+      pDrawn++;
+      drawPlayer(p1, lerp(p0.x, p1.x, f), lerp(p0.z, p1.z, f), angLerp(p0.yaw, p1.yaw, f), false);
     }
+    if (!fp && M.st !== 2) drawPlayer(meNow, M.x, M.z, emoteCam ? g.yaw : g.yaw, true);
     for (const [k, A] of g.panim) if (g.t - (A.seen || 0) > 5) g.panim.delete(k);
-    if (M.st !== 2) {
-      const r = { sv, col };
-      const wk = M.w;
-      const P = V.surv(r.sv, wk, r.col, M.w === 'bat' ? 'ready' : 'aim');
-      const lean = M.swing > 0 ? Math.sin((M.swing / 0.32) * Math.PI) * 0.5 : 0;
-      personItems(items, P, M.x, M.z, g.yaw + lean, { walk: M.mv ? Math.sin(M.ph) * 0.45 : 0, bob: M.mv ? Math.abs(Math.sin(M.ph)) * 0.045 : 0, lie: M.st === 1, pitch: M.st === 0 ? -(g.kick || 0) * 0.5 : 0 });
-      parts.push({ x: M.x, y: floorH(M.x, M.z) + 0.03, z: M.z, size: 0.45, alpha: 0.45, type: 21, dw: -1 });
+
+    const petSeen = new Set();
+    for (const p1 of b.ps.values()) {
+      if (p1.pst == null || p1.pst < 0) continue;
+      const p0 = a.ps.get(p1.id) || p1;
+      const x = lerp(p0.px, p1.px, f), z = lerp(p0.pz, p1.pz, f), pyaw = angLerp(p0.pyaw, p1.pyaw, f);
+      const r = p1.id === myId ? { pk: pet } : g.roster.get(p1.id) || {};
+      const key = r.pk || 'rex';
+      let D = g.pets.get(p1.id);
+      if (!D || D.key !== key) { const DM = V.dog(key); D = { key, DM, rig: makeRig(DM.joints, true), x, z, ph: 0, mv: 0, bite: 0, leap: 0, M: new Float32Array(16) }; g.pets.set(p1.id, D); }
+      const mvd = Math.hypot(x - D.x, z - D.z);
+      D.mv = lerp(D.mv, mvd / Math.max(dt, 1e-3), Math.min(1, dt * 8));
+      D.ph += (mvd / (D.mv > 3.5 ? 1.6 : 0.9)) * Math.PI * 2;
+      D.x = x; D.z = z;
+      D.bite = Math.max(0, D.bite - dt * 3); D.leap = Math.max(0, D.leap - dt * 2.6);
+      petSeen.add(p1.id);
+      if (p1.pst === 2 && D.bite <= 0) D.bite = 0.999;
+      if (!inView(x, 0.5, z, 1)) continue;
+      poseDog(D.rig, { t: g.t, ph: D.ph, mv: D.mv, sit: p1.pst === 3 && D.mv < 0.4, bite: D.bite, leap: D.leap > 0 ? 1 - D.leap : 0, happy: p1.pst === 0 });
+      solve(D.rig);
+      items.push({ mesh: D.DM.mesh, model: poseInto(D.M, x, floorH(x, z), z, pyaw), bones: D.rig.S, cast: T.shadow > 0 });
+      parts.push({ x, y: floorH(x, z) + 0.03, z, size: 0.4, alpha: 0.38, type: 21, dw: -1 });
     }
-    g.kick = Math.max(0, (g.kick || 0) - dt * 0.3);
+    for (const k of g.pets.keys()) if (!petSeen.has(k)) g.pets.delete(k);
+
+    const lights = [];
+    for (let i = g.lights.length - 1; i >= 0; i--) { const L = g.lights[i]; L.life -= dt; if (L.life <= 0) { g.lights.splice(i, 1); continue; } const k = L.life / L.max; lights.push({ p: L.p, r: L.r, c: [L.c[0] * k, L.c[1] * k, L.c[2] * k], d: Math.hypot(L.p[0] - M.x, L.p[2] - M.z) }); }
     for (let i = g.fires.length - 1; i >= 0; i--) {
-      const F = g.fires[i];
-      F.life -= dt;
-      if (F.life <= 0) { g.fires.splice(i, 1); continue; }
-      const y = floorH(F.x, F.z);
-      const k = Math.min(1, F.life / 1.2);
-      for (let j = 0; j < 14; j++) { const s = (j * 0.31 + g.t * 1.3) % 1; const an = j * 2.4 + g.t * 0.3, d = (j % 5) / 5 * F.r; parts.push({ x: F.x + Math.cos(an) * d, y: y + 0.2 + s * 1.6, z: F.z + Math.sin(an) * d, size: (1.2 - s * 0.7) * k, alpha: 0.85 * (1 - s) * k, type: 12, seed: j / 14 }); }
+      const Fr = g.fires[i];
+      Fr.life -= dt;
+      if (Fr.life <= 0) { g.fires.splice(i, 1); continue; }
+      const y = floorH(Fr.x, Fr.z);
+      const k = Math.min(1, Fr.life / 1.2);
+      for (let j = 0; j < 14; j++) { const s = (j * 0.31 + g.t * 1.3) % 1; const an = j * 2.4 + g.t * 0.3, dd = (j % 5) / 5 * Fr.r; parts.push({ x: Fr.x + Math.cos(an) * dd, y: y + 0.2 + s * 1.6, z: Fr.z + Math.sin(an) * dd, size: (1.2 - s * 0.7) * k, alpha: 0.85 * (1 - s) * k, type: 12, seed: j / 14 }); }
+      lights.push({ p: [Fr.x, y + 1, Fr.z], r: 9, c: [2.2 * k * (0.85 + Math.sin(g.t * 17 + i) * 0.15), 1.1 * k, 0.35 * k], d: Math.hypot(Fr.x - M.x, Fr.z - M.z) });
+      Fr.snd -= dt; if (Fr.snd <= 0) { Fr.snd = 1.1; ZA.synth('fire', { pos: [Fr.x, y + 0.5, Fr.z], vol: 0.5 }); }
     }
+    for (const ac of b.ac || []) { const x = ac[0] / 10, z = ac[1] / 10, k = clamp(ac[2] / 10 / 0.6, 0, 1); parts.push({ x, y: floorH(x, z) + 0.04, z, size: ACID.r * 1.1, alpha: 0.75 * k, type: 26, dw: -1, seed: (x * 7) % 1 }); if (Math.random() < 0.3) parts.push({ x: x + rnd(-1.5, 1.5), y: floorH(x, z) + rnd(0.1, 0.5), z: z + rnd(-1.5, 1.5), size: 0.2, alpha: 0.6, type: 25, seed: Math.random() }); }
     for (let i = g.fx.length - 1; i >= 0; i--) {
       const p = g.fx[i];
       if (p.nade) {
         p.t += dt;
         if (p.t > p.life) { g.fx.splice(i, 1); continue; }
-        const u = clamp(p.t / 0.7, 0, 1);
-        const x = lerp(p.x0, p.x1, u), z = lerp(p.z0, p.z1, u), y = lerp(floorH(p.x0, p.z0) + 1.5, floorH(p.x1, p.z1) + 0.15, u) + Math.sin(u * Math.PI) * 3;
-        parts.push({ x, y, z, size: 0.22, alpha: 1, type: p.k === 'molotov' ? 12 : 4, seed: 0.5 });
+        const u = clamp(p.t / 0.75, 0, 1);
+        let x, y, z;
+        if (p.arc && p.arc.length > 1) { const q = u * (p.arc.length - 1), j = Math.floor(q), fr = q - j, A0 = p.arc[j], B0 = p.arc[Math.min(p.arc.length - 1, j + 1)]; x = lerp(A0[0], B0[0], fr); y = lerp(A0[1], B0[1], fr); z = lerp(A0[2], B0[2], fr); }
+        else { x = lerp(p.x0, p.x1, u); z = lerp(p.z0, p.z1, u); y = lerp(floorH(p.x0, p.z0) + 1.5, floorH(p.x1, p.z1) + 0.12, u) + Math.sin(u * Math.PI) * 2.6; }
+        items.push({ mesh: V.gun(p.k === 'molotov' ? 'molotov' : 'grenade'), model: m4.pose(x, y - 0.06, z, p.t * 9, p.t * 11, 0, 1.4) });
+        if (p.k === 'molotov') parts.push({ x, y: y + 0.15, z, size: 0.25, alpha: 0.9, type: 12, seed: 0.5 });
+        else if (u >= 1 && Math.sin(p.t * 20) > 0) parts.push({ x, y: y + 0.1, z, size: 0.12, alpha: 1, type: 8, seed: 0.5 });
+        continue;
+      }
+      if (p.spit) {
+        p.t += dt;
+        if (p.t > p.life) { g.fx.splice(i, 1); const y1 = floorH(p.x1, p.z1); for (let k = 0; k < 6; k++) fxPush({ x: p.x1 + rnd(-0.6, 0.6), y: y1 + 0.2, z: p.z1 + rnd(-0.6, 0.6), size: rnd(0.3, 0.6), alpha: 0.8, type: 25, life: 0.6, vy: 0.6, seed: Math.random() }); ZA.synth('sizzle', { pos: [p.x1, y1, p.z1], vol: 0.8, len: 1.2 }); continue; }
+        const u = p.t / p.life;
+        const x = lerp(p.x0, p.x1, u), z = lerp(p.z0, p.z1, u), y = lerp(p.y0, floorH(p.x1, p.z1), u) + Math.sin(u * Math.PI) * 2.2;
+        parts.push({ x, y, z, size: 0.32, alpha: 1, type: 25, seed: 0.4 });
         continue;
       }
       p.life -= dt;
       if (p.life <= 0) { g.fx.splice(i, 1); continue; }
       if (p.vy) p.y += p.vy * dt;
+      if (p.vx) p.x += p.vx * dt;
+      if (p.vz) p.z += p.vz * dt;
+      if (p.grav) { p.vy -= 9.8 * dt; const gy2 = floorH(p.x, p.z); if (p.y < gy2 + 0.02) { p.y = gy2 + 0.02; p.vy = 0; p.vx = (p.vx || 0) * 0.3; p.vz = (p.vz || 0) * 0.3; } }
       parts.push({ x: p.x, y: p.y, z: p.z, size: p.size, alpha: p.alpha * clamp(p.life * 6, 0, 1), type: p.type, seed: p.seed || 0.5 });
     }
     for (let i = g.tr.length - 1; i >= 0; i--) {
@@ -607,66 +1026,131 @@ export function ZombieGamePage({ me, myId, onClose }) {
       t.life -= dt;
       if (t.life <= 0) { g.tr.splice(i, 1); continue; }
       const dx = t.b[0] - t.a[0], dy = t.b[1] - t.a[1], dz = t.b[2] - t.a[2], L = Math.hypot(dx, dy, dz) || 1;
-      parts.push({ x: (t.a[0] + t.b[0]) / 2, y: (t.a[1] + t.b[1]) / 2, z: (t.a[2] + t.b[2]) / 2, size: 0.035, alpha: clamp(t.life * 14, 0, 1) * 0.9, type: 4, dx: dx / L, dy: dy / L, dz: dz / L, dw: L / 2 });
+      const u = 1 - t.life / 0.06, s0 = clamp(u * 1.4 - 0.4, 0, 1), s1 = clamp(u * 1.4, 0, 1);
+      const ax = t.a[0] + dx * s0, ay = t.a[1] + dy * s0, az = t.a[2] + dz * s0, bx = t.a[0] + dx * s1, by = t.a[1] + dy * s1, bz = t.a[2] + dz * s1;
+      const LL = Math.max(0.05, L * (s1 - s0));
+      parts.push({ x: (ax + bx) / 2, y: (ay + by) / 2, z: (az + bz) / 2, size: 0.022, alpha: 0.85, type: 4, dx: dx / L, dy: dy / L, dz: dz / L, dw: LL / 2 });
     }
-    fireFx(parts, -14, floorH(-14, 1.2) + 0.4, 1.2, 0.8, g.t);
-    fireFx(parts, -13, floorH(-13, -26) + 1, -26, 0.3, g.t + 1);
-    const fx = Math.sin(g.yaw), fz = Math.cos(g.yaw), rx = -Math.cos(g.yaw), rz = Math.sin(g.yaw);
-    const down = M.st !== 0;
-    const pv = [M.x, floorH(M.x, M.z) + (down ? 0.9 : 1.55), M.z];
-    const back = down ? 4.6 : M.w === 'sniper' && g.fire ? 2.6 : 3.5, side = down ? 0 : 0.78;
-    const cp = Math.cos(g.pitch), spit = Math.sin(g.pitch);
-    let cx = pv[0] - fx * back * cp + rx * side, cz = pv[2] - fz * back * cp + rz * side, cy = pv[1] + 0.45 - spit * back * 0.9 + (down ? 2.2 : 0);
-    const cc = collide(cx, cz, 0.3);
-    cx = cc[0]; cz = cc[1];
-    cy = Math.max(cy, floorH(cx, cz) + 0.5);
-    g.shake = Math.max(0, g.shake - dt * 1.8);
-    const sh = g.shake * 0.12;
-    const pos = [cx + (Math.random() - 0.5) * sh, cy + (Math.random() - 0.5) * sh, cz + (Math.random() - 0.5) * sh];
-    const at = [pos[0] + fx * cp * 20, pos[1] + (spit + (g.kick || 0)) * 20, pos[2] + fz * cp * 20];
-    g.cam = { pos, at };
-    V.R.render({ env: V.env, cam: { pos, at, fov: M.w === 'sniper' && g.fire ? 0.5 : 0.82, shadowAt: [M.x, 0, M.z], far: 420 }, items: V.statics.concat(items), parts });
-    g.hm = Math.max(0, g.hm - dt);
-    g.hurtT = Math.max(0, g.hurtT - dt);
-    const el = hitRef.current;
-    if (el) { el.style.opacity = g.hm > 0 ? '1' : '0'; el.style.borderColor = g.hmHead ? '#FF5A4A' : '#FFFFFF'; }
-    const hv = hurtRef.current;
-    if (hv) hv.style.opacity = String(clamp(g.hurtT * 1.6, 0, 0.85) + (M.hp < 35 && M.st === 0 ? 0.25 + Math.sin(g.t * 5) * 0.08 : 0));
+    drawScenery(g, V, items, parts, lights, [M.x, 0, M.z], g.t, inView);
+    g.aimLand = null;
+    if (g.thr && M.st === 0) {
+      const o = [pos[0] + Math.cos(g.yaw) * -0.15, pos[1] - 0.1, pos[2] - Math.sin(g.yaw) * -0.15];
+      const L = arcLand(o, g.yaw, g.pitch + 0.32, g.thr.k === 'grenade' ? 17 : 15);
+      g.aimLand = L;
+      L.pts.forEach((q, i) => { if (i > 0) parts.push({ x: q[0], y: q[1], z: q[2], size: 0.07, alpha: 0.95, type: 8, seed: 0.5 }); });
+      const R0 = g.thr.k === 'grenade' ? THROW.grenade.r : THROW.molotov.r;
+      const ly = floorH(L.x, L.z) + 0.08;
+      for (let i = 0; i < 28; i++) { const an = (i / 28) * Math.PI * 2 + g.t * 0.6; parts.push({ x: L.x + Math.cos(an) * R0, y: ly, z: L.z + Math.sin(an) * R0, size: 0.11, alpha: 0.95, type: 8, seed: 0.5 }); }
+      parts.push({ x: L.x, y: ly, z: L.z, size: 0.35, alpha: 0.9, type: 8, seed: 0.5 });
+    }
+    lights.sort((p, q) => p.d - q.d);
+    const useLights = lights.slice(0, 4);
+    const spot = g.torch && M.st !== 2 ? { p: [pos[0] - Math.cos(yaw) * 0.12, pos[1] - 0.1, pos[2] + Math.sin(yaw) * 0.12], d: fwd, cos: 0.84, r: 30, c: [1.5, 1.42, 1.25] } : null;
+    let vmLights = null;
+    if (fp && M.st === 0 && g.F) {
+      fpItems(vm, V, g.F, { dt, t: g.t, ads: g.ads && !g.thr, speed: M.speed, sprint: M.sprint, scope: M.w === 'sniper', throwK: g.thr ? g.thr.k : g.lastThrowK }, { pos, yaw, pitch });
+      vmLights = [{ p: [pos[0] - Math.cos(yaw) * 0.35, pos[1] + 0.3, pos[2] + Math.sin(yaw) * 0.35], r: 1.5, c: [0.9, 0.85, 0.8] }].concat(useLights.filter((l) => l.d < 6));
+    }
+    const at = [pos[0] + fwd[0] * 10, pos[1] + fwd[1] * 10, pos[2] + fwd[2] * 10];
+    const VP = V.R.render({ env: V.env, cam: { pos, at, fov, vmFov: 0.98, vmNear: 0.02, shadowAt: [M.x, 0, M.z], far: 380 }, items, parts, vm, lights: useLights, spot, vmLights });
+    overlay(g, VP, tagList, dt);
   };
-  const hitRef = useRef(null);
-  const hurtRef = useRef(null);
-  const hudRef = useRef(null);
-  hudRef.current = hud;
 
-  useEffect(() => {
-    if (phase !== 'play') return undefined;
+  const overlay = (g, VP, tags, dt) => {
+    const M = g.me;
+    const W = GS.W, H = GS.H;
+    const proj = (x, y, z) => { const cw = VP[3] * x + VP[7] * y + VP[11] * z + VP[15]; if (cw <= 0.05) return null; const cx = (VP[0] * x + VP[4] * y + VP[8] * z + VP[12]) / cw, cy = (VP[1] * x + VP[5] * y + VP[9] * z + VP[13]) / cw; return [(cx * 0.5 + 0.5) * W, (0.5 - cy * 0.5) * H, cw]; };
+    const dm = dmgRef.current;
+    if (dm) {
+      let k = 0;
+      for (let i = g.dn.length - 1; i >= 0; i--) {
+        const n = g.dn[i];
+        n.t += dt;
+        if (n.t > 0.85) { g.dn.splice(i, 1); continue; }
+        const p = proj(n.x, n.y + n.t * 0.55, n.z);
+        if (!p || k >= dm.children.length) continue;
+        const el = dm.children[k++];
+        const pop = n.t < 0.08 ? 1.35 - n.t * 4 : 1;
+        el.style.transform = `translate(${p[0].toFixed(1)}px,${p[1].toFixed(1)}px) translate(-50%,-50%) scale(${pop.toFixed(2)})`;
+        el.style.opacity = String(clamp((0.85 - n.t) * 4, 0, 1));
+        el.style.color = n.head ? '#FFD23A' : n.armor ? '#A8B4C0' : '#FFFFFF';
+        el.style.fontSize = n.head ? '19px' : '16px';
+        if (el.textContent !== String(n.v)) el.textContent = String(n.v);
+        el.style.display = 'block';
+      }
+      for (; k < dm.children.length; k++) dm.children[k].style.display = 'none';
+    }
+    const tg = tagRef.current;
+    if (tg) {
+      let k = 0;
+      for (const t of tags) {
+        if (k >= tg.children.length) break;
+        const p = proj(t.x, t.y, t.z);
+        if (!p) continue;
+        const el = tg.children[k++];
+        el.style.display = 'block';
+        el.style.transform = `translate(${p[0].toFixed(1)}px,${p[1].toFixed(1)}px) translate(-50%,-100%)`;
+        const txt = (t.emoji ? `${t.emoji} ` : '') + (t.n || '');
+        if (el.textContent !== txt) el.textContent = txt;
+        el.style.color = t.st === 1 ? '#FF8A7A' : t.bot ? 'rgba(220,226,232,0.85)' : '#8FD8FF';
+        el.style.fontSize = t.emoji && !t.n ? '24px' : '12px';
+      }
+      for (; k < tg.children.length; k++) tg.children[k].style.display = 'none';
+    }
+    g.hm = Math.max(0, g.hm - dt); g.hmKill = Math.max(0, g.hmKill - dt);
+    const hel = hitRef.current;
+    if (hel) { hel.style.opacity = g.hm > 0 ? '1' : '0'; const c = g.hmKill > 0 ? '#FF3B2E' : g.hmHead ? '#FFD23A' : '#FFFFFF'; for (const s of hel.children) s.style.background = c; hel.style.transform = `scale(${g.hmKill > 0 ? 1.25 : 1})`; }
+    const xh = xhRef.current;
+    if (xh) {
+      const Wc = WEAPONS[M.w];
+      const gap = Wc ? 7 + (Wc.spr * 180 + g.bloom * 260) * (M.speed > 1 ? 1.4 : 1) * (g.ads ? 0.3 : 1) : 8;
+      xh.style.setProperty('--gap', `${gap.toFixed(1)}px`);
+      xh.style.opacity = M.st === 0 && !g.thr && !(g.ads && g.view === 'fp') && !M.sprint ? '1' : '0';
+    }
+    const sc = scopeRef.current;
+    if (sc) { const on = g.ads && M.w === 'sniper' && g.view === 'fp' && g.F && g.F.ads > 0.85; sc.style.display = on ? 'block' : 'none'; const dot = sc.nextSibling; if (dot) dot.style.display = g.ads && M.w !== 'sniper' && g.view === 'fp' && g.F && g.F.ads > 0.6 && !g.thr ? 'block' : 'none'; }
+    g.hurtT = Math.max(0, g.hurtT - dt);
+    const hv = hurtRef.current;
+    if (hv) { hv.style.opacity = String(clamp(g.hurtT * 1.8, 0, 0.8) + (M.hp < 35 && M.st === 0 ? 0.22 + Math.sin(g.t * 5) * 0.08 : 0)); hv.style.filter = g.acidT > 0 ? 'hue-rotate(80deg)' : 'none'; }
+    g.acidT = Math.max(0, (g.acidT || 0) - dt);
+    const dr = dirRef.current;
+    if (dr) {
+      let k = 0;
+      for (let i = g.hurtDirs.length - 1; i >= 0; i--) { const h = g.hurtDirs[i]; h.t -= dt * 1.2; if (h.t <= 0) { g.hurtDirs.splice(i, 1); continue; } if (k >= dr.children.length) continue; const el = dr.children[k++]; const rel = angDiff(g.yaw, h.a); el.style.display = 'block'; el.style.opacity = String(clamp(h.t, 0, 1)); el.style.transform = `rotate(${(-rel * 180 / Math.PI).toFixed(1)}deg)`; }
+      for (; k < dr.children.length; k++) dr.children[k].style.display = 'none';
+    }
+    g.mapT -= dt;
+    if (g.mapT <= 0 && mapRef.current) {
+      g.mapT = 0.1;
+      const zs = [], ps = [];
+      for (const A of g.anim.values()) if (Math.hypot(A.x - M.x, A.z - M.z) < 46) zs.push([A.x, A.z, A.k === 'brute' ? 1 : 0]);
+      const Sn = g.snaps[g.snaps.length - 1];
+      let petp = null;
+      if (Sn) for (const p of Sn.ps.values()) { if (p.id !== myId && p.st !== 2) ps.push([p.x, p.z, p.yaw, p.st]); if (p.id === myId && p.pst >= 0) petp = [p.px, p.pz]; }
+      drawMinimap(mapRef.current, { x: M.x, z: M.z, yaw: g.yaw, scale: 2.2, roads: ROADS, blocks: BLOCKS, zs, ps, pet: petp, acid: Sn ? (Sn.ac || []).map((q) => [q[0] / 10, q[1] / 10]) : [] });
+    }
+  };
+
+  const ptr = (e) => { const el = wrapRef.current; const r = el.getBoundingClientRect(); return GS.side ? { x: e.clientY - r.top, y: r.right - e.clientX } : { x: e.clientX - r.left, y: e.clientY - r.top }; };
+  const lookBy = (dx, dy, mouse) => {
     const g = G.current;
-    const kd = (e) => {
-      if (sheet || (e.target && /INPUT|TEXTAREA/.test(e.target.tagName))) return;
-      g.keys.add(e.code);
-      if (e.code === 'KeyR') startReload(g);
-      else if (e.code === 'KeyQ') swap();
-      else if (e.code === 'KeyG') throwIt('grenade');
-      else if (e.code === 'KeyF') throwIt('molotov');
-      else if (e.code === 'KeyE') g.revHold = true;
-      else if (e.code === 'Enter' && mode && !mode.solo) setSheet('chat');
-    };
-    const ku = (e) => { g.keys.delete(e.code); if (e.code === 'KeyE') g.revHold = false; };
-    window.addEventListener('keydown', kd);
-    window.addEventListener('keyup', ku);
-    return () => { window.removeEventListener('keydown', kd); window.removeEventListener('keyup', ku); g.keys.clear(); };
-  }, [phase, sheet, mode]);
-
+    if (!g.me) return;
+    const M = g.me;
+    const k = (mouse ? 0.0036 : 0.0056) * (g.sens || 1) * (g.ads ? (M.w === 'sniper' ? 0.32 : 0.6) : 1);
+    const ddx = GS.side ? dy : dx, ddy = GS.side ? -dx : dy;
+    g.yaw -= ddx * k;
+    g.pitch = clamp(g.pitch - ddy * k * 0.85, -1.25, 1.2);
+  };
   const lookDown = (e) => {
     if (phase !== 'play') return;
     const el = wrapRef.current;
-    const r = el.getBoundingClientRect();
-    const x = GS.side ? e.clientY - r.top : e.clientX - r.left;
-    const y = GS.side ? r.right - e.clientX : e.clientY - r.top;
-    const wid = GS.side ? r.height : r.width, hei = GS.side ? r.width : r.height;
-    if (x < wid * 0.42 && y > hei * 0.32 && e.pointerType !== 'mouse') { J.handlers.onPointerDown(e); return; }
-    G.current.lookP.set(e.pointerId, { x, y });
-    if (e.pointerType === 'mouse') G.current.fire = e.button === 0;
+    const p = ptr(e);
+    const wid = GS.side ? el.clientHeight : el.clientWidth, hei = GS.side ? el.clientWidth : el.clientHeight;
+    void wid; void hei;
+    if (e.pointerType !== 'mouse' && p.x < GS.W * 0.42 && p.y > GS.H * 0.3) { J.handlers.onPointerDown(e); return; }
+    G.current.lookP.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (e.pointerType === 'mouse') { if (e.button === 0) G.current.fire = true; if (e.button === 2) { G.current.ads = true; syncHud(true); } }
+    ZA.init();
     try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
   };
   const lookMove = (e) => {
@@ -674,27 +1158,35 @@ export function ZombieGamePage({ me, myId, onClose }) {
     const g = G.current;
     const L = g.lookP.get(e.pointerId);
     if (!L) return;
-    const el = wrapRef.current;
-    const r = el.getBoundingClientRect();
-    const x = GS.side ? e.clientY - r.top : e.clientX - r.left;
-    const y = GS.side ? r.right - e.clientX : e.clientY - r.top;
-    const sens = (e.pointerType === 'mouse' ? 0.0042 : 0.0062) * (g.me && g.me.w === 'sniper' && g.fire ? 0.55 : 1);
-    g.yaw -= (x - L.x) * sens;
-    g.pitch = clamp(g.pitch - (y - L.y) * sens * 0.8, -0.55, 0.42);
-    L.x = x; L.y = y;
+    lookBy(e.clientX - L.x, e.clientY - L.y, e.pointerType === 'mouse');
+    L.x = e.clientX; L.y = e.clientY;
   };
-  const lookUp = (e) => { J.handlers.onPointerUp(e); const g = G.current; if (g.lookP.delete(e.pointerId) && e.pointerType === 'mouse') g.fire = false; };
-  const fireDown = (e) => {
-    e.stopPropagation();
-    const g = G.current;
-    Sfx.init();
-    g.fire = true;
-    const el = wrapRef.current, r = el.getBoundingClientRect();
-    g.lookP.set(e.pointerId, { x: GS.side ? e.clientY - r.top : e.clientX - r.left, y: GS.side ? r.right - e.clientX : e.clientY - r.top });
-    try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
-  };
-  const fireUp = (e) => { e.stopPropagation(); const g = G.current; g.fire = false; g.lookP.delete(e.pointerId); };
+  const lookUp = (e) => { J.handlers.onPointerUp(e); const g = G.current; if (g.lookP.delete(e.pointerId) && e.pointerType === 'mouse') { if (e.button === 0) g.fire = false; if (e.button === 2) { g.ads = false; syncHud(true); } } };
 
+  useEffect(() => {
+    if (phase !== 'play') return undefined;
+    const g = G.current;
+    const kd = (e) => {
+      if (sheet || (e.target && /INPUT|TEXTAREA/.test(e.target.tagName))) return;
+      if (e.repeat) return;
+      g.keys.add(e.code);
+      if (e.code === 'KeyR') startReload(g);
+      else if (e.code === 'KeyQ') swapGun();
+      else if (e.code === 'KeyG') throwStart('grenade');
+      else if (e.code === 'KeyF') throwStart('molotov');
+      else if (e.code === 'KeyV') melee();
+      else if (e.code === 'KeyE') g.revHold = true;
+      else if (e.code === 'KeyB') setSheet('emote');
+      else if (e.code === 'Enter' && mode && !mode.solo) setSheet('chat');
+    };
+    const ku = (e) => { g.keys.delete(e.code); if (e.code === 'KeyE') g.revHold = false; if ((e.code === 'KeyG' || e.code === 'KeyF') && g.thr) throwEnd(false); };
+    window.addEventListener('keydown', kd);
+    window.addEventListener('keyup', ku);
+    return () => { window.removeEventListener('keydown', kd); window.removeEventListener('keyup', ku); g.keys.clear(); };
+  }, [phase, sheet, mode]);
+
+  const cancelRef = useRef(null);
+  const overCancel = (e) => { const el = cancelRef.current; if (!el) return false; const r = el.getBoundingClientRect(); return e.clientX >= r.left - 8 && e.clientX <= r.right + 8 && e.clientY >= r.top - 8 && e.clientY <= r.bottom + 8; };
   const sendChat = (t0) => {
     const t = String(t0 || '').replace(/\s+/g, ' ').trim().slice(0, 90);
     const g = G.current;
@@ -704,44 +1196,73 @@ export function ZombieGamePage({ me, myId, onClose }) {
     setChatLog((l) => [...l.slice(-30), { who: 'You', t }]);
     setChatText(''); setSheet(null);
   };
-  const sendEmote = (e) => { const g = G.current; if (!g.net) return; g.net.send({ t: 'emo', e }); pushChat('You', e); setSheet(null); };
+  const sendInvites = () => {
+    const g = G.current;
+    const ps = friends.filter((fr) => picked.includes(fr.id));
+    if (!ps.length || !onInvite) return;
+    let room;
+    if (phase === 'play' && mode && !mode.solo && g.net) room = { reg: mode.reg, r: String(mode.r) };
+    else { room = { reg: best || 'asia', r: newSquad() }; start({ reg: room.reg, r: room.r, squad: true }); }
+    try { onInvite(ps, room); } catch {}
+    setPicked([]); setSheet(null);
+    const first = String(ps[0].name || 'Friend').split(' ')[0];
+    pushNote(ps.length === 1 ? `Invite sent to ${first}` : `Invites sent to ${ps.length} friends`, 'join');
+  };
 
   const pingCol = (ms) => (ms == null || ms >= 9999 ? 'rgba(239,232,210,0.5)' : ms < 90 ? '#7BE05A' : ms < 180 ? '#F2C230' : '#FF7A5A');
   const best = useMemo(() => (pings ? bestRegion(pings) : null), [pings]);
-  const ctrl = look.size;
-  const see = 1 - look.see;
   const H = hud || {};
+  const s = look.size * (land ? 1 : 0.86);
+  const see = 1 - look.see;
+  const px = (v) => Math.round(v * s);
+  const WN = (k) => (WEAPONS[k] ? WEAPONS[k].n : '');
 
   const menu = phase === 'menu' && (
-    <GLobby GS={GS} title="Dead Town" sub={cloudOn() ? 'Up to 50 survivors per server. Hold the town together.' : 'You and three bot friends against the waves'} onClose={onClose}
+    <GLobby GS={GS} title="Dead Town" sub={cloudOn() ? 'Up to 50 survivors per server. Hold the town together.' : 'You, your dog and three bot friends against the dead'} onClose={onClose}
       tools={<GHudBtn icon="gear" label="Settings" size={42} onPress={() => setSheet('gfx')} />}
       side={(
-        <GPanel style={{ padding: '10px 12px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}><span style={{ fontSize: 14, fontWeight: 900 }}>Your survivor</span><span style={{ fontSize: 12, fontWeight: 700, color: '#F2A23A' }}>{SV_TEXT[sv]}</span></div>
+        <GPanel style={{ padding: '10px 12px 12px', display: 'flex', flexDirection: 'column', gap: 9 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}><span style={{ fontSize: 14, fontWeight: 900 }}>Your survivor</span><span style={{ fontSize: 12, fontWeight: 700, color: '#E0A85A' }}>{SV_TEXT[sv]}</span></div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 6 }}>
             {SURV.map((k) => {
-              const S0 = SURVIVORS.find((s) => s.key === k);
               const on = k === sv;
-              const src = portrait(k, on ? col : 0, SURV_GUN[k]);
+              const src = portrait('surv', k, on ? col : 0, SURV_GUN[k]);
               return (
-                <button key={k} type="button" className="zgk-btn" aria-pressed={on} aria-label={S0.name} {...pressProps(() => { kitTap(); setSv(k); setCol(0); setGun(SURV_GUN[k]); })}
+                <button key={k} type="button" className="zgk-btn" aria-pressed={on} aria-label={SURV_LOOK[k].name} {...pressProps(() => { kitTap(); setSv(k); setCol(0); setGun(SURV_GUN[k]); })}
                   style={{ border: 'none', padding: 0, background: 'transparent', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, fontFamily: FONT }}>
-                  <span style={{ width: '100%', aspectRatio: '1', maxWidth: 64, borderRadius: 4, overflow: 'hidden', background: on ? 'linear-gradient(180deg, #5A6440, #2E3322)' : 'rgba(239,232,210,0.08)', boxShadow: on ? 'inset 0 0 0 2px #F28C28' : 'inset 0 0 0 1px rgba(239,232,210,0.16)' }}>{src && <img src={src} alt="" draggable={false} style={{ width: '100%', height: '100%', display: 'block' }} />}</span>
-                  <span style={{ fontSize: 11.5, fontWeight: 900, color: on ? '#F2A23A' : '#EFE8D2' }}>{S0.name}</span>
+                  <span style={{ width: '100%', aspectRatio: '1', maxWidth: 64, borderRadius: 8, overflow: 'hidden', background: on ? 'linear-gradient(180deg, #3A3F44, #1E2226)' : 'rgba(239,232,210,0.07)', boxShadow: on ? 'inset 0 0 0 2px #E0A85A' : 'inset 0 0 0 1px rgba(239,232,210,0.14)' }}>{src && <img src={src} alt="" draggable={false} style={{ width: '100%', height: '100%', display: 'block' }} />}</span>
+                  <span style={{ fontSize: 11.5, fontWeight: 900, color: on ? '#E0A85A' : '#EFE8D2' }}>{SURV_LOOK[k].name}</span>
                 </button>
               );
             })}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ fontSize: 12.5, fontWeight: 800, color: 'rgba(239,232,210,0.75)', width: 52 }}>Outfit</span>
-            {[0, 1, 2, 3].map((i) => <button key={i} type="button" className="zgk-btn" aria-label={`Outfit ${i + 1}`} aria-pressed={col === i} {...pressProps(() => { kitTap(); setCol(i); })} style={{ width: 28, height: 28, borderRadius: 4, border: 'none', cursor: 'pointer', background: OUTFIT_SWATCH(sv, i), boxShadow: col === i ? '0 0 0 2px #1A1C12, 0 0 0 4px #F28C28' : 'inset 0 0 0 1px rgba(0,0,0,0.3)' }} />)}
+            {[0, 1, 2, 3].map((i) => <button key={i} type="button" className="zgk-btn" aria-label={`Outfit ${i + 1}`} aria-pressed={col === i} {...pressProps(() => { kitTap(); setCol(i); })} style={{ width: 28, height: 28, borderRadius: 14, border: 'none', cursor: 'pointer', background: OUTFIT_SWATCH(sv, i), boxShadow: col === i ? '0 0 0 2px #15181A, 0 0 0 4px #E0A85A' : 'inset 0 0 0 1px rgba(0,0,0,0.3)' }} />)}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ fontSize: 12.5, fontWeight: 800, color: 'rgba(239,232,210,0.75)', width: 52 }}>Gun</span>
             <div role="radiogroup" aria-label="Gun" style={{ flex: 1, minWidth: 0, display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 4 }}>
-              {WKEYS.map((k) => <button key={k} type="button" role="radio" aria-checked={gun === k} className="zgk-btn" {...pressProps(() => { kitTap(); setGun(k); })} style={{ height: 30, border: 'none', borderRadius: 3, padding: 0, cursor: 'pointer', fontFamily: FONT, fontSize: 11.5, fontWeight: 900, color: gun === k ? '#1A1C12' : '#EFE8D2', background: gun === k ? '#F2A23A' : 'rgba(239,232,210,0.08)', boxShadow: gun === k ? 'none' : 'inset 0 0 0 1px rgba(239,232,210,0.14)' }}>{WEAPONS[k].n}</button>)}
+              {WKEYS.map((k) => <button key={k} type="button" role="radio" aria-checked={gun === k} className="zgk-btn" {...pressProps(() => { kitTap(); setGun(k); })} style={{ height: 30, border: 'none', borderRadius: 15, padding: 0, cursor: 'pointer', fontFamily: FONT, fontSize: 11.5, fontWeight: 900, color: gun === k ? '#15181A' : '#EFE8D2', background: gun === k ? '#E0A85A' : 'rgba(239,232,210,0.08)', boxShadow: gun === k ? 'none' : 'inset 0 0 0 1px rgba(239,232,210,0.14)' }}>{WEAPONS[k].n}</button>)}
             </div>
           </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 12.5, fontWeight: 800, color: 'rgba(239,232,210,0.75)', width: 52 }}>Dog</span>
+            <div role="radiogroup" aria-label="Dog" style={{ flex: 1, minWidth: 0, display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 5 }}>
+              {[...DOGS.map((d) => d.key), 'none'].map((k) => {
+                const on = pet === k;
+                const src = k === 'none' ? '' : portrait('dog', k, 0, '');
+                return (
+                  <button key={k} type="button" role="radio" aria-checked={on} aria-label={k === 'none' ? 'No dog' : DOGS.find((d) => d.key === k).name} className="zgk-btn" {...pressProps(() => { kitTap(); setPet(k); })}
+                    style={{ border: 'none', padding: 0, background: 'transparent', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, fontFamily: FONT }}>
+                    <span style={{ width: '100%', aspectRatio: '1', maxWidth: 46, borderRadius: 23, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? 'linear-gradient(180deg, #3A3F44, #1E2226)' : 'rgba(239,232,210,0.07)', boxShadow: on ? 'inset 0 0 0 2px #E0A85A' : 'inset 0 0 0 1px rgba(239,232,210,0.14)' }}>{src ? <img src={src} alt="" draggable={false} style={{ width: '100%', height: '100%', display: 'block' }} /> : <Ico k="close" size={18} color="rgba(239,232,210,0.6)" />}</span>
+                    <span style={{ fontSize: 10.5, fontWeight: 900, color: on ? '#E0A85A' : 'rgba(239,232,210,0.85)' }}>{k === 'none' ? 'None' : DOGS.find((d) => d.key === k).name}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          {pet !== 'none' && <div style={{ fontSize: 11.5, fontWeight: 700, color: 'rgba(239,232,210,0.65)' }}>{PET_TEXT[pet]}. Your dog follows you and goes after zombies on its own.</div>}
         </GPanel>
       )}
       main={(
@@ -754,9 +1275,9 @@ export function ZombieGamePage({ me, myId, onClose }) {
                 const n = roomCount(reg);
                 return (
                   <button key={reg} type="button" className="zgk-btn" aria-label={`Join ${REGION_NAMES[reg]} server`} {...pressProps(() => start({ reg, r: pickRoom(reg) }))}
-                    style={{ display: 'flex', alignItems: 'center', gap: 10, height: 44, padding: '0 10px', border: 'none', borderRadius: 3, cursor: 'pointer', fontFamily: FONT, color: '#EFE8D2', background: reg === best ? 'rgba(242,140,40,0.16)' : 'rgba(239,232,210,0.06)', boxShadow: reg === best ? 'inset 3px 0 0 #F28C28' : 'none', textAlign: 'left' }}>
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, height: 44, padding: '0 12px', border: 'none', borderRadius: 10, cursor: 'pointer', fontFamily: FONT, color: '#EFE8D2', background: reg === best ? 'rgba(224,168,90,0.16)' : 'rgba(239,232,210,0.06)', boxShadow: reg === best ? 'inset 3px 0 0 #E0A85A' : 'none', textAlign: 'left' }}>
                     <span style={{ flex: 1, minWidth: 0 }}>
-                      <span style={{ display: 'block', fontSize: 14, fontWeight: 900 }}>{REGION_NAMES[reg]}{reg === best ? <span style={{ fontSize: 11, fontWeight: 800, color: '#F2A23A' }}>  Best for you</span> : null}</span>
+                      <span style={{ display: 'block', fontSize: 14, fontWeight: 900 }}>{REGION_NAMES[reg]}{reg === best ? <span style={{ fontSize: 11, fontWeight: 800, color: '#E0A85A' }}>  Best for you</span> : null}</span>
                       <span style={{ display: 'block', fontSize: 11.5, fontWeight: 700, color: 'rgba(239,232,210,0.65)' }}>{n ? `${n} playing now` : 'Start a new game'}</span>
                     </span>
                     <span style={{ fontSize: 12.5, fontWeight: 900, color: pingCol(ms), fontVariantNumeric: 'tabular-nums' }}>{ms == null ? '' : ms >= 9999 ? 'No reply' : `${ms} ms`}</span>
@@ -764,12 +1285,13 @@ export function ZombieGamePage({ me, myId, onClose }) {
                   </button>
                 );
               })}
+              {canInvite && <GPill text="Invite friends" icon="people" color="gold" small wide onPress={() => setSheet('invite')} />}
               <GPill text="Play with bots" color="white" small wide onPress={() => start({ solo: true })} />
             </>
           ) : (
             <>
-              <div style={{ fontSize: 13, fontWeight: 700, lineHeight: 1.4, color: 'rgba(239,232,210,0.85)' }}>Hold the gas station with three bot friends. Waves get bigger, runners get faster and a brute shows up every fifth wave.</div>
-              {G.current.best > 0 && <div style={{ fontSize: 12.5, fontWeight: 800, color: '#F2A23A' }}>Your best: wave {G.current.best}</div>}
+              <div style={{ fontSize: 13, fontWeight: 700, lineHeight: 1.4, color: 'rgba(239,232,210,0.85)' }}>Hold the gas station with your dog and three bot friends. Waves get bigger, runners get faster and a brute shows up every fifth wave.</div>
+              {G.current.best > 0 && <div style={{ fontSize: 12.5, fontWeight: 800, color: '#E0A85A' }}>Your best: wave {G.current.best}</div>}
               <GPill text="Play with bots" icon="play" color="gold" wide onPress={() => start({ solo: true })} />
             </>
           )}
@@ -778,80 +1300,119 @@ export function ZombieGamePage({ me, myId, onClose }) {
     />
   );
 
-  const btnS = Math.round(46 * ctrl), fireS = Math.round(80 * ctrl);
+  const xhGap = 'var(--gap, 8px)';
   const play = phase === 'play' && hud && (
     <div style={{ position: 'absolute', inset: 0, zIndex: 4, pointerEvents: 'none' }}>
-      <div ref={hurtRef} aria-hidden="true" style={{ position: 'absolute', inset: 0, opacity: 0, background: 'radial-gradient(ellipse at center, rgba(120,0,0,0) 45%, rgba(150,10,10,0.75) 100%)', transition: 'opacity 0.08s linear' }} />
-      {H.st === 0 && H.w !== 'bat' && (
-        <div aria-hidden="true" style={{ position: 'absolute', left: '50%', top: '50%', width: 0, height: 0 }}>
-          {[[0, -1], [0, 1], [-1, 0], [1, 0]].map(([dx, dy], i) => <span key={i} style={{ position: 'absolute', left: dx * 9 - (dx ? 4 : 1), top: dy * 9 - (dy ? 4 : 1), width: dx ? 8 : 2, height: dy ? 8 : 2, background: 'rgba(255,255,255,0.92)', boxShadow: '0 0 2px rgba(0,0,0,0.8)' }} />)}
-          <span ref={hitRef} style={{ position: 'absolute', left: -9, top: -9, width: 18, height: 18, border: '2px solid #FFFFFF', transform: 'rotate(45deg)', opacity: 0, boxSizing: 'border-box' }} />
-        </div>
-      )}
-      <GHudPanel style={{ position: 'absolute', left: left(10), top: top(8), padding: '6px 12px 7px', minWidth: 132 }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-          <span style={{ fontSize: 12, fontWeight: 800, color: 'rgba(239,232,210,0.75)' }}>Wave</span>
-          <span style={{ fontSize: 26, fontWeight: 900, lineHeight: 1, color: '#F2A23A', fontVariantNumeric: 'tabular-nums' }}>{H.wave || 0}</span>
-        </div>
-        <div style={{ fontSize: 12, fontWeight: 800, color: '#EFE8D2', marginTop: 2 }}>{H.ph === 0 ? `Next wave in ${H.tl || 0}` : H.ph === 2 ? 'Overrun' : `${H.zl || 0} zombies left`}</div>
-        <div style={{ fontSize: 11.5, fontWeight: 700, color: 'rgba(239,232,210,0.7)', marginTop: 1, fontVariantNumeric: 'tabular-nums' }}>{fmt(H.pts || 0)} points, {H.kills || 0} kills</div>
-      </GHudPanel>
-      <div style={{ position: 'absolute', right: right(10), top: top(8), display: 'flex', gap: 6, pointerEvents: 'auto' }}>
-        {mode && !mode.solo && <GHudBtn icon="chat" label="Chat" onPress={() => setSheet('chat')} />}
-        <GHudBtn icon="people" label="Players" onPress={() => setSheet('players')} />
-        <GHudBtn icon="pause" label="Menu" onPress={() => setSheet('pause')} />
+      <div ref={hurtRef} aria-hidden="true" style={{ position: 'absolute', inset: 0, opacity: 0, background: 'radial-gradient(ellipse at center, rgba(110,0,0,0) 42%, rgba(150,8,8,0.78) 100%)' }} />
+      <div ref={scopeRef} aria-hidden="true" style={{ position: 'absolute', inset: 0, display: 'none', background: 'radial-gradient(circle at center, rgba(0,0,0,0) 0, rgba(0,0,0,0) 34vmin, rgba(0,0,0,0.96) 34.4vmin)' }}>
+        <div style={{ position: 'absolute', left: '50%', top: 0, bottom: 0, width: 1.5, background: 'rgba(0,0,0,0.85)' }} />
+        <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, height: 1.5, background: 'rgba(0,0,0,0.85)' }} />
+        <div style={{ position: 'absolute', left: '50%', top: '50%', width: 6, height: 6, margin: -3, borderRadius: 3, background: '#FF3B2E' }} />
       </div>
-      {mode && !mode.solo && <div style={{ position: 'absolute', right: right(12), top: top(52), fontSize: 11, fontWeight: 800, color: pingCol(H.rtt), textShadow: '0 1px 2px rgba(0,0,0,0.8)' }}>{H.rtt ? `${H.rtt} ms` : ''}{netErr === 'lost' ? 'Reconnecting' : ''}</div>}
-      <GFeed items={feedK} style={{ position: 'absolute', right: right(10), top: top(68), maxWidth: '40%' }} />
-      <GChatFeed items={chatFeed} style={{ position: 'absolute', left: left(10), top: top(land ? 92 : 100), width: land ? 'min(32%, 280px)' : 'calc(100% - 24px)' }} />
-      <GNotices items={notes} style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: top(land ? 54 : 110), width: 'min(52%, 420px)' }} />
+      <div aria-hidden="true" style={{ position: 'absolute', left: '50%', top: '50%', width: 6, height: 6, margin: -3, borderRadius: 3, background: '#FF2A1E', boxShadow: '0 0 6px rgba(255,40,30,0.9)', display: 'none' }} />
+      <div ref={xhRef} aria-hidden="true" style={{ position: 'absolute', left: '50%', top: '50%', width: 0, height: 0, transition: 'opacity 0.12s' }}>
+        {[[0, -1], [0, 1], [-1, 0], [1, 0]].map(([dx, dy], i) => <span key={i} style={{ position: 'absolute', left: dx ? (dx < 0 ? `calc(-${xhGap} - 9px)` : xhGap) : -1, top: dy ? (dy < 0 ? `calc(-${xhGap} - 9px)` : xhGap) : -1, width: dx ? 9 : 2, height: dy ? 9 : 2, background: 'rgba(255,255,255,0.95)', boxShadow: '0 0 2px rgba(0,0,0,0.85)' }} />)}
+        <span style={{ position: 'absolute', left: -1, top: -1, width: 2, height: 2, background: 'rgba(255,255,255,0.9)' }} />
+      </div>
+      <div ref={hitRef} aria-hidden="true" style={{ position: 'absolute', left: '50%', top: '50%', width: 0, height: 0, opacity: 0, transition: 'transform 0.08s' }}>
+        {[45, 135, 225, 315].map((r) => <span key={r} style={{ position: 'absolute', left: -1, top: -12, width: 2.5, height: 8, background: '#FFFFFF', transformOrigin: '1px 12px', transform: `rotate(${r}deg)`, boxShadow: '0 0 2px rgba(0,0,0,0.7)' }} />)}
+      </div>
+      <div ref={dirRef} aria-hidden="true" style={{ position: 'absolute', left: '50%', top: '50%', width: 0, height: 0 }}>
+        {[0, 1, 2, 3].map((i) => <span key={i} style={{ position: 'absolute', left: -60, top: -120, width: 120, height: 120, display: 'none', borderRadius: '50%', borderTop: '6px solid rgba(255,40,30,0.8)', transformOrigin: '60px 120px' }} />)}
+      </div>
+      <div ref={dmgRef} aria-hidden="true" style={{ position: 'absolute', left: 0, top: 0, width: 0, height: 0 }}>
+        {Array.from({ length: 22 }, (_, i) => <span key={i} style={{ position: 'absolute', left: 0, top: 0, display: 'none', fontWeight: 900, fontSize: 16, color: '#FFFFFF', textShadow: '0 1px 0 #000, 0 0 4px rgba(0,0,0,0.85)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', willChange: 'transform' }} />)}
+      </div>
+      <div ref={tagRef} aria-hidden="true" style={{ position: 'absolute', left: 0, top: 0, width: 0, height: 0 }}>
+        {Array.from({ length: 10 }, (_, i) => <span key={i} style={{ position: 'absolute', left: 0, top: 0, display: 'none', fontWeight: 800, fontSize: 12, color: '#8FD8FF', textShadow: '0 1px 2px rgba(0,0,0,0.9)', whiteSpace: 'nowrap', willChange: 'transform' }} />)}
+      </div>
+      <canvas ref={mapRef} width={116} height={116} aria-label="Map" style={{ position: 'absolute', left: left(12), top: top(10), width: 116, height: 116 }} />
+      <div style={{ position: 'absolute', left: '50%', top: top(8), transform: 'translateX(-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, textShadow: '0 1px 3px rgba(0,0,0,0.9)' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, padding: '2px 14px', borderRadius: 14, background: 'rgba(10,12,14,0.45)' }}>
+          <span style={{ fontSize: 12, fontWeight: 800, color: 'rgba(255,255,255,0.75)' }}>Wave</span>
+          <span style={{ fontSize: 22, fontWeight: 900, lineHeight: 1.1, color: '#FFFFFF', fontVariantNumeric: 'tabular-nums' }}>{H.wave || 0}</span>
+        </div>
+        <span style={{ fontSize: 12, fontWeight: 800, color: H.ph === 0 ? '#9CF0B4' : '#FFD7C8' }}>{H.ph === 0 ? `Next wave in ${H.tl || 0}` : H.ph === 2 ? 'Overrun' : `${H.zl || 0} zombies left`}</span>
+      </div>
+      <div style={{ position: 'absolute', right: right(12), top: top(8), display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', textShadow: '0 1px 3px rgba(0,0,0,0.9)', paddingTop: 1 }}>
+          <span style={{ fontSize: 15, fontWeight: 900, color: '#FFFFFF', fontVariantNumeric: 'tabular-nums' }}>{fmt(H.pts || 0)}</span>
+          <span style={{ fontSize: 11, fontWeight: 800, color: 'rgba(255,255,255,0.75)' }}>{H.kills === 1 ? '1 kill' : `${H.kills || 0} kills`}{mode && !mode.solo && H.rtt ? `, ${H.rtt} ms` : ''}</span>
+          {netErr === 'lost' && <span style={{ fontSize: 11, fontWeight: 800, color: '#FFB86A' }}>Reconnecting</span>}
+        </div>
+        {mode && !mode.solo && <TopBtn icon="chat" label="Chat" onTap={() => setSheet('chat')} />}
+        {canInvite && <TopBtn icon="invite" label="Invite friends" onTap={() => setSheet('invite')} />}
+        <TopBtn icon="people" label="Players" onTap={() => setSheet('players')} />
+        <TopBtn icon="pause" label="Menu" onTap={() => setSheet('pause')} />
+      </div>
+      <GFeed items={feedK} style={{ position: 'absolute', right: right(12), top: top(56), maxWidth: '40%' }} />
+      <GChatFeed items={chatFeed} style={{ position: 'absolute', left: left(12), top: top(134), width: land ? 'min(30%, 260px)' : 'calc(100% - 24px)' }} />
+      <GNotices items={notes} style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: top(land ? 58 : 110), width: 'min(52%, 420px)' }} />
       {banner && Date.now() - banner.at < 3200 && (
-        <div key={banner.at} style={{ position: 'absolute', left: 0, right: 0, top: '22%', display: 'flex', flexDirection: 'column', alignItems: 'center', animation: 'zgk-rib 3.2s ease-out forwards' }}>
-          <div style={{ padding: '6px 42px 7px', background: 'linear-gradient(90deg, rgba(20,22,14,0) 0%, rgba(20,22,14,0.82) 20%, rgba(20,22,14,0.82) 80%, rgba(20,22,14,0) 100%)', fontSize: 24, fontWeight: 900, color: '#F2A23A', textShadow: '0 2px 0 rgba(0,0,0,0.5)' }}>{banner.t}</div>
-          <div style={{ marginTop: 3, fontSize: 13, fontWeight: 800, color: '#EFE8D2', textShadow: '0 1px 3px rgba(0,0,0,0.9)' }}>{banner.s}</div>
+        <div key={banner.at} style={{ position: 'absolute', left: 0, right: 0, top: '24%', display: 'flex', flexDirection: 'column', alignItems: 'center', animation: 'zgk-rib 3.2s ease-out forwards' }}>
+          <div style={{ padding: '6px 42px 7px', background: 'linear-gradient(90deg, rgba(10,8,8,0) 0%, rgba(30,8,8,0.8) 22%, rgba(30,8,8,0.8) 78%, rgba(10,8,8,0) 100%)', fontSize: 26, fontWeight: 900, color: '#FFFFFF', letterSpacing: 0.5, textShadow: '0 2px 0 rgba(0,0,0,0.5)' }}>{banner.t}</div>
+          <div style={{ marginTop: 3, fontSize: 13, fontWeight: 800, color: '#FFC9BC', textShadow: '0 1px 3px rgba(0,0,0,0.9)' }}>{banner.s}</div>
         </div>
       )}
-      <div style={{ position: 'absolute', left: '50%', bottom: bottom(14), transform: 'translateX(-50%)', width: land ? 'min(30%, 260px)' : '46%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+      <div style={{ position: 'absolute', left: '50%', bottom: bottom(12), transform: 'translateX(-50%)', width: land ? 'min(28%, 250px)' : '52%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
         {H.st === 1 && <div style={{ fontSize: 13, fontWeight: 900, color: '#FF8A7A', textShadow: '0 1px 3px rgba(0,0,0,0.9)', textAlign: 'center' }}>{H.rev > 0 ? 'A friend is helping you up' : `You are down. Wait for a friend ${H.bleed}`}</div>}
-        {H.st === 2 && <div style={{ fontSize: 13, fontWeight: 900, color: '#EFE8D2', textShadow: '0 1px 3px rgba(0,0,0,0.9)' }}>You are back next wave</div>}
-        <div style={{ width: '100%', height: 12, borderRadius: 2, background: 'rgba(20,22,14,0.75)', boxShadow: 'inset 0 0 0 1px rgba(239,232,210,0.2)', overflow: 'hidden' }}>
-          <div style={{ width: `${clamp(H.st === 1 ? H.rev * 100 : H.hp, 0, 100)}%`, height: '100%', background: H.st === 1 ? '#7BE05A' : H.hp < 35 ? '#E5484D' : 'linear-gradient(180deg, #9CD86A, #5E9E3A)', transition: 'width 0.15s ease-out' }} />
+        {H.st === 2 && <div style={{ fontSize: 13, fontWeight: 900, color: '#FFFFFF', textShadow: '0 1px 3px rgba(0,0,0,0.9)' }}>You are back next wave</div>}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
+          <span style={{ fontSize: 13, fontWeight: 900, color: H.hp < 35 ? '#FF6A5A' : '#FFFFFF', textShadow: '0 1px 2px rgba(0,0,0,0.9)', fontVariantNumeric: 'tabular-nums', minWidth: 26, textAlign: 'right' }}>{Math.max(0, Math.round(H.st === 1 ? H.rev * 100 : H.hp))}</span>
+          <div style={{ flex: 1, height: 8, display: 'flex', gap: 2 }}>
+            {[0, 1, 2, 3].map((i) => { const v = clamp(((H.st === 1 ? H.rev * 100 : H.hp) - i * 25) / 25, 0, 1); return <div key={i} style={{ flex: 1, background: 'rgba(10,12,14,0.55)', borderRadius: 2, overflow: 'hidden', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.25)' }}><div style={{ width: `${v * 100}%`, height: '100%', background: H.st === 1 ? '#7BE05A' : H.hp < 35 ? '#E5484D' : '#F2F2EE', transition: 'width 0.15s' }} /></div>; })}
+          </div>
+          {H.pet && <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 11.5, fontWeight: 800, color: '#F2D27A', textShadow: '0 1px 2px rgba(0,0,0,0.9)' }}><Ico k="paw" size={14} color="#F2D27A" />{(DOGS.find((d) => d.key === H.pet) || DOGS[0]).name}</span>}
         </div>
       </div>
       {H.st === 0 && (
-        <div style={{ position: 'absolute', right: right(14), bottom: bottom(12), display: 'flex', alignItems: 'flex-end', gap: 10, pointerEvents: 'auto', opacity: see }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center' }}>
-            {H.near && <div onPointerDownCapture={() => { G.current.revHold = true; }} onPointerUpCapture={() => { G.current.revHold = false; }} onPointerCancelCapture={() => { G.current.revHold = false; }} onPointerLeave={() => { G.current.revHold = false; }} style={{ touchAction: 'none' }}><GBtn icon="heart" color="green" size={btnS + 6} label="Hold to help up your friend" fast onPress={() => {}} /></div>}
-            <GBtn icon="grenade" color="dark" size={btnS} label="Throw a grenade" badge={H.nades} disabled={!H.nades} onPress={() => throwIt('grenade')} />
-            <GBtn icon="flame" color="dark" size={btnS} label="Throw a fire bottle" badge={H.molos} disabled={!H.molos} onPress={() => throwIt('molotov')} />
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center' }}>
-            <GBtn icon="swap" color="dark" size={btnS} label={H.w === 'bat' ? 'Switch to gun' : 'Switch to bat'} onPress={swap} />
-            {H.w !== 'bat' && <GBtn icon="replay" color="dark" size={btnS} label="Reload" cool={H.rel > 0 ? 1 - H.rel : 0} coolMax={1} onPress={() => startReload(G.current)} />}
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-            <div style={{ fontSize: 15, fontWeight: 900, color: H.mag === 0 ? '#FF7A5A' : '#EFE8D2', textShadow: '0 1px 3px rgba(0,0,0,0.9)', fontVariantNumeric: 'tabular-nums' }}>{H.w === 'bat' ? 'Bat' : H.rel > 0 ? 'Reloading' : `${H.mag} / ${H.magMax}`}</div>
-            <div role="button" aria-label={H.w === 'bat' ? 'Swing' : 'Shoot'} onPointerDown={fireDown} onPointerMove={lookMove} onPointerUp={fireUp} onPointerCancel={fireUp} onLostPointerCapture={fireUp} style={{ touchAction: 'none', cursor: 'pointer' }}>
-              <div style={{ pointerEvents: 'none' }}><GBtn icon={H.w === 'bat' ? 'hammer' : 'target'} color="red" size={fireS} label={H.w === 'bat' ? 'Swing' : 'Shoot'} active={!!G.current.fire} onPress={() => {}} /></div>
+        <div style={{ position: 'absolute', inset: 0, opacity: see }}>
+          <div onPointerDown={(e) => { e.stopPropagation(); swapGun(); }} role="button" aria-label="Switch weapon" style={{ position: 'absolute', right: right(16), bottom: bottom(px(222)), pointerEvents: 'auto', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', padding: '6px 10px', borderRadius: 12, background: 'rgba(10,12,14,0.42)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.3)', textShadow: '0 1px 2px rgba(0,0,0,0.8)', minWidth: 112 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+              <span style={{ fontSize: 12.5, fontWeight: 900, color: '#FFFFFF' }}>{WN(H.w)}</span>
+              <span style={{ fontSize: 20, fontWeight: 900, color: H.mag === 0 ? '#FF6A5A' : '#FFFFFF', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{H.rel > 0 ? '...' : H.mag}<span style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)' }}> / {H.magMax}</span></span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 2 }}>
+              <Ico k="swap" size={13} color="rgba(255,255,255,0.7)" />
+              <span style={{ fontSize: 11, fontWeight: 800, color: 'rgba(255,255,255,0.7)' }}>{WN(H.slots ? H.slots[H.slot ? 0 : 1] : '')}</span>
             </div>
           </div>
+          <CBtn big size={px(88)} icon="bullet" label="Shoot" active={!!G.current.fire} style={{ right: right(26), bottom: bottom(px(54)) }}
+            onDown={() => { ZA.init(); G.current.fire = true; }} onMove={(dx, dy) => lookBy(dx, dy)} onUp={() => { G.current.fire = false; }} />
+          <CBtn size={px(56)} icon="scope" label={H.ads ? 'Stop aiming' : 'Aim down sights'} active={H.ads} style={{ right: right(px(132)), bottom: bottom(px(118)) }} onTap={() => { const g = G.current; g.ads = !g.ads; ZA.synth('tap', { f: 700, vol: 0.3 }); syncHud(true); }} />
+          <CBtn size={px(52)} icon="mag" label="Reload" ring={H.rel} style={{ right: right(px(34)), bottom: bottom(px(160)) }} onTap={() => startReload(G.current)} />
+          <CBtn size={px(48)} icon="knife" label="Melee" style={{ right: right(px(140)), bottom: bottom(px(34)) }} onTap={melee} />
+          <CBtn size={px(50)} icon="grenade" label="Throw a grenade" badge={H.nades} disabled={!H.nades} active={H.aiming && G.current.thr && G.current.thr.k === 'grenade'} style={{ right: right(px(208)), bottom: bottom(px(64)) }}
+            onDown={() => throwStart('grenade')} onMove={(dx, dy) => lookBy(dx, dy)} onUp={(e) => throwEnd(overCancel(e))} />
+          <CBtn size={px(50)} icon="bottle" label="Throw a fire bottle" badge={H.molos} disabled={!H.molos} active={H.aiming && G.current.thr && G.current.thr.k === 'molotov'} style={{ right: right(px(208)), bottom: bottom(px(130)) }}
+            onDown={() => throwStart('molotov')} onMove={(dx, dy) => lookBy(dx, dy)} onUp={(e) => throwEnd(overCancel(e))} />
+          <CBtn size={px(42)} icon="smile" label="Emotes and quick chat" style={{ right: right(px(118)), bottom: bottom(px(190)) }} onTap={() => setSheet('emote')} />
+          {TOUCHY && <CBtn size={px(60)} icon="bullet" label="Shoot with left hand" active={!!G.current.fireL} style={{ left: left(px(150)), bottom: bottom(px(178)) }}
+            onDown={() => { ZA.init(); G.current.fireL = true; }} onMove={(dx, dy) => lookBy(dx, dy)} onUp={() => { G.current.fireL = false; }} />}
+          {H.near && <CBtn size={px(66)} icon="heart" tone="green" label="Hold to help up your friend" style={{ right: right(px(280)), bottom: bottom(px(110)) }} onDown={() => { G.current.revHold = true; }} onUp={() => { G.current.revHold = false; }} sub="Hold" />}
+          {H.aiming && <div ref={cancelRef} style={{ position: 'absolute', right: right(px(290)), top: top(90), width: 56, height: 56, borderRadius: 28, background: 'rgba(160,20,20,0.45)', boxShadow: 'inset 0 0 0 1.5px rgba(255,255,255,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }}><Ico k="close" size={22} /><span style={{ fontSize: 9.5, fontWeight: 800, color: '#FFFFFF' }}>Cancel</span></div>}
+          {H.sprint && <div style={{ position: 'absolute', left: left(px(70)), bottom: bottom(px(186)), display: 'flex', alignItems: 'center', gap: 4, padding: '3px 9px', borderRadius: 12, background: 'rgba(10,12,14,0.45)' }}><Ico k="run" size={16} /><span style={{ fontSize: 11, fontWeight: 800, color: '#FFFFFF' }}>Running</span></div>}
         </div>
       )}
-      {!TOUCHY && <div style={{ position: 'absolute', left: left(10), bottom: bottom(10), fontSize: 11.5, fontWeight: 700, color: 'rgba(239,232,210,0.7)', textShadow: '0 1px 2px rgba(0,0,0,0.8)' }}>WASD move, drag to look, click to shoot, R reload, Q swap, G grenade, F fire bottle, E help up</div>}
-      {TOUCHY && <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', opacity: see * 0.9 }}><GJoy flat view={J.view} knobRef={J.knob} idle={{ x: land ? 104 : 92, y: GS.H - (land ? 96 : 120) }} R={J.R} /></div>}
+      {!TOUCHY && <div style={{ position: 'absolute', left: left(12), bottom: bottom(10), fontSize: 11.5, fontWeight: 700, color: 'rgba(255,255,255,0.7)', textShadow: '0 1px 2px rgba(0,0,0,0.8)' }}>WASD move, Shift run, drag to look, left click shoot, right click aim, R reload, Q switch, G grenade, F fire bottle, V melee, B emotes, E help up</div>}
+      {TOUCHY && H.st === 0 && <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', opacity: see * 0.9 }}><GJoy flat view={J.view} knobRef={J.knob} idle={{ x: land ? 110 : 96, y: GS.H - (land ? 100 : 124) }} R={J.R} /></div>}
     </div>
   );
 
   const g0 = G.current;
   const players = sheet === 'players' && g0.snaps.length ? [...g0.snaps[g0.snaps.length - 1].ps.values()].sort((p, q) => q.pts - p.pts) : [];
+  const row = (label, child) => <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}><div style={{ fontSize: 13, fontWeight: 800 }}>{label}</div>{child}</div>;
   const sheets = (
     <>
       {sheet === 'gfx' && (
         <GLobbySheet GS={GS} title="Settings" onClose={() => setSheet(null)}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div style={{ fontSize: 13, fontWeight: 800 }}>Graphics</div>
-            <GSeg value={tier} items={TIERS.map((t, i) => [i, t.name])} onPick={(i) => { setPref(PREF.gfx, i); setSheet(null); if (G.current.V) { G.current.V.dispose(); G.current.V = null; } setPhase('load'); setTier(i); }} label="Graphics" />
-            <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(239,232,210,0.7)', lineHeight: 1.4 }}>Fast runs smooth on older phones. Best adds shadows, grass and glow.</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {row('Graphics', <GSeg value={tier} items={TIERS.map((t, i) => [i, t.name])} onPick={(i) => { setPref(PREF.gfx, i); setSheet(null); if (G.current.V) { G.current.V.dispose(); G.current.V = null; } if (phase === 'play') quit(); setPhase('load'); setTier(i); }} label="Graphics" />)}
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(239,232,210,0.7)', lineHeight: 1.4, marginTop: -6 }}>Fast runs smooth on older phones. Best adds shadows, grass and glow.</div>
+            {row('View', <GSeg value={view} items={[['fp', 'First person'], ['tp', 'Over the shoulder']]} onPick={(v) => { setView(v); setPref(PREF.view, v); }} label="View" />)}
+            {row('Look speed', <GSeg value={sens <= 0.7 ? 0.6 : sens <= 1.1 ? 1 : sens <= 1.5 ? 1.4 : 1.9} items={[[0.6, 'Slow'], [1, 'Normal'], [1.4, 'Fast'], [1.9, 'Very fast']]} onPick={(v) => { setSens(v); setPref(PREF.sens, v); }} label="Look speed" />)}
+            {row('Flashlight', <GSeg value={torch ? 1 : 0} items={[[1, 'On'], [0, 'Off']]} onPick={(v) => { setTorch(!!v); setPref(PREF.torch, v); }} label="Flashlight" />)}
+            {row('Sound', <GSeg value={Sfx.sfxOn ? 1 : 0} items={[[1, 'On'], [0, 'Off']]} onPick={(v) => { Sfx.setSfx(!!v); setSheet('gfx2'); setTimeout(() => setSheet('gfx'), 0); }} label="Sound" />)}
             <GControlsPanel onClose={() => setSheet(null)} sideways />
           </div>
         </GLobbySheet>
@@ -861,8 +1422,33 @@ export function ZombieGamePage({ me, myId, onClose }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {mode && !mode.solo && <div style={{ fontSize: 12.5, fontWeight: 700, color: 'rgba(239,232,210,0.75)' }}>The town keeps going while this menu is open.</div>}
             <GPill text="Back to the fight" color="green" wide onPress={() => setSheet(null)} />
+            {canInvite && <GPill text="Invite friends" icon="people" color="gold" wide small onPress={() => setSheet('invite')} />}
             <GPill text="Settings" color="white" wide small onPress={() => setSheet('gfx')} />
             <GPill text="Leave the town" color="red" wide small onPress={quit} />
+          </div>
+        </GLobbySheet>
+      )}
+      {sheet === 'invite' && (
+        <GLobbySheet GS={GS} title="Invite friends" onClose={() => setSheet(null)} width={420}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: 'rgba(239,232,210,0.75)', lineHeight: 1.4 }}>
+              {phase === 'play' && mode && !mode.solo ? 'Friends join your server. Each one takes a bot spot right away.' : phase === 'play' ? 'Your game moves to a server so friends can join. Bots fill the empty spots until they arrive.' : 'You start on a server near you. Friends who tap the invite join you and take a bot spot.'}
+            </div>
+            {friends.length === 0 && <div style={{ fontSize: 13, fontWeight: 800, color: 'rgba(239,232,210,0.8)', padding: '8px 0' }}>Chat with a friend first, then they show up here.</div>}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 230, overflowY: 'auto' }}>
+              {friends.map((fr) => {
+                const on = picked.includes(fr.id);
+                return (
+                  <button key={fr.id} type="button" className="zgk-btn" aria-pressed={on} {...pressProps(() => { kitTap(); setPicked((v) => (v.includes(fr.id) ? v.filter((x) => x !== fr.id) : [...v, fr.id].slice(0, 10))); })}
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, height: 50, padding: '0 10px', border: 'none', borderRadius: 10, cursor: 'pointer', fontFamily: FONT, color: '#EFE8D2', background: on ? 'rgba(224,168,90,0.16)' : 'rgba(239,232,210,0.05)', textAlign: 'left' }}>
+                    <Avatar emoji={fr.avatar} name={fr.name} size={34} />
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fr.name}</span>
+                    <span style={{ width: 22, height: 22, borderRadius: 11, boxShadow: on ? 'none' : 'inset 0 0 0 2px rgba(239,232,210,0.4)', background: on ? '#E0A85A' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{on && <GIcon k="check" size={13} color="#15181A" line halo={false} stroke={3} />}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <GPill text={picked.length > 1 ? `Invite ${picked.length} friends` : 'Send invite'} color="gold" wide disabled={!picked.length} onPress={sendInvites} />
           </div>
         </GLobbySheet>
       )}
@@ -872,9 +1458,9 @@ export function ZombieGamePage({ me, myId, onClose }) {
             {players.map((p, i) => {
               const r = g0.roster.get(p.id) || {};
               return (
-                <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, height: 36, padding: '0 8px', borderRadius: 3, background: p.id === myId ? 'rgba(242,140,40,0.14)' : 'rgba(239,232,210,0.05)' }}>
+                <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, height: 36, padding: '0 8px', borderRadius: 8, background: p.id === myId ? 'rgba(224,168,90,0.14)' : 'rgba(239,232,210,0.05)' }}>
                   <span style={{ width: 20, fontSize: 12, fontWeight: 900, color: 'rgba(239,232,210,0.6)', fontVariantNumeric: 'tabular-nums' }}>{i + 1}</span>
-                  <span style={{ width: 10, height: 10, borderRadius: 2, background: OUTFIT_SWATCH(r.sv || 'jay', r.col | 0) }} />
+                  <span style={{ width: 10, height: 10, borderRadius: 5, background: OUTFIT_SWATCH(r.sv || 'jay', r.col | 0) }} />
                   <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.id === myId ? 'You' : r.n || 'Friend'}{r.bot ? <span style={{ fontSize: 11, color: 'rgba(239,232,210,0.55)' }}>  Bot</span> : null}</span>
                   <span style={{ fontSize: 11.5, fontWeight: 800, color: p.st === 0 ? '#9CD86A' : p.st === 1 ? '#FF8A7A' : 'rgba(239,232,210,0.5)' }}>{p.st === 0 ? 'Fighting' : p.st === 1 ? 'Down' : 'Out'}</span>
                   <span style={{ width: 70, textAlign: 'right', fontSize: 12.5, fontWeight: 900, fontVariantNumeric: 'tabular-nums' }}>{fmt(p.pts)}</span>
@@ -886,21 +1472,36 @@ export function ZombieGamePage({ me, myId, onClose }) {
       )}
       {sheet === 'chat' && (
         <Sheet title="Talk to the town" onClose={() => setSheet(null)}>
-          {chatLog.length > 0 && <div style={{ display: 'flex', flexDirection: 'column', gap: 6, margin: '12px 0 4px', maxHeight: 140, overflowY: 'auto' }}>{chatLog.slice(-8).map((m, i) => <div key={i} style={{ fontSize: 13.5, lineHeight: 1.4 }}><span style={{ fontWeight: 800, color: m.who === 'You' ? '#F2A23A' : '#9CD4FF' }}>{m.who}</span> <span style={{ color: 'rgba(255,255,255,0.85)' }}>{m.t}</span></div>)}</div>}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>{CHAT_PHRASES.map((p) => <button key={p} type="button" className="zgk-btn" onClick={() => sendChat(p)} style={{ height: 38, padding: '0 14px', borderRadius: 19, border: 'none', background: 'rgba(255,255,255,0.1)', color: '#FFFFFF', fontSize: 13.5, fontWeight: 800, fontFamily: FONT, cursor: 'pointer' }}>{p}</button>)}</div>
-          <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>{EMOTES.map((e) => <button key={e} type="button" className="zgk-btn" aria-label={`Send ${e}`} onClick={() => sendEmote(e)} style={{ flex: 1, height: 40, borderRadius: 12, border: 'none', background: 'rgba(255,255,255,0.08)', fontSize: 22, cursor: 'pointer' }}>{e}</button>)}</div>
+          {chatLog.length > 0 && <div style={{ display: 'flex', flexDirection: 'column', gap: 6, margin: '12px 0 4px', maxHeight: 140, overflowY: 'auto' }}>{chatLog.slice(-8).map((m0, i) => <div key={i} style={{ fontSize: 13.5, lineHeight: 1.4 }}><span style={{ fontWeight: 800, color: m0.who === 'You' ? '#E0A85A' : '#9CD4FF' }}>{m0.who}</span> <span style={{ color: 'rgba(255,255,255,0.85)' }}>{m0.t}</span></div>)}</div>}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>{QUICK_LINES.map((p) => <button key={p} type="button" className="zgk-btn" onClick={() => sendChat(p)} style={{ height: 38, padding: '0 14px', borderRadius: 19, border: 'none', background: 'rgba(255,255,255,0.1)', color: '#FFFFFF', fontSize: 13.5, fontWeight: 800, fontFamily: FONT, cursor: 'pointer' }}>{p}</button>)}</div>
           <form onSubmit={(e) => { e.preventDefault(); sendChat(chatText); }} style={{ display: 'flex', gap: 8, marginTop: 12 }}>
             <input value={chatText} onChange={(e) => setChatText(e.target.value)} maxLength={90} placeholder="Write a message" aria-label="Message" style={{ flex: 1, minWidth: 0, height: 42, borderRadius: 21, border: 'none', padding: '0 16px', background: 'rgba(255,255,255,0.1)', color: '#FFFFFF', fontSize: 15, fontFamily: FONT, outline: 'none' }} />
             <GPill text="Send" color="green" small onPress={() => sendChat(chatText)} disabled={!chatText.trim()} />
           </form>
         </Sheet>
       )}
+      {sheet === 'emote' && phase === 'play' && (
+        <div onPointerDown={(e) => { e.stopPropagation(); if (e.target === e.currentTarget) setSheet(null); }} style={{ position: 'absolute', inset: 0, zIndex: 25, background: 'rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ position: 'relative', width: 'min(86vmin, 330px)', aspectRatio: '1' }}>
+            <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'radial-gradient(circle, rgba(16,18,20,0.88) 0 34%, rgba(16,18,20,0.66) 35% 100%)', boxShadow: 'inset 0 0 0 1.5px rgba(255,255,255,0.35)' }} />
+            {EMOTE_LIST.map(([k, lab], i) => { const an = (i / EMOTE_LIST.length) * Math.PI * 2 - Math.PI / 2; return (
+              <button key={k} type="button" aria-label={lab} onClick={() => doEmote(k)} style={{ position: 'absolute', left: `${50 + Math.cos(an) * 38}%`, top: `${50 + Math.sin(an) * 38}%`, transform: 'translate(-50%,-50%)', width: 74, height: 40, borderRadius: 20, border: 'none', background: 'rgba(255,255,255,0.1)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.3)', color: '#FFFFFF', fontFamily: FONT, fontSize: 12.5, fontWeight: 800, cursor: 'pointer' }}>{lab}</button>
+            ); })}
+            <div style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', width: '52%', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4 }}>
+              {QUICK_EMOJI.map((e) => <button key={e} type="button" aria-label={`Send ${e}`} onClick={() => doEmote(e)} style={{ aspectRatio: '1', borderRadius: 12, border: 'none', background: 'rgba(255,255,255,0.08)', fontSize: 22, cursor: 'pointer', padding: 0 }}>{e}</button>)}
+            </div>
+          </div>
+          <div style={{ position: 'absolute', bottom: bottom(14), left: 0, right: 0, display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 6, padding: '0 12px' }}>
+            {QUICK_LINES.map((t) => <button key={t} type="button" onClick={() => sayLine(t)} style={{ height: 34, padding: '0 12px', borderRadius: 17, border: 'none', background: 'rgba(16,18,20,0.75)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.3)', color: '#FFFFFF', fontFamily: FONT, fontSize: 12.5, fontWeight: 800, cursor: 'pointer' }}>{t}</button>)}
+          </div>
+        </div>
+      )}
       {result && phase === 'play' && (
-        <div style={{ position: 'absolute', inset: 0, zIndex: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(10,8,6,0.55)', padding: 16 }}>
+        <div style={{ position: 'absolute', inset: 0, zIndex: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(10,6,6,0.6)', padding: 16 }}>
           <GPanel style={{ width: '100%', maxWidth: 380, padding: '16px 16px 14px', display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'stretch', animation: 'zgk-pop 0.3s ease-out' }}>
-            <GTitle text={`Overrun at wave ${result.wave}`} size={26} color="#F2A23A" />
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 1, borderRadius: 3, overflow: 'hidden' }}>
-              {[['Kills', result.kills], ['Points', fmt(result.pts)], ['Best wave', result.best]].map(([a, v]) => <div key={a} style={{ padding: '9px 4px 8px', background: 'rgba(239,232,210,0.07)', textAlign: 'center' }}><div style={{ fontSize: 19, fontWeight: 900, color: '#EFE8D2', fontVariantNumeric: 'tabular-nums' }}>{v}</div><div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(239,232,210,0.6)', marginTop: 2 }}>{a}</div></div>)}
+            <GTitle text={`Overrun at wave ${result.wave}`} size={26} color="#E0A85A" />
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 1, borderRadius: 8, overflow: 'hidden' }}>
+              {[['Kills', result.kills], ['Points', fmt(result.pts)], ['Best wave', result.best]].map(([a0, v]) => <div key={a0} style={{ padding: '9px 4px 8px', background: 'rgba(239,232,210,0.07)', textAlign: 'center' }}><div style={{ fontSize: 19, fontWeight: 900, color: '#EFE8D2', fontVariantNumeric: 'tabular-nums' }}>{v}</div><div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(239,232,210,0.6)', marginTop: 2 }}>{a0}</div></div>)}
             </div>
             {mode && !mode.solo ? <div style={{ fontSize: 12.5, fontWeight: 800, color: 'rgba(239,232,210,0.8)', textAlign: 'center' }}>A new game starts in a few seconds</div> : null}
             <div style={{ display: 'flex', gap: 8 }}>
@@ -915,13 +1516,13 @@ export function ZombieGamePage({ me, myId, onClose }) {
 
   return (
     <Portal><GSkin k="zombie">
-      <div ref={GS.rootRef} style={{ position: 'fixed', left: 0, right: 0, top: 'var(--zvp-top, 0px)', height: 'calc(var(--zvp-h, 100%) + var(--zgx, 0px))', zIndex: 90, background: '#1A1C14', overflow: 'hidden', touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', fontFamily: FONT, color: '#EFE8D2' }}>
+      <div ref={GS.rootRef} style={{ position: 'fixed', left: 0, right: 0, top: 'var(--zvp-top, 0px)', height: 'calc(var(--zvp-h, 100%) + var(--zgx, 0px))', zIndex: 90, background: '#101214', overflow: 'hidden', touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', fontFamily: FONT, color: '#EFE8D2' }}>
         <div ref={wrapRef} style={GS.wrapStyle} onPointerDown={lookDown} onPointerMove={lookMove} onPointerUp={lookUp} onPointerCancel={lookUp} onLostPointerCapture={lookUp} onContextMenu={(e) => e.preventDefault()}>
           <canvas ref={cvRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block' }} />
           {phase === 'load' && (
-            <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, background: '#1A1C14' }}>
-              <GTitle text="Dead Town" size={40} color="#F2A23A" />
-              <div style={{ width: 180, height: 6, borderRadius: 2, background: 'rgba(239,232,210,0.12)', overflow: 'hidden' }}><div style={{ width: `${Math.max(12, loadPct)}%`, height: '100%', background: '#F28C28', transition: 'width 0.4s ease-out' }} /></div>
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, background: '#101214' }}>
+              <GTitle text="Dead Town" size={40} color="#E0A85A" />
+              <div style={{ width: 180, height: 6, borderRadius: 3, background: 'rgba(239,232,210,0.12)', overflow: 'hidden' }}><div style={{ width: `${Math.max(12, loadPct)}%`, height: '100%', background: '#C8442E', transition: 'width 0.4s ease-out' }} /></div>
               <div style={{ fontSize: 12.5, fontWeight: 800, color: 'rgba(239,232,210,0.7)' }}>Building the town</div>
             </div>
           )}

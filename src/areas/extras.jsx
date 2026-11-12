@@ -6574,27 +6574,28 @@ function WnSegments({ total, at, onArt, dark }) {
   );
 }
 
-const WN_PHOTOS = { zombie47: '/wn47-zombie.webp', servers47: '/wn47-servers.webp', siege47: '/wn47-siege.webp', look47: '/wn47-look.webp', chat47: '/wn47-chat.webp' };
+const WN_PHOTOS = { dead48: '/wn48-dead.webp', kinds48: '/wn48-kinds.webp', dog48: '/wn48-dog.webp', invite48: '/wn48-invite.webp', emote48: '/wn48-emote.webp' };
 const WN_HIGHLIGHTS = [
-  { k: 'zombie47', art: 'zombie47', go: 'zombie', cta: 'Play now', title: 'Dead Town', text: 'A new 3D zombie game. Hold a small town against bigger and bigger waves with bots, or with up to 50 players on one server.' },
-  { k: 'servers47', art: 'servers47', go: 'zombie', cta: 'Play now', title: 'Servers in Asia, USA and Europe', text: 'Pick the closest server. Your ping shows next to each one, and you can see how many people are playing.' },
-  { k: 'siege47', art: 'siege47', go: 'siege', cta: 'Play now', title: 'Scrap Siege for 20', text: 'Up to 20 players. Two friends can pick the same hero in different colours, and your powers panel shows every upgrade you picked.' },
-  { k: 'look47', art: 'look47', go: 'games', cta: 'Open Games', title: 'A new look for every game', text: 'Every live game has its own buttons and panels. On Android, games fill the whole screen.' },
-  { k: 'chat47', art: 'chat47', go: 'games', cta: 'Open Games', title: 'Chat and join any time', text: 'Messages show for everyone, even when you are far apart. Jump into a running game in place of a bot, or ask a friend to let you in.' },
+  { k: 'dead48', art: 'dead48', go: 'zombie', cta: 'Play now', title: 'Dead Town, rebuilt', text: 'First person with your gun and hands on screen, clear round buttons, aim down sights, damage numbers and real gun, reload and zombie sounds.' },
+  { k: 'kinds48', art: 'kinds48', go: 'zombie', cta: 'Play now', title: 'Nine kinds of zombies', text: 'Runners, crawlers, screamers that make the others faster, spitters, riot cops in armour, bloaters and brutes, with torn clothes and blood.' },
+  { k: 'dog48', art: 'dog48', go: 'zombie', cta: 'Play now', title: 'Your own dog', text: 'Pick a dog before you play. It follows you everywhere and goes after zombies on its own.' },
+  { k: 'invite48', art: 'invite48', go: 'zombie', cta: 'Play now', title: 'Invite friends to Dead Town', text: 'Send an invite from the game. Friends join your server right away and take a bot spot.' },
+  { k: 'emote48', art: 'emote48', go: 'zombie', cta: 'Play now', title: 'Emotes and quick emojis', text: 'Wave, cheer, point or dance, send quick emojis, and see where your grenade lands before you throw.' },
 ];
 const WN_SECTIONS = [
-  { title: 'Games', items: [
-    { art: 'zombie47', title: 'Dead Town', text: 'A new 3D zombie game for up to 50.' },
-    { art: 'servers47', title: 'Servers near you', text: 'Asia, USA and Europe with ping.' },
-    { art: 'siege47', title: 'Scrap Siege for 20', text: 'Same hero twice, new colours and powers.' },
-    { art: 'look47', title: 'A new look for every game', text: 'Own buttons per game, full screen on Android.' },
-    { art: 'chat47', title: 'Chat and join any time', text: 'Chat for everyone, ask to join.' },
+  { title: 'Dead Town', items: [
+    { art: 'dead48', title: 'Dead Town, rebuilt', text: 'First person, new buttons and real sounds.' },
+    { art: 'kinds48', title: 'Nine kinds of zombies', text: 'Runners, crawlers, spitters and more.' },
+    { art: 'dog48', title: 'Your own dog', text: 'It follows you and fights zombies.' },
+    { art: 'invite48', title: 'Invite friends', text: 'Friends join your server in a tap.' },
+    { art: 'emote48', title: 'Emotes and quick emojis', text: 'Wave, cheer, dance and grenade aim.' },
   ] },
 ];
 const WN_NEW_COUNT = WN_SECTIONS.reduce((n, sec) => n + sec.items.length, 0);
 const WN_SUMMARY = `${WN_NEW_COUNT} new things to try.`;
 
 const WN_EARLIER = [
+  { title: 'Dead Town and servers near you', text: 'A new 3D zombie game, servers in Asia, USA and Europe, Scrap Siege for 20 players, a new look for every game and chat for everyone.' },
   { title: 'Scrap Siege for ten and four new heroes', text: 'Ten friends on five big maps, gadgets and dash for every hero, hero levels with scrap, upgrades every second wave and smoother watching.' },
   { title: 'Scrap Siege and police chases', text: 'A live robot fight for four friends, police and shortcuts in Island Rally, new skills and drinks, and names that light up when friends talk.' },
   { title: 'Explosions, a new Gulp and longer levels', text: 'Fireballs and lightning in Island Rally, a brand new Gulp with 15 hard levels, longer Roll Squad and Two Torches levels, and music in every lobby.' },

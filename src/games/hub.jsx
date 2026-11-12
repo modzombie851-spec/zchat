@@ -18,7 +18,8 @@ import { GameRoomsPage, useLobbyPresence } from './rooms.jsx';
 const POPULAR = ['pool', 'chess', 'crm', 'zap', 'ckr', 'golf'];
 const RANK = ['pool', 'chess', 'crm', 'zap', 'ckr', 'golf', 'c4', 'ship', 'ttt', 'dots', 'reversi', 'gomoku', 'hang', 'wduel', 'rps'];
 const PUZZLES = ['sdk', 'xw', 'jig'];
-const NO_BOARD = ['sudoku', 'jig', 'xw', 'sdk'];
+const NO_BOARD = ['sudoku', 'jig', 'xw', 'sdk', 'zombie'];
+const LIVE_KEYS = () => LIVE_GAME_KEYS.filter((k) => k !== 'zombie' || cloudOn());
 const BANNER_POS = { lounge: 'center 8%', study: 'center 18%', terrace: 'center 22%', course: 'center 30%', arena: 'center 14%', harbor: 'center 22%', zen: 'center 16%', desk: 'center 12%', playroom: 'center 14%', den: 'center 7%', parlor: 'center 17%' };
 const SUBS = {
   pool: 'Break, pot your group, sink the black', chess: 'Classic chess, every rule', ckr: 'Jump, take and crown', golf: 'Nine holes, fewest strokes',
@@ -421,7 +422,7 @@ export function GamesPage({ onClose, onChallenge, onShareScore, initialGame, fri
             <>
               <SectionTitle>Live, at the same time</SectionTitle>
               <div className="zgh-row" style={{ display: 'flex', gap: 10, overflowX: 'auto', margin: '0 -16px', padding: '2px 16px 4px' }}>
-                {LIVE_GAME_KEYS.map((k) => (
+                {LIVE_KEYS().map((k) => (
                   <div key={k} style={{ width: 168, flexShrink: 0 }}>
                     <Tile k={k} title={GAME_TITLES[k]} sub={subFor(k)} badge={<LiveBadge />} onClick={() => openAny(k)} />
                   </div>
@@ -517,7 +518,7 @@ export function GamePickerSheet({ profile, onPick, onMore, onClose }) {
   const first = String((profile && profile.name) || 'your friend').split(' ')[0];
   const together = Object.keys(pairs).reduce((a, k) => a + ((pairs[k] && pairs[k].n) || 0), 0);
   const all = useMemo(() => duoKeys().filter((k) => !bot || ghBotCan(k)), [bot]);
-  const live = bot ? [] : LIVE_GAME_KEYS.slice();
+  const live = bot ? [] : LIVE_KEYS();
   const puzzles = bot ? [] : puzzleKeys();
   const recentDuo = recent.filter((k) => all.includes(k) || live.includes(k) || puzzles.includes(k)).slice(0, 4);
   useWarmScenes(all.slice(0, 6));

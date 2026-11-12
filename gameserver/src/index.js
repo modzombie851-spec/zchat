@@ -25,6 +25,7 @@ function roomName(u) {
   const reg = REGIONS[u.searchParams.get('reg')] ? u.searchParams.get('reg') : 'usa';
   if (!g || !CAP[g]) return null;
   if (g === 'zombie') {
+    if (/^f[a-z0-9]{6,12}$/.test(r)) return { name: `z:zombie:${reg}:${r}`, reg };
     const n = Math.max(1, Math.min(20, parseInt(r, 10) || 1));
     return { name: `z:zombie:${reg}:${n}`, reg };
   }
@@ -148,6 +149,7 @@ export class Lobby extends DurableObject {
       if (now - r.at > 90000) { delete this.rooms[id]; continue; }
       const p = parseName(id);
       const [reg, n] = p.rest.split(':');
+      if (!/^[0-9]+$/.test(n || '')) continue;
       if (out[reg]) out[reg].push({ n: Number(n) || 1, p: r.n, w: r.w, cap: r.cap || 50 });
     }
     for (const k of Object.keys(out)) out[k].sort((a, b) => a.n - b.n);

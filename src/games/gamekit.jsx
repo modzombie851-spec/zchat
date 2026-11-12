@@ -23,7 +23,7 @@ export const SKINS = {
   roll: { k: 'roll', shape: 'round', face: ['#FFFFFF', '#E2E8F6'], lip: '#8090C8', edge: '#3A3352', ico: '#3A3352', gloss: 0, panel: 'rgba(54,40,100,0.6)', pr: 16, pEdge: 'inset 0 0 0 2px rgba(255,255,255,0.36)', note: 'rgba(54,40,100,0.88)', nr: 18, feed: 'rgba(54,40,100,0.6)', name: '#FFE27A' },
   gulp: { k: 'gulp', dark: ['#2F6E9A', '#1C4C74', '#0C2A48'], shape: 'bubble', face: ['rgba(150,228,255,0.3)', 'rgba(8,72,130,0.6)'], lip: null, edge: 'rgba(205,245,255,0.85)', ico: '#FFFFFF', gloss: 0.6, panel: 'linear-gradient(180deg, rgba(4,54,96,0.62), rgba(2,30,62,0.62))', pr: 14, pEdge: 'inset 0 0 0 1px rgba(150,228,255,0.32)', note: 'rgba(3,40,74,0.88)', nr: 17, feed: 'rgba(3,40,74,0.58)', name: '#8FE8FF', joyRing: 'rgba(190,240,255,0.75)', joyKnob: 'rgba(170,230,255,0.42)' },
   duo: { k: 'duo', dark: ['#6A5644', '#43362A', '#1E1610'], shape: 'tab', face: ['#5E4C3B', '#33281F'], lip: '#160F0A', edge: '#C99A45', ico: '#FBE6B8', gloss: 0.12, panel: 'linear-gradient(180deg, rgba(46,35,25,0.9), rgba(26,19,13,0.9))', pr: 4, pEdge: 'inset 0 0 0 1px rgba(217,165,72,0.55)', note: 'rgba(32,24,16,0.95)', nr: 4, feed: 'rgba(32,24,16,0.7)', name: '#F2C46A', joyRing: 'rgba(242,196,106,0.7)', joyKnob: 'rgba(251,230,184,0.4)' },
-  zombie: { k: 'zombie', dark: ['#5E6646', '#3A402C', '#1C2014'], shape: 'cut', btnShape: 'cut', face: ['#545C3D', '#2E3322'], lip: '#12140D', edge: '#0B0D07', ico: '#EFE8D2', gloss: 0.1, panel: 'linear-gradient(180deg, rgba(38,42,28,0.9), rgba(20,22,14,0.9))', pr: 3, pEdge: 'inset 0 -2px 0 #F28C28, inset 0 0 0 1px rgba(239,232,210,0.1)', note: 'rgba(24,26,17,0.95)', nr: 3, feed: 'rgba(22,24,15,0.72)', name: '#F2A23A', joyRing: 'rgba(239,232,210,0.6)', joyKnob: 'rgba(242,140,40,0.45)' },
+  zombie: { k: 'zombie', dark: ['#3A3F45', '#23272B', '#111316'], shape: 'round', face: ['#2C3035', '#16191C'], lip: '#08090A', edge: 'rgba(255,255,255,0.22)', ico: '#F2F2EE', gloss: 0.08, panel: 'linear-gradient(180deg, rgba(22,25,28,0.9), rgba(11,13,15,0.92))', pr: 14, pEdge: 'inset 0 0 0 1px rgba(255,255,255,0.12)', note: 'rgba(16,18,20,0.92)', nr: 14, feed: 'rgba(14,16,18,0.6)', name: '#E0A85A', joyRing: 'rgba(255,255,255,0.55)', joyKnob: 'rgba(255,255,255,0.3)' },
 };
 const SkinCtx = createContext(null);
 export function GSkin({ k, children }) { return <SkinCtx.Provider value={SKINS[k] || null}>{children}</SkinCtx.Provider>; }
@@ -364,7 +364,7 @@ export function GJoy({ view, knobRef, color = 'blue', idle, R = 52, alpha = 1, f
   const c = GC[color] || GC.blue;
   const S = useSkin();
   const ring = S.joyRing || 'rgba(255,255,255,0.5)';
-  const sq = S.k === 'siege' || S.k === 'zombie';
+  const sq = S.k === 'siege';
   const flatBase = (x, y, op) => (
     <div style={{ position: 'absolute', left: x - R - 10, top: y - R - 10, width: (R + 10) * 2, height: (R + 10) * 2, borderRadius: '50%', background: 'radial-gradient(circle, rgba(0,0,0,0.08) 0%, rgba(0,0,0,0.22) 100%)', boxShadow: `inset 0 0 0 1.5px ${ring}`, pointerEvents: 'none', opacity: op * alpha }}>
       {sq && [0, 90, 180, 270].map((a) => <span key={a} style={{ position: 'absolute', left: '50%', top: '50%', width: 10, height: 2, marginLeft: -5, marginTop: -1, background: ring, transform: `rotate(${a}deg) translateX(${R + 2}px)` }} />)}

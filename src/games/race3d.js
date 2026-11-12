@@ -224,6 +224,29 @@ void main() {
   vLight = uLightVP * wp;
   gl_Position = uVP * wp;
 }`;
+const SKVS = `#version 300 es
+layout(location=0) in vec3 aPos;
+layout(location=1) in vec3 aNor;
+layout(location=2) in vec4 aCol;
+layout(location=3) in float aBone;
+uniform mat4 uModel, uVP, uLightVP;
+uniform mat4 uBones[20];
+out vec3 vPos; out vec3 vNor; out vec4 vCol; out vec4 vLight;
+void main() {
+  mat4 B = uModel * uBones[int(aBone + 0.5)];
+  vec4 wp = B * vec4(aPos, 1.0);
+  vPos = wp.xyz;
+  vNor = mat3(B) * aNor;
+  vCol = aCol;
+  vLight = uLightVP * wp;
+  gl_Position = uVP * wp;
+}`;
+const SKSVS = `#version 300 es
+layout(location=0) in vec3 aPos;
+layout(location=3) in float aBone;
+uniform mat4 uModel, uLightVP;
+uniform mat4 uBones[20];
+void main() { gl_Position = uLightVP * uModel * uBones[int(aBone + 0.5)] * vec4(aPos, 1.0); }`;
 const FS = `#version 300 es
 precision highp float;
 precision highp sampler2DShadow;
@@ -231,6 +254,8 @@ in vec3 vPos; in vec3 vNor; in vec4 vCol; in vec4 vLight;
 uniform vec3 uSunDir, uSunCol, uSkyCol, uGndCol, uFogCol, uFogSun, uCam, uHor, uZen, uTint;
 uniform float uFogDen, uShadowOn, uExposure, uMode, uAlpha, uDetail;
 uniform sampler2DShadow uShadow;
+uniform vec4 uPL[4]; uniform vec3 uPLC[4]; uniform float uPLN;
+uniform vec4 uSP, uSPD; uniform vec3 uSPC;
 out vec4 o;
 float dh(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
 float dn(vec2 p) { vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f); return mix(mix(dh(i), dh(i + vec2(1.0, 0.0)), u.x), mix(dh(i + vec2(0.0, 1.0)), dh(i + vec2(1.0, 1.0)), u.x), u.y); }
@@ -321,6 +346,22 @@ void main() {
       vec3 env = mix(envAt(r), amb * 1.4, rough);
       col = base * (env * 1.15 + uSunCol * nl * sh * 0.3);
       col += uSunCol * pow(nh, mix(600.0, 40.0, rough)) * mix(6.0, 0.9, rough) * sh;
+    }
+    if (uPLN > 0.5 || uSPC.r > 0.0) {
+      vec3 dl = vec3(0.0);
+      for (int i = 0; i < 4; i++) {
+        if (float(i) >= uPLN) break;
+        vec3 L = uPL[i].xyz - vPos; float dd = length(L);
+        float at = clamp(1.0 - dd / uPL[i].w, 0.0, 1.0);
+        dl += uPLC[i] * (max(dot(n, L / max(dd, 0.001)), 0.0) * 0.85 + 0.15) * at * at;
+      }
+      if (uSPC.r > 0.0) {
+        vec3 L = uSP.xyz - vPos; float dd = length(L); vec3 l = L / max(dd, 0.001);
+        float cone = smoothstep(uSPD.w, uSPD.w + 0.1, dot(-l, uSPD.xyz));
+        float at = clamp(1.0 - dd / uSP.w, 0.0, 1.0);
+        dl += uSPC * (max(dot(n, l), 0.0) * 0.8 + 0.2) * cone * at * at;
+      }
+      col += base * dl;
     }
   }
   float f = 1.0 - exp(-pow(d * uFogDen, 1.35));
@@ -414,6 +455,55 @@ void main() {
   float t = vInfo.y;
   float a = (1.0 - smoothstep(0.15, 1.0, r)) * vInfo.x;
   vec3 c; float add = 0.0;
+  if (t > 21.5) {
+    float sd = vInfo.z * 17.0;
+    float n = vn(vUv * 3.1 + sd) * 0.6 + vn(vUv * 7.7 - sd * 1.3) * 0.4;
+    float d0 = length(uCam - vPos);
+    float f0 = 1.0 - exp(-pow(d0 * uFogDen, 1.35));
+    vec3 fc = pow(uFogCol, vec3(1.0 / 2.2));
+    if (t < 22.5) {
+      float e = 1.0 - smoothstep(0.5 + n * 0.38, 0.6 + n * 0.38, r);
+      float wet = smoothstep(0.55, 0.0, length(vUv - vec2(-0.2, 0.25))) * 0.35;
+      vec3 c2 = mix(vec3(0.13, 0.01, 0.008), vec3(0.26, 0.018, 0.012), n) + wet * vec3(0.3, 0.12, 0.1);
+      float a2 = e * vInfo.x;
+      o = vec4(mix(c2, fc, f0) * a2, a2);
+      return;
+    }
+    if (t < 23.5) {
+      float e = 1.0 - smoothstep(0.2 + n * 0.5, 1.0, r);
+      vec3 c2 = mix(vec3(0.32, 0.015, 0.012), vec3(0.6, 0.05, 0.035), n);
+      float a2 = e * vInfo.x * smoothstep(0.3, 1.2, d0);
+      o = vec4(mix(c2, fc, f0) * a2, a2);
+      return;
+    }
+    if (t < 24.5) {
+      float e = 1.0 - smoothstep(0.3 + n * 0.4, 1.0, r);
+      vec3 c2 = mix(vec3(0.34, 0.31, 0.27), vec3(0.55, 0.51, 0.45), clamp(0.5 - vUv.y * 0.4 + n * 0.3, 0.0, 1.0));
+      float a2 = e * vInfo.x * 0.8 * smoothstep(0.6, 2.5, d0);
+      o = vec4(mix(c2, fc, f0) * a2, a2);
+      return;
+    }
+    if (t < 25.5) {
+      float core = 1.0 - smoothstep(0.0, 0.6, r);
+      float e = 1.0 - smoothstep(0.25 + n * 0.45, 1.0, r);
+      vec3 c2 = mix(vec3(0.25, 0.75, 0.08), vec3(0.75, 1.0, 0.35), core) * 1.4;
+      float a2 = e * vInfo.x;
+      o = vec4(mix(c2, fc, f0 * 0.5) * a2, 0.0);
+      return;
+    }
+    if (t < 26.5) {
+      float e = 1.0 - smoothstep(0.5 + n * 0.35, 0.62 + n * 0.35, r);
+      vec3 c2 = mix(vec3(0.18, 0.42, 0.05), vec3(0.42, 0.75, 0.12), n) * 1.3;
+      float a2 = e * vInfo.x;
+      o = vec4(mix(c2, fc, f0 * 0.5) * a2, a2 * 0.5);
+      return;
+    }
+    float e = 1.0 - smoothstep(0.0, 1.0, r);
+    vec3 c2 = vec3(1.0, 0.75, 0.4) * 2.2;
+    float a2 = e * e * vInfo.x;
+    o = vec4(c2 * a2, 0.0);
+    return;
+  }
   if (t > 20.5) {
     float e = 1.0 - smoothstep(0.0, 1.0, r);
     float a2 = e * e * vInfo.x;
@@ -644,6 +734,37 @@ export function createRenderer(canvas, opts = {}) {
     owned.push(m);
     return m;
   }
+  let SKP = null, SKS = null;
+  function skin(data) {
+    const vao = gl.createVertexArray();
+    const buf = gl.createBuffer();
+    gl.bindVertexArray(vao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 44, 0);
+    gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 44, 12);
+    gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 4, gl.FLOAT, false, 44, 24);
+    gl.enableVertexAttribArray(3); gl.vertexAttribPointer(3, 1, gl.FLOAT, false, 44, 40);
+    gl.bindVertexArray(null);
+    if (!SKP) { SKP = compile(gl, SKVS, FS); SKS = compile(gl, SKSVS, SFS); }
+    const m = { vao, buf, n: data.length / 11, skin: true };
+    owned.push(m);
+    return m;
+  }
+  const NOL = new Float32Array(16), NOC = new Float32Array(12);
+  function setLights(pr, scene) {
+    const L = scene.lights;
+    const n = L ? Math.min(4, L.length) : 0;
+    if (n) {
+      const a = new Float32Array(16), c = new Float32Array(12);
+      for (let i = 0; i < n; i++) { const l = L[i]; a[i * 4] = l.p[0]; a[i * 4 + 1] = l.p[1]; a[i * 4 + 2] = l.p[2]; a[i * 4 + 3] = l.r; c[i * 3] = l.c[0]; c[i * 3 + 1] = l.c[1]; c[i * 3 + 2] = l.c[2]; }
+      gl.uniform4fv(pr.u['uPL[0]'], a); gl.uniform3fv(pr.u['uPLC[0]'], c);
+    } else if (pr.u['uPL[0]']) { gl.uniform4fv(pr.u['uPL[0]'], NOL); gl.uniform3fv(pr.u['uPLC[0]'], NOC); }
+    gl.uniform1f(pr.u.uPLN, n);
+    const s = scene.spot;
+    if (s) { gl.uniform4f(pr.u.uSP, s.p[0], s.p[1], s.p[2], s.r); gl.uniform4f(pr.u.uSPD, s.d[0], s.d[1], s.d[2], s.cos); gl.uniform3fv(pr.u.uSPC, s.c); }
+    else gl.uniform3f(pr.u.uSPC, 0, 0, 0);
+  }
   function drop(m) {
     if (!m) return;
     try { gl.deleteBuffer(m.buf); gl.deleteVertexArray(m.vao); } catch {}
@@ -692,12 +813,24 @@ export function createRenderer(canvas, opts = {}) {
       gl.disable(gl.CULL_FACE);
       gl.useProgram(S.p);
       gl.uniformMatrix4fv(S.u.uLightVP, false, LVP);
+      let skc = null;
       for (const it of items) {
         if (!it.cast || it.blend) continue;
         if (it.bs && Math.hypot(it.bs[0] - sc[0], it.bs[2] - sc[2]) > sr + it.bs[3]) continue;
+        if (it.bones) { (skc || (skc = [])).push(it); continue; }
         gl.uniformMatrix4fv(S.u.uModel, false, it.model || IDENT);
         gl.bindVertexArray(it.mesh.vao);
         gl.drawArrays(gl.TRIANGLES, 0, it.mesh.n);
+      }
+      if (skc && SKS) {
+        gl.useProgram(SKS.p);
+        gl.uniformMatrix4fv(SKS.u.uLightVP, false, LVP);
+        for (const it of skc) {
+          gl.uniformMatrix4fv(SKS.u.uModel, false, it.model || IDENT);
+          gl.uniformMatrix4fv(SKS.u['uBones[0]'], false, it.bones);
+          gl.bindVertexArray(it.mesh.vao);
+          gl.drawArrays(gl.TRIANGLES, 0, it.mesh.n);
+        }
       }
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     }
@@ -724,37 +857,52 @@ export function createRenderer(canvas, opts = {}) {
     gl.enable(gl.DEPTH_TEST);
     gl.depthFunc(gl.LEQUAL);
     gl.disable(gl.CULL_FACE);
-    gl.useProgram(P.p);
-    gl.uniformMatrix4fv(P.u.uVP, false, VP);
-    gl.uniformMatrix4fv(P.u.uLightVP, false, LVP);
-    gl.uniform3fv(P.u.uSunDir, env.sunDir);
-    gl.uniform3fv(P.u.uSunCol, env.sunCol);
-    gl.uniform3fv(P.u.uSkyCol, env.skyCol);
-    gl.uniform3fv(P.u.uGndCol, env.gndCol);
-    gl.uniform3fv(P.u.uFogCol, env.fogCol);
-    gl.uniform3fv(P.u.uFogSun, env.fogSunLin || env.fogSun);
     if (!env.horLin) { env.horLin = toLin(env.reflHor || env.horizon); env.zenLin = toLin(env.reflZen || env.zenith); }
-    gl.uniform3fv(P.u.uHor, env.horLin);
-    gl.uniform3fv(P.u.uZen, env.zenLin);
-    gl.uniform3fv(P.u.uCam, cam.pos);
-    gl.uniform1f(P.u.uFogDen, env.fogDen);
-    gl.uniform1f(P.u.uShadowOn, useShadow ? 1 : 0);
-    gl.uniform1f(P.u.uExposure, env.exposure || 1);
-    gl.uniform1f(P.u.uDetail, env.detail || 0);
-    gl.uniform1f(P.u.uMode, 0);
-    gl.uniform1f(P.u.uAlpha, 1);
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, shadowTex);
-    gl.uniform1i(P.u.uShadow, 0);
-    let blends = null;
+    const setMain = (pr) => {
+      gl.useProgram(pr.p);
+      gl.uniformMatrix4fv(pr.u.uVP, false, VP);
+      gl.uniformMatrix4fv(pr.u.uLightVP, false, LVP);
+      gl.uniform3fv(pr.u.uSunDir, env.sunDir);
+      gl.uniform3fv(pr.u.uSunCol, env.sunCol);
+      gl.uniform3fv(pr.u.uSkyCol, env.skyCol);
+      gl.uniform3fv(pr.u.uGndCol, env.gndCol);
+      gl.uniform3fv(pr.u.uFogCol, env.fogCol);
+      gl.uniform3fv(pr.u.uFogSun, env.fogSunLin || env.fogSun);
+      gl.uniform3fv(pr.u.uHor, env.horLin);
+      gl.uniform3fv(pr.u.uZen, env.zenLin);
+      gl.uniform3fv(pr.u.uCam, cam.pos);
+      gl.uniform1f(pr.u.uFogDen, env.fogDen);
+      gl.uniform1f(pr.u.uShadowOn, useShadow ? 1 : 0);
+      gl.uniform1f(pr.u.uExposure, env.exposure || 1);
+      gl.uniform1f(pr.u.uDetail, env.detail || 0);
+      gl.uniform1f(pr.u.uMode, 0);
+      gl.uniform1f(pr.u.uAlpha, 1);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, shadowTex);
+      gl.uniform1i(pr.u.uShadow, 0);
+      setLights(pr, scene);
+    };
+    setMain(P);
+    let blends = null, sks = null;
     lastDrawn = 0;
     for (const it of items) {
       if (it.blend) { (blends || (blends = [])).push(it); continue; }
       if (it.bs && !visible(it.bs)) continue;
       lastDrawn += it.mesh.n;
+      if (it.bones) { (sks || (sks = [])).push(it); continue; }
       gl.uniformMatrix4fv(P.u.uModel, false, it.model || IDENT);
       gl.bindVertexArray(it.mesh.vao);
       gl.drawArrays(gl.TRIANGLES, 0, it.mesh.n);
+    }
+    if (sks && SKP) {
+      setMain(SKP);
+      for (const it of sks) {
+        gl.uniformMatrix4fv(SKP.u.uModel, false, it.model || IDENT);
+        gl.uniformMatrix4fv(SKP.u['uBones[0]'], false, it.bones);
+        gl.bindVertexArray(it.mesh.vao);
+        gl.drawArrays(gl.TRIANGLES, 0, it.mesh.n);
+      }
+      gl.useProgram(P.p);
     }
     if (blends) {
       gl.enable(gl.BLEND);
@@ -794,10 +942,44 @@ export function createRenderer(canvas, opts = {}) {
       gl.depthMask(true);
       gl.disable(gl.BLEND);
     }
+    const vm = scene.vm;
+    if (vm && vm.length) {
+      const VVP = m4.mul(m4.persp(cam.vmFov || cam.fov, W / H, cam.vmNear || 0.02, 40), view);
+      gl.clear(gl.DEPTH_BUFFER_BIT);
+      gl.useProgram(P.p);
+      gl.uniformMatrix4fv(P.u.uVP, false, VVP);
+      if (scene.vmLights) setLights(P, { lights: scene.vmLights, spot: scene.spot });
+      gl.uniform1f(P.u.uMode, 0);
+      gl.uniform1f(P.u.uAlpha, 1);
+      let vb = null;
+      for (const it of vm) {
+        if (it.blend) { (vb || (vb = [])).push(it); continue; }
+        gl.uniformMatrix4fv(P.u.uModel, false, it.model || IDENT);
+        gl.bindVertexArray(it.mesh.vao);
+        gl.drawArrays(gl.TRIANGLES, 0, it.mesh.n);
+      }
+      if (vb) {
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+        gl.depthMask(false);
+        for (const it of vb) {
+          gl.uniform1f(P.u.uMode, it.blend);
+          gl.uniform1f(P.u.uAlpha, it.alpha == null ? 1 : it.alpha);
+          if (it.tint) gl.uniform3fv(P.u.uTint, it.tint);
+          gl.uniformMatrix4fv(P.u.uModel, false, it.model || IDENT);
+          gl.bindVertexArray(it.mesh.vao);
+          gl.drawArrays(gl.TRIANGLES, 0, it.mesh.n);
+        }
+        gl.depthMask(true);
+        gl.disable(gl.BLEND);
+        gl.uniform1f(P.u.uMode, 0);
+      }
+      gl.uniformMatrix4fv(P.u.uVP, false, VP);
+    }
     gl.bindVertexArray(null);
     if (usePost) runPost(env);
     return VP;
   }
-  return { gl, mesh, drop, render, dispose, lose, drawn: () => lastDrawn };
+  return { gl, mesh, skin, drop, render, dispose, lose, drawn: () => lastDrawn };
 }
 const IDENT = m4.ident();

@@ -145,6 +145,7 @@ export const Sfx = {
     try { if (hidden) ac.suspend(); else ac.resume(); } catch {}
   },
   bus() { return ac && sfxBus ? { ac, out: sfxBus } : null; },
+  mbus() { return ac && musBus ? { ac, out: musBus } : null; },
 };
 
 let wakeArmed = false;

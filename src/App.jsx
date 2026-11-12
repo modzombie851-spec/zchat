@@ -15,7 +15,7 @@ import {
 import { zLazy, zLazyPrefetch, zLazySetUi } from './lazy.jsx';
 import { GAME_KITS, GAME_KIT_BY, GameKitArt, kitUser, gameKitPull } from './games/kits.jsx';
 import { loadLiveFriends, castMe, liveKind, useJoinWait } from './games/live.js';
-import { cloudOn } from './games/zcloud.js';
+import { cloudOn, pingRegions, bestRegion } from './games/zcloud.js';
 import { ZLANGS, setZLang, useZLang, zlangWanted, zlangOnPick, zlangDirty, zlangClean, zlangStored } from './i18n/index.js';
 export const TrustedFriendsPage = zLazy(() => import('./areas/safety.jsx'), 'TrustedFriendsPage', 'safety');
 export const RecoveryHelpPage = zLazy(() => import('./areas/safety.jsx'), 'RecoveryHelpPage', 'safety');
@@ -18596,7 +18596,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-export const APP_VERSION = '47.0V';
+export const APP_VERSION = '48.0V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -36606,6 +36606,14 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       try { await sendGameStateTo(p, st, { quiet: false }); } catch {}
     }
   };
+  const startZombieWith = async (profiles, room) => {
+    if (!room || !room.reg || !room.r) return;
+    for (const p of profiles || []) {
+      if (!p || p.is_bot) continue;
+      const st = { g: 'zombie', id: newClientId(), x: session.user.id, o: p.id, w: null, n: 0, st: 'wait', exp: Date.now() + LIVE_INVITE_MS, sx: 0, so: 0, rm: `${room.reg}:${room.r}` };
+      try { await sendGameStateTo(p, st, { quiet: false }); } catch {}
+    }
+  };
   const startSiegeWith = async (profiles, rmIn) => {
     const rm = rmIn || newClientId();
     if (!rmIn) setSiegeGame({ rm, host: session.user.id });
@@ -36618,6 +36626,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const startLiveGame = async (profile, kind) => {
     if (!profile || profile.is_bot) return;
     if (kind === 'siege') { startSiegeWith([profile]); return; }
+    if (kind === 'zombie') { let reg = 'asia'; try { reg = bestRegion(await pingRegions()) || 'asia'; } catch {} const room = { reg, r: `f${newClientId().replace(/[^a-z0-9]/gi, '').toLowerCase().slice(0, 9).padEnd(8, '0')}` }; setShowGames(false); setZombieGame({ at: Date.now(), join: room, host: true }); startZombieWith([profile], room); return; }
     if (kind === 'roll') { startRollWith([profile]); return; }
     if (kind === 'race') { startRaceWith([profile]); return; }
     if (kind === 'gulpco') { startGulpRoomWith([profile]); return; }
@@ -36634,6 +36643,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (st.g === 'roll') { setRollGame({ rm: st.rm || st.id, host: st.x }); return; }
     if (st.g === 'race') { setRaceGame({ rm: st.rm || st.id, host: st.x }); return; }
     if (st.g === 'siege') { setSiegeGame({ rm: st.rm || st.id, host: st.x }); return; }
+    if (st.g === 'zombie') { const [reg, r] = String(st.rm || '').split(':'); if (reg && r) { setShowGames(false); setZombieGame({ at: Date.now(), join: { reg, r } }); } return; }
     if (st.g === 'gulpco') { if (typeof st.rm === 'string') setGulpRoom({ rm: st.rm }); return; }
     setLiveGame({ state: st, messageId: msg.id, peer });
   };
@@ -48374,7 +48384,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onInvite={(ps) => { const rm = racePick.rm; setRacePick(null); setShowGames(false); startRaceWith(ps, rm); }} />
       )}
       {zombieGame && me && (
-        <ZombieGamePage key={zombieGame.at} me={me} myId={session.user.id} onClose={() => { setZombieGame(null); setShowGames(true); }} />
+        <ZombieGamePage key={zombieGame.at} me={me} myId={session.user.id} join={zombieGame.join || null} friends={gameFriends} onInvite={(ps, room) => startZombieWith(ps, room)} onClose={() => { setZombieGame(null); setShowGames(true); }} />
       )}
       {siegeGame && me && (
         <SiegeGamePage key={siegeGame.rm} solo={!!siegeGame.solo} room={siegeGame.solo ? null : siegeGame} me={me} myId={session.user.id} watch={!!siegeGame.watch}
@@ -48385,7 +48395,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         <SiegeInviteSheet friends={gameFriends} already={siegePick.n} side={!!siegePick.side} onClose={() => setSiegePick(null)}
           onInvite={(ps) => { const rm = siegePick.rm; setSiegePick(null); setShowGames(false); startSiegeWith(ps, rm); }} />
       )}
-      {liveGame && me && liveGame.state.g !== 'duo' && liveGame.state.g !== 'gulp' && liveGame.state.g !== 'roll' && liveGame.state.g !== 'gulpco' && liveGame.state.g !== 'race' && liveGame.state.g !== 'siege' && (
+      {liveGame && me && liveGame.state.g !== 'duo' && liveGame.state.g !== 'gulp' && liveGame.state.g !== 'roll' && liveGame.state.g !== 'gulpco' && liveGame.state.g !== 'race' && liveGame.state.g !== 'siege' && liveGame.state.g !== 'zombie' && (
         <LiveGamePage key={liveGame.state.id} initial={liveGame.state} me={me} peer={liveGame.peer} myId={session.user.id}
           onClose={() => setLiveGame(null)}
           onSaveState={(next) => saveLiveState(liveGame.messageId, next)}
@@ -50685,6 +50695,7 @@ export function parseGameMessage(content) {
     if (st.g === 'fade') return Array.isArray(st.b) && st.b.length === 9 ? st : null;
     if (st.g === 'tug' || st.g === 'qrace' || st.g === 'rrace' || st.g === 'duo' || st.g === 'gulp') return typeof st.x === 'string' && typeof st.o === 'string' ? st : null;
     if (st.g === 'roll' || st.g === 'gulpco' || st.g === 'race' || st.g === 'siege') return typeof st.x === 'string' && typeof st.o === 'string' && typeof st.rm === 'string' && st.rm.length <= 64 ? st : null;
+    if (st.g === 'zombie') return typeof st.x === 'string' && typeof st.o === 'string' && typeof st.rm === 'string' && /^(asia|usa|eu):[a-z0-9]{1,13}$/.test(st.rm) ? st : null;
     if (G1_KEYS.includes(st.g)) return g1Valid(st) ? st : null;
     return null;
   } catch { return null; }
@@ -59859,9 +59870,9 @@ export function GameArt({ k: kIn, width = 160, height = 100, radius = 14, style 
   return <img src={src} alt="" aria-hidden="true" draggable={false} decoding="async" style={{ display: 'block', width, height, borderRadius: radius, flexShrink: 0, objectFit: 'cover', ...style }} />;
 }
 
-export const LIVE_GAME_KEYS = ['siege', 'race', 'roll', 'gulpco', 'duo', 'gulp', 'tug', 'qrace', 'rrace'];
+export const LIVE_GAME_KEYS = ['siege', 'race', 'roll', 'gulpco', 'duo', 'gulp', 'tug', 'qrace', 'rrace', 'zombie'];
 Object.assign(GAME_TITLES, { zombie: 'Dead Town', siege: 'Scrap Siege', race: 'Island Rally', roll: 'Roll Squad', gulpco: 'Gulp room', duo: 'Two Torches', gulp: 'Gulp', tug: 'Tug of war', qrace: 'Quiz race', rrace: 'Reaction race' });
-Object.assign(FRIEND_GAME_SUBS, { siege: `Live, up to ${cloudOn() ? '20 players' : 'ten friends'} against robot waves`, race: 'Live, up to eight friends, four maps', roll: 'Live, up to four friends roll together', gulpco: 'Live, up to ten friends, join any time', duo: 'Live, endless temples together', gulp: 'Live, eat smaller fish and grow', tug: 'Live, tap faster than them', qrace: 'Live, fastest right answer', rrace: 'Live, first to tap on green' });
+Object.assign(FRIEND_GAME_SUBS, { zombie: 'Live, fight zombies together on a server', siege: `Live, up to ${cloudOn() ? '20 players' : 'ten friends'} against robot waves`, race: 'Live, up to eight friends, four maps', roll: 'Live, up to four friends roll together', gulpco: 'Live, up to ten friends, join any time', duo: 'Live, endless temples together', gulp: 'Live, eat smaller fish and grow', tug: 'Live, tap faster than them', qrace: 'Live, fastest right answer', rrace: 'Live, first to tap on green' });
 Object.assign(GAME_ART_BG, { zombie: ['#8A8F5A', '#1E2216'], siege: ['#D9A54A', '#3A2E22'], race: ['#7FB4E0', '#3A4B63'], roll: ['#6EC6FF', '#4FA83A'], duo: ['#3B2A48', '#120C1C'], gulp: ['#1C6FA8', '#082A4C'], gulpco: ['#1C6FA8', '#082A4C'], tug: ['#F97316', '#E11D48'], qrace: ['#7C3AED', '#2563EB'], rrace: ['#10B981', '#0EA5E9'] });
 Object.assign(GAME_RULES, {
   siege: { how: ['Pick a hero: Blaze blasts up close, Pip snipes from far away, Boom throws bombs over walls and Mira heals friends with her orb.', 'Move with the left stick. Tap the red button to shoot the closest robot, or drag it to aim.', 'Hitting robots charges your super. When the gold button glows, tap it or drag it to aim.', 'Robots come in waves from the hatches. A boss shows up every 5 waves.', 'If a friend goes down, stand next to them to revive them. Grab health, power and super drops.', 'Hide in bushes so robots lose sight of you. Talk with your mic or send emojis.'], win: 'Survive 15 waves together, or go endless and see how far you get.' },
@@ -60289,7 +60300,7 @@ function Ga2Host({ myId, me, group, members, post }) {
   );
 }
 
-FRIEND_GAME_GROUPS.unshift(['Play live now', LIVE_GAME_KEYS.slice()]);
+FRIEND_GAME_GROUPS.unshift(['Play live now', LIVE_GAME_KEYS.filter((k) => k !== 'zombie' || cloudOn())]);
 const LIVE_INVITE_MS = 10 * 60 * 1000;
 
 function liveStatusFor(state, myId, peerName) {
@@ -60321,6 +60332,8 @@ function LiveGameCard({ state, myId, peerName, onOpen, onRematch }) {
         <div style={{ textAlign: 'center', fontSize: 13, fontWeight: 800, color: theme.ink, padding: '2px 0 4px' }}>Race in 3D, up to eight friends</div>
       ) : state.g === 'siege' ? (
         <div style={{ textAlign: 'center', fontSize: 13, fontWeight: 800, color: theme.ink, padding: '2px 0 4px' }}>Fight robot waves, up to ten friends</div>
+      ) : state.g === 'zombie' ? (
+        <div style={{ textAlign: 'center', fontSize: 13, fontWeight: 800, color: theme.ink, padding: '2px 0 4px' }}>Hold the town against zombies together</div>
       ) : state.g === 'roll' ? (
         <div style={{ textAlign: 'center', fontSize: 13, fontWeight: 800, color: theme.ink, padding: '2px 0 4px' }}>Roll together, up to four friends</div>
       ) : state.g === 'gulpco' ? (
