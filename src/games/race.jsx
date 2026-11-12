@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Avatar, Portal, useBackClose, FONT, Spinner } from '../App.jsx';
 import { useRoomLink } from './relay.jsx';
 import { EMOTES, Sheet, injectCss, useGameChat, ChatSheet } from './livekit.jsx';
-import { GBtn, GPill, GPanel, GChip, GTitle, GIcon, GHudBtn, GHudPanel, GNotices, useNotices, useWatchNotices, injectKitCss, kitTap, pressProps, maxDpr, INK, useCtlLook, useGameStage, GControlsPanel, GVolBars, GLobby, GSlot, GLobbySheet, GSwitchRow } from './gamekit.jsx';
+import { GBtn, GPill, GPanel, GChip, GTitle, GIcon, GHudBtn, GHudPanel, GNotices, useNotices, useWatchNotices, injectKitCss, kitTap, pressProps, maxDpr, INK, useCtlLook, useGameStage, GControlsPanel, GVolBars, GLobby, GSlot, GLobbySheet, GSwitchRow, GSeg } from './gamekit.jsx';
 import { Sfx } from './sfx.js';
 import { setWatchAllowed, useLiveBeacon, useGamePrivacy } from './live.js';
 import { createRenderer, m4, MeshBuilder } from './race3d.js';
@@ -17,6 +17,7 @@ const TILT_PREF = 'zchat-race-tilt';
 const MAP_PREF = 'zchat-race-map';
 const MODE_PREF = 'zchat-race-mode';
 const GFX_PREF = 'zchat-race-gfx';
+const BOTS_PREF = 'zchat-race-bots';
 const BEST_KEY = (uid, map) => (map && map !== 'coast' ? `zchat-race-best-${uid || 'me'}-${map}` : `zchat-race-best-${uid || 'me'}`);
 const readPref = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : v; } catch { return d; } };
 const savePref = (k, v) => { try { localStorage.setItem(k, String(v)); } catch {} };
@@ -27,6 +28,7 @@ const lin = (h) => { const n = parseInt(h.slice(1), 16); return [((n >> 16) / 25
 const srgb = (h) => { const n = parseInt(h.slice(1), 16); return [(n >> 16) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255]; };
 const MODES = { race: 'Race', attack: 'Attack race' };
 const GFX = [['auto', 'Auto'], ['best', 'Best'], ['fast', 'Fast']];
+const BOTLV = [['easy', 'Easy'], ['normal', 'Normal'], ['hard', 'Hard']];
 const validMap = (k) => (MAPS[k] ? k : 'coast');
 const weakDevice = () => { try { return (navigator.hardwareConcurrency || 4) <= 4 || (navigator.deviceMemory || 4) <= 3; } catch { return false; } };
 const mul = m4.mul;
@@ -133,16 +135,7 @@ function CarPick({ k, on, img, color, onPress, mini }) {
 }
 
 function Seg({ value, items, onPick, disabled }) {
-  return (
-    <div role="radiogroup" style={{ display: 'flex', gap: 4, padding: 3, borderRadius: 13, background: 'rgba(0,0,0,0.28)' }}>
-      {items.map(([k, label]) => (
-        <button key={k} type="button" role="radio" aria-checked={value === k} disabled={disabled && value !== k} onClick={(e) => { e.stopPropagation(); if (!disabled) onPick(k); }}
-          style={{ flex: 1, minWidth: 0, height: 34, border: 'none', borderRadius: 10, padding: '0 8px', fontFamily: FONT, fontSize: 13, fontWeight: 900, cursor: disabled ? 'default' : 'pointer', background: value === k ? 'linear-gradient(180deg, #FFD84E 0%, #F2B11F 100%)' : 'transparent', color: value === k ? INK : 'rgba(255,255,255,0.86)', whiteSpace: 'nowrap', opacity: disabled && value !== k ? 0.45 : 1 }}>
-          {label}
-        </button>
-      ))}
-    </div>
-  );
+  return <GSeg value={value} items={items} onPick={onPick} disabled={disabled} height={34} />;
 }
 
 const Chevron = ({ dir }) => (
@@ -171,6 +164,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
   const [watchers, setWatchers] = useState([]);
   const [laps, setLaps] = useState(LAPS);
   const [fill, setFill] = useState(true);
+  const [botLv, setBotLv] = useState(() => { const v = readPref(BOTS_PREF, 'normal'); return v === 'easy' || v === 'hard' ? v : 'normal'; });
   const [hud, setHud] = useState({ pos: 1, n: 1, lap: 1, time: 0, order: [], fin: false, en: 0, cd: {}, drift: 0, warn: false });
   const [count, setCount] = useState(0);
   const [result, setResult] = useState(null);
@@ -227,7 +221,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
   const rosterSeen = useRef({ list: null, at: Date.now(), bye: new Set() });
   const kindOf = () => (solo ? 'me' : myId);
   const inRace = () => G.current.ids.includes(kindOf()) && !watch;
-  if (typeof window !== 'undefined' && window.__zfake) window.__zrace = { T: () => (RR.current ? RR.current.T : null), hitMe: (k) => { const c = G.current.cars[kindOf()]; if (c) applyHitRef.current(c, k, 'bot1', true); }, G: () => G.current, phase: () => phaseRef.current, hold: () => hold.current, roster: () => rosterRef.current, total: () => (RR.current && RR.current.T ? RR.current.T.total : 0), skill: (k) => G.current.skillQ.push(k), map: () => (RR.current ? RR.current.key : null), mode: () => G.current.mode, drawn: () => (RR.current ? RR.current.R.drawn() : 0), tier: () => G.current.budget.tier };
+  if (typeof window !== 'undefined' && window.__zfake) window.__zrace = { T: () => (RR.current ? RR.current.T : null), hitMe: (k) => { const c = G.current.cars[kindOf()]; if (c) applyHitRef.current(c, k, 'bot1', true); }, hitBot: (id, k) => { const c = G.current.cars[id]; if (c) applyHitRef.current(c, k || 'rocket', kindOf(), true); }, G: () => G.current, phase: () => phaseRef.current, hold: () => hold.current, roster: () => rosterRef.current, total: () => (RR.current && RR.current.T ? RR.current.T.total : 0), skill: (k) => G.current.skillQ.push(k), map: () => (RR.current ? RR.current.key : null), mode: () => G.current.mode, drawn: () => (RR.current ? RR.current.R.drawn() : 0), tier: () => G.current.budget.tier };
 
   const say = (text, sec = 2.2) => { setToast({ text, at: Date.now() }); clearTimeout(toastT.current); toastT.current = setTimeout(() => setToast(null), sec * 1000); };
   const nameOf = (k) => (k === kindOf() ? 'You' : G.current.botMeta[k] ? G.current.botMeta[k].n : names[k] || 'Friend');
@@ -327,7 +321,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
     try { ensureMap(mk); } catch {}
     const st = RR.current;
     g.rid = cfg.rid; g.ids = cfg.ids.slice(); g.laps = cfg.laps || LAPS;
-    g.mode = cfg.mode === 'attack' ? 'attack' : 'race'; g.map = mk;
+    g.mode = cfg.mode === 'attack' ? 'attack' : 'race'; g.map = mk; g.botLv = cfg.bl === 'hard' || cfg.bl === 'easy' ? cfg.bl : 'normal';
     if (g.mode !== modeRef.current) setMode(g.mode);
     g.cars = {}; g.fins = {}; g.parts = []; g.fx = []; g.net = {}; g.endAt = 0; g.resAt = 0; g.lapSeen = 0;
     g.rockets = []; g.oils = []; g.skillQ = []; g.hits = 0; g.warnAt = 0;
@@ -361,11 +355,11 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
     const want = solo ? MAX_RACERS : fill ? MAX_RACERS : ids.length;
     for (let i = ids.length; i < want; i++) {
       const id = `bot${i}`;
-      bots.push({ id, n: BOT_NAMES[i % BOT_NAMES.length], c: CAR_KEYS[(i * 3 + 1) % CAR_KEYS.length], sk: 0.9 + ((i * 37) % 9) / 100 });
+      bots.push({ id, n: BOT_NAMES[i % BOT_NAMES.length], c: CAR_KEYS[(i * 3 + 1) % CAR_KEYS.length], sk: botLv === 'hard' ? 0.97 + ((i * 37) % 6) / 100 : botLv === 'easy' ? 0.84 + ((i * 37) % 7) / 100 : 0.9 + ((i * 37) % 9) / 100 });
       ids.push(id);
       cars[id] = bots[bots.length - 1].c;
     }
-    const cfg = { rid: `${Date.now().toString(36)}${Math.floor(Math.random() * 1e4)}`, ids, cars, bots, laps, in: 3600, map: mapRef.current, mode: modeRef.current };
+    const cfg = { rid: `${Date.now().toString(36)}${Math.floor(Math.random() * 1e4)}`, ids, cars, bots, laps, in: 3600, map: mapRef.current, mode: modeRef.current, bl: botLv };
     if (!solo) { setRoster(ids.filter((k) => !k.startsWith('bot'))); relay.send('go', cfg); }
     beginRace(cfg);
   };
@@ -392,11 +386,47 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
 
   const spawnBurst = (x, y, z, n, type, speed, life, size) => {
     const P = G.current.parts;
-    const cap = [340, 240, 140][G.current.budget.tier] || 200;
+    const cap = [420, 300, 170][G.current.budget.tier] || 260;
     for (let k = 0; k < n && P.length < cap; k++) {
       const a = Math.random() * Math.PI * 2, e = (Math.random() - 0.3) * 1.2;
       const sp = speed * (0.4 + Math.random() * 0.6);
       P.push({ x, y, z, vx: Math.cos(a) * Math.cos(e) * sp, vy: Math.abs(Math.sin(e)) * sp + speed * 0.2, vz: Math.sin(a) * Math.cos(e) * sp, life: 0, max: life * (0.6 + Math.random() * 0.6), s0: size * 0.6, s1: size * (type === 4 ? 0.3 : 1.6), a0: type === 4 ? 1 : 0.8, type, g: type === 4 ? 9 : 0 });
+    }
+  };
+  const P3 = (o) => {
+    const g = G.current;
+    const cap = [420, 300, 170][g.budget.tier] || 260;
+    if (g.parts.length >= cap) return;
+    g.parts.push({ life: 0, vx: 0, vy: 0, vz: 0, a0: 1, seed: Math.random(), ...o });
+  };
+  const blast = (x, y, z, big, gy, near) => {
+    const lite = G.current.budget.tier >= 2;
+    const R = (a, b) => a + Math.random() * (b - a);
+    const k = near ? 0.62 : 1;
+    P3({ x, y, z, max: 0.16, s0: 1.4 * k, s1: (big ? 5.5 : 3.6) * k, a0: near ? 0.5 : 0.9, type: 16 });
+    P3({ x, y: gy + 0.35, z, max: 0.5, s0: 1, s1: big ? 9 : 6, a0: 0.9, type: 13, flat: 1 });
+    for (let i = 0; i < (big ? (lite ? 5 : 9) : 4); i++) { const a = R(0, 6.283), d = R(0, 0.9) * k; P3({ x: x + Math.cos(a) * d, y: y + R(-0.1, 0.6), z: z + Math.sin(a) * d, vx: Math.cos(a) * R(0.8, 2.4) * k, vy: R(1.4, 3.4) * k, vz: Math.sin(a) * R(0.8, 2.4) * k, max: R(0.32, 0.62), s0: R(0.7, 1.2) * k, s1: R(1.7, 2.7) * k, a0: 0.95, type: 12, fin: 1 }); }
+    for (let i = 0; i < (big ? (lite ? 4 : 7) : 3); i++) { const a = R(0, 6.283), d = R(0, 1.1) * k; P3({ x: x + Math.cos(a) * d, y: y + R(0.2, 0.9), z: z + Math.sin(a) * d, vx: Math.cos(a) * R(0.3, 1), vy: R(1.3, 2.6), vz: Math.sin(a) * R(0.3, 1), max: R(1.1, 1.8), s0: R(0.7, 1.1) * k, s1: R(2.2, 3.3) * k, a0: near ? 0.38 : 0.55, type: 11, fin: 1 }); }
+    for (let i = 0; i < (big ? 10 : 5); i++) { const a = R(0, 6.283); const sp = R(6, 12); P3({ x, y: y + 0.3, z, vx: Math.cos(a) * sp * 0.7, vy: R(5, 10), vz: Math.sin(a) * sp * 0.7, g: 22, max: R(0.8, 1.3), s0: R(0.16, 0.3), s1: 0.14, a0: 1, type: 5 }); }
+    for (let i = 0; i < (big ? 20 : 9); i++) { const a = R(0, 6.283); const sp = R(10, 20); P3({ x, y: y + 0.2, z, vx: Math.cos(a) * sp * 0.8, vy: R(3, 11), vz: Math.sin(a) * sp * 0.8, g: 18, max: R(0.35, 0.7), s0: 0.09, s1: 0.05, a0: 1, type: 4, st: 0.035 }); }
+  };
+  const bolts = (x, y, z, R0, n, h = 0.6) => {
+    const lite = G.current.budget.tier >= 2;
+    for (let b = 0; b < n; b++) {
+      let a = (b / n) * 6.283 + Math.random() * 0.5, px = x, py = y, pz = z;
+      const steps = 6, life = 0.16 + Math.random() * 0.14;
+      for (let j = 1; j <= steps; j++) {
+        a += (Math.random() - 0.5) * 0.9;
+        const d = (R0 / steps) * (0.7 + Math.random() * 0.6);
+        const qx = px + Math.cos(a) * d, qz = pz + Math.sin(a) * d, qy = y + (Math.random() - 0.4) * h;
+        const dx = qx - px, dy = qy - py, dz = qz - pz, L = Math.hypot(dx, dy, dz) * 0.5 + 0.06;
+        const th = 0.17 * (1 - j / (steps + 3));
+        P3({ x: (px + qx) / 2, y: (py + qy) / 2, z: (pz + qz) / 2, max: life, s0: th, s1: th * 0.7, a0: 1, type: 15, d: [dx, dy, dz], L });
+        if (!lite) P3({ x: (px + qx) / 2, y: (py + qy) / 2, z: (pz + qz) / 2, max: life, s0: th * 3.6, s1: th * 2.6, a0: 0.3, type: 15, d: [dx, dy, dz], L: L * 1.05 });
+        if (!lite && j === 3 && Math.random() < 0.6) { const ba = a + (Math.random() < 0.5 ? 0.9 : -0.9), bl = d * 0.8; const bx = qx + Math.cos(ba) * bl, bz = qz + Math.sin(ba) * bl, by = qy - 0.2; P3({ x: (qx + bx) / 2, y: (qy + by) / 2, z: (qz + bz) / 2, max: life * 0.8, s0: th * 0.7, s1: th * 0.5, a0: 1, type: 15, d: [bx - qx, by - qy, bz - qz], L: bl * 0.5 + 0.05 }); }
+        px = qx; py = qy; pz = qz;
+      }
+      P3({ x: px, y: py, z: pz, max: life, s0: 0.28, s1: 0.1, a0: 0.8, type: 15 });
     }
   };
   const boom = (c, big = true) => {
@@ -408,9 +438,9 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
     if (now - (g.boomAt[c.id] || 0) < 1200) return;
     g.boomAt[c.id] = now;
     const p = st.T.at(c.s, c.x);
-    spawnBurst(p.x, p.y + 0.9, p.z, big ? 16 : 8, 1, 7, 0.55, 1.1);
-    spawnBurst(p.x, p.y + 1.1, p.z, big ? 10 : 5, 5, 3, 1.2, 1.4);
-    spawnBurst(p.x, p.y + 0.8, p.z, big ? 10 : 6, 4, 11, 0.6, 0.35);
+    const cp = g.camPos;
+    const near = !!cp && Math.hypot(cp[0] - p.x, cp[1] - p.y, cp[2] - p.z) < 16;
+    blast(p.x, p.y + (c.air || 0) + 0.9, p.z, big, p.y, near);
   };
   const crashCar = (c, k, by) => {
     const side = (String(by || '').charCodeAt(0) + Math.floor(c.s)) % 2 ? 1 : -1;
@@ -434,7 +464,11 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
     const g = G.current;
     const myK = kindOf();
     if (k === 'rocket') boom(c, !blocked);
-    if (blocked) { const st = RR.current; if (st && st.T) { const p = st.T.at(c.s, c.x); spawnBurst(p.x, p.y + 1, p.z, 12, 6, 6, 0.5, 0.6); } }
+    { const st = RR.current; if (st && st.T) { const p = st.T.at(c.s, c.x);
+      if (blocked) { spawnBurst(p.x, p.y + 1, p.z, 10, 6, 7, 0.45, 0.4); P3({ x: p.x, y: p.y + 0.35, z: p.z, max: 0.45, s0: 1.5, s1: 7.5, a0: 1, type: 14, flat: 1 }); P3({ x: p.x, y: p.y + 1.1, z: p.z, max: 0.14, s0: 0.8, s1: 2.6, a0: 0.55, type: 16 }); }
+      else if (k === 'oil') { for (let i = 0; i < 14; i++) { const a = Math.random() * 6.283; P3({ x: p.x, y: p.y + 0.4, z: p.z, vx: Math.cos(a) * (3 + Math.random() * 4), vy: 3 + Math.random() * 4, vz: Math.sin(a) * (3 + Math.random() * 4), g: 16, max: 0.6 + Math.random() * 0.4, s0: 0.13, s1: 0.09, a0: 1, type: 17, st: 0.03 }); } for (let i = 0; i < 6; i++) P3({ x: p.x + (Math.random() - 0.5) * 2, y: p.y + 0.4, z: p.z + (Math.random() - 0.5) * 2, vy: 0.8, max: 1.4, s0: 0.8, s1: 3, a0: 0.5, type: 18, fin: 1 }); }
+      else if (k === 'shock') { bolts(p.x, p.y + 1.1, p.z, 2.2, 5, 0.9); P3({ x: p.x, y: p.y + 0.9, z: p.z, max: 0.2, s0: 1, s1: 2.6, a0: 0.6, type: 16 }); }
+    } }
     if (c.id === myK) {
       Sfx.play(blocked ? 'shield' : k === 'shock' ? 'shock' : 'hurt', { vol: 0.8 });
       if (!blocked) { g.shake = Math.max(g.shake || 0, k === 'rocket' ? 0.5 : 0.3); try { navigator.vibrate && navigator.vibrate(k === 'rocket' ? 60 : 30); } catch {} }
@@ -450,17 +484,20 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
     const c = g.cars[id];
     if (k === 'rocket') {
       g.rockets.push({ n, by: id, tg: tg && g.cars[tg] ? tg : null, s: s + 2.4, x, v: ROCKET_V, life: 3.6 });
+      { const st = RR.current; if (st && st.T) { const p = st.T.at(s + 1.6, x); P3({ x: p.x, y: p.y + 0.9, z: p.z, max: 0.12, s0: 1.2, s1: 2.6, a0: 0.9, type: 16 }); for (let i = 0; i < 7; i++) P3({ x: p.x + (Math.random() - 0.5) * 1.2, y: p.y + 0.6, z: p.z + (Math.random() - 0.5) * 1.2, vx: (Math.random() - 0.5) * 2, vy: 0.9 + Math.random(), vz: (Math.random() - 0.5) * 2, max: 1.2, s0: 0.6, s1: 2.6, a0: 0.5, type: 18, fin: 1 }); } }
       Sfx.play('fireball', { vol: id === kindOf() ? 0.7 : 0.35 });
       if (tg === kindOf()) { g.warnAt = performance.now(); Sfx.play('alert', { vol: 0.6 }); }
     } else if (k === 'oil') {
       g.oils.push({ n, by: id, s: s - 3.2, x, at: performance.now(), until: performance.now() + 14000, hit: {} });
+      { const st = RR.current; if (st && st.T) { const p = st.T.at(s - 3.2, x); for (let i = 0; i < 16; i++) { const a = Math.random() * 6.283, sp = 2 + Math.random() * 4; P3({ x: p.x, y: p.y + 0.5, z: p.z, vx: Math.cos(a) * sp, vy: 2 + Math.random() * 3.5, vz: Math.sin(a) * sp, g: 18, max: 0.5 + Math.random() * 0.3, s0: 0.14, s1: 0.1, a0: 1, type: 17, st: 0.03 }); } } }
       Sfx.play('poof', { vol: id === kindOf() ? 0.6 : 0.3 });
     } else if (k === 'shield') {
       if (c) c.shield = SHIELD_T;
+      { const st = RR.current; if (st && st.T) { const p = st.T.at(s, x); P3({ x: p.x, y: p.y + 0.35, z: p.z, max: 0.5, s0: 1.2, s1: 6.5, a0: 1, type: 14, flat: 1 }); for (let i = 0; i < 14; i++) { const a = (i / 14) * 6.283; P3({ x: p.x + Math.cos(a) * 1.7, y: p.y + 0.3 + Math.random() * 0.6, z: p.z + Math.sin(a) * 2.4, vy: 2.2 + Math.random(), max: 0.7, s0: 0.12, s1: 0.05, a0: 1, type: 6, st: 0.05 }); } } }
       Sfx.play('shield', { vol: id === kindOf() ? 0.7 : 0.3 });
     } else if (k === 'shock') {
       const st = RR.current;
-      if (st && st.T) { const p = st.T.at(s, x); for (let q = 0; q < 26; q++) { const a = (q / 26) * Math.PI * 2; g.parts.push({ x: p.x, y: p.y + 0.8, z: p.z, vx: Math.cos(a) * 26, vy: 0.6, vz: Math.sin(a) * 26, life: 0, max: 0.7, s0: 1.1, s1: 2.2, a0: 0.9, type: 6 }); } }
+      if (st && st.T) { const p = st.T.at(s, x); P3({ x: p.x, y: p.y + 0.35, z: p.z, max: 0.55, s0: 2, s1: 20, a0: 1, type: 14, flat: 1 }); P3({ x: p.x, y: p.y + 0.4, z: p.z, max: 0.8, s0: 1, s1: 13, a0: 0.55, type: 14, flat: 1 }); P3({ x: p.x, y: p.y + 1, z: p.z, max: 0.16, s0: 1.2, s1: 4.2, a0: 0.7, type: 16 }); bolts(p.x, p.y + 0.8, p.z, 7, 8); }
       Sfx.play('shock', { vol: id === kindOf() ? 0.8 : 0.45 });
       const myK = kindOf();
       for (const o of Object.values(g.cars)) {
@@ -493,7 +530,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
 
   useEffect(() => {
     if (solo || !room) return undefined;
-    const cleanBots = (list) => (Array.isArray(list) ? list.filter((b) => b && typeof b.id === 'string').slice(0, MAX_RACERS).map((b) => ({ id: b.id, n: String(b.n || 'Bot').slice(0, 20), c: b.c, sk: clamp(num(b.sk, 0.95), 0.8, 1) })) : []);
+    const cleanBots = (list) => (Array.isArray(list) ? list.filter((b) => b && typeof b.id === 'string').slice(0, MAX_RACERS).map((b) => ({ id: b.id, n: String(b.n || 'Bot').slice(0, 20), c: b.c, sk: clamp(num(b.sk, 0.95), 0.8, 1.04) })) : []);
     const offs = [
       relay.on('*', (m) => { if (m.m) { metaRef.current[m.from] = m.m; setNames((p) => (p[m.from] === m.m.n ? p : { ...p, [m.from]: m.m.n })); if (m.m.c && CARS[m.m.c]) setCarsOf((p) => (p[m.from] ? p : { ...p, [m.from]: m.m.c })); } if (!joinOrder.current.includes(m.from)) joinOrder.current.push(m.from); }),
       relay.on('roster', (m) => {
@@ -657,7 +694,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
       let dt = (ts - last) / 1000;
       last = ts;
       if (dt <= 0) return;
-      dt = Math.min(0.25, dt);
+      dt = Math.min(0.25, dt) * (window.__zraceTS || 1);
       const g = G.current, T = st.T;
       const B = g.budget;
       B.avg = B.avg * 0.94 + Math.min(80, dt * 1000) * 0.06; B.n += 1;
@@ -765,7 +802,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
               if (!c) continue;
               const sk = g.botMeta[k] ? g.botMeta[k].skill : 0.95;
               const gap = c.s - lead;
-              const band = gap > 70 ? 0.9 : gap > 30 ? 0.96 : gap < -90 ? 1.07 : gap < -40 ? 1.03 : 1;
+              const band = g.botLv === 'hard' ? (gap > 70 ? 0.97 : gap > 30 ? 0.995 : gap < -90 ? 1.09 : gap < -40 ? 1.05 : 1.01) : g.botLv === 'easy' ? (gap > 30 ? 0.88 : gap > 0 ? 0.94 : gap < -90 ? 1.03 : 1) : (gap > 70 ? 0.9 : gap > 30 ? 0.96 : gap < -90 ? 1.07 : gap < -40 ? 1.03 : 1);
               let seek = null;
               if (attack && c.en < 70) { let bd = 1e9; for (const b of g.bottles) { if (b.took[k] > now) continue; const ds = (((b.s - c.s) % total) + total) % total; if (ds > 6 && ds < 45 && ds < bd) { bd = ds; seek = b.x; } } }
               const inp = botInput(c, T, all, raceT, sk, seek);
@@ -773,7 +810,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
               for (const o of all) if (o !== c && g.bots.includes(o.id)) collide(c, o, true);
               if (attack && !c.fin) {
                 takeBottles(c); checkOil(c);
-                if (sub === 0 && ph === 'race' && raceT > 6) { const d0 = botSkill(c, all, g.rockets, Math.random, step); if (d0) castSkill(k, d0.k, d0.tg); }
+                if (sub === 0 && ph === 'race' && raceT > 6) { const d0 = botSkill(c, all, g.rockets, Math.random, step * (g.botLv === 'hard' ? 1.7 : g.botLv === 'easy' ? 0.55 : 1)); if (d0) castSkill(k, d0.k, d0.tg); }
               }
               if (!c.fin && c.s >= total * g.laps) { c.fin = Math.max(0.01, raceT); g.fins[k] = c.fin; }
             }
@@ -787,7 +824,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
                 const mineHit = hitC.id === myK && playing;
                 const botHit = isHost && g.bots.includes(hitC.id);
                 if (mineHit || botHit) applyHit(hitC, 'rocket', r.by, true); else boom(hitC, true);
-              } else if (r.life <= 0) { g.rockets.splice(i, 1); const p = T.at(r.s, r.x); spawnBurst(p.x, p.y + 0.6, p.z, 6, 5, 2, 0.8, 0.9); }
+              } else if (r.life <= 0) { g.rockets.splice(i, 1); const p = T.at(r.s, r.x); blast(p.x, p.y + 0.8, p.z, false, p.y, false); }
             }
           }
         }
@@ -835,10 +872,14 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
         const local = f.id === myK;
         if (f.k === 'boost') { if (local) { Sfx.play('dash', { vol: 0.75 }); try { navigator.vibrate && navigator.vibrate(18); } catch {} } }
         else if (f.k === 'ready') { if (local) Sfx.play('pick', { vol: 0.5 }); }
-        else if (f.k === 'wall' || f.k === 'bump') { if (local) { Sfx.play('bump', { vol: 0.35 + f.f * 0.5, gap: 0.2 }); g.shake = Math.max(g.shake || 0, 0.18 + f.f * 0.25); } }
+        else if (f.k === 'wall' || f.k === 'bump') {
+          const bc = g.cars[f.id];
+          if (bc && f.f > 0.15) { const bp = T.at(bc.s, bc.x); for (let i = 0; i < Math.round(4 + f.f * 10); i++) { const a = Math.random() * 6.283; P3({ x: bp.x, y: bp.y + 0.6, z: bp.z, vx: Math.cos(a) * 7, vy: 2 + Math.random() * 5, vz: Math.sin(a) * 7, g: 16, max: 0.3 + Math.random() * 0.3, s0: 0.08, s1: 0.04, a0: 1, type: 4, st: 0.03 }); } P3({ x: bp.x, y: bp.y + 0.6, z: bp.z, max: 0.1, s0: 0.6, s1: 1.4, a0: 0.7, type: 16 }); }
+          if (local) { Sfx.play('bump', { vol: 0.35 + f.f * 0.5, gap: 0.2 }); g.shake = Math.max(g.shake || 0, 0.18 + f.f * 0.25); }
+        }
         else if (f.k === 'land') {
           const lc = g.cars[f.id];
-          if (lc) { const lp = T.at(lc.s, lc.x); spawnBurst(lp.x, lp.y + (lc.air || 0) + 0.2, lp.z, 5 + Math.round(f.f * 10), 2, 3 + f.f * 5, 1.2, 0.9); }
+          if (lc) { const lp = T.at(lc.s, lc.x); spawnBurst(lp.x, lp.y + (lc.air || 0) + 0.2, lp.z, 5 + Math.round(f.f * 10), 2, 3 + f.f * 5, 1.2, 0.9); if (f.f > 0.3) { P3({ x: lp.x, y: lp.y + 0.3, z: lp.z, max: 0.45, s0: 1.2, s1: 5 + f.f * 4, a0: 0.5, type: 13, flat: 1 }); for (let i = 0; i < 6; i++) P3({ x: lp.x + (Math.random() - 0.5) * 2.4, y: lp.y + 0.3, z: lp.z + (Math.random() - 0.5) * 3, vy: 0.7, max: 1.3, s0: 0.9, s1: 3.2, a0: 0.45, type: 18, fin: 1 }); } }
           if (local) { Sfx.play('bump', { vol: 0.35 + f.f * 0.55, gap: 0.12 }); g.shake = Math.max(g.shake || 0, 0.16 + f.f * 0.45); try { if (navigator.vibrate) navigator.vibrate(Math.round(10 + f.f * 30)); } catch {} }
         } else if (f.k === 'jump') { if (local) Sfx.play('dash', { vol: 0.4 }); }
         else if (f.k === 'pad') { if (local) { Sfx.play('dash', { vol: 0.85 }); try { if (navigator.vibrate) navigator.vibrate(16); } catch {} } }
@@ -846,7 +887,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
       const mineC = g.cars[myK];
       if (g.eng) g.eng.set(mineC ? mineC.v : 0, mineC && mineC.boostT > 0, mineC ? mineC.drift : 0, racing && !!mineC && !pausedRef.current);
       const P = g.parts;
-      const cap = [340, 240, 140][B.tier] || 200;
+      const cap = [420, 300, 170][B.tier] || 260;
       const items = st.world.slice();
       const pool = g.pool || (g.pool = []);
       let pi = 0;
@@ -882,14 +923,18 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
         const back = (CARS[c.type] || CARS.sport).len;
         if (step > 0 && (c.drift > 0.45 || c.spin > 0) && c.v > 8 && P.length < cap) {
           const dust = st.key === 'rock';
-          for (const sg of [-1, 1]) P.push({ x: p.x - fxv * (back - 0.5) + rxv * sg * 0.85, y: p.y + 0.25, z: p.z - fzv * (back - 0.5) + rzv * sg * 0.85, vx: -fxv * 2 + (Math.random() - 0.5), vy: 0.6 + Math.random() * 0.5, vz: -fzv * 2 + (Math.random() - 0.5), life: 0, max: 0.9 + Math.random() * 0.4, s0: 0.35, s1: 1.6, a0: dust ? 0.4 : 0.3, type: dust ? 2 : 0 });
+          for (const sg of [-1, 1]) P.push({ x: p.x - fxv * (back - 0.5) + rxv * sg * 0.85, y: p.y + 0.25, z: p.z - fzv * (back - 0.5) + rzv * sg * 0.85, vx: -fxv * 2 + (Math.random() - 0.5), vy: 0.6 + Math.random() * 0.5, vz: -fzv * 2 + (Math.random() - 0.5), life: 0, max: 0.9 + Math.random() * 0.5, s0: 0.4, s1: dust ? 1.7 : 2.3, a0: dust ? 0.42 : 0.4, type: dust ? 2 : 18, fin: dust ? 0 : 1, seed: Math.random() });
         }
         if (step > 0 && st.key === 'rock' && c.v > 20 && P.length < cap * 0.7 && Math.random() < 0.45) P.push({ x: p.x - fxv * back, y: p.y + 0.3, z: p.z - fzv * back, vx: -fxv * 3, vy: 0.8, vz: -fzv * 3, life: 0, max: 1.1, s0: 0.5, s1: 2.2, a0: 0.22, type: 2 });
         if (step > 0 && c.inAir && c.flipV && P.length < cap) P.push({ x: p.x, y: p.y + air + 0.7, z: p.z, vx: (Math.random() - 0.5) * 1.6, vy: 0.5 + Math.random() * 0.6, vz: (Math.random() - 0.5) * 1.6, life: 0, max: 0.9, s0: 0.6, s1: 2.2, a0: 0.55, type: 5 });
-        if (step > 0 && c.smokeT > 0) { c.smokeT = Math.max(0, c.smokeT - step); if (P.length < cap && Math.random() < 0.55) P.push({ x: p.x + fxv * 0.9, y: p.y + air + 0.9, z: p.z + fzv * 0.9, vx: -fxv * 1.5 + (Math.random() - 0.5), vy: 1.1 + Math.random() * 0.6, vz: -fzv * 1.5 + (Math.random() - 0.5), life: 0, max: 1.2, s0: 0.5, s1: 2, a0: 0.5 * Math.min(1, c.smokeT), type: 5 }); }
+        if (step > 0 && c.smokeT > 0) { c.smokeT = Math.max(0, c.smokeT - step); if (P.length < cap && Math.random() < 0.55) P.push({ x: p.x + fxv * 0.9, y: p.y + air + 0.9, z: p.z + fzv * 0.9, vx: -fxv * 1.5 + (Math.random() - 0.5), vy: 1.1 + Math.random() * 0.6, vz: -fzv * 1.5 + (Math.random() - 0.5), life: 0, max: 1.3, s0: 0.45, s1: 1.8, a0: 0.5 * Math.min(1, c.smokeT), type: 11, fin: 1, seed: Math.random() }); }
+        if (step > 0 && c.zapT > 0 && Math.random() < 0.3) bolts(p.x, p.y + air + 0.9, p.z, 1.5, 1, 0.8);
         if (step > 0 && c.zapT > 0) { c.zapT = Math.max(0, c.zapT - step); if (P.length < cap && Math.random() < 0.7) { const a = Math.random() * Math.PI * 2; P.push({ x: p.x + Math.cos(a) * 1.1, y: p.y + air + 0.4 + Math.random() * 0.9, z: p.z + Math.sin(a) * 1.1, vx: Math.cos(a) * 3, vy: 1 + Math.random() * 2, vz: Math.sin(a) * 3, life: 0, max: 0.28, s0: 0.35, s1: 0.1, a0: 1, type: 4 }); } }
         if (step > 0 && c.boostT > 0 && P.length < cap) {
-          for (const sg of [-1, 1]) P.push({ x: p.x - fxv * (back + 0.1) + rxv * sg * 0.38, y: p.y + 0.4, z: p.z - fzv * (back + 0.1) + rzv * sg * 0.38, vx: -fxv * 9, vy: 0, vz: -fzv * 9, life: 0, max: 0.16, s0: 0.3, s1: 0.08, a0: 0.95, type: 1 });
+          for (const sg of [-1, 1]) {
+            P.push({ x: p.x - fxv * (back + 0.1) + rxv * sg * 0.38, y: p.y + air + 0.4, z: p.z - fzv * (back + 0.1) + rzv * sg * 0.38, vx: -fxv * 11, vy: 0, vz: -fzv * 11, life: 0, max: 0.15, s0: 0.36, s1: 0.1, a0: 1, type: 19, seed: Math.random(), st: 0.06 });
+            if (Math.random() < 0.5) P.push({ x: p.x - fxv * (back + 0.5) + rxv * sg * 0.38, y: p.y + air + 0.42, z: p.z - fzv * (back + 0.5) + rzv * sg * 0.38, vx: -fxv * 7, vy: 0.2, vz: -fzv * 7, life: 0, max: 0.2, s0: 0.42, s1: 0.1, a0: 0.9, type: 12, seed: Math.random() });
+          }
         }
         if (c.shield > 0 && step > 0 && Math.random() < 0.3 && P.length < cap) { const a = Math.random() * Math.PI * 2; P.push({ x: p.x + Math.cos(a) * 1.6, y: p.y + 0.4 + Math.random() * 1.4, z: p.z + Math.sin(a) * 2.2, vx: 0, vy: 1.2, vz: 0, life: 0, max: 0.5, s0: 0.25, s1: 0.05, a0: 0.9, type: 3 }); }
         if (c.slow > 0 && step > 0 && Math.random() < 0.4 && P.length < cap) P.push({ x: p.x + (Math.random() - 0.5) * 2, y: p.y + 0.6 + Math.random(), z: p.z + (Math.random() - 0.5) * 3, vx: 0, vy: 0.5, vz: 0, life: 0, max: 0.3, s0: 0.35, s1: 0.1, a0: 1, type: 6 });
@@ -903,8 +948,9 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
           items.push({ mesh: st.fx.rocket, model: m4.pose(p.x, p.y + 0.85, p.z, yaw) });
           if (step > 0 && P.length < cap) {
             const fxv = Math.sin(yaw), fzv = Math.cos(yaw);
-            P.push({ x: p.x - fxv * 0.7, y: p.y + 0.85, z: p.z - fzv * 0.7, vx: -fxv * 6, vy: 0, vz: -fzv * 6, life: 0, max: 0.14, s0: 0.42, s1: 0.1, a0: 1, type: 1 });
-            P.push({ x: p.x - fxv * 1.0, y: p.y + 0.85, z: p.z - fzv * 1.0, vx: (Math.random() - 0.5), vy: 0.5, vz: (Math.random() - 0.5), life: 0, max: 0.8, s0: 0.3, s1: 1.1, a0: 0.35, type: 0 });
+            P.push({ x: p.x - fxv * 0.7, y: p.y + 0.85, z: p.z - fzv * 0.7, vx: -fxv * 6, vy: 0, vz: -fzv * 6, life: 0, max: 0.13, s0: 0.42, s1: 0.14, a0: 1, type: 12, seed: Math.random(), st: 0.09 });
+            P.push({ x: p.x - fxv * 0.6, y: p.y + 0.85, z: p.z - fzv * 0.6, vx: 0, vy: 0, vz: 0, life: 0, max: 0.06, s0: 0.9, s1: 0.5, a0: 0.8, type: 16, seed: 0 });
+            P.push({ x: p.x - fxv * 1.1, y: p.y + 0.85, z: p.z - fzv * 1.1, vx: (Math.random() - 0.5) * 0.8, vy: 0.45, vz: (Math.random() - 0.5) * 0.8, life: 0, max: 1.15, s0: 0.38, s1: 1.7, a0: 0.55, type: 11, fin: 1, seed: Math.random() });
           }
         }
         for (const o of g.oils) {
@@ -931,7 +977,12 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
         if (q.g) q.vy -= q.g * step;
         q.x += q.vx * step; q.y += q.vy * step; q.z += q.vz * step;
         const u = q.life / q.max;
-        parts.push({ x: q.x, y: q.y, z: q.z, size: q.s0 + (q.s1 - q.s0) * u, alpha: q.a0 * (1 - u), type: q.type || 0 });
+        const sz = q.s0 + (q.s1 - q.s0) * (q.fin ? 1 - (1 - u) * (1 - u) : u);
+        const pt = { x: q.x, y: q.y, z: q.z, size: sz, alpha: q.a0 * (q.fin ? Math.min(1, u / 0.1) * (1 - u) * (1 - u * 0.3) : 1 - u), type: q.type || 0, seed: q.seed || 0 };
+        if (q.st) { const sp = Math.hypot(q.vx, q.vy, q.vz); if (sp > 0.5) { pt.dx = q.vx; pt.dy = q.vy; pt.dz = q.vz; pt.dw = sz + sp * q.st; } }
+        else if (q.d) { pt.dx = q.d[0]; pt.dy = q.d[1]; pt.dz = q.d[2]; pt.dw = q.L; }
+        else if (q.flat) pt.dw = -1;
+        parts.push(pt);
       }
       let camPos, camAt, fov = 1.0;
       const tvCars = ph === 'menu' && (g.menuT || 0) > 1.6 ? all.filter((c) => c.wx != null) : [];
@@ -998,6 +1049,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
         }
       }
       st.env.time = now / 1000;
+      g.camPos = camPos;
       const VP = st.R.render({ env: st.env, cam: { pos: camPos, at: camAt, fov, shadowAt: [camAt[0], camAt[1] - 1, camAt[2]], far: B.tier >= 2 ? 900 : 1600 }, items, parts });
       const W2 = cv.width / dpr, H2 = cv.height / dpr;
       for (const k of Object.keys(tagRefs.current)) {
@@ -1103,6 +1155,8 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
   const bestLap = Number(readPref(BEST_KEY(uid, mapKey), '0'));
   const hostName = names[room && room.host] || 'The host';
 
+  useEffect(() => { if (phase === 'menu') { Sfx.init(); Sfx.music('lobbyRace', true); } else Sfx.music(null, false); }, [phase]);
+  useEffect(() => () => Sfx.music(null, false), []);
   const toggleWatchR = () => { const v = !allowWatch; setAllowWatch(v); setWatchAllowed(v); kitTap(); };
   const lobbyUi = phase !== 'menu' ? null : (
     <GLobby GS={GS} title="Island Rally" onClose={finish} closeLabel={solo ? 'Leave' : 'Back to chat'} tint="rgba(8,12,24,0.6)"
@@ -1173,7 +1227,13 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
             {isHost && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ fontSize: 14.5, fontWeight: 900, flex: 1 }}>Laps</span>
-                {[2, 3, 5].map((n) => <GPill key={n} small text={String(n)} color={laps === n ? 'gold' : 'white'} height={36} onPress={() => setLaps(n)} style={{ minWidth: 52 }} />)}
+                {[2, 3, 5, 8].map((n) => <GPill key={n} small text={String(n)} color={laps === n ? 'gold' : 'white'} height={36} onPress={() => setLaps(n)} style={{ minWidth: 48 }} />)}
+              </div>
+            )}
+            {isHost && (solo || fill) && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 14.5, fontWeight: 900, flex: 1 }}>Bots</span>
+                <div style={{ width: 230 }}><Seg value={botLv} items={BOTLV} onPick={(k) => { kitTap(); setBotLv(k); savePref(BOTS_PREF, k); }} /></div>
               </div>
             )}
             {isHost && !solo && <GSwitchRow label="Fill empty spots with bots" on={fill} onToggle={() => setFill((v) => !v)} />}

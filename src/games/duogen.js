@@ -446,8 +446,8 @@ function bFoes(ctx) {
     gems.push([px + T.ri(0, 1), py, ch === 'L' ? 'sun' : 'moon']);
   }
   pillars(g, T, T.ri(1, 3));
-  const n = Math.min(5, 2 + Math.floor(depth / 2) + (T.chance(0.3) ? 1 : 0));
-  const kinds = depth >= 4 ? ['v', 'g', 'x', 'y', 'u', 'u'] : depth >= 3 ? ['v', 'g', 'x', 'x', 'y'] : depth >= 2 ? ['v', 'g', 'g', 'y'] : ['v', 'g', 'g'];
+  const n = Math.min(depth >= 7 ? 7 : 5, 2 + Math.floor(depth / 2) + (T.chance(0.3) ? 1 : 0));
+  const kinds = depth >= 7 ? ['v', 'g', 'x', 'y', 'y', 'u', 'u'] : depth >= 4 ? ['v', 'g', 'x', 'y', 'u', 'u'] : depth >= 3 ? ['v', 'g', 'x', 'x', 'y'] : depth >= 2 ? ['v', 'g', 'g', 'y'] : ['v', 'g', 'g'];
   const placed = [];
   for (let i = 0; i < n * 10 && placed.length < n; i++) {
     const x = T.ri(2, w - 3), y = T.ri(1, h - 3);

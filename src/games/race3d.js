@@ -358,10 +358,21 @@ const PVS = `#version 300 es
 layout(location=0) in vec2 aCorner;
 layout(location=1) in vec4 aCenter;
 layout(location=2) in vec3 aInfo;
-uniform mat4 uVP; uniform vec3 uRight, uUp;
+layout(location=3) in vec4 aDir;
+uniform mat4 uVP; uniform vec3 uRight, uUp, uCam;
 out vec2 vUv; out vec3 vInfo; out vec3 vPos;
 void main() {
-  vec3 p = aCenter.xyz + (uRight * aCorner.x + uUp * aCorner.y) * aCenter.w;
+  vec3 p;
+  if (aDir.w > 0.0) {
+    vec3 ax = aDir.xyz;
+    float al = length(ax);
+    ax = al > 1e-5 ? ax / al : uUp;
+    vec3 sd = cross(ax, normalize(uCam - aCenter.xyz));
+    float sl = length(sd);
+    sd = sl > 1e-4 ? sd / sl : uRight;
+    p = aCenter.xyz + ax * (aCorner.y * aDir.w) + sd * (aCorner.x * aCenter.w);
+  } else if (aDir.w < 0.0) p = aCenter.xyz + vec3(aCorner.x, 0.0, aCorner.y) * aCenter.w;
+  else p = aCenter.xyz + (uRight * aCorner.x + uUp * aCorner.y) * aCenter.w;
   vUv = aCorner; vInfo = aInfo; vPos = p;
   gl_Position = uVP * vec4(p, 1.0);
 }`;
@@ -370,12 +381,33 @@ precision highp float;
 in vec2 vUv; in vec3 vInfo; in vec3 vPos;
 uniform vec3 uCam, uFogCol; uniform float uFogDen;
 out vec4 o;
+float hh(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float vn(vec2 p) { vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f); return mix(mix(hh(i), hh(i + vec2(1.0, 0.0)), u.x), mix(hh(i + vec2(0.0, 1.0)), hh(i + vec2(1.0, 1.0)), u.x), u.y); }
 void main() {
   float r = length(vUv);
   if (r > 1.0) discard;
   float t = vInfo.y;
   float a = (1.0 - smoothstep(0.15, 1.0, r)) * vInfo.x;
   vec3 c; float add = 0.0;
+  if (t > 10.5) {
+    float sd = vInfo.z * 17.0;
+    float n = vn(vUv * 2.6 + sd) * 0.62 + vn(vUv * 5.3 - sd * 1.7) * 0.38;
+    if (t < 11.5) { float e = 1.0 - smoothstep(0.38 + n * 0.32, 0.98, r); a = e * vInfo.x * 0.92; c = mix(vec3(0.34, 0.33, 0.33), vec3(0.62, 0.6, 0.58), clamp(0.5 - vUv.y * 0.5 + n * 0.3, 0.0, 1.0)); }
+    else if (t < 12.5) { float e = 1.0 - smoothstep(0.3 + n * 0.4, 1.0, r); float core = 1.0 - smoothstep(0.0, 0.55 + n * 0.2, r); c = mix(vec3(0.95, 0.22, 0.04), mix(vec3(1.0, 0.62, 0.12), vec3(1.0, 0.96, 0.7), core), clamp(core * 1.4 + n * 0.3, 0.0, 1.0)) * 1.7; a = e * vInfo.x; add = 1.0; }
+    else if (t < 13.5) { float ring = smoothstep(0.5, 0.86, r) * (1.0 - smoothstep(0.86, 1.0, r)); float br = 0.6 + 0.4 * vn(vec2(atan(vUv.y, vUv.x) * 5.0, sd)); a = (ring * br + (1.0 - smoothstep(0.0, 0.86, r)) * 0.12) * vInfo.x * 1.2; c = mix(vec3(0.85, 0.62, 0.38), vec3(1.0, 0.9, 0.7), ring) * 1.25; add = 0.6; }
+    else if (t < 14.5) { float ring = smoothstep(0.58, 0.88, r) * (1.0 - smoothstep(0.88, 1.0, r)); float br = 0.55 + 0.45 * vn(vec2(atan(vUv.y, vUv.x) * 7.0, sd)); a = (ring * br + (1.0 - smoothstep(0.0, 0.88, r)) * 0.16) * vInfo.x * 1.3; c = mix(vec3(0.16, 0.55, 1.0), vec3(0.62, 0.94, 1.0), ring) * 1.45; add = 1.0; }
+    else if (t < 15.5) { float core = 1.0 - smoothstep(0.0, 0.42, r); a = (core * 1.25 + (1.0 - smoothstep(0.2, 1.0, r)) * 0.45) * vInfo.x; c = mix(vec3(0.25, 0.62, 1.0), vec3(0.94, 0.98, 1.0), core) * 1.7; add = 1.0; }
+    else if (t < 16.5) { a = (1.0 - smoothstep(0.0, 1.0, r)) * vInfo.x; c = vec3(1.0, 0.94, 0.8) * 2.4; add = 1.0; }
+    else if (t < 17.5) { float e = 1.0 - smoothstep(0.55, 0.95, r); float hi = 1.0 - smoothstep(0.0, 0.3, length(vUv - vec2(-0.3, 0.35))); a = e * vInfo.x; c = vec3(0.04, 0.04, 0.06) + hi * 0.55; }
+    else if (t < 18.5) { float e = 1.0 - smoothstep(0.35 + n * 0.35, 1.0, r); a = e * vInfo.x * 0.7; c = mix(vec3(0.72, 0.72, 0.74), vec3(0.92, 0.92, 0.94), n); }
+    else { float core = 1.0 - smoothstep(0.0, 0.5, r); c = mix(vec3(0.22, 0.32, 1.0), vec3(0.72, 0.9, 1.0), core) * 1.5; a = (1.0 - smoothstep(0.1 + n * 0.3, 1.0, r)) * vInfo.x; add = 1.0; }
+    float d0 = length(uCam - vPos);
+    a *= smoothstep(1.2, 5.5, d0);
+    float f0 = 1.0 - exp(-pow(d0 * uFogDen, 1.35));
+    c = mix(c, pow(uFogCol, vec3(1.0 / 2.2)), f0 * (1.0 - add * 0.6));
+    o = vec4(c * a, a * (1.0 - add));
+    return;
+  }
   if (t < 0.5) c = vec3(0.88, 0.88, 0.9);
   else if (t < 1.5) { c = mix(vec3(1.0, 0.95, 0.62), vec3(1.0, 0.42, 0.08), r) * 1.5; add = 0.6; }
   else if (t < 2.5) c = vec3(0.74, 0.6, 0.44);
@@ -388,6 +420,7 @@ void main() {
   else if (t < 9.5) { c = vec3(0.9, 0.95, 1.0) * 1.5; add = 1.0; a *= 1.0 - smoothstep(0.0, 1.0, r); }
   else { c = mix(vec3(1.0, 0.7, 1.0), vec3(0.7, 0.3, 1.0), r) * 1.6; add = 1.0; }
   float d = length(uCam - vPos);
+  a *= smoothstep(1.2, 5.5, d);
   float f = 1.0 - exp(-pow(d * uFogDen, 1.35));
   c = mix(c, pow(uFogCol, vec3(1.0 / 2.2)), f * (1.0 - add * 0.6));
   o = vec4(c * a, a * (1.0 - add));
@@ -443,10 +476,11 @@ export function createRenderer(canvas, opts = {}) {
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, 1, 1, -1, -1, 1, 1, -1, 1]), gl.STATIC_DRAW);
   gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
   gl.bindBuffer(gl.ARRAY_BUFFER, partBuf);
-  gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 4, gl.FLOAT, false, 28, 0); gl.vertexAttribDivisor(1, 1);
-  gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 3, gl.FLOAT, false, 28, 16); gl.vertexAttribDivisor(2, 1);
+  gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 4, gl.FLOAT, false, 44, 0); gl.vertexAttribDivisor(1, 1);
+  gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 3, gl.FLOAT, false, 44, 16); gl.vertexAttribDivisor(2, 1);
+  gl.enableVertexAttribArray(3); gl.vertexAttribPointer(3, 4, gl.FLOAT, false, 44, 28); gl.vertexAttribDivisor(3, 1);
   gl.bindVertexArray(null);
-  let partData = new Float32Array(7 * 256);
+  let partData = new Float32Array(11 * 256);
 
   const owned = [];
   function mesh(data) {
@@ -589,9 +623,9 @@ export function createRenderer(canvas, opts = {}) {
     }
     if (parts && parts.length) {
       const n = parts.length;
-      if (partData.length < n * 7) partData = new Float32Array(Math.max(n, partData.length / 7 * 2) * 7);
+      if (partData.length < n * 11) partData = new Float32Array(Math.max(n, partData.length / 11 * 2) * 11);
       let k = 0;
-      for (const p of parts) { partData[k++] = p.x; partData[k++] = p.y; partData[k++] = p.z; partData[k++] = p.size; partData[k++] = p.alpha; partData[k++] = p.type || 0; partData[k++] = 0; }
+      for (const p of parts) { partData[k++] = p.x; partData[k++] = p.y; partData[k++] = p.z; partData[k++] = p.size; partData[k++] = p.alpha; partData[k++] = p.type || 0; partData[k++] = p.seed || 0; partData[k++] = p.dx || 0; partData[k++] = p.dy || 0; partData[k++] = p.dz || 0; partData[k++] = p.dw || 0; }
       gl.useProgram(Q.p);
       gl.uniformMatrix4fv(Q.u.uVP, false, VP);
       gl.uniform3f(Q.u.uRight, view[0], view[4], view[8]);
@@ -601,7 +635,7 @@ export function createRenderer(canvas, opts = {}) {
       gl.uniform1f(Q.u.uFogDen, env.fogDen);
       gl.bindVertexArray(partVao);
       gl.bindBuffer(gl.ARRAY_BUFFER, partBuf);
-      gl.bufferData(gl.ARRAY_BUFFER, partData.subarray(0, n * 7), gl.DYNAMIC_DRAW);
+      gl.bufferData(gl.ARRAY_BUFFER, partData.subarray(0, n * 11), gl.DYNAMIC_DRAW);
       gl.enable(gl.BLEND);
       gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
       gl.depthMask(false);

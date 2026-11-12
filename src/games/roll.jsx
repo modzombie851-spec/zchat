@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Avatar, Portal, useBackClose, hapticTap, FONT, Spinner } from '../App.jsx';
 import { useRoomLink } from './relay.jsx';
 import { EMOTES, Sheet, injectCss, useGameChat, ChatSheet } from './livekit.jsx';
-import { GBtn, GHold, GPill, GPanel, GChip, GTitle, GIcon, GHudBtn, GHudPanel, GHint, GStat, GNotices, useNotices, useWatchNotices, stagePoint, injectKitCss, kitTap, pressProps, maxDpr, INK, useCtlLook, useGameStage, GControlsPanel, GVolBars, GLobby, GSlot, GLobbySheet } from './gamekit.jsx';
+import { GBtn, GHold, GPill, GPanel, GChip, GTitle, GIcon, GHudBtn, GHudPanel, GHint, GStat, GNotices, useNotices, useWatchNotices, stagePoint, injectKitCss, kitTap, pressProps, maxDpr, newBudget, budgetTick, INK, useCtlLook, useGameStage, GControlsPanel, GVolBars, GLobby, GSlot, GLobbySheet } from './gamekit.jsx';
 import { Sfx } from './sfx.js';
 import { setWatchAllowed, useLiveBeacon, useGamePrivacy } from './live.js';
 import { WORLDS, LEVEL_N, BALLS, R, levelOf, levelName, makeWorld, mkBall, stepBall, interact, applyEvent, pressedButtons, gatesToOpen, stepPlates, foePos, clamp, demoSetup, demoStep, demoStarts, clipStart, clipRun, DEMO_DT } from './rollengine.js';
@@ -20,10 +20,11 @@ function saveBest(uid, i, r) {
   } catch {}
 }
 const fmtT = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
-const WORLD_BTN = ['green', 'orange', 'teal', 'blue', 'purple', 'pink', 'red', 'teal', 'purple'];
-const WORLD_TINT = ['#7BD25A', '#FF9E6B', '#BFE6FF', '#9AA3AD', '#8A7AD0', '#FF9FD0', '#FF8A3D', '#5FD0C9', '#C7B8FF'];
+const WORLD_BTN = ['green', 'orange', 'teal', 'blue', 'purple', 'pink', 'red', 'teal', 'purple', 'blue', 'purple'];
+const WORLD_TINT = ['#7BD25A', '#FF9E6B', '#BFE6FF', '#9AA3AD', '#8A7AD0', '#FF9FD0', '#FF8A3D', '#5FD0C9', '#C7B8FF', '#9FB4D8', '#B9A6F0'];
 const DEMO_N = 3;
 const clipCache = new Map();
+const rbud = newBudget();
 function planClips(li, ms) {
   let c = clipCache.get(li);
   if (!c) { c = { lens: [], si: 0, P: null, total: 0, done: false }; clipCache.set(li, c); }
@@ -223,7 +224,7 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
       relay.on('*', (m) => { if (m.m) { metaRef.current[m.from] = m.m; setNames((prev) => (prev[m.from] === m.m.n ? prev : { ...prev, [m.from]: m.m.n })); } if (!joinOrder.current.includes(m.from)) joinOrder.current.push(m.from); }),
       relay.on('roster', (m) => { if (isHost) return; if (Array.isArray(m.ids)) { setRoster(m.ids.slice(0, 4)); if (m.nm) setNames((prev) => ({ ...prev, ...m.nm })); if (m.cur != null && !WR.current) startLevel(m.cur, m.ids.slice(0, 4), true); } if (typeof m.sl === 'number' && m.sl >= 0 && m.sl < LEVEL_N) setSel(m.sl); if (m.nw && watchRef.current) { say('The players turned off watching.', 3); setTimeout(() => onClose(), 1500); } }),
       relay.on('lv', (m) => { if (isHost) return; if (Array.isArray(m.ids)) setRoster(m.ids); startLevel(m.i, m.ids, true); }),
-      relay.on('menu', () => { if (!isHost) { setPhase('menu'); Sfx.music(null, false); } }),
+      relay.on('menu', () => { if (!isHost) { setPhase('menu'); Sfx.music('lobbyRoll', true); } }),
       relay.on('sel', (m) => { if (isHost) return; const i = Number(m.i); if (i >= 0 && i < LEVEL_N) setSel(i); }),
       relay.on('pl', (m) => {
         const W = WR.current;
@@ -284,7 +285,7 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
   const leave = () => { if (phase === 'play' && !solo && !watch) { setLeaveAsk(true); return; } finish(); };
   const finish = () => { Sfx.stopAll(); onClose(); };
   useBackClose(true, () => { if (chatOpen) setChatOpen(false); else if (lvSheet) setLvSheet(false); else if (ctl) setCtl(false); else if (people) setPeople(false); else if (quick) setQuick(false); else if (leaveAsk) setLeaveAsk(false); else if (paused) setPaused(false); else if (phase === 'play' && solo) setPaused(true); else if (phase !== 'menu') { if (solo || isHost) toMenu(); else leave(); } else leave(); });
-  const toMenu = () => { setPhase('menu'); Sfx.music(null, false); WR.current = null; if (!solo && isHost) relay.send('menu', {}); };
+  const toMenu = () => { setPhase('menu'); Sfx.music('lobbyRoll', true); WR.current = null; if (!solo && isHost) relay.send('menu', {}); };
 
   useEffect(() => {
     const kd = (e) => {
@@ -332,7 +333,7 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
     if (D.fin && D.fade >= 1) { const [si, len] = nextClip(li, D.si); fresh(si, len); D.fin = false; }
     const wrap = wrapRef.current;
     const cw = wrap ? wrap.clientWidth : window.innerWidth, ch = wrap ? wrap.clientHeight : window.innerHeight;
-    const dpr = maxDpr(false);
+    const dpr = budgetTick(rbud, raw);
     if (cv.width !== Math.round(cw * dpr) || cv.height !== Math.round(ch * dpr)) { cv.width = Math.round(cw * dpr); cv.height = Math.round(ch * dpr); clearChunks(); }
     const s = Math.round(clamp((cw > ch ? ch / 10 : cw / 10.5), 30, 58));
     const live = D.S.balls.filter((b) => !(b.dead > 0) && !b.home);
@@ -369,7 +370,7 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
       if (!W || !cv || (phaseRef.current !== 'play' && phaseRef.current !== 'done')) return;
       const wrap = wrapRef.current;
       const cw = wrap ? wrap.clientWidth : window.innerWidth, ch = wrap ? wrap.clientHeight : window.innerHeight;
-      const dpr = maxDpr(false);
+      const dpr = budgetTick(rbud, dt);
       if (cv.width !== Math.round(cw * dpr) || cv.height !== Math.round(ch * dpr)) { cv.width = Math.round(cw * dpr); cv.height = Math.round(ch * dpr); clearChunks(); }
       const step = pausedRef.current ? 0 : dt;
       const myK = kindOf();
@@ -523,6 +524,7 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
     </GHudPanel>
   );
 
+  useEffect(() => { if (phase === 'menu') { Sfx.init(); Sfx.music('lobbyRoll', true); } }, [phase]);
   const pickSel = (i) => { if (!isHost || watch) return; const v = clamp(i, 0, LEVEL_N - 1); setSel(v); if (!solo) relay.send('sel', { i: v }); };
   const openLevels = () => { setSheetW(levelOf(sel).w); setLvSheet(true); };
   const toggleWatch = () => { setWatchAllowed(!allowWatch); kitTap(); };

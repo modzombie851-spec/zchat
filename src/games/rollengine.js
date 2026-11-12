@@ -12,6 +12,8 @@ export const WORLDS = [
   { id: 'lava', name: 'Lava caves', n: 6 },
   { id: 'beach', name: 'Coral beach', n: 6 },
   { id: 'cloud', name: 'Cloud kingdom', n: 6 },
+  { id: 'storm', name: 'Thunder ruins', n: 6 },
+  { id: 'shadow', name: 'Shadow keep', n: 6 },
 ];
 export const LEVEL_N = WORLDS.reduce((a, w) => a + w.n, 0);
 export const BALLS = [
@@ -39,7 +41,7 @@ export function buildLevel(index, nPlayers) {
   const ri = (a, b) => a + Math.floor(rnd() * (b - a + 1));
   const pick = (arr) => arr[Math.floor(rnd() * arr.length)];
   const diff = w * 0.55 + l * 0.18;
-  const segs = 10 + Math.min(10, Math.floor(w * 1.3 + l * 0.7));
+  const segs = w >= 9 ? 20 + Math.min(10, (w - 9) * 4 + l) : 10 + Math.min(10, Math.floor(w * 1.3 + l * 0.7));
   const cols = [];
   const ents = [];
   const coins = [];
@@ -271,6 +273,41 @@ export function buildLevel(index, nPlayers) {
       coins.push({ x: s + 9, y: base - 7.6 }, { x: s + 5.5, y: base - 4.4 });
       flat(2);
     },
+    pillars() {
+      flat(2);
+      const n = 3 + (diff > 5.5 ? 1 : 0) + ri(0, 1);
+      let top = base;
+      for (let k = 0; k < n; k++) {
+        const g = ri(2, 3);
+        for (let i = 0; i < g; i++) col(null);
+        top = clamp(top + ri(-2, 1), 6, 13);
+        const s = x0();
+        col(top); col(top);
+        coins.push({ x: s + 1, y: top - 1.6 });
+        if (k === n - 2 && stars.length < 3 && rnd() < 0.5) stars.push({ x: s + 1, y: top - 4.2 });
+      }
+      for (let i = 0; i < 2; i++) col(null);
+      base = clamp(top + ri(-1, 1), 8, 13);
+      flat(3);
+    },
+    spikefloor() {
+      flat(2);
+      const n = 9 + (diff > 5.5 ? 4 : 0);
+      const s = x0();
+      for (let i = 0; i < n; i++) { const c = cols[col(base)]; c[base - 1] = '^'; }
+      for (let k = 1; k < n - 2; k += 4) { cols[s + k][base - 3] = '='; cols[s + k + 1][base - 3] = '='; coins.push({ x: s + k + 1, y: base - 4.4 }); }
+      ents.push({ k: 'buzz', x: s + n / 2, y: base - 5.6, rx: Math.max(1.2, n / 2 - 2), ry: 0.5, ph: rnd() * TAU, sp: 0.7 + diff * 0.06 });
+      flat(2);
+    },
+    skygap() {
+      flat(2);
+      const g = 4 + (diff > 5.5 ? 1 : 0);
+      const s = x0();
+      for (let i = 0; i < g; i++) col(null);
+      ents.push({ k: 'buzz', x: s + g / 2, y: base - 2.4, rx: 0.6, ry: 1.3, ph: rnd() * TAU, sp: 1.1 });
+      coinArc(s + g / 2 - 0.5, base - 4.2, g - 1, 0.8);
+      flat(2);
+    },
     climb() {
       flat(2);
       const s = x0();
@@ -304,6 +341,8 @@ export function buildLevel(index, nPlayers) {
     lava: ['lava', 'lava', 'hopper', 'mover', 'bridge', 'relay', 'lift', 'spikes', 'flyers', 'team'],
     beach: ['gap', 'walkers', 'spring', 'hill', 'bridge', 'team', 'hopper', 'mover', 'steps', 'climb'],
     cloud: ['flyers', 'mover', 'mover', 'lift', 'climb', 'climb', 'bridge', 'bridge', 'relay', 'team'],
+    storm: ['skygap', 'pillars', 'spikefloor', 'flyers', 'mover', 'lift', 'bridge', 'relay', 'climb', 'gap', 'walkers', 'team'],
+    shadow: ['pillars', 'spikefloor', 'skygap', 'lava', 'mover', 'relay', 'team', 'bridge', 'hopper', 'tower', 'spikes', 'lift'],
   };
   const pool = (SIG[wid] || SIG.meadow).slice();
   if (w === 0 && l < 2) { for (const k of ['bridge', 'team', 'mover']) { const i = pool.indexOf(k); if (i >= 0) pool.splice(i, 1); } }
@@ -460,10 +499,10 @@ export function stepBall(W, b, input, dt, others) {
       if (n.ny < -0.45) b.carry = m.id;
     }
     for (const o of others || []) {
-      if (!o || o.dead > 0 || o.home) continue;
-      const dx = b.x - o.x, dy = b.y - o.y, d = Math.hypot(dx, dy);
-      if (d >= R * 2 || d < 1e-4) continue;
-      pushOut(b, o.x + dx / d * R, o.y + dy / d * R, false, R, R);
+      if (!o || o.dead > 0 || o.home || o.spawn > 0 || b.vy < -0.5) continue;
+      const dx = b.x - o.x, top = o.y - R * 2 + 0.02;
+      if (Math.abs(dx) > R * 1.45 || b.y < top - 0.02 || b.y > o.y - R * 0.9 || prevY > top + 0.3) continue;
+      b.y = top; b.vy = Math.min(b.vy, o.vy || 0, 0); b.ground = true; b.gnx = 0; b.gny = -1;
     }
   }
   if (b.ground) b.air2 = true;

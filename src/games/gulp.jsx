@@ -3,10 +3,10 @@ import { Avatar, Portal, useBackClose, hapticTap, FONT, Spinner } from '../App.j
 import { useGameLink, useRoomRelay, useWatchChannel, useMeshRoom } from './relay.jsx';
 import { setWatchAllowed, useLiveBeacon, useGamePrivacy } from './live.js';
 import { EMOTES, PingChip, Sheet, injectCss, useVoice } from './livekit.jsx';
-import { GC, GBtn, GPill, GPanel, GChip, GTitle, GJoy, GIcon, GControlsPanel, GHudBtn, GHudPanel, GHudSkill, GFeed, GRibbon, GHint, GIconCap, GStat, GNotices, useNotices, useWatchNotices, GSkillArt, useCtlLook, useGameStage, useJoystick, injectKitCss, kitTap, pressProps, maxDpr, INK, GVolBars, GLobby, GSlot } from './gamekit.jsx';
+import { GC, GBtn, GPill, GPanel, GChip, GTitle, GJoy, GIcon, GControlsPanel, GHudBtn, GHudPanel, GHudSkill, GFeed, GRibbon, GHint, GIconCap, GStat, GNotices, useNotices, useWatchNotices, GSkillArt, useCtlLook, useGameStage, useJoystick, injectKitCss, kitTap, pressProps, maxDpr, INK, GVolBars, GLobby, GSlot, GLobbySheet , weakPhone } from './gamekit.jsx';
 import { Sfx } from './sfx.js';
 import { WW, WH, LIVES, MAXN, STAGES, SKILLS, SKILL_KEYS, SPECIES, rOf, viewOf, stageOf, clamp, makeGame, spawnFish, hostStep, applyGuestEvent, snap, applySnap, guestFollow, setNet, followNet, movePlayer, tickPlayer, canEat, canTake, canOpen, chestGain, eatGain, botInput, useSkill, addPlayer, dropPlayer, adoptHost } from './gulpengine.js';
-import { render, makeDeco, updateParts, bubbles, floatText, burst, bits, ring, drawRadar, placeName, drawBadge, fmtN, PLAYER_PAL, SLOT_KEYS, warmSprites } from './gulpdraw.js';
+import { render, makeDeco, updateParts, bubbles, floatText, burst, bits, ring, zap, drawRadar, placeName, drawBadge, drawSpecies, fmtN, PLAYER_PAL, SLOT_KEYS, warmSprites } from './gulpdraw.js';
 import { GULP_LEVELS, goalText, rulesText, goalProgress, starsFor, readLevels, saveLevel, pickMission, missionProgress, missionLabel, missionShort, REWARDS } from './gulplevels.js';
 
 const QUICK = ['Come here', 'Run', 'Big fish', 'Nice one', 'Watch out', 'Good game'];
@@ -15,13 +15,13 @@ const ROOM_MAX = 10;
 const BEST_KEY = (uid) => `zchat-gulp2-best-${uid || 'me'}`;
 const SKILL_COL = { dash: 'blue', suck: 'purple', shield: 'teal', shock: 'gold', frenzy: 'red' };
 const SKILL_ICON = { dash: 'dash', suck: 'suck', shield: 'shield', shock: 'bolt', frenzy: 'flame' };
-const ARC = { suck: 180, shield: 145, shock: 112, frenzy: 82 };
+const ARC = { suck: 186, shield: 151, shock: 118, frenzy: 86 };
 const FX_NAME = { shield: 'shield', double: 'double food', magnet: 'magnet', speed: 'speed boost' };
-const SK_X = 186, SK_Y = 156, SK_R = 94;
+const SK_X = 186, SK_Y = 156, SK_R = 104;
 const skillAt = (k) => {
   if (k === 'dash') return [SK_X - 36, SK_Y - 36];
   const a = (ARC[k] * Math.PI) / 180;
-  return [Math.round(SK_X + Math.cos(a) * SK_R - 26), Math.round(SK_Y - Math.sin(a) * SK_R - 26)];
+  return [Math.round(SK_X + Math.cos(a) * SK_R - 24), Math.round(SK_Y - Math.sin(a) * SK_R - 24)];
 };
 const BOT_NAMES = ['Bubbles', 'Finn'];
 const JOY_COL = { sun: 'orange', moon: 'blue', c0: 'orange', c1: 'blue', c2: 'green', c3: 'pink', c4: 'purple', c5: 'gold', c6: 'teal', c7: 'red', c8: 'white', c9: 'orange' };
@@ -143,7 +143,7 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
   const fxMaxRef = useRef({});
   const bannerTimer = useRef(0);
   const overRef = useRef(false);
-  const budget = useRef({ avg: 16, low: false, n: 0 });
+  const budget = useRef({ avg: 16, low: weakPhone(), n: 0 });
   const sheetOpen = useRef(false);
   const levelRef = useRef(null);
   const hostRef = useRef(null);
@@ -172,6 +172,7 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
     radius: () => Math.round((land ? 46 : 52) * Math.max(0.7, look.size)),
     zone: (x, y, r) => (r.width > r.height ? x < r.width * 0.52 && y > 64 : !(x > r.width * 0.55 && y > r.height - 300) && y > 90),
   });
+  if (typeof window !== 'undefined' && window.__zfake) window.__zgulpSheet = (cv, n, sz) => { const c = cv.getContext('2d'); for (let i = 0; i < n; i++) { c.save(); c.translate((i % 5) * sz, Math.floor(i / 5) * sz); drawSpecies(c, i, 0, sz, false); c.restore(); } for (let k = 0; k < 10; k++) { c.save(); c.translate((k % 5) * sz, (Math.floor(n / 5) + 1 + Math.floor(k / 5)) * sz); drawBadge(c, ['sun', 'moon', 'b1', 'b2', 'b3', 'b4', 'sun', 'moon', 'b1', 'b2'][k], k, sz); c.restore(); } };
   if (typeof window !== 'undefined' && window.__zfake) window.__zgulp = { game: () => GR.current, demo: () => demoRef.current, host: () => hostRef.current, roster: () => rosterRef.current, level: () => levelRef.current, miss: () => missRef.current };
 
   const say = (text, sec) => { const life = sec || 3.2; setHint({ text, at: Date.now(), life }); clearTimeout(toastTimer.current); toastTimer.current = setTimeout(() => setHint(null), life * 1000); };
@@ -811,7 +812,9 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
       if (!wasDash && meP.dashT > 0) { Sfx.play('dash', { vol: 0.7 }); bubbles(partsRef.current, meP.x - Math.cos(meP.a) * rOf(meP.n), meP.y - Math.sin(meP.a) * rOf(meP.n), 7, rOf(meP.n) * 0.25 + 0.06); }
       if (skill === 'suck' && meP.fx.suck > 0.9) { Sfx.play('suck', { vol: 0.7 }); Sfx.play('slurp', { vol: 0.8 }); }
       if (skill === 'shield' && meP.fx.shield > 0) Sfx.play('shield', { vol: 0.7 });
-      if (skill === 'shock' && meP.cd.shock > 0) { Sfx.play('shock', { vol: 0.9 }); ring(partsRef.current, meP.x, meP.y, rOf(meP.n) * 6 + 4, '#FFE15A'); cam.current.shake = 0.35; }
+      if (skill === 'shock' && meP.cd.shock > 0) { Sfx.play('shock', { vol: 0.9 }); ring(partsRef.current, meP.x, meP.y, rOf(meP.n) * 6 + 4, '#FFE15A'); zap(partsRef.current, meP.x, meP.y, rOf(meP.n) * 6 + 4); cam.current.shake = 0.35; }
+      if (skill === 'shield' && meP.fx.shield > 0) bubbles(partsRef.current, meP.x, meP.y, 10, rOf(meP.n) * 0.2 + 0.05);
+      if (skill === 'frenzy' && meP.fx.frenzy > 0) burst(partsRef.current, meP.x, meP.y, '#FF8A3D', 16, rOf(meP.n) * 0.8 + 0.4);
       if (skill === 'frenzy' && meP.fx.frenzy > 0) Sfx.play('skill', { vol: 0.8 });
       if (isDuel || isRoom) {
         const now = Date.now();
@@ -864,7 +867,8 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
       if (hk !== hudKey.current && (hnow - (hudKey.at || 0) > 90 || meP.dead > 0)) { hudKey.current = hk; hudKey.at = hnow; setHud({ n: meP.n, st: meP.stage, lives: meP.lives, time: G.t, cd: { ...meP.cd }, fx: { ...meP.fx }, combo: meP.combo, dead: meP.dead, on: other ? { n: other.n, lives: other.lives, out: other.out, k: otherK } : null, goal: goal ? { label: goal.label, frac: Math.min(1, goal.cur / Math.max(1, goal.need)) } : null, place, missDone: MM ? MM.done : 0, miss: MM ? MM.list.map((m) => ({ id: m.id, text: m.text, done: !!m.doneAt, label: m.doneAt ? 'Done' : missionLabel(m, m.cur || 0), short: missionShort(m, m.cur || 0), frac: Math.min(1, (m.cur || 0) / Math.max(1, m.v)) })) : null }); }
       const ms = performance.now() - t0;
       B.avg = B.avg * 0.95 + ms * 0.05; B.n += 1;
-      if (B.n > 120 && B.avg > 14 && !B.low) B.low = true;
+      if (B.n > 120 && B.avg > 14 && !B.low) { B.low = true; B.n = 0; }
+      else if (B.n > 120 && B.avg > 20 && B.low === true) B.low = 2;
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
@@ -976,6 +980,7 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
     </Sheet>
   );
 
+  useEffect(() => { if (phase === 'menu' || phase === 'lobby' || phase === 'join') { Sfx.init(); Sfx.music('lobbyGulp', true); } }, [phase]);
   const waitingPeer = phase === 'lobby' || !here;
   const lobbyUi = phase !== 'menu' && phase !== 'lobby' ? null : (
     <GLobby GS={GS} title="Gulp" onClose={finish} closeLabel={isSolo ? 'Leave' : 'Back to chat'} tint="rgba(2,14,32,0.62)"
@@ -1138,7 +1143,7 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
                     const [x, y] = skillAt(k);
                     return (
                       <div key={k} style={{ position: 'absolute', left: x, top: y, pointerEvents: 'auto', animation: 'zgk-pop 0.35s ease-out' }}>
-                        <GHudSkill icon={SKILL_ICON[k]} art={k} main={main} size={main ? 72 : 52} label={SKILLS[k].name} cool={hud.cd[k] || 0} coolMax={SKILLS[k].cd} sound={main ? 'click' : 'pop'} onPress={() => { skillReq.current = k; }} />
+                        <GHudSkill icon={SKILL_ICON[k]} art={k} main={main} size={main ? 72 : 48} label={SKILLS[k].name} cool={hud.cd[k] || 0} coolMax={SKILLS[k].cd} sound={main ? 'click' : 'pop'} onPress={() => { skillReq.current = k; }} />
                       </div>
                     );
                   })}
@@ -1223,23 +1228,39 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
             </div>
           )}
 
-          {sheet && sheet.k === 'levels' && (
-            <Sheet title="Levels" text={`${totalStars} of ${GULP_LEVELS.length * 3} stars`} onClose={() => setSheet(null)}>
-              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${land ? 5 : 4}, minmax(0, 1fr))`, gap: 10, marginTop: 14 }}>
-                {GULP_LEVELS.map((L, i) => {
-                  const b = lvls[i];
-                  return (
-                    <div key={i} role="button" tabIndex={0} aria-label={`Level ${i + 1}, ${L.name}. ${goalText(L)}`} onClick={() => { kitTap(); setSheet(null); startLevel(i); }}
-                      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '10px 4px 8px', borderRadius: 16, background: b && b.stars ? 'rgba(91,227,125,0.14)' : 'rgba(255,255,255,0.07)', boxShadow: b && b.stars === 3 ? 'inset 0 0 0 2px #FFD23F' : 'inset 0 0 0 1.5px rgba(255,255,255,0.1)', cursor: 'pointer' }}>
-                      <span style={{ fontSize: 20, fontWeight: 900, color: '#FFFFFF', textShadow: '0 1px 3px rgba(0,0,0,0.6)' }}>{i + 1}</span>
-                      <span style={{ display: 'flex', gap: 1 }}>{[0, 1, 2].map((q) => <GIcon key={q} k="star" size={11} color={b && b.stars > q ? '#FFD23F' : 'rgba(255,255,255,0.25)'} />)}</span>
-                      <span style={{ fontSize: 10.5, fontWeight: 800, color: 'rgba(255,255,255,0.75)', textAlign: 'center', lineHeight: 1.2, minHeight: 25 }}>{L.name}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </Sheet>
-          )}
+          {sheet && sheet.k === 'levels' && (() => {
+            const pg = sheet.pg != null ? sheet.pg : Math.min(Math.floor(GULP_LEVELS.findIndex((_, i) => !(lvls[i] && lvls[i].stars)) / 10), Math.ceil(GULP_LEVELS.length / 10) - 1);
+            const page = Math.max(0, pg);
+            const pages = Math.ceil(GULP_LEVELS.length / 10);
+            const ids = Array.from({ length: 10 }, (_, k) => page * 10 + k).filter((i) => i < GULP_LEVELS.length);
+            return (
+              <GLobbySheet GS={GS} title="Levels" width={640} onClose={() => setSheet(null)}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <GBtn icon="chevl" color="dark" size={36} fast={false} label="Previous page" disabled={page <= 0} onPress={() => setSheet({ k: 'levels', pg: page - 1 })} />
+                  <div style={{ flex: 1, textAlign: 'center' }}>
+                    <div style={{ fontSize: 15, fontWeight: 900 }}>{page >= 3 ? 'Hard levels' : `Levels ${ids[0] + 1} to ${ids[ids.length - 1] + 1}`}</div>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: 'rgba(255,255,255,0.7)' }}>{`${totalStars} of ${GULP_LEVELS.length * 3} stars`}</div>
+                  </div>
+                  <GBtn icon="chevr" color="dark" size={36} fast={false} label="Next page" disabled={page >= pages - 1} onPress={() => setSheet({ k: 'levels', pg: page + 1 })} />
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${land ? 5 : 3}, minmax(0, 1fr))`, gap: 8, marginTop: 12 }}>
+                  {ids.map((i) => {
+                    const L = GULP_LEVELS[i];
+                    const b = lvls[i];
+                    return (
+                      <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, minWidth: 0 }}>
+                        <GBtn color={i >= 30 ? 'red' : b && b.stars ? 'teal' : 'blue'} size={48} fast={false} label={`Level ${i + 1}, ${L.name}. ${goalText(L)}`} onPress={() => { setSheet(null); startLevel(i); }}>
+                          <span style={{ fontSize: 17, fontWeight: 900, color: '#FFFFFF', textShadow: '0 2px 0 rgba(0,0,0,0.35)' }}>{i + 1}</span>
+                        </GBtn>
+                        <span style={{ fontSize: 11, fontWeight: 800, color: 'rgba(255,255,255,0.82)', maxWidth: '100%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{L.name}</span>
+                        <span style={{ display: 'flex', gap: 1 }}>{[0, 1, 2].map((q) => <GIcon key={q} k="star" size={11} color={b && b.stars > q ? '#FFD23F' : 'rgba(255,255,255,0.2)'} />)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </GLobbySheet>
+            );
+          })()}
 
           {sheet && sheet.k === 'how' && (
             <Sheet title="How to play Gulp" onClose={() => setSheet(null)}>

@@ -18586,7 +18586,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-export const APP_VERSION = '43.0V';
+export const APP_VERSION = '44.0V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -49432,6 +49432,10 @@ export const WN_THUMBS = {
   rally43: { bg: 'sky', draw: () => <WnBg src="/race-jumps.webp" /> },
   roll43: { bg: 'sky', draw: () => <WnBg src="/roll-team.webp" /> },
   lobby43: { bg: 'sky', draw: () => <WnBg src="/games-lobby.webp" /> },
+  gulp44: { bg: 'sky', draw: () => <WnBg src="/gulp-new.webp" /> },
+  rally44: { bg: 'sky', draw: () => <WnBg src="/race-fx.webp" /> },
+  levels44: { bg: 'sky', draw: () => <WnBg src="/roll-storm.webp" /> },
+  music44: { bg: 'sky', draw: () => <WnBg src="/lobby-music.webp" /> },
   attack42: { bg: 'sky', draw: () => <WnBg src="/race-attack.webp" /> },
   maps42: { bg: 'sky', draw: () => <WnBg src="/race-maps.webp" /> },
   cars42: { bg: 'sky', draw: () => <WnBg src="/race-cars.webp" /> },
@@ -50017,6 +50021,10 @@ Object.assign(WN_SCENES, {
   rally43h: { bg: 'sky', draw: () => <WnBg tall src="/race-jumps.webp" x0="-60" /> },
   roll43h: { bg: 'sky', draw: () => <WnBg tall src="/roll-team.webp" x0="-60" /> },
   lobby43h: { bg: 'sky', draw: () => <WnBg tall src="/games-lobby.webp" x0="-170" /> },
+  gulp44h: { bg: 'sky', draw: () => <WnBg tall src="/gulp-new.webp" x0="-55" /> },
+  rally44h: { bg: 'sky', draw: () => <WnBg tall src="/race-fx.webp" x0="-120" /> },
+  levels44h: { bg: 'sky', draw: () => <WnBg tall src="/roll-storm.webp" x0="-70" /> },
+  music44h: { bg: 'sky', draw: () => <WnBg tall src="/lobby-music.webp" x0="-90" /> },
   attack42h: { bg: 'sky', draw: () => <WnBg tall src="/race-attack.webp" x0="-70" /> },
   maps42h: { bg: 'sky', draw: () => <WnBg tall src="/race-maps.webp" x0="-60" /> },
   cars42h: { bg: 'sky', draw: () => <WnBg tall src="/race-cars.webp" x0="-62" /> },

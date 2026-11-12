@@ -29,6 +29,21 @@ export const GULP_LEVELS = [
   { name: 'Bubble master', goal: { k: 'pick', v: 14 }, n: 2500, cfg: { pk: 2 }, par: 240 },
   { name: 'Abyss walker', goal: { k: 'size', v: 300000 }, start: [1220, 360], n: 60000, par: 520 },
   { name: 'Legend of the deep', goal: { k: 'size', v: 1000000 }, n: 300000, lives: 3, par: 600 },
+  { name: 'Shark tide', goal: { k: 'size', v: 40000 }, n: 8000, cfg: { hunt: 3.2 }, lives: 2, par: 300 },
+  { name: 'No mistakes', goal: { k: 'eat', v: 500 }, n: 2000, lives: 1, par: 330 },
+  { name: 'Clock is ticking', goal: { k: 'size', v: 20000 }, n: 3000, limit: 180, par: 150 },
+  { name: 'Hunted', goal: { k: 'time', v: 180 }, n: 5000, cfg: { hunt: 3.6 }, lives: 2 },
+  { name: 'Combo legend', goal: { k: 'combo', v: 45 }, n: 4000, par: 220 },
+  { name: 'Deep treasure', goal: { k: 'chest', v: 5 }, start: [1100, 330], n: 6000, cfg: { hunt: 2.4 }, par: 300 },
+  { name: 'Golden storm', goal: { k: 'gold', v: 3 }, n: 8000, limit: 300, par: 240 },
+  { name: 'Bubble frenzy', goal: { k: 'pick', v: 20 }, n: 6000, cfg: { pk: 1.8, hunt: 2.6 }, par: 300 },
+  { name: 'Orca waters', goal: { k: 'size', v: 400000 }, n: 80000, cfg: { hunt: 3 }, lives: 2, par: 480 },
+  { name: 'Last breath', goal: { k: 'time', v: 240 }, start: [1220, 360], n: 20000, cfg: { hunt: 3.8 }, lives: 1 },
+  { name: 'Mega feast', goal: { k: 'eat', v: 900 }, n: 15000, limit: 420, par: 360 },
+  { name: 'Kraken call', goal: { k: 'size', v: 2000000 }, n: 400000, cfg: { hunt: 2.8 }, lives: 2, par: 600 },
+  { name: 'Iron fin', goal: { k: 'combo', v: 60 }, n: 30000, lives: 1, par: 260 },
+  { name: 'Sea of gold', goal: { k: 'gold', v: 5 }, n: 50000, cfg: { hunt: 3 }, par: 400 },
+  { name: 'Leviathan', goal: { k: 'size', v: 15000000 }, n: 2000000, cfg: { hunt: 3.2 }, lives: 2, par: 720 },
 ];
 
 const fmtNum = (v) => (v >= 1e9 ? `${Math.round(v / 1e8) / 10}b`.replace('.0b', 'b') : v >= 1e6 ? `${Math.round(v / 1e5) / 10}m`.replace('.0m', 'm') : v >= 10000 ? `${Math.round(v / 100) / 10}k`.replace('.0k', 'k') : String(Math.floor(v)).replace(/\B(?=(\d{3})+(?!\d))/g, ','));

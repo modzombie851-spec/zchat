@@ -1,4 +1,6 @@
 import { TAU, LIGHT_R, clamp, mulberry, at as atW, alive, dist, litAt, isWallCh, onTile, spikeAmt, spikeWarn, spikeOff, crumbleState, isPad, SPIKE_P, TDOOR_T } from './duoengine.js';
+let LITE = 0;
+export const setDuoLite = (v) => { LITE = v ? 1 : 0; };
 
 let CW = null;
 const at = (x, y) => atW(CW, x, y);
@@ -588,7 +590,7 @@ function drawBridge(c, s, t, W) {
     const g = c.createLinearGradient(0, Y, 0, Y + s); g.addColorStop(0, '#7E8FA6'); g.addColorStop(1, '#4E5B70');
     c.fillStyle = g; rr(c, X + s * 0.06, Y + s * 0.04, s * 0.88, s * 0.84, s * 0.12); c.fill();
     c.fillStyle = 'rgba(255,255,255,0.12)'; c.fillRect(X + s * 0.14, Y + s * 0.07, s * 0.72, s * 0.04);
-    c.shadowColor = '#7FB2FF'; c.shadowBlur = s * 0.3 * L;
+    c.shadowColor = '#7FB2FF'; c.shadowBlur = LITE ? 0 : s * 0.3 * L;
     glyph(c, 'moon', X + s * 0.5, Y + s * 0.45, s * 0.36, `rgba(190,220,255,${0.4 + L * 0.6})`, s * 0.04);
     c.restore();
     if (L < 0.5) { c.strokeStyle = 'rgba(140,180,255,0.14)'; c.lineWidth = 1; c.setLineDash([3, 4]); rr(c, X + s * 0.08, Y + s * 0.06, s * 0.84, s * 0.8, s * 0.12); c.stroke(); c.setLineDash([]); }
@@ -670,7 +672,7 @@ function drawCodeDoor(c, s, W) {
     for (let i = 0; i < 3; i++) {
       const gx = X + s * (0.29 + i * 0.21), gy = top + s * 0.32;
       c.fillStyle = 'rgba(30,22,14,0.55)'; c.beginPath(); c.arc(gx, gy, s * 0.085, 0, TAU); c.fill();
-      if (W.codeGlow > 0.05) { c.save(); c.globalAlpha = W.codeGlow; c.shadowColor = '#FFC75A'; c.shadowBlur = s * 0.2; glyph(c, W.code[i], gx, gy, s * 0.14, '#FFE09A', s * 0.028); c.restore(); }
+      if (W.codeGlow > 0.05) { c.save(); c.globalAlpha = W.codeGlow; c.shadowColor = '#FFC75A'; c.shadowBlur = LITE ? 0 : s * 0.2; glyph(c, W.code[i], gx, gy, s * 0.14, '#FFE09A', s * 0.028); c.restore(); }
     }
     c.restore();
   }
@@ -686,7 +688,7 @@ function drawDialHint(c, s, t, W, me) {
 function drawMural(c, s, W) {
   if (!W.muralAt || W.mural < 0.02) return;
   c.save(); c.globalAlpha = W.mural;
-  for (let i = 0; i < 3; i++) { const gx = (W.muralAt.x + 0.24 + i * 0.26) * s, gy = (W.muralAt.y + 0.72) * s; c.shadowColor = '#6FB0FF'; c.shadowBlur = s * 0.25; glyph(c, W.code[i], gx, gy, s * 0.22, '#CFE6FF', s * 0.035); }
+  for (let i = 0; i < 3; i++) { const gx = (W.muralAt.x + 0.24 + i * 0.26) * s, gy = (W.muralAt.y + 0.72) * s; c.shadowColor = '#6FB0FF'; c.shadowBlur = LITE ? 0 : s * 0.25; glyph(c, W.code[i], gx, gy, s * 0.22, '#CFE6FF', s * 0.035); }
   c.restore();
 }
 
@@ -755,7 +757,7 @@ function drawKey(c, s, t, W) {
   if (K.held) { const p = W.p[K.held]; if (!alive(p)) return; x = p.x * s; y = (p.y - 1.25) * s + Math.sin(t * 3) * s * 0.03; sc = 0.7; }
   else { x = K.x * s; y = (K.y - 0.25) * s + Math.sin(t * 2.5) * s * 0.06; c.fillStyle = 'rgba(0,0,0,0.25)'; c.beginPath(); c.ellipse(K.x * s, (K.y + 0.15) * s, s * 0.16, s * 0.05, 0, 0, TAU); c.fill(); }
   c.save(); c.translate(x, y); c.scale(sc, sc); c.rotate(-0.5);
-  c.shadowColor = '#9CC8FF'; c.shadowBlur = s * 0.35;
+  c.shadowColor = '#9CC8FF'; c.shadowBlur = LITE ? 0 : s * 0.35;
   c.strokeStyle = '#DCEBFF'; c.lineWidth = s * 0.07; c.beginPath(); c.arc(-s * 0.14, 0, s * 0.11, 0, TAU); c.stroke();
   c.lineCap = 'round'; c.beginPath(); c.moveTo(-s * 0.03, 0); c.lineTo(s * 0.26, 0); c.moveTo(s * 0.2, 0); c.lineTo(s * 0.2, s * 0.09); c.moveTo(s * 0.12, 0); c.lineTo(s * 0.12, s * 0.07); c.stroke();
   c.restore();
@@ -788,7 +790,7 @@ function drawExitDoors(c, s, t, W) {
     c.fillStyle = '#2A2119'; c.beginPath(); c.moveTo(X + s * 0.12, Y + s); c.lineTo(X + s * 0.12, Y + s * 0.42); c.quadraticCurveTo(X + s * 0.5, Y + s * 0.05, X + s * 0.88, Y + s * 0.42); c.lineTo(X + s * 0.88, Y + s); c.closePath(); c.fill();
     const g = c.createLinearGradient(0, Y + s * 0.3, 0, Y + s); g.addColorStop(0, k === 'sun' ? '#8A4A1A' : '#22406E'); g.addColorStop(1, k === 'sun' ? '#5A2E10' : '#152B4D');
     c.fillStyle = g; c.beginPath(); c.moveTo(X + s * 0.2, Y + s); c.lineTo(X + s * 0.2, Y + s * 0.46); c.quadraticCurveTo(X + s * 0.5, Y + s * 0.16, X + s * 0.8, Y + s * 0.46); c.lineTo(X + s * 0.8, Y + s); c.closePath(); c.fill();
-    c.save(); c.shadowColor = col; c.shadowBlur = s * (on ? 0.6 : 0.2); glyph(c, k, X + s * 0.5, Y + s * 0.62, s * 0.34, on ? '#FFFFFF' : col, s * 0.045); c.restore();
+    c.save(); c.shadowColor = col; c.shadowBlur = LITE ? 0 : s * (on ? 0.6 : 0.2); glyph(c, k, X + s * 0.5, Y + s * 0.62, s * 0.34, on ? '#FFFFFF' : col, s * 0.045); c.restore();
     const cy = (e.y + 0.55) * s;
     const pg = c.createRadialGradient(X + s * 0.5, cy, 0, X + s * 0.5, cy, s * 0.55); pg.addColorStop(0, rgba(col, on ? 0.55 : 0.22 + Math.sin(t * 3) * 0.06)); pg.addColorStop(1, rgba(col, 0));
     c.fillStyle = pg; c.fillRect(X - s * 0.1, cy - s * 0.55, s * 1.2, s * 1.1);
@@ -1280,7 +1282,7 @@ function drawEmote(c, x, y, text, k, t) {
   c.save(); c.globalAlpha = a > 0.85 ? (1 - a) / 0.15 : 1;
   c.translate(x, y - 6 - k * 26); c.scale(pop, pop);
   c.font = `34px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",${FF}`; c.textAlign = 'center'; c.textBaseline = 'middle';
-  c.shadowColor = 'rgba(0,0,0,0.45)'; c.shadowBlur = 8; c.shadowOffsetY = 3;
+  c.shadowColor = 'rgba(0,0,0,0.45)'; c.shadowBlur = LITE ? 0 : 8; c.shadowOffsetY = 3;
   c.fillText(text, 0, 0);
   c.restore();
 }

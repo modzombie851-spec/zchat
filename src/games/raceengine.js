@@ -188,15 +188,15 @@ export function collide(a, b, both) {
   const pen = 1 - d;
   const us = ns / d, ux = nx / d;
   const ma = (CARS[a.type] || CARS.sport).mass, mb = (CARS[b.type] || CARS.sport).mass;
-  const ka = both ? mb / (ma + mb) : 1, kb = both ? ma / (ma + mb) : 0;
-  a.s -= us * pen * ls * ka; a.x -= ux * pen * lx * ka * 1.1;
-  if (both) { b.s += us * pen * ls * kb; b.x += ux * pen * lx * kb * 1.1; }
+  const ka = both ? mb / (ma + mb) : 0.6, kb = both ? ma / (ma + mb) : 0;
+  a.s -= us * pen * ls * ka; a.x -= ux * pen * lx * ka * 0.9;
+  if (both) { b.s += us * pen * ls * kb; b.x += ux * pen * lx * kb * 0.9; }
   const closing = (a.v - b.v) * us;
   if (closing > 0) {
-    a.v = clamp(a.v - closing * 0.55 * ka * us, 0, 70);
-    if (both) b.v = clamp(b.v + closing * 0.45 * kb * us, 0, 70);
+    a.v = clamp(a.v - closing * 0.4 * ka * us, 0, 70);
+    if (both) b.v = clamp(b.v + closing * 0.4 * kb * us, 0, 70);
   }
-  a.yaw += -ux * 0.06 * ka;
+  if (Math.abs(closing) > 2.5) a.yaw -= ux * 0.02 * ka;
   a.bump = 0.25;
   return Math.min(1, Math.abs(closing) / 12 + pen * 0.5);
 }

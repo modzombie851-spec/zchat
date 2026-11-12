@@ -10,6 +10,8 @@ export const SKY = {
   candy: { top: '#FF9FD0', bot: '#FFE6F3', far: '#FFC6E3', mid: '#F49ACA', dirt: ['#E98DBD', '#C96A9C', '#A24D7B'], grass: ['#8FF0C8', '#4CCB9C'], brick: ['#FFB4DA', '#E07AB2'], plank: ['#F2C59B', '#C8955B'], cloud: true },
   lava: { top: '#3B1515', bot: '#96351A', far: '#5C221A', mid: '#431612', dirt: ['#6E3D32', '#572B21', '#3C1C15'], grass: ['#FF8A3D', '#E0561B'], brick: ['#AA573C', '#7C3B27'], plank: ['#8E5C46', '#603C2C'], cloud: false, hazard: true },
   beach: { top: '#3FB6E8', bot: '#C9F1FF', far: '#5FD0C9', mid: '#2FB3A6', dirt: ['#F2D29A', '#E0B877', '#C49758'], grass: ['#5FD08A', '#2FA866'], brick: ['#F7B26B', '#D9853E'], plank: ['#D9A86B', '#A8763C'], cloud: true },
+  storm: { top: '#2B3A57', bot: '#8193B0', far: '#4C5C78', mid: '#3A4862', dirt: ['#7E8394', '#646979', '#4B4F5E'], grass: ['#8FD86A', '#56A83C'], brick: ['#A9AFC0', '#787F93'], plank: ['#9C8566', '#6C5A41'], cloud: false, rain: true },
+  shadow: { top: '#160F2A', bot: '#4A2B5E', far: '#2C2042', mid: '#221836', dirt: ['#5C4B72', '#47395C', '#332846'], grass: ['#A794D6', '#7562A8'], brick: ['#7B5C9C', '#563D75'], plank: ['#8F6F5B', '#5F4637'], cloud: false, stars: true },
   cloud: { top: '#8FA8FF', bot: '#F2E9FF', far: '#D9D2FF', mid: '#BDB4F5', dirt: ['#FFFFFF', '#E6E4FA', '#C9C4EE'], grass: ['#FFD86B', '#F2B53A'], brick: ['#C7B8FF', '#9A86E6'], plank: ['#E8DFFF', '#B9A9EE'], cloud: true },
 };
 function rr(c, x, y, w, h, r) { r = Math.max(0, Math.min(r, w / 2, h / 2)); c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
@@ -110,6 +112,13 @@ function drawSky(c, W, V) {
   };
   layer(0.15, P.far, 110, 0.006, 0);
   layer(0.3, P.mid, 70, 0.011, 60);
+  if (P.rain) {
+    const fl = Math.max(0, Math.sin(t * 0.7) * Math.sin(t * 2.3 + 1) - 0.82) * 4;
+    if (fl > 0) { c.fillStyle = `rgba(220,230,255,${Math.min(0.35, fl * 0.35)})`; c.fillRect(0, 0, cw, ch); }
+    c.strokeStyle = 'rgba(200,215,240,0.32)'; c.lineWidth = 1.4; c.beginPath();
+    for (let i = 0; i < 70; i++) { const x = ((i * 97.3 - camX * s * 0.2 - t * 90) % (cw + 40) + cw + 40) % (cw + 40) - 20, y = ((i * 53.7 + t * 520) % (ch + 40)) - 20; c.moveTo(x, y); c.lineTo(x - 6, y + 16); }
+    c.stroke();
+  }
   if (P.cloud) {
     c.fillStyle = 'rgba(255,255,255,0.9)';
     for (let i = 0; i < 6; i++) { const x = ((i * 260 - camX * s * 0.08 + t * 8) % (cw + 300) + cw + 300) % (cw + 300) - 150, y = 50 + (i * 47) % (ch * 0.3); c.beginPath(); c.arc(x, y, 26, 0, TAU); c.arc(x + 28, y - 10, 32, 0, TAU); c.arc(x + 60, y, 24, 0, TAU); c.rect(x, y, 60, 24); c.fill(); }

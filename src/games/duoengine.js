@@ -197,6 +197,18 @@ const CURATED = [
   { seed: 'story38', theme: 'tomb', rooms: ['foes', 'wood', 'code', 'foes'], name: 'Haunted crypt', goal: 'Ghosts and spiders guard the hidden code', depth: 6 },
   { seed: 'story39', theme: 'jungle', rooms: ['bridge', 'wood', 'fires', 'foes'], name: 'Jungle fort', goal: 'Light both fires deep in the jungle', depth: 6 },
   { seed: 'story40', theme: 'forge', rooms: ['wood', 'beam', 'foes', 'timed', 'wood'], name: 'The last gate', goal: 'Every trick and two wooden gates. Stay together', depth: 6 },
+  { seed: 'story41', theme: 'sand', rooms: ['spikes', 'foes', 'crumble', 'gate', 'split', 'foes'], name: 'Sun gauntlet', goal: 'Spikes, beasts and a falling floor, then take your own road', depth: 7 },
+  { seed: 'story42', theme: 'jungle', rooms: ['bridge', 'foes', 'wood', 'portal', 'spikes', 'foes'], name: 'Root maze', goal: 'Burn the roots and ride the rings past the beasts', depth: 7 },
+  { seed: 'story43', theme: 'ice', rooms: ['ice', 'foes', 'crumble', 'ice', 'timed', 'foes'], name: 'Frozen fangs', goal: 'Slide, fight and beat the clock on the ice', depth: 7 },
+  { seed: 'story44', theme: 'crystal', rooms: ['beam', 'foes', 'split', 'crumble', 'code', 'foes'], name: 'Mirror vault', goal: 'Bend the light, cross the cracks, crack the code', depth: 7 },
+  { seed: 'story45', theme: 'tomb', rooms: ['foes', 'spikes', 'wood', 'foes', 'gate', 'crumble'], name: 'Bone hall', goal: 'Skeletons in every room. Watch the spikes', depth: 7 },
+  { seed: 'story46', theme: 'forge', rooms: ['timed', 'foes', 'wood', 'spikes', 'fires', 'foes'], name: 'Iron furnace', goal: 'Race the door, then light both fires under attack', depth: 7 },
+  { seed: 'story47', theme: 'sky', rooms: ['crumble', 'portal', 'foes', 'crumble', 'split', 'foes', 'gate'], name: 'Cloud fall', goal: 'Seven rooms of falling floors above the sky', depth: 8 },
+  { seed: 'story48', theme: 'sand', rooms: ['code', 'foes', 'spikes', 'wood', 'bridge', 'foes', 'crumble'], name: 'Desert king', goal: 'The longest tomb under the sand', depth: 8 },
+  { seed: 'story49', theme: 'jungle', rooms: ['plate', 'foes', 'wood', 'fires', 'spikes', 'foes', 'split'], name: 'Green fortress', goal: 'Hold the door, burn the gate, light the fires', depth: 8 },
+  { seed: 'story50', theme: 'ice', rooms: ['ice', 'beam', 'foes', 'crumble', 'ice', 'foes', 'gate'], name: 'Glacier heart', goal: 'Two ice halls and a beam of light at the core', depth: 8 },
+  { seed: 'story51', theme: 'tomb', rooms: ['foes', 'code', 'spikes', 'foes', 'wood', 'crumble', 'foes'], name: 'Crypt lord', goal: 'Fight through three rooms full of the dead', depth: 8 },
+  { seed: 'story52', theme: 'forge', rooms: ['wood', 'timed', 'foes', 'beam', 'spikes', 'foes', 'gate', 'crumble'], name: 'Last forge', goal: 'Eight rooms and every trick at once', depth: 8 },
 ];
 export const STORY_N = LEVELS.length + CURATED.length;
 

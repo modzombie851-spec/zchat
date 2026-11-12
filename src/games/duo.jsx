@@ -4,10 +4,11 @@ import { useGameLink, useRoomRelay, useWatchChannel } from './relay.jsx';
 import { setWatchAllowed, useLiveBeacon, useGamePrivacy } from './live.js';
 import { EMOTES, SignalBars, PingChip, SpeakerIcon, SmileIcon, Check, Heart, MicIcon, ChatIcon, SwapIcon, HandIcon, btnBase, Btn, RoundBtn, Sheet, Stars, injectCss, useVoice, setKitTap } from './livekit.jsx';
 import { LIVES, GLYPHS, GLYPH_NAMES, STORY_N, ENDLESS, ATK_CD, levelDef, makeWorld, stepWorld, buddyInput, applyEvent, snapshot, mergeSnapshot, sameLevel, syncClock, setNet, nearDial, nearMirror, turnMirror, foeRows, setFoes, tryCode, hintFor, aimTarget, clamp, missionsFor, parTime, spikeAmt, crumbleState, demoInputs, demoDuoWorld } from './duoengine.js';
-import { Snd, THEMES, buildStatic, buildMini, drawDuoMini, render, updateParts, dust, puffs, embers, glints, part, ring, glyph, drawExplorer } from './duodraw.js';
-import { GC, GBtn, GPill, GPanel, GChip, GTitle, GJoy, GIcon, GHudBtn, GHudPanel, GHudSkill, GHint, GStat, GNotices, useNotices, useWatchNotices, injectKitCss, kitTap, pressProps, INK, useCtlLook, useGameStage, stagePoint, GControlsPanel, GLobby, GSlot, GLobbySheet, GVolBars } from './gamekit.jsx';
+import { Snd, THEMES, buildStatic, buildMini, drawDuoMini, render, updateParts, dust, puffs, embers, glints, part, ring, glyph, drawExplorer , setDuoLite } from './duodraw.js';
+import { GC, GBtn, GPill, GPanel, GChip, GTitle, GJoy, GIcon, GHudBtn, GHudPanel, GHudSkill, GHint, GStat, GNotices, useNotices, useWatchNotices, injectKitCss, kitTap, pressProps, INK, newBudget, budgetTick, useCtlLook, useGameStage, stagePoint, GControlsPanel, GLobby, GSlot, GLobbySheet, GVolBars, GSeg } from './gamekit.jsx';
 import { Sfx } from './sfx.js';
 
+const dbud = newBudget();
 const PHRASES = ['Wait for me', 'Go ahead', 'Over here', 'Hold the plate', 'Come closer, I need light', 'On three', 'Nice one', 'Sorry', 'I will get the lever', 'Follow me'];
 const QUICK = ['Wait for me', 'Go ahead', 'Over here', 'Hold the plate', 'Nice one', 'Follow me'];
 const BEST_KEY = (uid) => `zchat-duo-best-${uid || 'me'}`;
@@ -372,7 +373,8 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
     }
     const wrap = wrapRef.current;
     const cw = wrap ? wrap.clientWidth : window.innerWidth, ch = wrap ? wrap.clientHeight : window.innerHeight;
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const dpr = budgetTick(dbud, dt);
+    setDuoLite(dbud.lv >= 1);
     if (cv.width !== Math.round(cw * dpr) || cv.height !== Math.round(ch * dpr)) { cv.width = Math.round(cw * dpr); cv.height = Math.round(ch * dpr); }
     const s = Math.round(cw > ch ? clamp(ch / 9.5, 36, 66) : clamp(cw / 7.4, 44, 66));
     if (!D.stat || D.stat.s !== s || D.stat.d !== dpr) D.stat = { cv: buildStatic(W, s * dpr), s, d: dpr };
@@ -400,15 +402,18 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
       last = ts;
       const W = WR.current;
       const cv = cvRef.current;
+      Snd.st.sfx = Sfx.sfxOn;
+      { const wantMus = !!W && Sfx.musicOn && phaseRef.current === 'play'; if (!!Snd.st.music !== wantMus) Snd.music(wantMus, W ? W.theme : undefined); }
       if (!W && cv && (phaseRef.current === 'pick' || phaseRef.current === 'lobby')) { drawDemo(cv, Math.min(0.05, Math.max(0, (ts - (demoRef.current ? demoRef.current.last : ts)) / 1000))); if (demoRef.current) demoRef.current.last = ts; return; }
       if (!W || !cv) return;
       const wrap = wrapRef.current;
       const cw = wrap ? wrap.clientWidth : window.innerWidth, ch = wrap ? wrap.clientHeight : window.innerHeight;
-      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      const dpr = budgetTick(dbud, dt);
+      setDuoLite(dbud.lv >= 1);
       if (cv.width !== Math.round(cw * dpr) || cv.height !== Math.round(ch * dpr)) { cv.width = Math.round(cw * dpr); cv.height = Math.round(ch * dpr); }
       const s = Math.round(cw > ch ? clamp(ch / 9.5, 36, 66) : clamp(cw / 7.4, 44, 66));
       const st = statRef.current;
-      if (!st.cv || st.s !== s || st.li !== W.li || st.a !== W.attempt || st.rs !== W.rs) statRef.current = { cv: buildStatic(W, s * dpr), s, li: W.li, a: W.attempt, rs: W.rs };
+      if (!st.cv || st.s !== s || st.d !== dpr || st.li !== W.li || st.a !== W.attempt || st.rs !== W.rs) statRef.current = { cv: buildStatic(W, s * dpr), s, d: dpr, li: W.li, a: W.attempt, rs: W.rs };
       const playing = phaseRef.current === 'play';
       const act = activeRef.current;
       let ix = joy.current.x, iy = joy.current.y;
@@ -616,6 +621,7 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
     const { x, y } = stagePoint(el, e, sideRef.current);
     const w = el.clientWidth, h = el.clientHeight;
     if (y < 52 || (x > w * 0.55 && y > h - 230)) return;
+    if (joy.current.id != null && joy.current.id !== e.pointerId && x > w * 0.45) return;
     if (quick) setQuick(false);
     Snd.init();
     joy.current = { x: 0, y: 0, id: e.pointerId, cx: x, cy: y, show: true };
@@ -700,6 +706,8 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
       </form>
     </Sheet>
   );
+  useEffect(() => { if (phase === 'pick' || phase === 'lobby') { Sfx.init(); Sfx.music('lobbyDuo', true); } else Sfx.music(null, false); }, [phase]);
+  useEffect(() => () => Sfx.music(null, false), []);
   const pickMode = (m) => { if (!host || watch) return; setMode(m); if (!solo) relay.send('psel', { m, i: storySel }); };
   const pickStory = (i) => { if (!host || watch) return; const v = clamp(i, 0, STORY_N - 1); setStorySel(v); setMode('story'); if (!solo) relay.send('psel', { m: 'story', i: v }); };
   const toggleWatch = () => { setWatchAllowed(!allowWatch); kitTap(); };
@@ -754,12 +762,7 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
       )}
       main={(
         <GPanel style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <div role="radiogroup" aria-label="Mode" style={{ display: 'flex', gap: 4, padding: 3, borderRadius: 11, background: 'rgba(0,0,0,0.3)' }}>
-            {[['endless', 'Endless'], ['story', 'Story']].map(([k, t]) => (
-              <button key={k} type="button" role="radio" aria-checked={mode === k} className="zgk-btn" disabled={!canPick && mode !== k} {...pressProps(() => { if (canPick) { kitTap(); pickMode(k); } })}
-                style={{ flex: 1, height: 32, border: 'none', borderRadius: 8, fontFamily: FONT, fontSize: 13, fontWeight: 900, cursor: canPick ? 'pointer' : 'default', background: mode === k ? 'linear-gradient(180deg, #FFD84E 0%, #F2B11F 100%)' : 'transparent', color: mode === k ? '#1F1702' : 'rgba(255,255,255,0.75)' }}>{t}</button>
-            ))}
-          </div>
+          <GSeg label="Mode" value={mode} items={[['endless', 'Endless'], ['story', 'Story']]} disabled={!canPick} onPick={(k) => { kitTap(); pickMode(k); }} />
           {mode === 'endless' ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 50 }}>
               <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>{['sand', 'jungle', 'ice', 'forge', 'crystal', 'tomb', 'sky'].map((k) => <span key={k} title={THEMES[k].name} style={{ width: 8, height: 24, borderRadius: 3, background: THEMES[k].floor[0], boxShadow: `inset 0 -5px 0 ${THEMES[k].faceB}` }} />)}</div>
