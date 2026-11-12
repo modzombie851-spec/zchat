@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../supabaseClient.js';
+import { cloudOn, useCloudRoom } from './zcloud.js';
 import { rtKeep, rtDrop, rtReady, gameIceConfig } from '../App.jsx';
 import { talkTap, talkDrop } from './talk.js';
 
@@ -256,7 +257,7 @@ const iceDone = (pc, ms) => new Promise((res) => {
   try { pc.addEventListener('icegatheringstatechange', chk); } catch { done(); }
 });
 
-export function useMeshRoom({ id, myId, enabled = true, meta, fast, audio = false }) {
+export function useMeshRoom({ id, myId, enabled = true, meta, fast, audio = false, cap = 0 }) {
   const [peers, setPeers] = useState([]);
   const [links, setLinks] = useState({});
   const [metas, setMetas] = useState({});
@@ -269,6 +270,8 @@ export function useMeshRoom({ id, myId, enabled = true, meta, fast, audio = fals
   if (!S.current) S.current = { sid: meshSid(), conns: new Map(), metas: {}, pres: [], seen: new Map(), peers: [], ch: null, ok: false, subs: new Map(), track: null, muted: {}, cloudAt: new Map(), alive: false, ice: null, linkKey: '', needPlay: false, fast: new Set(fast || MESH_FAST) };
   const metaRef = useRef(meta || {});
   metaRef.current = meta || {};
+  const capRef = useRef(cap);
+  capRef.current = cap;
   const env = (t, data) => ({ ...(data || {}), t, from: myId, at: Date.now() });
   const cloud = (payload) => {
     const st = S.current;
@@ -419,11 +422,17 @@ export function useMeshRoom({ id, myId, enabled = true, meta, fast, audio = fals
     ids.delete(myId);
     const next = [...ids].sort();
     if (next.join('|') !== st.peers.join('|')) { st.peers = next; setPeers(next); }
+    let pick = next;
+    const cp = capRef.current;
+    if (cp > 0 && next.length > cp) {
+      const ring = [...next, myId].sort(), me = ring.indexOf(myId), half = Math.floor(cp / 2), n = ring.length;
+      pick = next.filter((p) => { const d = Math.abs(ring.indexOf(p) - me); return Math.min(d, n - d) <= half; });
+    }
     for (const [p, c] of st.conns) {
-      if (!next.includes(p)) { if (!c.goneAt) c.goneAt = now; else if (now - c.goneAt > 6000) closeConn(p); }
+      if (!pick.includes(p)) { if (!c.goneAt) c.goneAt = now; else if (now - c.goneAt > 6000) closeConn(p); }
       else c.goneAt = 0;
     }
-    for (const p of next) ensureConn(p);
+    for (const p of pick) ensureConn(p);
     showLinks();
   };
   const tick = () => {
@@ -638,9 +647,21 @@ export function useGameLink({ id, myId, peerId, enabled = true, g, fast }) {
   return useMemo(() => ({ here, send, on, me: myId, watch }), [here, on, myId]);
 }
 
-export function useRoomLink({ id, myId, enabled = true, meta, fast, audio = false }) {
-  const mesh = useMeshRoom({ id, myId, enabled, meta, fast, audio });
+export function useRoomLink({ id, myId, enabled = true, meta, fast, audio = false, cloud = null, reg }) {
+  const useCl = !!cloud && cloudOn();
+  const cl = useCloudRoom({ g: cloud, id, myId, enabled: enabled && useCl, meta, reg });
+  const mesh = useMeshRoom({ id, myId, enabled: enabled && (!useCl || audio), meta, fast, audio, cap: useCl ? 6 : 0 });
   const meshRef = useRef(mesh);
   meshRef.current = mesh;
-  return useMemo(() => ({ peers: mesh.peers, send: (t, d) => mesh.send(t, d), on: mesh.on, me: myId, here: mesh.peers.length > 0, links: mesh.links, mic: mesh.mic, mics: mesh.mics, muted: mesh.muted, vols: mesh.vols, toggleMic: () => meshRef.current.toggleMic(), toggleMute: (p) => meshRef.current.toggleMute(p), setVol: (p, v) => meshRef.current.setVol(p, v) }), [mesh.peers, mesh.on, mesh.links, mesh.mic, mesh.mics, mesh.muted, mesh.vols, myId]);
+  const clRef = useRef(cl);
+  clRef.current = cl;
+  return useMemo(() => {
+    const voice = { mic: mesh.mic, mics: mesh.mics, muted: mesh.muted, vols: mesh.vols, toggleMic: () => meshRef.current.toggleMic(), toggleMute: (p) => meshRef.current.toggleMute(p), setVol: (p, v) => meshRef.current.setVol(p, v) };
+    if (useCl) {
+      const links = {};
+      for (const p of cl.peers) links[p] = 'server';
+      return { peers: cl.peers, send: (t, d) => clRef.current.send(t, d), on: cl.on, me: myId, here: cl.peers.length > 0, links, cloud: true, rtt: cl.rtt, ok: cl.ok, ...voice };
+    }
+    return { peers: mesh.peers, send: (t, d) => mesh.send(t, d), on: mesh.on, me: myId, here: mesh.peers.length > 0, links: mesh.links, ...voice };
+  }, [useCl, cl.peers, cl.on, cl.rtt, cl.ok, mesh.peers, mesh.on, mesh.links, mesh.mic, mesh.mics, mesh.muted, mesh.vols, myId]);
 }

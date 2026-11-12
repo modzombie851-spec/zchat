@@ -1,3 +1,4 @@
+import { backdropProps } from './tap.js';
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { GameRoom, RoomLayer, defineSfx, sfx, haptic, useGameKit } from './kit.jsx';
 import { clamp, lerp, makeCanvas, fitCanvas, dpr, grain, woodTexture, rrect, rgba, shade, tint, mix, hexRgb, perfMeter, noiseHit, tone, loopNoise, easeOut, rng, gameCache, onGameCacheDrop, dropGameCaches, canvasBlank, guardCanvases } from './physics.jsx';
@@ -1343,7 +1344,7 @@ function SpinPicker({ spin, onChange, onClose }) {
   const [held, setHeld] = useState(false);
   const x = 50 + (v.e || 0) * 0.39; const y = 50 - (v.s || 0) * 0.39;
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 40, background: 'rgba(6,4,2,0.62)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: FONT }}>
+    <div {...backdropProps(onClose)} style={{ position: 'fixed', inset: 0, zIndex: 40, background: 'rgba(6,4,2,0.62)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: FONT }}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: 300, borderRadius: 26, padding: '20px 20px 16px', background: 'linear-gradient(180deg, #2A1D14, #1A120C)', boxShadow: '0 20px 50px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,220,170,0.12)', textAlign: 'center' }}>
         <div style={{ fontSize: 17, fontWeight: 800, color: '#FFF4E4' }}>Spin</div>
         <div style={{ fontSize: 13, color: 'rgba(255,236,210,0.7)', marginTop: 3, minHeight: 18 }}>{spinWords(v)}</div>

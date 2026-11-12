@@ -414,6 +414,12 @@ void main() {
   float t = vInfo.y;
   float a = (1.0 - smoothstep(0.15, 1.0, r)) * vInfo.x;
   vec3 c; float add = 0.0;
+  if (t > 20.5) {
+    float e = 1.0 - smoothstep(0.0, 1.0, r);
+    float a2 = e * e * vInfo.x;
+    o = vec4(0.0, 0.0, 0.0, a2);
+    return;
+  }
   if (t > 10.5) {
     float sd = vInfo.z * 17.0;
     float n = vn(vUv * 2.6 + sd) * 0.62 + vn(vUv * 5.3 - sd * 1.7) * 0.38;
@@ -450,6 +456,45 @@ void main() {
   float f = 1.0 - exp(-pow(d * uFogDen, 1.35));
   c = mix(c, pow(uFogCol, vec3(1.0 / 2.2)), f * (1.0 - add * 0.6));
   o = vec4(c * a, a * (1.0 - add));
+}`;
+
+const POSTVS = `#version 300 es
+layout(location=0) in vec2 aPos;
+out vec2 vUv;
+void main() { vUv = aPos * 0.5 + 0.5; gl_Position = vec4(aPos, 0.0, 1.0); }`;
+const BRIGHTFS = `#version 300 es
+precision mediump float;
+in vec2 vUv; uniform sampler2D uTex; uniform vec2 uPx; uniform float uTh;
+out vec4 o;
+vec3 tap(vec2 d) { vec3 c = texture(uTex, vUv + d * uPx).rgb; float l = max(c.r, max(c.g, c.b)); return c * smoothstep(uTh, uTh + 0.25, l); }
+void main() { o = vec4((tap(vec2(-1.0, -1.0)) + tap(vec2(1.0, -1.0)) + tap(vec2(-1.0, 1.0)) + tap(vec2(1.0, 1.0))) * 0.25, 1.0); }`;
+const BLURFS = `#version 300 es
+precision mediump float;
+in vec2 vUv; uniform sampler2D uTex; uniform vec2 uDir;
+out vec4 o;
+void main() {
+  vec3 c = texture(uTex, vUv).rgb * 0.227027;
+  c += (texture(uTex, vUv + uDir * 1.3846).rgb + texture(uTex, vUv - uDir * 1.3846).rgb) * 0.3162162;
+  c += (texture(uTex, vUv + uDir * 3.2308).rgb + texture(uTex, vUv - uDir * 3.2308).rgb) * 0.0702703;
+  o = vec4(c, 1.0);
+}`;
+const COMPFS = `#version 300 es
+precision mediump float;
+in vec2 vUv; uniform sampler2D uScene, uB1, uB2;
+uniform float uBloom, uSat, uCon, uVig;
+uniform vec3 uLo, uHi;
+out vec4 o;
+void main() {
+  vec3 c = texture(uScene, vUv).rgb;
+  vec3 b = texture(uB1, vUv).rgb * 0.55 + texture(uB2, vUv).rgb * 0.85;
+  c = c + b * uBloom * (1.0 - c * 0.45);
+  float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+  c = mix(vec3(l), c, uSat);
+  c = (c - 0.5) * uCon + 0.5;
+  c *= mix(uLo, uHi, smoothstep(0.05, 0.85, l));
+  vec2 d = vUv - 0.5;
+  c *= 1.0 - dot(d, d) * uVig;
+  o = vec4(clamp(c, 0.0, 1.0), 1.0);
 }`;
 
 function compile(gl, vs, fs) {
@@ -508,6 +553,82 @@ export function createRenderer(canvas, opts = {}) {
   gl.bindVertexArray(null);
   let partData = new Float32Array(11 * 256);
 
+  let PPROG = null, PP = null;
+  function postFree() {
+    if (!PP) return;
+    try { for (const t of [PP.scene, PP.a1, PP.a2, PP.b1, PP.b2]) { gl.deleteTexture(t.t); gl.deleteFramebuffer(t.fb); } gl.deleteRenderbuffer(PP.rc); gl.deleteRenderbuffer(PP.rd); gl.deleteFramebuffer(PP.ms); } catch {}
+    PP = null;
+  }
+  function mkTex(w, h) {
+    const t = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, w, h);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    const fb = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0);
+    return { t, fb, w, h };
+  }
+  function postSetup(W, H) {
+    if (PP && PP.W === W && PP.H === H) return PP;
+    postFree();
+    if (!PPROG) PPROG = { b: compile(gl, POSTVS, BRIGHTFS), u: compile(gl, POSTVS, BLURFS), c: compile(gl, POSTVS, COMPFS) };
+    const samples = Math.min(4, gl.getParameter(gl.MAX_SAMPLES) || 0);
+    const ms = gl.createFramebuffer(), rc = gl.createRenderbuffer(), rd = gl.createRenderbuffer();
+    gl.bindRenderbuffer(gl.RENDERBUFFER, rc);
+    if (samples > 0) gl.renderbufferStorageMultisample(gl.RENDERBUFFER, samples, gl.RGBA8, W, H); else gl.renderbufferStorage(gl.RENDERBUFFER, gl.RGBA8, W, H);
+    gl.bindRenderbuffer(gl.RENDERBUFFER, rd);
+    if (samples > 0) gl.renderbufferStorageMultisample(gl.RENDERBUFFER, samples, gl.DEPTH_COMPONENT24, W, H); else gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT24, W, H);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, ms);
+    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, rc);
+    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, rd);
+    const q4 = (v) => Math.max(1, Math.round(v / 4)), q8 = (v) => Math.max(1, Math.round(v / 8));
+    PP = { W, H, ms, rc, rd, scene: mkTex(W, H), a1: mkTex(q4(W), q4(H)), a2: mkTex(q4(W), q4(H)), b1: mkTex(q8(W), q8(H)), b2: mkTex(q8(W), q8(H)) };
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    return PP;
+  }
+  function pass(pr, target, src, setU) {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, target ? target.fb : null);
+    gl.viewport(0, 0, target ? target.w : canvas.width, target ? target.h : canvas.height);
+    gl.useProgram(pr.p);
+    if (src) { gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, src.t); gl.uniform1i(pr.u.uTex, 0); }
+    setU(pr.u);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+  function runPost(env) {
+    const W = canvas.width, H = canvas.height, P2 = PP, pr = PPROG, o = env.post || {};
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, P2.ms);
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, P2.scene.fb);
+    gl.blitFramebuffer(0, 0, W, H, 0, 0, W, H, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+    gl.disable(gl.DEPTH_TEST); gl.disable(gl.BLEND); gl.depthMask(false);
+    gl.bindVertexArray(skyVao);
+    pass(pr.b, P2.a1, P2.scene, (u) => { gl.uniform2f(u.uPx, 1 / W, 1 / H); gl.uniform1f(u.uTh, o.th == null ? 0.72 : o.th); });
+    pass(pr.u, P2.a2, P2.a1, (u) => gl.uniform2f(u.uDir, 1 / P2.a1.w, 0));
+    pass(pr.u, P2.a1, P2.a2, (u) => gl.uniform2f(u.uDir, 0, 1 / P2.a2.h));
+    pass(pr.u, P2.b1, P2.a1, (u) => gl.uniform2f(u.uDir, 1.5 / P2.a1.w, 0));
+    pass(pr.u, P2.b2, P2.b1, (u) => gl.uniform2f(u.uDir, 0, 1.5 / P2.b1.h));
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, W, H);
+    gl.useProgram(pr.c.p);
+    const bindT = (unit, t, name) => { gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, t); gl.uniform1i(pr.c.u[name], unit); };
+    bindT(0, P2.scene.t, 'uScene'); bindT(1, P2.a1.t, 'uB1'); bindT(2, P2.b2.t, 'uB2');
+    gl.uniform1f(pr.c.u.uBloom, o.bloom == null ? 0.9 : o.bloom);
+    gl.uniform1f(pr.c.u.uSat, o.sat == null ? 1.08 : o.sat);
+    gl.uniform1f(pr.c.u.uCon, o.con == null ? 1.06 : o.con);
+    gl.uniform1f(pr.c.u.uVig, o.vig == null ? 0.55 : o.vig);
+    gl.uniform3fv(pr.c.u.uLo, o.lo || [0.96, 0.99, 1.06]);
+    gl.uniform3fv(pr.c.u.uHi, o.hi || [1.04, 1.0, 0.94]);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.depthMask(true);
+    gl.bindVertexArray(null);
+  }
+
   const owned = [];
   function mesh(data) {
     const vao = gl.createVertexArray();
@@ -530,6 +651,7 @@ export function createRenderer(canvas, opts = {}) {
   }
   function dispose() {
     for (const m of owned.slice()) drop(m);
+    postFree();
     try { gl.deleteTexture(shadowTex); gl.deleteFramebuffer(shadowFb); gl.deleteBuffer(skyBuf); gl.deleteBuffer(partBuf); gl.deleteBuffer(cornerBuf); } catch {}
   }
   function lose() { try { const ext = gl.getExtension('WEBGL_lose_context'); if (ext) ext.loseContext(); } catch {} }
@@ -579,6 +701,8 @@ export function createRenderer(canvas, opts = {}) {
       }
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     }
+    const usePost = !!env.post;
+    if (usePost) { postSetup(W, H); gl.bindFramebuffer(gl.FRAMEBUFFER, PP.ms); }
     gl.viewport(0, 0, W, H);
     gl.clearColor(0, 0, 0, 1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
@@ -671,6 +795,7 @@ export function createRenderer(canvas, opts = {}) {
       gl.disable(gl.BLEND);
     }
     gl.bindVertexArray(null);
+    if (usePost) runPost(env);
     return VP;
   }
   return { gl, mesh, drop, render, dispose, lose, drawn: () => lastDrawn };

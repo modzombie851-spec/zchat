@@ -14,7 +14,8 @@ import {
 } from './supabaseClient.js';
 import { zLazy, zLazyPrefetch, zLazySetUi } from './lazy.jsx';
 import { GAME_KITS, GAME_KIT_BY, GameKitArt, kitUser, gameKitPull } from './games/kits.jsx';
-import { loadLiveFriends, castMe, liveKind } from './games/live.js';
+import { loadLiveFriends, castMe, liveKind, useJoinWait } from './games/live.js';
+import { cloudOn } from './games/zcloud.js';
 import { ZLANGS, setZLang, useZLang, zlangWanted, zlangOnPick, zlangDirty, zlangClean, zlangStored } from './i18n/index.js';
 export const TrustedFriendsPage = zLazy(() => import('./areas/safety.jsx'), 'TrustedFriendsPage', 'safety');
 export const RecoveryHelpPage = zLazy(() => import('./areas/safety.jsx'), 'RecoveryHelpPage', 'safety');
@@ -323,6 +324,7 @@ export const LiveWatchPage = zLazy(() => import('./games/livecast.jsx'), 'LiveWa
 export const PageCast = zLazy(() => import('./games/livecast.jsx'), 'PageCast', 'livecast');
 export const RaceInviteSheet = zLazy(() => import('./games/race.jsx'), 'RaceInviteSheet', 'race');
 export const SiegeGamePage = zLazy(() => import('./games/siege.jsx'), 'SiegeGamePage', 'siege');
+export const ZombieGamePage = zLazy(() => import('./games/zombie.jsx'), 'ZombieGamePage', 'zombie');
 export const SiegeInviteSheet = zLazy(() => import('./games/siege.jsx'), 'SiegeInviteSheet', 'siege');
 export const G1GolfPage = zLazy(() => import('./areas/games.jsx'), 'G1GolfPage', 'games');
 export const G1SudokuBoard = zLazy(() => import('./areas/games.jsx'), 'G1SudokuBoard', 'games');
@@ -5250,8 +5252,12 @@ function DmClosedBar({ name }) {
 }
 
 const HOME_FEATS = [
-  { k: 'games', label: 'Games', game: 'pool' },
-  { k: 'online', label: 'Play online', game: 'zap', live: true },
+  { k: 'zombie', label: 'Dead Town', game: 'zombie', live: true },
+  { k: 'siege', label: 'Scrap Siege', game: 'siege', live: true },
+  { k: 'race', label: 'Island Rally', game: 'race', live: true },
+  { k: 'roll', label: 'Roll Squad', game: 'roll', live: true },
+  { k: 'gulp', label: 'Gulp', game: 'gulp', live: true },
+  { k: 'duo', label: 'Two Torches', game: 'duo', live: true },
   { k: 'draw', label: 'Draw together' },
   { k: 'booth', label: 'Photo booth' },
   { k: 'watch', label: 'Watch together' },
@@ -17599,16 +17605,18 @@ function liveLine(row, first) {
   const L = liveKind(row);
   const game = GAME_TITLES[L.k] || 'a game';
   const title = L.k === 'gulpco' ? `${first} is in a Gulp room` : info.lob ? `${first} is waiting for a ${game} player` : `${first} is playing ${game}`;
-  const sub = L.max ? (L.join ? `${L.n} of ${L.max} playing. You can join now.` : L.full ? (L.watch && !info.lob ? 'The room is full. You can watch.' : 'The room is full right now') : (L.watch ? 'Joining is off. You can watch.' : 'Joining is off'))
+  const sub = L.max ? (L.join ? `${L.n} of ${L.max} playing. You can join now.` : L.full ? (L.watch && !info.lob ? 'The room is full. You can watch.' : 'The room is full right now') : (L.ask ? (L.watch ? 'Ask to join, or watch' : 'Ask to join') : L.watch ? 'Joining is off. You can watch.' : 'Joining is off'))
     : info.so ? (L.watch && L.play ? 'Watch live or play the same game' : L.watch ? 'Watch the game live' : L.play ? 'Play the same game together' : 'Playing now')
       : L.watch ? 'Watch the game live' : 'Playing now';
   const acts = [];
   if (L.act) acts.push(L.act);
+  if (L.ask) acts.push('Ask to join');
   if (info.so && L.watch && L.play) acts.push('Play too');
   return { L, title, sub, acts, line: L.k === 'gulpco' ? 'In a Gulp room now' : info.lob ? `Waiting for a ${game} player` : `Playing ${game} now` };
 }
 function LivePlayBar({ profile, onJoin, onWatch }) {
   const { theme } = useTheme();
+  const jw = useJoinWait(castMe.id);
   const [row, setRow] = useState(null);
   const pid = profile && profile.id;
   useEffect(() => {
@@ -17630,7 +17638,7 @@ function LivePlayBar({ profile, onJoin, onWatch }) {
         <div style={{ fontSize: 14, fontWeight: 700, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
         <div style={{ fontSize: 12.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub}</div>
       </div>
-      {acts.map((a, i) => <button key={a} onClick={() => { livePlayCache.at = 0; if (a === 'Watch') onWatch(row); else onJoin(row); }} className="zchat-press" aria-label={a === 'Watch' ? `Watch ${first}` : a === 'Join' ? `Join ${first}` : `Play ${GAME_TITLES[L.k] || 'it'} too`} style={{ height: 32, padding: '0 14px', borderRadius: 10, border: 'none', background: a === 'Watch' ? theme.coral : a === 'Join' ? '#22B04B' : (theme.dark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.08)'), color: a === 'Play too' ? theme.ink : 'white', fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: FONT, flexShrink: 0, marginLeft: i ? -4 : 0 }}>{a}</button>)}
+      {acts.map((a, i) => { const ask = a === 'Ask to join'; const js = ask ? jw.state(row) : 'idle'; const label = ask ? (js === 'wait' ? 'Asked' : js === 'no' ? 'Not now' : js === 'ok' ? 'Joining' : a) : a; return <button key={a} disabled={ask && js !== 'idle'} onClick={() => { livePlayCache.at = 0; if (a === 'Watch') onWatch(row); else if (ask) jw.ask(row, castMe.me, () => onJoin(row)); else onJoin(row); }} className="zchat-press" aria-label={a === 'Watch' ? `Watch ${first}` : a === 'Join' ? `Join ${first}` : ask ? `Ask ${first} to let you join` : `Play ${GAME_TITLES[L.k] || 'it'} too`} style={{ height: 32, padding: '0 14px', borderRadius: 10, border: 'none', background: a === 'Watch' ? theme.coral : a === 'Join' || (ask && js === 'idle') ? '#22B04B' : (theme.dark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.08)'), color: a === 'Play too' || (ask && js !== 'idle') ? theme.ink : 'white', fontWeight: 700, fontSize: 14, cursor: ask && js !== 'idle' ? 'default' : 'pointer', fontFamily: FONT, flexShrink: 0, marginLeft: i ? -4 : 0 }}>{label}</button>; })}
     </div>
   );
 }
@@ -18588,7 +18596,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-export const APP_VERSION = '46.0V';
+export const APP_VERSION = '47.0V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -36499,6 +36507,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [raceGame, setRaceGame] = useState(null);
   const [racePick, setRacePick] = useState(null);
   const [siegeGame, setSiegeGame] = useState(null);
+  const [zombieGame, setZombieGame] = useState(null);
   const [siegePick, setSiegePick] = useState(null);
   const [watchGame, setWatchGame] = useState(null);
   const [castWatch, setCastWatch] = useState(null);
@@ -36523,7 +36532,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [rollPick, setRollPick] = useState(null);
   const [gulpRoom, setGulpRoom] = useState(null);
   const [gulpPick, setGulpPick] = useState(null);
-  if (typeof window !== 'undefined' && window.__zfake) { window.__zopenGulpRoom = (rm) => setGulpRoom({ rm }); window.__zopenRoll = (rm, host, watch) => setRollGame({ rm, host, watch: !!watch }); window.__zopenRace = (rm, host, watch) => setRaceGame({ rm, host, watch: !!watch }); window.__zraceSolo = () => setRaceGame({ solo: true, rm: 'solo' }); window.__zsiegeSolo = () => setSiegeGame({ solo: true, rm: 'solo' }); window.__zopenSiege = (rm, host, watch) => setSiegeGame({ rm, host, watch: !!watch }); }
+  if (typeof window !== 'undefined' && window.__zfake) { window.__zopenGulpRoom = (rm) => setGulpRoom({ rm }); window.__zopenZombie = () => setZombieGame({ at: Date.now() }); window.__zopenRoll = (rm, host, watch) => setRollGame({ rm, host, watch: !!watch }); window.__zopenRace = (rm, host, watch) => setRaceGame({ rm, host, watch: !!watch }); window.__zraceSolo = () => setRaceGame({ solo: true, rm: 'solo' }); window.__zsiegeSolo = () => setSiegeGame({ solo: true, rm: 'solo' }); window.__zopenSiege = (rm, host, watch) => setSiegeGame({ rm, host, watch: !!watch }); }
   const joinLivePlay = async (r) => {
     const info = (r && r.info) || {};
     if (!r) return;
@@ -44767,7 +44776,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [featPick, setFeatPick] = useState(null);
   const [featGo, setFeatGo] = useState(null);
   const homeFeat = (k) => {
-    if (k === 'games') { setShowGames({ at: Date.now() }); return; }
+    if (k === 'zombie') { setZombieGame({ at: Date.now() }); return; }
+    if (k === 'games' || k === 'siege' || k === 'race' || k === 'roll' || k === 'gulp' || k === 'duo') { setShowGames({ at: Date.now() }); return; }
     if (k === 'online') { setShowGames({ at: Date.now(), room: '' }); return; }
     if (k === 'ai') { setAiStudio({ mode: 'image' }); return; }
     if (k === 'bot') {
@@ -48266,7 +48276,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       {msgSearchOpen != null && (
         <SearchMessagesPage myId={session.user.id} groups={groups} hiddenIds={getHiddenMsgIds()} initialQuery={msgSearchOpen} onClose={() => setMsgSearchOpen(null)} onOpen={openSearchHit} />
       )}
-      {showWhatsNew && <PageGuard name="whats new" onClose={() => setShowWhatsNew(false)}><WhatsNewSheet me={me} onClose={() => setShowWhatsNew(false)} onTry={(g) => { if (g === 'sets') setCollectionOpen(true); else if (g === 'shop') setShopOpen(true); else if (g === 'rooms') setShowGames({ at: Date.now(), room: '' }); else if (g === 'games') setShowGames(true); else if (g === 'camera') setStoryCamera(true); else if (g === 'race') setShowGames(true); else if (g === 'siege') setSiegeGame({ solo: true, rm: 'solo' }); else if (g === 'vibes') setHomeTab('moments'); else if (g === 'map') setMapOpen(true); else if (g === 'song' && me) setProfileOf({ ...me, __song: true }); else if (g === 'ai') setAiStudio({ mode: 'image' }); else if (g === 'chars') setCharsOpen(true); else if (g === 'coins') setWalletOpen(true); else if (g === 'bubbles') setShowBubbleSheet(true); else if (g === 'drops') setCollectionOpen('__drop'); else if (g === 'folders') { setHomeTab('chats'); setFoldersOpen(true); } else if (g === 'styles') setShopOpen('tab:styles'); else if (g === 'communities') setCommunitiesOpen({}); }} /></PageGuard>}
+      {showWhatsNew && <PageGuard name="whats new" onClose={() => setShowWhatsNew(false)}><WhatsNewSheet me={me} onClose={() => setShowWhatsNew(false)} onTry={(g) => { if (g === 'sets') setCollectionOpen(true); else if (g === 'shop') setShopOpen(true); else if (g === 'rooms') setShowGames({ at: Date.now(), room: '' }); else if (g === 'games') setShowGames(true); else if (g === 'camera') setStoryCamera(true); else if (g === 'race') setShowGames(true); else if (g === 'siege') setSiegeGame({ solo: true, rm: 'solo' }); else if (g === 'zombie') setZombieGame({ at: Date.now() }); else if (g === 'vibes') setHomeTab('moments'); else if (g === 'map') setMapOpen(true); else if (g === 'song' && me) setProfileOf({ ...me, __song: true }); else if (g === 'ai') setAiStudio({ mode: 'image' }); else if (g === 'chars') setCharsOpen(true); else if (g === 'coins') setWalletOpen(true); else if (g === 'bubbles') setShowBubbleSheet(true); else if (g === 'drops') setCollectionOpen('__drop'); else if (g === 'folders') { setHomeTab('chats'); setFoldersOpen(true); } else if (g === 'styles') setShopOpen('tab:styles'); else if (g === 'communities') setCommunitiesOpen({}); }} /></PageGuard>}
       {showGames && (
         <GamesPage key={showGames.at || 'games'} initialGame={showGames.game || null} onClose={() => setShowGames(false)}
           friends={gameFriends}
@@ -48277,6 +48287,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onRaceSolo={() => { setShowGames(false); setRaceGame({ solo: true, rm: 'solo' }); }}
           onSiegeInvite={() => setSiegePick({ rm: null })}
           onSiegeSolo={() => { setShowGames(false); setSiegeGame({ solo: true, rm: 'solo' }); }}
+          onZombie={() => { setShowGames(false); setZombieGame({ at: Date.now() }); }}
           onGulpRoom={() => setGulpPick({ rm: null, n: 1 })}
           onWatch={(r, p) => openWatch(r, p)}
           onJoinLive={(r) => joinLivePlay(r)}
@@ -48361,6 +48372,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       {racePick && (
         <RaceInviteSheet friends={gameFriends} already={racePick.n} side={!!racePick.side} onClose={() => setRacePick(null)}
           onInvite={(ps) => { const rm = racePick.rm; setRacePick(null); setShowGames(false); startRaceWith(ps, rm); }} />
+      )}
+      {zombieGame && me && (
+        <ZombieGamePage key={zombieGame.at} me={me} myId={session.user.id} onClose={() => { setZombieGame(null); setShowGames(true); }} />
       )}
       {siegeGame && me && (
         <SiegeGamePage key={siegeGame.rm} solo={!!siegeGame.solo} room={siegeGame.solo ? null : siegeGame} me={me} myId={session.user.id} watch={!!siegeGame.watch}
@@ -59821,7 +59835,7 @@ function svgMarkup(node) {
   return `<${node.type}${attrs}>${svgMarkup(node.props.children)}</${node.type}>`;
 }
 const gameArtSrcs = new Map();
-const GAME_ART_FILES = { duo: '/duo-art.webp', gulp: '/gulp-art.webp', gulpco: '/gulp-art.webp', roll: '/roll-art.webp', race: '/race-art.webp', siege: '/siege-art.webp' };
+const GAME_ART_FILES = { zombie: '/zombie-art.webp', duo: '/duo-art.webp', gulp: '/gulp-art.webp', gulpco: '/gulp-art.webp', roll: '/roll-art.webp', race: '/race-art.webp', siege: '/siege-art.webp' };
 function gameArtSrc(kIn) {
   const key = String(kIn == null ? '' : kIn);
   if (GAME_ART_FILES[key]) return GAME_ART_FILES[key];
@@ -59846,9 +59860,9 @@ export function GameArt({ k: kIn, width = 160, height = 100, radius = 14, style 
 }
 
 export const LIVE_GAME_KEYS = ['siege', 'race', 'roll', 'gulpco', 'duo', 'gulp', 'tug', 'qrace', 'rrace'];
-Object.assign(GAME_TITLES, { siege: 'Scrap Siege', race: 'Island Rally', roll: 'Roll Squad', gulpco: 'Gulp room', duo: 'Two Torches', gulp: 'Gulp', tug: 'Tug of war', qrace: 'Quiz race', rrace: 'Reaction race' });
-Object.assign(FRIEND_GAME_SUBS, { siege: 'Live, up to ten friends against robot waves', race: 'Live, up to eight friends, four maps', roll: 'Live, up to four friends roll together', gulpco: 'Live, up to ten friends, join any time', duo: 'Live, endless temples together', gulp: 'Live, eat smaller fish and grow', tug: 'Live, tap faster than them', qrace: 'Live, fastest right answer', rrace: 'Live, first to tap on green' });
-Object.assign(GAME_ART_BG, { siege: ['#D9A54A', '#3A2E22'], race: ['#7FB4E0', '#3A4B63'], roll: ['#6EC6FF', '#4FA83A'], duo: ['#3B2A48', '#120C1C'], gulp: ['#1C6FA8', '#082A4C'], gulpco: ['#1C6FA8', '#082A4C'], tug: ['#F97316', '#E11D48'], qrace: ['#7C3AED', '#2563EB'], rrace: ['#10B981', '#0EA5E9'] });
+Object.assign(GAME_TITLES, { zombie: 'Dead Town', siege: 'Scrap Siege', race: 'Island Rally', roll: 'Roll Squad', gulpco: 'Gulp room', duo: 'Two Torches', gulp: 'Gulp', tug: 'Tug of war', qrace: 'Quiz race', rrace: 'Reaction race' });
+Object.assign(FRIEND_GAME_SUBS, { siege: `Live, up to ${cloudOn() ? '20 players' : 'ten friends'} against robot waves`, race: 'Live, up to eight friends, four maps', roll: 'Live, up to four friends roll together', gulpco: 'Live, up to ten friends, join any time', duo: 'Live, endless temples together', gulp: 'Live, eat smaller fish and grow', tug: 'Live, tap faster than them', qrace: 'Live, fastest right answer', rrace: 'Live, first to tap on green' });
+Object.assign(GAME_ART_BG, { zombie: ['#8A8F5A', '#1E2216'], siege: ['#D9A54A', '#3A2E22'], race: ['#7FB4E0', '#3A4B63'], roll: ['#6EC6FF', '#4FA83A'], duo: ['#3B2A48', '#120C1C'], gulp: ['#1C6FA8', '#082A4C'], gulpco: ['#1C6FA8', '#082A4C'], tug: ['#F97316', '#E11D48'], qrace: ['#7C3AED', '#2563EB'], rrace: ['#10B981', '#0EA5E9'] });
 Object.assign(GAME_RULES, {
   siege: { how: ['Pick a hero: Blaze blasts up close, Pip snipes from far away, Boom throws bombs over walls and Mira heals friends with her orb.', 'Move with the left stick. Tap the red button to shoot the closest robot, or drag it to aim.', 'Hitting robots charges your super. When the gold button glows, tap it or drag it to aim.', 'Robots come in waves from the hatches. A boss shows up every 5 waves.', 'If a friend goes down, stand next to them to revive them. Grab health, power and super drops.', 'Hide in bushes so robots lose sight of you. Talk with your mic or send emojis.'], win: 'Survive 15 waves together, or go endless and see how far you get.' },
   duo: { how: ['You carry the orange torch, your friend carries the blue one. Move with the joystick.', 'Orange walks through lava and fire. Blue wades through water, lights hidden stones and reads hidden codes.', 'Pull levers, hold doors on the plates, jump through glowing rings, cross spikes when they drop and keep moving on cracked floors.', 'Play the story or endless temples that are new every time. You share three hearts.', 'Talk with voice, quick messages and emojis. You can mute your friend any time.'], win: 'Stand on your own glowing doors at the same time to finish. Finish missions for stars.' },

@@ -1,3 +1,4 @@
+import { backdropProps } from './tap.js';
 import React, { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { GameRoom, RoomButton, RoomSheet, sfx, haptic, defineSfx, clickSound, useLandPhone } from './kit.jsx';
 import { useGameRelay } from './relay.jsx';
@@ -340,7 +341,7 @@ function ChessView({ Z, st, myId, onMove, onMeta, peerSel, onSel, peerName, stil
           })}
           <div ref={input.ref} {...input.handlers} role="grid" aria-label="Chess board" style={{ position: 'absolute', inset: 0, zIndex: 4, touchAction: 'none', cursor: myTurn ? 'pointer' : 'default' }} />
           {promo && C && (
-            <div onClick={() => setPromo(null)} style={{ position: 'absolute', inset: 0, zIndex: 8, background: 'rgba(10,6,4,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div {...backdropProps(() => setPromo(null))} style={{ position: 'absolute', inset: 0, zIndex: 8, background: 'rgba(10,6,4,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', gap: 6, padding: 10, borderRadius: 16, background: '#2A1D14', boxShadow: '0 12px 30px rgba(0,0,0,0.5)' }}>
                 {['q', 'r', 'b', 'n'].map((q) => (
                   <button key={q} type="button" aria-label={`Promote to ${C.PIECE_NAMES[q]}`} onClick={() => doMove(promo.f, promo.t, q)} className="zgr-press" style={{ width: 54, height: 54, borderRadius: 12, border: 'none', background: '#ECD7B2', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>

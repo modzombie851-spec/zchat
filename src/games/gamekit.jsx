@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { FONT, hapticTap } from '../App.jsx';
 import { Sfx } from './sfx.js';
 
@@ -15,6 +15,36 @@ export const GC = {
   teal: ['#5EE6D2', '#18B3A0', '#0B6B60'],
   pink: ['#FF8FC8', '#F0509E', '#99245F'],
 };
+
+const SKIN0 = { k: '', shape: 'round', face: ['rgba(74,80,116,0.92)', 'rgba(40,44,72,0.92)'], lip: 'rgba(8,8,22,0.75)', edge: INK, ico: '#FFFFFF', gloss: 0.42, panel: 'linear-gradient(90deg, rgba(0,0,0,0.46), rgba(0,0,0,0.26))', pr: 8, pEdge: 'none', note: 'rgba(10,12,18,0.82)', nr: 17, feed: 'rgba(8,10,18,0.6)', name: '#FFD27A' };
+export const SKINS = {
+  rally: { k: 'rally', dark: ['#3A4566', '#232B45', '#0E1426'], shape: 'sq', face: ['#323C5A', '#161D33'], lip: '#060912', lipEdge: '#060912', edge: 'rgba(255,255,255,0.82)', ico: '#FFFFFF', gloss: 0.16, panel: 'linear-gradient(180deg, rgba(16,24,48,0.84), rgba(8,13,30,0.84))', pr: 5, pEdge: 'inset 3px 0 0 #FFC93C', note: 'rgba(10,16,34,0.92)', nr: 6, feed: 'rgba(10,16,34,0.66)', name: '#FFC93C', joyRing: 'rgba(255,255,255,0.6)', joyKnob: 'rgba(255,255,255,0.45)' },
+  siege: { k: 'siege', dark: ['#6E7884', '#434B57', '#1E232B'], shape: 'plate', btnShape: 'plate', face: ['#7C8794', '#434C59'], lip: '#16191F', edge: '#0E1116', ico: '#F4F6F8', gloss: 0.26, rivets: true, panel: 'linear-gradient(180deg, rgba(50,57,68,0.9), rgba(25,29,37,0.9))', pr: 3, pEdge: 'inset 0 2px 0 #F2B21B, inset 0 0 0 1px rgba(255,255,255,0.07)', note: 'rgba(28,32,40,0.95)', nr: 3, feed: 'rgba(24,28,36,0.72)', name: '#F2B21B', joyRing: 'rgba(242,178,27,0.75)', joyKnob: 'rgba(196,204,214,0.5)' },
+  roll: { k: 'roll', shape: 'round', face: ['#FFFFFF', '#E2E8F6'], lip: '#8090C8', edge: '#3A3352', ico: '#3A3352', gloss: 0, panel: 'rgba(54,40,100,0.6)', pr: 16, pEdge: 'inset 0 0 0 2px rgba(255,255,255,0.36)', note: 'rgba(54,40,100,0.88)', nr: 18, feed: 'rgba(54,40,100,0.6)', name: '#FFE27A' },
+  gulp: { k: 'gulp', dark: ['#2F6E9A', '#1C4C74', '#0C2A48'], shape: 'bubble', face: ['rgba(150,228,255,0.3)', 'rgba(8,72,130,0.6)'], lip: null, edge: 'rgba(205,245,255,0.85)', ico: '#FFFFFF', gloss: 0.6, panel: 'linear-gradient(180deg, rgba(4,54,96,0.62), rgba(2,30,62,0.62))', pr: 14, pEdge: 'inset 0 0 0 1px rgba(150,228,255,0.32)', note: 'rgba(3,40,74,0.88)', nr: 17, feed: 'rgba(3,40,74,0.58)', name: '#8FE8FF', joyRing: 'rgba(190,240,255,0.75)', joyKnob: 'rgba(170,230,255,0.42)' },
+  duo: { k: 'duo', dark: ['#6A5644', '#43362A', '#1E1610'], shape: 'tab', face: ['#5E4C3B', '#33281F'], lip: '#160F0A', edge: '#C99A45', ico: '#FBE6B8', gloss: 0.12, panel: 'linear-gradient(180deg, rgba(46,35,25,0.9), rgba(26,19,13,0.9))', pr: 4, pEdge: 'inset 0 0 0 1px rgba(217,165,72,0.55)', note: 'rgba(32,24,16,0.95)', nr: 4, feed: 'rgba(32,24,16,0.7)', name: '#F2C46A', joyRing: 'rgba(242,196,106,0.7)', joyKnob: 'rgba(251,230,184,0.4)' },
+  zombie: { k: 'zombie', dark: ['#5E6646', '#3A402C', '#1C2014'], shape: 'cut', btnShape: 'cut', face: ['#545C3D', '#2E3322'], lip: '#12140D', edge: '#0B0D07', ico: '#EFE8D2', gloss: 0.1, panel: 'linear-gradient(180deg, rgba(38,42,28,0.9), rgba(20,22,14,0.9))', pr: 3, pEdge: 'inset 0 -2px 0 #F28C28, inset 0 0 0 1px rgba(239,232,210,0.1)', note: 'rgba(24,26,17,0.95)', nr: 3, feed: 'rgba(22,24,15,0.72)', name: '#F2A23A', joyRing: 'rgba(239,232,210,0.6)', joyKnob: 'rgba(242,140,40,0.45)' },
+};
+const SkinCtx = createContext(null);
+export function GSkin({ k, children }) { return <SkinCtx.Provider value={SKINS[k] || null}>{children}</SkinCtx.Provider>; }
+export function useSkin() { return useContext(SkinCtx) || SKIN0; }
+const CLIP = { plate: 'polygon(24% 0,76% 0,100% 24%,100% 76%,76% 100%,24% 100%,0 76%,0 24%)', cut: 'polygon(0 0,74% 0,100% 26%,100% 100%,0 100%)' };
+const RAD = { round: '50%', bubble: '50%', sq: '26%', tab: '16%' };
+function SkinBox({ shape, w, h, top, bg, edge, ol, shadow, inset, children, style }) {
+  const clip = CLIP[shape];
+  if (clip) {
+    return (
+      <span aria-hidden="true" style={{ position: 'absolute', left: 0, top, width: w, height: h, clipPath: clip, WebkitClipPath: clip, background: edge, filter: shadow ? 'drop-shadow(0 3px 4px rgba(0,0,0,0.3))' : undefined, ...style }}>
+        <span style={{ position: 'absolute', inset: ol, clipPath: clip, WebkitClipPath: clip, overflow: 'hidden', background: bg, boxShadow: inset || undefined, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{children}</span>
+      </span>
+    );
+  }
+  return <span aria-hidden="true" style={{ position: 'absolute', left: 0, top, width: w, height: h, borderRadius: RAD[shape] || '50%', overflow: 'hidden', background: bg, boxShadow: [ol ? `0 0 0 ${ol}px ${edge}` : '', shadow || '', inset || ''].filter(Boolean).join(', ') || undefined, display: 'flex', alignItems: 'center', justifyContent: 'center', ...style }}>{children}</span>;
+}
+function Rivets({ size }) {
+  const d = Math.max(2, Math.round(size * 0.075));
+  return <>{[['20%', '20%'], ['80%', '20%'], ['20%', '80%'], ['80%', '80%']].map(([x, y], i) => <span key={i} style={{ position: 'absolute', left: x, top: y, width: d, height: d, marginLeft: -d / 2, marginTop: -d / 2, borderRadius: d, background: 'rgba(255,255,255,0.5)', boxShadow: '0 1px 0 rgba(0,0,0,0.5)' }} />)}</>;
+}
 
 let cssDone = false;
 export function injectKitCss() {
@@ -38,6 +68,7 @@ export function injectKitCss() {
     '@keyframes zgk-hint{0%{opacity:0}10%{opacity:1}85%{opacity:1}100%{opacity:0}}',
     '@keyframes zgk-note{0%{opacity:0;transform:translateY(-10px) scale(.96)}7%{opacity:1;transform:none}86%{opacity:1;transform:none}100%{opacity:0;transform:translateY(-4px)}}',
     '@keyframes zgk-talk{0%,100%{transform:scaleY(.3)}50%{transform:scaleY(1)}}',
+    '@keyframes zgk-chat{0%{opacity:0;transform:translateY(6px)}4%{opacity:1;transform:none}86%{opacity:1}100%{opacity:0}}',
   ].join('');
   document.head.appendChild(st);
 }
@@ -50,6 +81,8 @@ export function kitTap(kind) {
 
 const ICON = {
   close: 'M7 7l10 10M17 7L7 17',
+  grenade: 'M9.6 9.2h4.8M10.4 9.2V7h3.2v2.2M13.6 7.6c1.2-1.6 2.9-2.4 4.4-2M7.2 15.4a4.8 5.2 0 1 0 9.6 0a4.8 5.2 0 1 0-9.6 0M8.4 13.6h7.2M8.4 17.2h7.2M12 10.4v10',
+  target: 'M12 2.8v4.4M12 16.8v4.4M2.8 12h4.4M16.8 12h4.4M12 8.4a3.6 3.6 0 1 0 0 7.2a3.6 3.6 0 1 0 0-7.2',
   rocket: 'M12 2.2c2.9 2.3 4.4 5.6 4.4 9.6v4.4H7.6v-4.4C7.6 7.8 9.1 4.5 12 2.2zM7.6 12.6L4.4 16.4v2.8h3.2M16.4 12.6l3.2 3.8v2.8h-3.2M10.2 17.6h3.6L12 21.8z',
   drop: 'M12 2.8c3.2 4.4 6.2 7.9 6.2 11.4a6.2 6.2 0 0 1-12.4 0c0-3.5 3-7 6.2-11.4z',
   dash: 'M3 7h6M2 12h8M3 17h6M11 5l8 7-8 7z',
@@ -123,8 +156,9 @@ function hexA(h, a) { const n = parseInt(String(h).slice(1, 7), 16) || 0; return
 
 export function GBtn({ icon, label, onPress, color = 'blue', size = 64, cool = 0, coolMax = 0, badge, disabled, fast = true, sound = 'pop', iconSize, style, children, active }) {
   injectKitCss();
+  const S = useSkin();
   const [down, setDown] = useState(false);
-  const c = GC[color] || GC.dark;
+  const c = (color === 'dark' && S.dark) || GC[color] || GC.dark;
   const light = color === 'white' || color === 'gold';
   const busy = cool > 0 || disabled;
   const fire = () => { if (busy) return; kitTap(sound); if (onPress) onPress(); };
@@ -133,6 +167,15 @@ export function GBtn({ icon, label, onPress, color = 'blue', size = 64, cool = 0
   const ol = size >= 50 ? 2.5 : 2;
   const ink = light ? '#262B40' : '#FFFFFF';
   const press = down && !busy;
+  const shp = S.btnShape && CLIP[S.btnShape] ? S.btnShape : null;
+  const content = (
+    <>
+      <span style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: busy ? 0.55 : 1, filter: light ? 'none' : `drop-shadow(0 ${Math.max(1, Math.round(size * 0.03))}px 0 ${c[2]})` }}>
+        {children || <GIcon k={icon} size={iconSize || Math.round(size * 0.46)} color={ink} line halo={false} stroke={2.6} />}
+      </span>
+      {cool > 0 && coolMax > 1.5 && <span style={{ position: 'absolute', left: 0, right: 0, top: '50%', transform: 'translateY(-50%)', textAlign: 'center', fontFamily: FONT, fontWeight: 900, fontSize: Math.round(size * 0.32), color: '#FFFFFF', textShadow: `0 2px 0 ${INK}` }}>{Math.ceil(cool)}</span>}
+    </>
+  );
   return (
     <button type="button" className="zgk-btn" aria-label={label} disabled={!!disabled}
       onPointerDown={(e) => { e.stopPropagation(); if (e.cancelable) e.preventDefault(); setDown(true); if (fast) fire(); }}
@@ -141,17 +184,29 @@ export function GBtn({ icon, label, onPress, color = 'blue', size = 64, cool = 0
       onPointerLeave={() => setDown(false)}
       onClick={(e) => { e.stopPropagation(); if (!fast) fire(); }}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fire(); } }}
-      style={{ position: 'relative', width: size, height: size + lip, padding: 0, border: 'none', borderRadius: '50%', background: 'transparent', cursor: busy ? 'default' : 'pointer', flexShrink: 0, opacity: disabled ? 0.5 : 1, ...style }}>
-      <span aria-hidden="true" style={{ position: 'absolute', left: 0, top: lip, width: size, height: size, borderRadius: '50%', background: c[2], boxShadow: `0 0 0 ${ol}px ${INK}, 0 ${lip}px 8px rgba(0,0,0,0.28)` }} />
-      <span aria-hidden="true" style={{ position: 'absolute', left: 0, top: press ? lip - 1 : 0, width: size, height: size, borderRadius: '50%', overflow: 'hidden', background: `linear-gradient(180deg, ${c[0]} 0%, ${c[1]} 78%)`, boxShadow: `0 0 0 ${ol}px ${active ? '#FFFFFF' : INK}, inset 0 -${Math.max(2, Math.round(size * 0.05))}px 0 rgba(0,0,0,0.14)`, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'top 0.05s ease-out' }}>
-        <span style={{ position: 'absolute', left: '16%', right: '16%', top: '7%', height: '36%', borderRadius: '50%', background: 'linear-gradient(180deg, rgba(255,255,255,0.6), rgba(255,255,255,0.06))' }} />
-        {frac > 0 && <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: `conic-gradient(rgba(10,8,24,0.62) ${frac * 360}deg, rgba(0,0,0,0) 0deg)` }} />}
-        <span style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: busy ? 0.55 : 1, filter: light ? 'none' : `drop-shadow(0 ${Math.max(1, Math.round(size * 0.03))}px 0 ${c[2]})` }}>
-          {children || <GIcon k={icon} size={iconSize || Math.round(size * 0.46)} color={ink} line halo={false} stroke={2.6} />}
-        </span>
-        {cool > 0 && coolMax > 1.5 && <span style={{ position: 'absolute', left: 0, right: 0, top: '50%', transform: 'translateY(-50%)', textAlign: 'center', fontFamily: FONT, fontWeight: 900, fontSize: Math.round(size * 0.32), color: '#FFFFFF', textShadow: `0 2px 0 ${INK}` }}>{Math.ceil(cool)}</span>}
-      </span>
-      {active && <span aria-hidden="true" style={{ position: 'absolute', left: -4, top: -4, width: size + 8, height: size + 8, borderRadius: '50%', boxShadow: '0 0 0 3px #FFD84E', pointerEvents: 'none' }} />}
+      style={{ position: 'relative', width: size, height: size + lip, padding: 0, border: 'none', borderRadius: shp ? 4 : '50%', background: 'transparent', cursor: busy ? 'default' : 'pointer', flexShrink: 0, opacity: disabled ? 0.5 : 1, ...style }}>
+      {shp ? (
+        <>
+          {active && <SkinBox shape={shp} w={size + 10} h={size + 10} top={-5} bg="#FFD84E" edge="#FFD84E" ol={0} style={{ left: -5 }} />}
+          <SkinBox shape={shp} w={size} h={size} top={lip} bg={c[2]} edge={INK} ol={ol} shadow />
+          <SkinBox shape={shp} w={size} h={size} top={press ? lip - 1 : 0} bg={`linear-gradient(180deg, ${c[0]} 0%, ${c[1]} 78%)`} edge={active ? '#FFFFFF' : INK} ol={ol} inset={`inset 0 -${Math.max(2, Math.round(size * 0.05))}px 0 rgba(0,0,0,0.16), inset 0 0 0 ${Math.max(2, Math.round(size * 0.05))}px rgba(255,255,255,0.12)`}>
+            <span style={{ position: 'absolute', left: '22%', right: '22%', top: '7%', height: '30%', borderRadius: 3, background: 'linear-gradient(180deg, rgba(255,255,255,0.5), rgba(255,255,255,0.04))' }} />
+            {S.rivets && size >= 44 && <Rivets size={size} />}
+            {frac > 0 && <span style={{ position: 'absolute', inset: 0, background: `conic-gradient(rgba(10,8,24,0.62) ${frac * 360}deg, rgba(0,0,0,0) 0deg)` }} />}
+            {content}
+          </SkinBox>
+        </>
+      ) : (
+        <>
+          <span aria-hidden="true" style={{ position: 'absolute', left: 0, top: lip, width: size, height: size, borderRadius: '50%', background: c[2], boxShadow: `0 0 0 ${ol}px ${INK}, 0 ${lip}px 8px rgba(0,0,0,0.28)` }} />
+          <span aria-hidden="true" style={{ position: 'absolute', left: 0, top: press ? lip - 1 : 0, width: size, height: size, borderRadius: '50%', overflow: 'hidden', background: `linear-gradient(180deg, ${c[0]} 0%, ${c[1]} 78%)`, boxShadow: `0 0 0 ${ol}px ${active ? '#FFFFFF' : INK}, inset 0 -${Math.max(2, Math.round(size * 0.05))}px 0 rgba(0,0,0,0.14)`, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'top 0.05s ease-out' }}>
+            <span style={{ position: 'absolute', left: '16%', right: '16%', top: '7%', height: '36%', borderRadius: '50%', background: 'linear-gradient(180deg, rgba(255,255,255,0.6), rgba(255,255,255,0.06))' }} />
+            {frac > 0 && <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: `conic-gradient(rgba(10,8,24,0.62) ${frac * 360}deg, rgba(0,0,0,0) 0deg)` }} />}
+            {content}
+          </span>
+          {active && <span aria-hidden="true" style={{ position: 'absolute', left: -4, top: -4, width: size + 8, height: size + 8, borderRadius: '50%', boxShadow: '0 0 0 3px #FFD84E', pointerEvents: 'none' }} />}
+        </>
+      )}
       {badge != null && <span aria-hidden="true" style={{ position: 'absolute', right: -4, top: -4, minWidth: 19, height: 19, padding: '0 5px', borderRadius: 10, background: '#E5484D', color: '#FFFFFF', fontFamily: FONT, fontWeight: 900, fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box', boxShadow: `0 0 0 2px ${INK}` }}>{badge}</span>}
     </button>
   );
@@ -235,9 +290,11 @@ export function GSeg({ value, items, onPick, disabled, height = 36, label }) {
   );
 }
 
+const PANEL_EDGE = { rally: [10, 'inset 3px 0 0 #FFC93C, inset 0 0 0 1px rgba(255,255,255,0.1)', 'rgba(10,16,34,0.88)'], siege: [6, 'inset 0 2px 0 #F2B21B, inset 0 0 0 1px rgba(255,255,255,0.09)', 'rgba(26,30,38,0.9)'], roll: [20, 'inset 0 0 0 2px rgba(255,255,255,0.22)', 'rgba(40,30,78,0.86)'], gulp: [18, 'inset 0 0 0 1px rgba(150,228,255,0.3)', 'rgba(3,34,64,0.84)'], duo: [6, 'inset 0 0 0 1px rgba(217,165,72,0.5)', 'rgba(30,22,15,0.9)'], zombie: [4, 'inset 0 -2px 0 #F28C28, inset 0 0 0 1px rgba(239,232,210,0.1)', 'rgba(22,24,15,0.9)'] };
 export function GPanel({ children, style, color }) {
+  const P = PANEL_EDGE[useSkin().k];
   return (
-    <div style={{ borderRadius: 14, background: color || 'rgba(12,16,24,0.86)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.11), inset 0 1px 0 rgba(255,255,255,0.08), 0 12px 32px rgba(0,0,0,0.38)', ...style }}>{children}</div>
+    <div style={{ borderRadius: P ? P[0] : 14, background: color || (P ? P[2] : 'rgba(12,16,24,0.86)'), boxShadow: `${P ? `${P[1]}, ` : 'inset 0 0 0 1px rgba(255,255,255,0.11), '}inset 0 1px 0 rgba(255,255,255,0.08), 0 12px 32px rgba(0,0,0,0.38)`, ...style }}>{children}</div>
   );
 }
 
@@ -305,9 +362,13 @@ export function useJoystick(wrapRef, opts) {
 
 export function GJoy({ view, knobRef, color = 'blue', idle, R = 52, alpha = 1, flat = false }) {
   const c = GC[color] || GC.blue;
+  const S = useSkin();
+  const ring = S.joyRing || 'rgba(255,255,255,0.5)';
+  const sq = S.k === 'siege' || S.k === 'zombie';
   const flatBase = (x, y, op) => (
-    <div style={{ position: 'absolute', left: x - R - 10, top: y - R - 10, width: (R + 10) * 2, height: (R + 10) * 2, borderRadius: '50%', background: 'radial-gradient(circle, rgba(0,0,0,0.08) 0%, rgba(0,0,0,0.22) 100%)', boxShadow: 'inset 0 0 0 1.5px rgba(255,255,255,0.5)', pointerEvents: 'none', opacity: op * alpha }}>
-      <div ref={op === 1 ? knobRef : null} style={{ position: 'absolute', left: R + 10 - Math.round(R * 0.42), top: R + 10 - Math.round(R * 0.42), width: Math.round(R * 0.84), height: Math.round(R * 0.84), borderRadius: '50%', background: 'rgba(255,255,255,0.42)', boxShadow: 'inset 0 0 0 1.5px rgba(255,255,255,0.9), 0 2px 6px rgba(0,0,0,0.25)' }} />
+    <div style={{ position: 'absolute', left: x - R - 10, top: y - R - 10, width: (R + 10) * 2, height: (R + 10) * 2, borderRadius: '50%', background: 'radial-gradient(circle, rgba(0,0,0,0.08) 0%, rgba(0,0,0,0.22) 100%)', boxShadow: `inset 0 0 0 1.5px ${ring}`, pointerEvents: 'none', opacity: op * alpha }}>
+      {sq && [0, 90, 180, 270].map((a) => <span key={a} style={{ position: 'absolute', left: '50%', top: '50%', width: 10, height: 2, marginLeft: -5, marginTop: -1, background: ring, transform: `rotate(${a}deg) translateX(${R + 2}px)` }} />)}
+      <div ref={op === 1 ? knobRef : null} style={{ position: 'absolute', left: R + 10 - Math.round(R * 0.42), top: R + 10 - Math.round(R * 0.42), width: Math.round(R * 0.84), height: Math.round(R * 0.84), borderRadius: sq ? '30%' : '50%', background: S.joyKnob || 'rgba(255,255,255,0.42)', boxShadow: `inset 0 0 0 1.5px ${S.joyRing ? ring : 'rgba(255,255,255,0.9)'}, 0 2px 6px rgba(0,0,0,0.25)` }} />
     </div>
   );
   if (flat) {
@@ -405,23 +466,26 @@ export function GToggle({ on, onPress, label, iconOn, iconOff }) {
 
 const CTL_KEY = 'zchat-game-controls';
 const ctlSubs = new Set();
-let ctlNow = null;
-function ctlRead() {
+const ctlNow = {};
+const ctlKey = (g) => (g ? `${CTL_KEY}-${g}` : CTL_KEY);
+function ctlRead(g) {
   try {
-    const v = JSON.parse(localStorage.getItem(CTL_KEY) || 'null');
+    const v = JSON.parse(localStorage.getItem(ctlKey(g)) || 'null') || (g ? JSON.parse(localStorage.getItem(CTL_KEY) || 'null') : null);
     if (v && typeof v === 'object') return { size: Math.min(1.25, Math.max(0.6, Number(v.size) || 1)), see: Math.min(0.7, Math.max(0, Number(v.see) || 0)), side: v.side !== false };
   } catch {}
   return { size: 1, see: 0, side: true };
 }
-export function ctlLook() { if (!ctlNow) ctlNow = ctlRead(); return ctlNow; }
-export function setCtlLook(patch) {
-  ctlNow = { ...ctlLook(), ...patch };
-  try { localStorage.setItem(CTL_KEY, JSON.stringify(ctlNow)); } catch {}
-  ctlSubs.forEach((f) => { try { f(ctlNow); } catch {} });
+export function ctlLook(g = '') { if (!ctlNow[g]) ctlNow[g] = ctlRead(g); return ctlNow[g]; }
+export function setCtlLook(patch, g = '') {
+  ctlNow[g] = { ...ctlLook(g), ...patch };
+  try { localStorage.setItem(ctlKey(g), JSON.stringify(ctlNow[g])); } catch {}
+  ctlSubs.forEach((f) => { try { f(g, ctlNow[g]); } catch {} });
 }
-export function useCtlLook() {
-  const [v, setV] = useState(ctlLook);
-  useEffect(() => { const f = (n) => setV(n); ctlSubs.add(f); return () => { ctlSubs.delete(f); }; }, []);
+export function useCtlLook(g) {
+  const S = useSkin();
+  const key = g != null ? g : S.k;
+  const [v, setV] = useState(() => ctlLook(key));
+  useEffect(() => { setV(ctlLook(key)); const f = (k, n) => { if (k === key) setV(n); }; ctlSubs.add(f); return () => { ctlSubs.delete(f); }; }, [key]);
   return v;
 }
 const SIZES = [[0.7, 'Small'], [0.85, 'Medium'], [1, 'Normal'], [1.15, 'Big']];
@@ -482,7 +546,8 @@ export function GVoiceRow({ name, avatar, muted, vol = 1, onMute, onVol, me }) {
 }
 
 export function GControlsPanel({ onClose, sideways, wide }) {
-  const v = useCtlLook();
+  const g = useSkin().k;
+  const v = useCtlLook(g);
   const [snd, setSnd] = useState(() => !!Sfx.sfxOn);
   const [mus, setMus] = useState(() => !!Sfx.musicOn);
   const samples = (
@@ -493,20 +558,20 @@ export function GControlsPanel({ onClose, sideways, wide }) {
   );
   const opts = (
     <>
-      <GSteps label="Button size" value={v.size} opts={SIZES} onPick={(x) => setCtlLook({ size: x })} />
-      <GSteps label="See through" value={v.see} opts={SEES} onPick={(x) => setCtlLook({ see: x })} />
+      <GSteps label="Button size" value={v.size} opts={SIZES} onPick={(x) => setCtlLook({ size: x }, g)} />
+      <GSteps label="See through" value={v.see} opts={SEES} onPick={(x) => setCtlLook({ see: x }, g)} />
       <div style={{ display: 'flex', gap: 14, width: '100%' }}>
         <div style={{ flex: 1, minWidth: 0 }}><GSwitchRow label="Sound" on={snd} onToggle={() => { const n = !snd; setSnd(n); Sfx.init(); Sfx.setSfx(n); }} /></div>
         <div style={{ flex: 1, minWidth: 0 }}><GSwitchRow label="Music" on={mus} onToggle={() => { const n = !mus; setMus(n); Sfx.init(); Sfx.setMusic(n); }} /></div>
       </div>
       {sideways && (
-        <div role="switch" aria-checked={v.side} tabIndex={0} {...pressProps(() => { setCtlLook({ side: !v.side }); kitTap(); })} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', cursor: 'pointer', fontSize: 14, fontWeight: 900, color: '#FFFFFF' }}>
+        <div role="switch" aria-checked={v.side} tabIndex={0} {...pressProps(() => { setCtlLook({ side: !v.side }, g); kitTap(); })} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', cursor: 'pointer', fontSize: 14, fontWeight: 900, color: '#FFFFFF' }}>
           <span style={{ flex: 1 }}>Play sideways<span style={{ display: 'block', fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.65)' }}>No need to turn your phone setting</span></span>
           <span aria-hidden="true" style={{ width: 46, height: 28, borderRadius: 14, background: v.side ? '#F7C53A' : 'rgba(255,255,255,0.18)', position: 'relative', transition: 'background .15s ease', flexShrink: 0 }}><span style={{ position: 'absolute', top: 3, left: v.side ? 21 : 3, width: 22, height: 22, borderRadius: 11, background: '#FFFFFF', transition: 'left .15s ease' }} /></span>
         </div>
       )}
       <div style={{ display: 'flex', gap: 10, width: '100%' }}>
-        <GPill text="Reset" color="white" small onPress={() => setCtlLook({ size: 1, see: 0 })} style={{ flex: 1 }} wide />
+        <GPill text="Reset" color="white" small onPress={() => setCtlLook({ size: 1, see: 0 }, g)} style={{ flex: 1 }} wide />
         <GPill text="Done" color="green" small onPress={onClose} style={{ flex: 1 }} wide />
       </div>
     </>
@@ -685,17 +750,67 @@ export function useStageBox(ref) {
 }
 const envIn = (n) => `env(safe-area-inset-${n}, 0px)`;
 const lockable = () => typeof window !== 'undefined' && window.screen && window.screen.orientation && typeof window.screen.orientation.lock === 'function';
+const fsEl = () => (typeof document !== 'undefined' ? document.fullscreenElement || document.webkitFullscreenElement || null : null);
+const isAndroid = () => typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent || '');
+function iosGap() {
+  try {
+    if (typeof navigator === 'undefined' || navigator.standalone !== true) return 0;
+    const p = document.createElement('div');
+    p.style.cssText = 'position:fixed;left:0;top:0;width:1px;height:1px;visibility:hidden;pointer-events:none;padding-top:env(safe-area-inset-top)';
+    document.body.appendChild(p);
+    const st = parseFloat(window.getComputedStyle(p).paddingTop) || 0;
+    p.remove();
+    const tall = window.innerHeight > window.innerWidth;
+    const sw = window.screen.width, sh = window.screen.height;
+    const full = tall ? Math.max(sw, sh) : Math.min(sw, sh);
+    const miss = full - window.innerHeight;
+    return st > 0 && miss > 4 && miss <= st + 2 ? Math.round(miss) : 0;
+  } catch { return 0; }
+}
 export function useGameStage(look) {
   const rootRef = useRef(null);
   const box = useStageBox(rootRef);
   const want = !!(look && look.side) && TOUCHY;
+  const [fsOn, setFsOn] = useState(() => !!fsEl());
   useEffect(() => {
     if (!want || !lockable()) return undefined;
     const so = window.screen.orientation;
     let tried = false;
     try { const r = so.lock('landscape'); tried = true; if (r && r.catch) r.catch(() => {}); } catch {}
     return () => { if (tried) { try { so.unlock(); } catch {} } };
-  }, [want]);
+  }, [want, fsOn]);
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el || typeof document === 'undefined') return undefined;
+    const de = document.documentElement;
+    const can = TOUCHY && isAndroid() && !!(de.requestFullscreen || de.webkitRequestFullscreen);
+    let mine = false, tried = false;
+    const onFs = () => setFsOn(!!fsEl());
+    document.addEventListener('fullscreenchange', onFs);
+    document.addEventListener('webkitfullscreenchange', onFs);
+    const go = () => {
+      if (tried || !can || fsEl()) return;
+      tried = true;
+      try {
+        const r = de.requestFullscreen ? de.requestFullscreen({ navigationUI: 'hide' }) : de.webkitRequestFullscreen();
+        mine = true;
+        if (r && r.catch) r.catch(() => { mine = false; });
+      } catch { mine = false; }
+    };
+    if (can) el.addEventListener('pointerup', go, true);
+    const fix = () => { const g = iosGap(); el.style.setProperty('--zgx', `${g}px`); };
+    fix();
+    window.addEventListener('resize', fix);
+    window.addEventListener('orientationchange', fix);
+    return () => {
+      el.removeEventListener('pointerup', go, true);
+      document.removeEventListener('fullscreenchange', onFs);
+      document.removeEventListener('webkitfullscreenchange', onFs);
+      window.removeEventListener('resize', fix);
+      window.removeEventListener('orientationchange', fix);
+      if (mine && fsEl()) { try { const r = document.exitFullscreen ? document.exitFullscreen() : document.webkitExitFullscreen(); if (r && r.catch) r.catch(() => {}); } catch {} }
+    };
+  }, []);
   const sideRef = useRef(false);
   const tall = box.h > box.w * 1.08, wide = box.w > box.h * 1.08;
   const side = want && (sideRef.current ? !wide : tall);
@@ -715,25 +830,32 @@ export function stagePoint(el, e, side) {
 
 export function GHudBtn({ icon, label, onPress, on = false, tone = '#7CF2A0', size = 36, badge, children }) {
   injectKitCss();
+  const S = useSkin();
   const [down, setDown] = useState(false);
   const ic = Math.round(size * 0.5);
-  const lip = 3;
+  const lip = S.lip ? 3 : 0;
+  const bubble = S.shape === 'bubble';
+  const light = S.ico !== '#FFFFFF' && S.k === 'roll';
+  const face = on ? `linear-gradient(180deg, ${tone} 0%, ${hexA(tone, 0.72)} 100%)` : bubble ? `radial-gradient(circle at 34% 28%, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0.1) 26%, ${S.face[0]} 52%, ${S.face[1]} 100%)` : `linear-gradient(180deg, ${S.face[0]} 0%, ${S.face[1]} 100%)`;
+  const inset = S.k === 'duo' ? 'inset 0 0 0 3px rgba(0,0,0,0.22), inset 0 0 0 4px rgba(217,165,72,0.3)' : `inset 0 -2px 0 rgba(0,0,0,${light ? 0.08 : 0.18})`;
   return (
     <button type="button" className="zgk-btn" aria-label={label} aria-pressed={on || undefined} {...pressProps(() => { kitTap('click'); if (onPress) onPress(); })}
       onPointerUp={() => setDown(false)} onPointerCancel={() => setDown(false)} onPointerLeave={() => setDown(false)} onPointerDownCapture={() => setDown(true)}
-      style={{ position: 'relative', width: size, height: size + lip, borderRadius: '50%', border: 'none', padding: 0, flexShrink: 0, cursor: 'pointer', background: 'transparent' }}>
-      <span aria-hidden="true" style={{ position: 'absolute', left: 0, top: lip, width: size, height: size, borderRadius: '50%', background: 'rgba(8,8,22,0.75)', boxShadow: `0 0 0 2px ${INK}` }} />
-      <span aria-hidden="true" style={{ position: 'absolute', left: 0, top: down ? lip - 1 : 0, width: size, height: size, borderRadius: '50%', overflow: 'hidden', background: on ? `linear-gradient(180deg, ${tone} 0%, ${hexA(tone, 0.72)} 100%)` : 'linear-gradient(180deg, rgba(74,80,116,0.92) 0%, rgba(40,44,72,0.92) 100%)', boxShadow: `0 0 0 2px ${INK}, inset 0 -2px 0 rgba(0,0,0,0.18)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <span style={{ position: 'absolute', left: '18%', right: '18%', top: '8%', height: '34%', borderRadius: '50%', background: 'linear-gradient(180deg, rgba(255,255,255,0.42), rgba(255,255,255,0.03))' }} />
-        <span style={{ position: 'relative', display: 'flex', filter: 'drop-shadow(0 1.5px 0 rgba(0,0,0,0.45))' }}>{children || <GIcon k={icon} size={ic} color={on ? INK : '#FFFFFF'} line halo={false} stroke={2.4} />}</span>
-      </span>
+      style={{ position: 'relative', width: size, height: size + lip, borderRadius: RAD[S.shape] || 0, border: 'none', padding: 0, flexShrink: 0, cursor: 'pointer', background: 'transparent', transform: bubble && down ? 'scale(0.92)' : undefined, transition: 'transform 0.06s ease-out' }}>
+      {lip > 0 && <SkinBox shape={S.shape} w={size} h={size} top={lip} bg={S.lip} edge={S.lipEdge || S.edge} ol={2} />}
+      <SkinBox shape={S.shape} w={size} h={size} top={down && lip ? lip - 1 : 0} bg={face} edge={S.edge} ol={bubble ? 1.5 : 2} inset={inset} shadow={bubble ? '0 3px 10px rgba(0,30,60,0.35)' : ''}>
+        {S.gloss > 0 && !bubble && <span style={{ position: 'absolute', left: '18%', right: '18%', top: '8%', height: '34%', borderRadius: '50%', background: `linear-gradient(180deg, rgba(255,255,255,${S.gloss}), rgba(255,255,255,0.03))` }} />}
+        {S.rivets && size >= 30 && <Rivets size={size} />}
+        <span style={{ position: 'relative', display: 'flex', filter: light ? 'none' : 'drop-shadow(0 1.5px 0 rgba(0,0,0,0.45))' }}>{children || <GIcon k={icon} size={ic} color={on ? INK : S.ico} line halo={false} stroke={2.4} />}</span>
+      </SkinBox>
       {badge != null && <span aria-hidden="true" style={{ position: 'absolute', right: -3, top: -3, minWidth: 17, height: 17, padding: '0 4px', borderRadius: 9, background: '#E5484D', color: '#FFFFFF', fontFamily: FONT, fontWeight: 900, fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box', boxShadow: `0 0 0 2px ${INK}` }}>{badge}</span>}
     </button>
   );
 }
 
 export function GHudPanel({ children, style }) {
-  return <div style={{ borderRadius: 8, background: 'linear-gradient(90deg, rgba(0,0,0,0.46), rgba(0,0,0,0.26))', color: '#FFFFFF', fontFamily: FONT, textShadow: '0 1px 2px rgba(0,0,0,0.55)', ...style }}>{children}</div>;
+  const S = useSkin();
+  return <div style={{ borderRadius: S.pr, background: S.panel, boxShadow: S.pEdge !== 'none' ? S.pEdge : undefined, color: '#FFFFFF', fontFamily: FONT, textShadow: '0 1px 2px rgba(0,0,0,0.55)', ...style }}>{children}</div>;
 }
 
 export function GFeed({ items, align = 'right', style }) {
@@ -804,16 +926,63 @@ export function useWatchNotices(list, push, on = true) {
   }, [list, on]);
   useEffect(() => () => { for (const t of S.current.gone.values()) clearTimeout(t); }, []);
 }
+export function useChatFeed() {
+  const [items, setItems] = useState([]);
+  const timers = useRef(new Set());
+  useEffect(() => () => { timers.current.forEach((t) => clearTimeout(t)); timers.current.clear(); }, []);
+  const push = useCallback((who, text, col) => {
+    const t0 = String(text || '').replace(/\s+/g, ' ').trim().slice(0, 90);
+    if (!t0) return;
+    const L = Math.min(11, 6.5 + t0.length * 0.05);
+    const it = { id: `${Date.now()}${Math.random()}`, who: String(who || 'Friend').slice(0, 24), text: t0, col, life: L };
+    setItems((v) => [...v.slice(-3), it]);
+    const t = setTimeout(() => { timers.current.delete(t); setItems((v) => v.filter((x) => x !== it)); }, L * 1000 + 80);
+    timers.current.add(t);
+  }, []);
+  useEffect(() => { if (typeof window !== 'undefined' && window.__zfake) window.__zfeedTest = push; }, [push]);
+  return [items, push];
+}
+export function GChatFeed({ items, style, align = 'left' }) {
+  injectKitCss();
+  const S = useSkin();
+  if (!items || !items.length) return null;
+  const right = align === 'right';
+  return (
+    <div aria-live="polite" style={{ display: 'flex', flexDirection: 'column', alignItems: right ? 'flex-end' : 'flex-start', gap: 4, pointerEvents: 'none', fontFamily: FONT, ...style }}>
+      {items.map((it) => (
+        <div key={it.id} style={{ maxWidth: '100%', boxSizing: 'border-box', padding: '4px 10px 5px', borderRadius: Math.min(S.nr, 12), background: S.feed, boxShadow: S.k === 'siege' ? 'inset 2px 0 0 #F2B21B' : S.k === 'rally' ? 'inset 3px 0 0 #FFC93C' : S.k === 'zombie' ? 'inset 2px 0 0 #F28C28' : S.k === 'duo' ? 'inset 0 0 0 1px rgba(217,165,72,0.4)' : 'none', color: '#FFFFFF', fontSize: 12.5, fontWeight: 700, lineHeight: 1.32, textShadow: '0 1px 2px rgba(0,0,0,0.6)', overflowWrap: 'anywhere', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', animation: `zgk-chat ${it.life}s ease-out forwards` }}>
+          <span style={{ fontWeight: 900, color: it.col || S.name }}>{it.who}</span> <span>{it.text}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+export function GJoinAsks({ asks, onAnswer, style }) {
+  injectKitCss();
+  if (!asks || !asks.length) return null;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, pointerEvents: 'auto', ...style }}>
+      {asks.map((a) => (
+        <GPanel key={a.by} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 8px 7px 12px', animation: 'zgk-pop 0.25s ease-out' }}>
+          <span style={{ flex: 1, minWidth: 0, fontFamily: FONT, fontSize: 13.5, fontWeight: 800, color: '#FFFFFF', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{`${a.n} wants to join`}</span>
+          <GPill text="Not now" color="white" small onPress={() => onAnswer(a.by, false)} />
+          <GPill text="Let in" color="green" small onPress={() => onAnswer(a.by, true)} />
+        </GPanel>
+      ))}
+    </div>
+  );
+}
 export function GNotices({ items, style }) {
   injectKitCss();
+  const S = useSkin();
   if (!items || !items.length) return null;
   return (
     <div aria-live="polite" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, pointerEvents: 'none', fontFamily: FONT, ...style }}>
       {items.map((it) => {
         const K = NOTE_KIND[it.kind] || NOTE_KIND.info;
         return (
-          <div key={it.id} style={{ display: 'flex', alignItems: 'center', gap: 8, maxWidth: '100%', height: 34, padding: '0 14px 0 5px', borderRadius: 17, background: 'rgba(10,12,18,0.82)', boxShadow: '0 4px 16px rgba(0,0,0,0.32), inset 0 0 0 1px rgba(255,255,255,0.08)', color: '#FFFFFF', fontSize: 13.5, fontWeight: 800, whiteSpace: 'nowrap', boxSizing: 'border-box', animation: `zgk-note ${it.life}s ease-out forwards` }}>
-            <span style={{ width: 24, height: 24, borderRadius: 12, background: K.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><GIcon k={K.icon} size={14} color="#FFFFFF" line halo={false} stroke={2.3} /></span>
+          <div key={it.id} style={{ display: 'flex', alignItems: 'center', gap: 8, maxWidth: '100%', height: 34, padding: '0 14px 0 5px', borderRadius: S.nr, background: S.note, boxShadow: '0 4px 16px rgba(0,0,0,0.32), inset 0 0 0 1px rgba(255,255,255,0.08)', color: '#FFFFFF', fontSize: 13.5, fontWeight: 800, whiteSpace: 'nowrap', boxSizing: 'border-box', animation: `zgk-note ${it.life}s ease-out forwards` }}>
+            <span style={{ width: 24, height: 24, borderRadius: S.nr >= 12 ? 12 : S.nr, background: K.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><GIcon k={K.icon} size={14} color="#FFFFFF" line halo={false} stroke={2.3} /></span>
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{it.text}</span>
           </div>
         );

@@ -1,3 +1,4 @@
+import { backdropProps } from './tap.js';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../supabaseClient.js';
 import { useLiveBeacon } from './live.js';
@@ -158,7 +159,7 @@ function CreateSheet({ onClose, onCreate }) {
   const [who, setWho] = useState('anyone');
   return (
     <Portal>
-      <div onClick={onClose} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 96, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', background: 'rgba(0,0,0,0.5)', fontFamily: FONT }}>
+      <div {...backdropProps(onClose)} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 96, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', background: 'rgba(0,0,0,0.5)', fontFamily: FONT }}>
         <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', maxWidth: 480, maxHeight: 'min(88vh, calc(100% - 24px))', display: 'flex', flexDirection: 'column', background: theme.panelBg, borderRadius: '26px 26px 0 0', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))' }}>
           <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 4px' }}><div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border }} /></div>
           <div style={{ padding: '6px 18px 10px' }}>

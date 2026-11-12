@@ -1,3 +1,4 @@
+import { backdropProps } from './tap.js';
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { supabase } from '../supabaseClient.js';
 import { GameRoom, RoomLayer, defineSfx, sfx, haptic, useGameKit } from './kit.jsx';
@@ -425,7 +426,7 @@ function Flights({ list, onDone }) {
 function ColorPicker({ onPick, onClose }) {
   useBackClose(true, onClose);
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 40, background: 'rgba(5,4,8,0.62)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: FONT }}>
+    <div {...backdropProps(onClose)} style={{ position: 'fixed', inset: 0, zIndex: 40, background: 'rgba(5,4,8,0.62)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: FONT }}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: 300, borderRadius: 26, padding: '20px 18px 18px', background: 'linear-gradient(180deg, #221A30, #15111C)', boxShadow: '0 20px 50px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.08)' }}>
         <div style={{ fontSize: 17, fontWeight: 800, color: '#FFF', textAlign: 'center' }}>Pick a colour</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 16 }}>
@@ -479,7 +480,7 @@ function WhoPicker({ st, myId, onPick, onClose }) {
   const outs = Array.isArray(st.out) ? st.out : [];
   const list = (st.p || []).map((u, i) => [u, i]).filter(([u, i]) => u !== myId && !outs.includes(i));
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 40, background: 'rgba(5,4,8,0.62)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: FONT }}>
+    <div {...backdropProps(onClose)} style={{ position: 'fixed', inset: 0, zIndex: 40, background: 'rgba(5,4,8,0.62)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: FONT }}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: 300, borderRadius: 26, padding: '20px 18px 18px', background: 'linear-gradient(180deg, #221A30, #15111C)', boxShadow: '0 20px 50px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.08)' }}>
         <div style={{ fontSize: 17, fontWeight: 800, color: '#FFF', textAlign: 'center' }}>Swap hands with</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 14 }}>

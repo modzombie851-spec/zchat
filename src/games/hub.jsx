@@ -1,3 +1,4 @@
+import { backdropProps } from './tap.js';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../supabaseClient.js';
 import {
@@ -8,7 +9,8 @@ import {
 } from '../App.jsx';
 import { useLiveCast, useRaceLink, CastEye, CastLayer, CastSheet, injectCastCss } from './livecast.jsx';
 import { useMyLevels, useLevels, LEVEL_GAMES, readRecent, noteRecent } from './levels.jsx';
-import { loadLiveFriends, liveKind } from './live.js';
+import { loadLiveFriends, liveKind, useJoinWait, castMe } from './live.js';
+import { cloudOn } from './zcloud.js';
 import { sceneUrl, sceneKeyFor, preloadScene } from './scenes.jsx';
 import { unlockAudio } from './kit.jsx';
 import { GameRoomsPage, useLobbyPresence } from './rooms.jsx';
@@ -203,7 +205,8 @@ function OnlineCard({ online, onOpen }) {
   );
 }
 
-export function GamesPage({ onClose, onChallenge, onShareScore, initialGame, friends, onPlayWith, onStartLive, onRollInvite, onRaceInvite, onRaceSolo, onSiegeInvite, onSiegeSolo, onGulpRoom, onWatch, onJoinLive, onOpenLeaderboard, onPlayBot, myId, me, onRoomHost, onRoomGuest, initialRoom, playToo }) {
+export function GamesPage({ onClose, onChallenge, onShareScore, initialGame, friends, onPlayWith, onStartLive, onRollInvite, onRaceInvite, onRaceSolo, onSiegeInvite, onSiegeSolo, onZombie, onGulpRoom, onWatch, onJoinLive, onOpenLeaderboard, onPlayBot, myId, me, onRoomHost, onRoomGuest, initialRoom, playToo }) {
+  const jw = useJoinWait(castMe.id);
   injectHubCss();
   injectCastCss();
   useBackClose(true, onClose);
@@ -303,6 +306,7 @@ export function GamesPage({ onClose, onChallenge, onShareScore, initialGame, fri
                         </div>
                       </div>
                       {L.act ? <GameButton small full color={L.act === 'Watch' ? 'gold' : 'green'} label={L.act} ariaLabel={`${L.act} ${String(p.name || '').split(' ')[0]}`} onClick={() => { tap(); if (L.act === 'Watch') onWatch(r, p); else if (onJoinLive) onJoinLive(r, p); }} /> : <div style={{ height: 36, display: 'flex', alignItems: 'center', fontSize: 12.5, fontWeight: 700, color: theme.muted }}>Playing now</div>}
+                      {L.ask && onJoinLive && (() => { const js = jw.state(r); return <GameButton small full color={js === 'idle' ? 'green' : 'white'} label={js === 'wait' ? 'Asked' : js === 'no' ? 'Not now' : js === 'ok' ? 'Joining' : 'Ask to join'} ariaLabel={`Ask ${String(p.name || '').split(' ')[0]} to let you join`} onClick={() => { if (js !== 'idle') return; tap(); jw.ask(r, castMe.me, () => onJoinLive(r, p)); }} />; })()}
                       {two && onJoinLive && <GameButton small full color="white" label="Play too" ariaLabel={`Play ${GAME_TITLES[L.k] || 'it'} with ${String(p.name || '').split(' ')[0]}`} onClick={() => { tap(); onJoinLive(r, p); }} />}
                     </div>
                   </div>
@@ -310,13 +314,26 @@ export function GamesPage({ onClose, onChallenge, onShareScore, initialGame, fri
               </div>
             </>
           )}
+          {onZombie && (
+            <div style={{ position: 'relative', borderRadius: 22, overflow: 'hidden', margin: '6px 0 10px', boxShadow: '0 10px 24px rgba(0,0,0,0.22)' }}>
+              <GameArt k="zombie" width="100%" height={188} radius={0} style={{ width: '100%' }} />
+              <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(20,22,14,0) 30%, rgba(20,22,14,0.55) 58%, rgba(20,22,14,0.92) 100%)' }} />
+              <div style={{ position: 'absolute', left: 14, right: 14, bottom: 12, display: 'flex', alignItems: 'flex-end', gap: 10 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span style={{ fontSize: 20, fontWeight: 900, color: '#FFFFFF' }}>Dead Town</span><span style={{ fontSize: 11, fontWeight: 800, color: '#1A1C12', background: '#F2A23A', borderRadius: 4, padding: '2px 6px' }}>New</span></div>
+                  <div style={{ fontSize: 12.5, fontWeight: 600, color: 'rgba(255,255,255,0.86)', lineHeight: 1.35 }}>{cloudOn() ? 'Up to 50 survivors on servers in Asia, USA and Europe hold a small town against waves of zombies.' : 'Hold a small town against waves of zombies with three bot friends.'}</div>
+                </div>
+                <GameButton small color="gold" label="Play" onClick={() => { tap(); noteRecent('zombie'); onZombie(); }} />
+              </div>
+            </div>
+          )}
           <div style={{ position: 'relative', borderRadius: 22, overflow: 'hidden', margin: '6px 0 4px', boxShadow: '0 10px 24px rgba(0,0,0,0.22)' }}>
             <GameArt k="siege" width="100%" height={168} radius={0} style={{ width: '100%' }} />
             <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(12,18,10,0) 18%, rgba(12,18,10,0.5) 52%, rgba(12,18,10,0.9) 100%)' }} />
             <div style={{ position: 'absolute', left: 14, right: 14, bottom: 12, display: 'flex', alignItems: 'flex-end', gap: 10 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 19, fontWeight: 900, color: '#FFFFFF' }}>Scrap Siege</div>
-                <div style={{ fontSize: 12.5, fontWeight: 600, color: 'rgba(255,255,255,0.85)', lineHeight: 1.35 }}>Up to ten friends pick from eight heroes and hold off waves of robots on five big maps, with a boss every five waves.</div>
+                <div style={{ fontSize: 12.5, fontWeight: 600, color: 'rgba(255,255,255,0.85)', lineHeight: 1.35 }}>{`${cloudOn() ? 'Up to 20 players' : 'Up to ten friends'} pick from eight heroes and hold off waves of robots on five big maps, with a boss every five waves.`}</div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
                 {onSiegeInvite && <GameButton small color="gold" label="Invite friends" onClick={() => { tap(); noteRecent('siege'); onSiegeInvite(); }} />}
@@ -512,7 +529,7 @@ export function GamePickerSheet({ profile, onPick, onMore, onClose }) {
     </div>
   );
   return (
-    <div onClick={onClose} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 94, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT, background: 'rgba(0,0,0,0.5)' }}>
+    <div {...backdropProps(onClose)} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 94, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT, background: 'rgba(0,0,0,0.5)' }}>
       <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ transform: drag.sheetStyle.transform, transition: drag.sheetStyle.transition, width: '100%', maxWidth: 480, height: 'min(86vh, calc(100% - 24px))', display: 'flex', flexDirection: 'column', background: theme.panelBg, borderRadius: '26px 26px 0 0', overflow: 'hidden', paddingBottom: 'env(safe-area-inset-bottom)', boxShadow: '0 -10px 40px rgba(0,0,0,0.3)' }}>
         <div {...drag.sheetProps} style={{ touchAction: 'none', flexShrink: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 2px' }}><div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border }} /></div>

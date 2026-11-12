@@ -6574,24 +6574,28 @@ function WnSegments({ total, at, onArt, dark }) {
   );
 }
 
+const WN_PHOTOS = { zombie47: '/wn47-zombie.webp', servers47: '/wn47-servers.webp', siege47: '/wn47-siege.webp', look47: '/wn47-look.webp', chat47: '/wn47-chat.webp' };
 const WN_HIGHLIGHTS = [
-  { k: 'squad46', art: 'squad46h', go: 'siege', cta: 'Play now', title: 'Scrap Siege for ten', text: 'Up to ten friends in one squad now, on five big maps: Scrap yard, Jungle temple, Frost base, Lava foundry and Harbor docks.' },
-  { k: 'heroes46', art: 'heroes46h', go: 'siege', cta: 'Play now', title: 'Four new heroes', text: 'Rex, Volt, Kai and Ivy join the fight. Every hero has a gadget, everyone can dash to dodge, and robots drop shields, rapid fire and speed.' },
-  { k: 'levels46', art: 'levels46h', go: 'siege', cta: 'Play now', title: 'Hero levels and upgrades', text: 'Earn scrap in every game and level your heroes up to 10. Every second wave, pick an upgrade that lasts the whole game.' },
-  { k: 'watch46', art: 'watch46h', go: 'games', cta: 'Open Games', title: 'Smoother watching', text: 'Watching friends play is smooth in every live game now, and you can switch who you watch. In Scrap Siege you also see who got you.' },
+  { k: 'zombie47', art: 'zombie47', go: 'zombie', cta: 'Play now', title: 'Dead Town', text: 'A new 3D zombie game. Hold a small town against bigger and bigger waves with bots, or with up to 50 players on one server.' },
+  { k: 'servers47', art: 'servers47', go: 'zombie', cta: 'Play now', title: 'Servers in Asia, USA and Europe', text: 'Pick the closest server. Your ping shows next to each one, and you can see how many people are playing.' },
+  { k: 'siege47', art: 'siege47', go: 'siege', cta: 'Play now', title: 'Scrap Siege for 20', text: 'Up to 20 players. Two friends can pick the same hero in different colours, and your powers panel shows every upgrade you picked.' },
+  { k: 'look47', art: 'look47', go: 'games', cta: 'Open Games', title: 'A new look for every game', text: 'Every live game has its own buttons and panels. On Android, games fill the whole screen.' },
+  { k: 'chat47', art: 'chat47', go: 'games', cta: 'Open Games', title: 'Chat and join any time', text: 'Messages show for everyone, even when you are far apart. Jump into a running game in place of a bot, or ask a friend to let you in.' },
 ];
 const WN_SECTIONS = [
   { title: 'Games', items: [
-    { art: 'squad46', title: 'Scrap Siege for ten', text: 'Ten friends and five big maps.' },
-    { art: 'heroes46', title: 'Four new heroes', text: 'Gadgets, dash and power ups.' },
-    { art: 'levels46', title: 'Hero levels and upgrades', text: 'Level up with scrap, pick upgrades.' },
-    { art: 'watch46', title: 'Smoother watching', text: 'Smooth views and switch who you watch.' },
+    { art: 'zombie47', title: 'Dead Town', text: 'A new 3D zombie game for up to 50.' },
+    { art: 'servers47', title: 'Servers near you', text: 'Asia, USA and Europe with ping.' },
+    { art: 'siege47', title: 'Scrap Siege for 20', text: 'Same hero twice, new colours and powers.' },
+    { art: 'look47', title: 'A new look for every game', text: 'Own buttons per game, full screen on Android.' },
+    { art: 'chat47', title: 'Chat and join any time', text: 'Chat for everyone, ask to join.' },
   ] },
 ];
 const WN_NEW_COUNT = WN_SECTIONS.reduce((n, sec) => n + sec.items.length, 0);
 const WN_SUMMARY = `${WN_NEW_COUNT} new things to try.`;
 
 const WN_EARLIER = [
+  { title: 'Scrap Siege for ten and four new heroes', text: 'Ten friends on five big maps, gadgets and dash for every hero, hero levels with scrap, upgrades every second wave and smoother watching.' },
   { title: 'Scrap Siege and police chases', text: 'A live robot fight for four friends, police and shortcuts in Island Rally, new skills and drinks, and names that light up when friends talk.' },
   { title: 'Explosions, a new Gulp and longer levels', text: 'Fireballs and lightning in Island Rally, a brand new Gulp with 15 hard levels, longer Roll Squad and Two Torches levels, and music in every lobby.' },
   { title: 'New game lobbies and watching friends', text: 'Watch and join any game, Island Rally jumps and crashes, Roll Squad team levels and new lobbies with the game playing behind.' },
@@ -6700,7 +6704,18 @@ function WnLiveWallArt({ dark, thumb }) {
     </div>
   );
 }
+function WnPhoto({ src, thumb }) {
+  return (
+    <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden', background: '#16181C' }}>
+      <img src={src} alt="" aria-hidden="true" draggable={false} style={{ position: 'absolute', inset: '-8%', width: '116%', height: '116%', objectFit: 'cover', filter: 'blur(16px) brightness(0.5) saturate(1.1)' }} />
+      <div style={{ position: 'absolute', inset: thumb ? 0 : '0 14px', display: 'flex', alignItems: thumb ? 'stretch' : 'center', justifyContent: 'center' }}>
+        <img src={src} alt="" draggable={false} decoding="async" style={thumb ? { width: '100%', height: '100%', objectFit: 'cover', display: 'block' } : { width: '100%', height: 'auto', maxHeight: '100%', objectFit: 'contain', display: 'block', borderRadius: 12, boxShadow: '0 12px 30px rgba(0,0,0,0.45)' }} />
+      </div>
+    </div>
+  );
+}
 function WnPic({ k, dark, thumb, me }) {
+  if (WN_PHOTOS[k]) return <WnPhoto src={WN_PHOTOS[k]} thumb={thumb} />;
   if (k === 'styles23') return <WnStylesArt me={me} dark={dark} thumb={thumb} />;
   if (k === 'stickers23') return <WnStickerArt dark={dark} thumb={thumb} />;
   if (k === 'decor') return <WnDecorArt me={me} thumb={thumb} />;

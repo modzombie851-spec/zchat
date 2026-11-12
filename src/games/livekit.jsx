@@ -1,3 +1,4 @@
+import { backdropProps } from './tap.js';
 import React, { useEffect, useRef, useState } from 'react';
 import { FONT, hapticTap, gameIceConfig } from '../App.jsx';
 import { talkTap, talkDrop } from './talk.js';
@@ -100,7 +101,7 @@ export function RoundBtn({ onClick, label, children, size = 54, bg = 'rgba(14,12
 
 export function Sheet({ title, text, onClose, children }) {
   return (
-    <div onClick={onClose} style={{ position: 'absolute', inset: 0, zIndex: 40, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+    <div {...backdropProps(onClose)} style={{ position: 'absolute', inset: 0, zIndex: 40, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
       <div onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 480, maxHeight: '86%', overflowY: 'auto', borderRadius: '16px 16px 0 0', background: '#10151D', padding: '18px 18px calc(18px + env(safe-area-inset-bottom))', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.1), inset 0 0 0 1px rgba(255,255,255,0.06), 0 -12px 40px rgba(0,0,0,0.5)', color: '#FFFFFF', fontFamily: FONT, boxSizing: 'border-box', animation: 'zduo-up 0.26s cubic-bezier(.2,.8,.2,1)' }}>
         <div style={{ width: 38, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.2)', margin: '-6px auto 12px' }} />
         {title && <div style={{ fontSize: 18.5, fontWeight: 900 }}>{title}</div>}
@@ -252,10 +253,12 @@ export function useVoice(relay, enabled, host) {
 }
 
 export const CHAT_PHRASES = ['Nice one', 'Wait for me', 'Go go go', 'Help me here', 'Haha', 'Good game', 'One more?', 'Thanks'];
-export function useGameChat(relay, nameOf, onNote) {
+export function useGameChat(relay, nameOf, onNote, onMine) {
   const [log, setLog] = useState([]);
   const noteRef = useRef(onNote);
   noteRef.current = onNote;
+  const mineRef = useRef(onMine);
+  mineRef.current = onMine;
   const nameRef = useRef(nameOf);
   nameRef.current = nameOf;
   const relayRef = useRef(relay);
@@ -267,7 +270,7 @@ export function useGameChat(relay, nameOf, onNote) {
       if (!t || !m.from) return;
       const who = nameRef.current(m.from);
       setLog((l) => [...l.slice(-30), { who, t }]);
-      if (noteRef.current) noteRef.current(`${who}: ${t}`);
+      if (noteRef.current) noteRef.current(`${who}: ${t}`, who, t, m.from);
     });
     return () => { if (off) off(); };
   }, [relay && relay.on]);
@@ -277,6 +280,7 @@ export function useGameChat(relay, nameOf, onNote) {
     if (!t || !r) return false;
     r.send('ct', { x: t });
     setLog((l) => [...l.slice(-30), { who: 'You', t }]);
+    if (mineRef.current) mineRef.current(t);
     return true;
   };
   return { log, send };

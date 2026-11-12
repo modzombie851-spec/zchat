@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../supabaseClient.js';
+import { cloudOn } from './zcloud.js';
 
 export const castMe = { id: null, me: null };
 const KEY = 'zchat-game-watchable';
@@ -86,7 +87,7 @@ export async function loadLiveFriends() {
   return Array.isArray(d) ? d : [];
 }
 
-export const LIVE_ROOM_MAX = { gulpco: 10, roll: 4, race: 8, siege: 10 };
+export const LIVE_ROOM_MAX = { gulpco: 10, roll: 4, race: 8, siege: cloudOn() ? 20 : 10 };
 export function liveKind(r, max = LIVE_ROOM_MAX) {
   const info = (r && r.info) || {};
   const k = r && r.game === 'gulp' && info.co ? 'gulpco' : (r && r.game) || '';
@@ -96,8 +97,71 @@ export function liveKind(r, max = LIVE_ROOM_MAX) {
   const watch = info.w !== false;
   if (cap) {
     const full = n >= cap;
-    return { k, n, max: cap, join: canJoin && !full, full, watch, act: canJoin && !full ? 'Join' : watch && !info.lob ? 'Watch' : null };
+    return { k, n, max: cap, join: canJoin && !full, full, watch, ask: !canJoin && !full && !info.lob, act: canJoin && !full ? 'Join' : watch && !info.lob ? 'Watch' : null };
   }
   if (info.so) return { k, n: 1, max: 0, join: canJoin, full: false, watch, act: watch ? 'Watch' : canJoin ? 'Play too' : null, play: canJoin };
   return { k, n, max: 0, join: false, full: false, watch, act: watch ? 'Watch' : null };
+}
+
+function boxSend(topic, payload) {
+  let ch;
+  try { ch = supabase.channel(topic, { config: { broadcast: { self: false, ack: false } } }); } catch { return; }
+  let done = false;
+  const drop = () => { if (done) return; done = true; try { supabase.removeChannel(ch); } catch {} };
+  ch.subscribe((status) => {
+    if (status !== 'SUBSCRIBED') return;
+    try { const r = ch.send({ type: 'broadcast', event: 'ja', payload }); if (r && r.catch) r.catch(() => {}); } catch {}
+    setTimeout(drop, 2500);
+  });
+  setTimeout(drop, 9000);
+}
+function useBox(topic, onMsg) {
+  const cb = useRef(onMsg);
+  cb.current = onMsg;
+  useEffect(() => {
+    if (!topic) return undefined;
+    let ch = null;
+    try { ch = supabase.channel(topic, { config: { broadcast: { self: false, ack: false } } }); } catch { return undefined; }
+    ch.on('broadcast', { event: 'ja' }, (m) => { const p = m && m.payload; if (p && cb.current) cb.current(p); });
+    ch.subscribe(() => {});
+    return () => { try { supabase.removeChannel(ch); } catch {} };
+  }, [topic]);
+}
+
+export function useJoinAsks({ myId, on, game }) {
+  const [asks, setAsks] = useState([]);
+  useBox(on && myId ? `zja-${myId}` : null, (p) => {
+    if (p.t !== 'ask' || typeof p.by !== 'string' || p.by === myId || (game && p.game && p.game !== game)) return;
+    const n = String(p.n || 'A friend').split(' ')[0].slice(0, 20);
+    setAsks((v) => (v.some((a) => a.by === p.by) ? v : [...v.slice(-2), { by: p.by, n, at: Date.now() }]));
+  });
+  useEffect(() => {
+    if (!asks.length) return undefined;
+    const t = setTimeout(() => setAsks((v) => v.filter((a) => Date.now() - a.at < 60000)), 61000);
+    return () => clearTimeout(t);
+  }, [asks]);
+  const answer = (by, ok) => {
+    setAsks((v) => v.filter((a) => a.by !== by));
+    boxSend(`zja-${by}`, { t: ok ? 'ok' : 'no', by: myId, game });
+  };
+  return { asks, answer };
+}
+
+export function useJoinWait(myId) {
+  const [wait, setWait] = useState({});
+  const okRef = useRef({});
+  useBox(myId && Object.values(wait).some((w) => w === 'wait') ? `zja-${myId}` : null, (p) => {
+    if (!p || typeof p.by !== 'string' || (p.t !== 'ok' && p.t !== 'no')) return;
+    setWait((v) => (v[p.by] === 'wait' ? { ...v, [p.by]: p.t === 'ok' ? 'ok' : 'no' } : v));
+    if (p.t === 'ok' && okRef.current[p.by]) { const f = okRef.current[p.by]; delete okRef.current[p.by]; f(); }
+  });
+  const ask = (row, me, onOk) => {
+    const host = row && row.user_id;
+    if (!host || !myId || wait[host] === 'wait') return;
+    okRef.current[host] = onOk;
+    setWait((v) => ({ ...v, [host]: 'wait' }));
+    setTimeout(() => boxSend(`zja-${host}`, { t: 'ask', by: myId, n: (me && me.name) || '', game: row.game, room: row.room }), 600);
+    setTimeout(() => setWait((v) => (v[host] === 'wait' ? { ...v, [host]: 'no' } : v)), 60000);
+  };
+  return { state: (row) => (row && wait[row.user_id]) || 'idle', ask };
 }

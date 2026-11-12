@@ -1,3 +1,4 @@
+import { backdropProps } from './tap.js';
 import React, { useContext, useEffect, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
 import { TRACKS, makeVoices, makeIR } from './music.jsx';
@@ -547,7 +548,7 @@ export function RoomLayer({ children }) {
 
 export function RoomSheet({ title, text, onClose, children }) {
   return (
-    <div onClick={onClose} style={{ position: 'absolute', inset: 0, zIndex: 40, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+    <div {...backdropProps(onClose)} style={{ position: 'absolute', inset: 0, zIndex: 40, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
       <div className="zgr-up" onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 480, borderRadius: '26px 26px 0 0', background: '#17141F', padding: '18px 18px calc(18px + env(safe-area-inset-bottom))', boxShadow: '0 -12px 40px rgba(0,0,0,0.5)', color: '#FFFFFF', fontFamily: KIT_FONT }}>
         <div style={{ width: 38, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.2)', margin: '-6px auto 12px' }} />
         {title && <div style={{ fontSize: 19, fontWeight: 900, letterSpacing: '-0.01em' }}>{title}</div>}

@@ -5,7 +5,7 @@ import { setWatchAllowed, useLiveBeacon, useGamePrivacy } from './live.js';
 import { EMOTES, SignalBars, PingChip, SpeakerIcon, SmileIcon, Check, Heart, MicIcon, ChatIcon, SwapIcon, HandIcon, btnBase, Btn, RoundBtn, Sheet, Stars, injectCss, useVoice, setKitTap } from './livekit.jsx';
 import { LIVES, GLYPHS, GLYPH_NAMES, STORY_N, ENDLESS, ATK_CD, levelDef, makeWorld, stepWorld, buddyInput, applyEvent, snapshot, mergeSnapshot, sameLevel, syncClock, setNet, nearDial, nearMirror, turnMirror, foeRows, setFoes, tryCode, hintFor, aimTarget, clamp, missionsFor, parTime, spikeAmt, crumbleState, demoInputs, demoDuoWorld } from './duoengine.js';
 import { Snd, THEMES, buildStatic, buildMini, drawDuoMini, render, updateParts, dust, puffs, embers, glints, part, ring, glyph, drawExplorer , setDuoLite } from './duodraw.js';
-import { GC, GBtn, GPill, GPanel, GChip, GTitle, GJoy, GIcon, GHudBtn, GHudPanel, GHudSkill, GHint, GStat, GNotices, useNotices, useWatchNotices, injectKitCss, kitTap, pressProps, INK, newBudget, budgetTick, useCtlLook, useGameStage, stagePoint, GControlsPanel, GLobby, GSlot, GLobbySheet, GVolBars, GSeg , GTalkers, GWatchBar } from './gamekit.jsx';
+import { GC, GBtn, GPill, GPanel, GChip, GTitle, GJoy, GIcon, GHudBtn, GHudPanel, GHudSkill, GHint, GStat, GNotices, useNotices, useWatchNotices, injectKitCss, kitTap, pressProps, INK, newBudget, budgetTick, useCtlLook, useGameStage, stagePoint, GControlsPanel, GLobby, GSlot, GLobbySheet, GVolBars, GSeg , GTalkers, GWatchBar, GSkin, GChatFeed, useChatFeed } from './gamekit.jsx';
 import { Sfx } from './sfx.js';
 import { useTalking } from './talk.js';
 
@@ -125,6 +125,7 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
   const atkReq = useRef(0);
   const foeSend = useRef(0);
   const [chatText, setChatText] = useState('');
+  const [feed, pushFeed] = useChatFeed();
   const [log, setLog] = useState([]);
   const [leaveAsk, setLeaveAsk] = useState(false);
   const [cleared, setCleared] = useState(0);
@@ -159,7 +160,7 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
   const rsRef = useRef(rs);
   rsRef.current = rs;
   const [joyView, setJoyView] = useState(null);
-  const look = useCtlLook();
+  const look = useCtlLook('duo');
   const GS = useGameStage(look);
   const side = GS.side, land = GS.land;
   const sideRef = useRef(side); sideRef.current = side;
@@ -248,8 +249,8 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
         const sorted = [...N.pings].sort((a, b) => a - b);
         N.ping = Math.max(1, Math.round(sorted[Math.floor(sorted.length / 2)]));
       }),
-      relay.on('chat', (m) => { heard(); const text = String(m.text || '').slice(0, 90); if (!text) return; bubble(watch ? (m.from === watch.host ? 'sun' : 'moon') : theirKind, text); setLog((l) => [...l.slice(-30), { who: peerFirst, text }]); Snd.fx.pop(); }),
-      relay.on('emo', (m) => { heard(); const e = String(m.e || ''); if (!EMOTES.includes(e)) return; bubble(watch ? (m.from === watch.host ? 'sun' : 'moon') : theirKind, e, true); Snd.fx.emote(); }),
+      relay.on('chat', (m) => { heard(); const text = String(m.text || '').slice(0, 90); if (!text) return; const kk = watch ? (m.from === watch.host ? 'sun' : 'moon') : theirKind; bubble(kk, text); pushFeed(watch && kk === 'sun' ? hostFirst : peerFirst, text, kk === 'sun' ? '#FFB066' : '#8CC8FF'); setLog((l) => [...l.slice(-30), { who: peerFirst, text }]); Snd.fx.pop(); }),
+      relay.on('emo', (m) => { heard(); const e = String(m.e || ''); if (!EMOTES.includes(e)) return; const kk = watch ? (m.from === watch.host ? 'sun' : 'moon') : theirKind; bubble(kk, e, true); pushFeed(watch && kk === 'sun' ? hostFirst : peerFirst, e, kk === 'sun' ? '#FFB066' : '#8CC8FF'); Snd.fx.emote(); }),
       relay.on('hi', () => { heard(); if (host) sendSync(); }),
       relay.on('hey', heard),
       relay.on('psel', (m) => { heard(); if (host) return; if (watch && m.from !== watch.host) return; if (m.m === 'endless' || m.m === 'story') setMode(m.m); const i = Number(m.i); if (i >= 0 && i < STORY_N) setStorySel(i); }),
@@ -603,6 +604,7 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
     const t = String(text || '').trim().slice(0, 90);
     if (!t) return;
     bubble(activeRef.current, t);
+    pushFeed('You', t);
     setLog((l) => [...l.slice(-30), { who: 'You', text: t }]);
     if (!solo) relay.send('chat', { text: t });
     setChatText('');
@@ -840,8 +842,8 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
     </GLobby>
   );
   return (
-    <Portal>
-      <div ref={GS.rootRef} style={{ position: 'fixed', left: 0, right: 0, top: 'var(--zvp-top, 0px)', height: 'var(--zvp-h, 100%)', zIndex: 90, background: '#0B0910', overflow: 'hidden', touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', fontFamily: FONT, color: '#FFFFFF' }}>
+    <Portal><GSkin k="duo">
+      <div ref={GS.rootRef} style={{ position: 'fixed', left: 0, right: 0, top: 'var(--zvp-top, 0px)', height: 'calc(var(--zvp-h, 100%) + var(--zgx, 0px))', zIndex: 90, background: '#0B0910', overflow: 'hidden', touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', fontFamily: FONT, color: '#FFFFFF' }}>
       <div ref={wrapRef} data-side={side ? '1' : '0'} onPointerDown={onJoyDown} onPointerMove={onJoyMove} onPointerUp={onJoyUp} onPointerCancel={onJoyUp} onLostPointerCapture={onJoyUp} style={GS.wrapStyle}>
         <canvas ref={cvRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block' }} />
 
@@ -1016,6 +1018,7 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
         )}
         <GTalkers ids={talking} nameOf={(k) => (k === 'me' ? 'You' : peerFirst)} top={top(phase === 'play' ? 46 : 50)} />
         <GNotices items={notes} style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', ...(phase === 'pick' ? { top: top(64) } : land ? (intro ? { bottom: bottom(64) } : { top: top(46) }) : { bottom: bottom(armB + 14) }), width: land ? 'min(52%, 420px)' : 'calc(100% - 40px)', zIndex: 30 }} />
+        {phase === 'play' && <GChatFeed items={feed} style={{ position: 'absolute', left: left(12), top: top(land ? 160 : 150), width: land ? 'min(30%, 260px)' : 'calc(100% - 24px)', zIndex: 29 }} />}
         {chatSheet}
         {sheet && sheet.k === 'voice' && !solo && !watch && (
           <Sheet title="Voice" text={voice.micOn ? `Your mic is on. ${peerFirst} can hear you.` : 'Turn your mic on to talk while you play.'} onClose={() => setSheet(null)}>
@@ -1049,7 +1052,7 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
         )}
       </div>
       </div>
-    </Portal>
+    </GSkin></Portal>
   );
 }
 

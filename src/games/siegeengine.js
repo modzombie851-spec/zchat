@@ -1,6 +1,8 @@
 import { mkNet, netPush, netRead } from './netlerp.js';
 export const TILE = 2;
-export const SQUAD_MAX = 10;
+export let SQUAD_MAX = 10;
+export function setSquadMax(n) { SQUAD_MAX = Math.max(1, n | 0); }
+export const heroCap = () => (SQUAD_MAX > 16 ? 3 : 2);
 export const DASH = { len: 4.2, t: 0.18, cd: 3.2 };
 export const GADGETS = 3, GADGET_CD = 5;
 export const WIN_WAVE = 15;
@@ -92,6 +94,12 @@ export const CARDS = {
   volt: { hero: 'volt', name: 'Long arc', text: 'Zaps hit one more robot', icon: 'bolt', go: (m) => { m.extra += 1; }, max: 3 },
   kai: { hero: 'kai', name: 'Cluster rockets', text: 'Rockets blast a bigger area', icon: 'rocket', go: (m) => { m.rad *= 1.25; }, max: 2 },
   ivy: { hero: 'ivy', name: 'Deep chill', text: 'Slows last longer', icon: 'snow', go: (m) => { m.slow *= 1.4; }, max: 2 },
+  crit: { name: 'Lucky shot', text: 'Some shots hit twice as hard', icon: 'star', go: (m) => { m.crit = Math.min(0.36, (m.crit || 0) + 0.12); }, max: 3 },
+  chain: { name: 'Chain blast', text: 'Robots you take down explode', icon: 'bomb', go: (m) => { m.chain = (m.chain || 0) + 1; }, max: 2 },
+  rush: { name: 'Kill rush', text: 'Run faster for a moment after a takedown', icon: 'dash', go: (m) => { m.rush = (m.rush || 0) + 1; }, max: 2 },
+  magnet: { name: 'Magnet', text: 'Grab power ups from farther away', icon: 'magnet', go: (m) => { m.magnet = (m.magnet || 0) + 1.3; }, max: 2 },
+  guard: { name: 'Super guard', text: 'Your super also gives you a shield', icon: 'shield', go: (m) => { m.supShield = (m.supShield || 0) + 0.2; }, max: 2 },
+  medic: { name: 'Field medic', text: 'Help friends up much faster', icon: 'heart', go: (m) => { m.revive = (m.revive || 1) * 1.6; }, max: 2 },
 };
 export const CARD_KEYS = Object.keys(CARDS);
 export const cardWave = (n) => n > 0 && n % 2 === 0;
@@ -462,6 +470,12 @@ function killRobot(W, b, by) {
   if (h) h.stats.kills += 1;
   emit(W, { k: 'kill', id: b.id, type: b.type, x: b.x, z: b.z, by });
   net(W, ['k', b.id, by || '']);
+  if (h && h.mods && h.mods.chain && !b.chained) {
+    const r = 2.6 + h.mods.chain * 0.5, d = Math.round(320 * h.mods.chain * (h.mods.dmg || 1));
+    W.zones.push({ k: 'boom', x: b.x, z: b.z, r, d: 0, t: 0, live: true });
+    net(W, ['z', 'boom', +b.x.toFixed(2), +b.z.toFixed(2), r, 0, 0]);
+    for (const o of W.robots) if (o !== b && o.hp > 0 && Math.hypot(o.x - b.x, o.z - b.z) < r + o.r) { o.chained = true; const dx = o.x - b.x, dz = o.z - b.z, L = Math.hypot(dx, dz) || 1; hurtRobot(W, o, d, by, dx / L, dz / L, { kb: 3 }); }
+  }
   if (b.type === 'bomber' && !b.blown) bomberBlast(W, b, 0.75);
   const n = b.type === 'boss' ? 3 : W.rnd() < R.drop ? 1 : 0;
   for (let i = 0; i < n; i++) {
@@ -827,6 +841,7 @@ export function heroShots(W, h, kind, a, dist, seed) {
       out.push({ side: 'h', k: 'rain', own: h.id, x0: h.x, z0: h.z, x1, z1, x: h.x, z: h.z, y: 1, t: 0, T: S.flight + i * 0.11, rad: S.rad * M.rad, d: dmgOf(h, S.dmg), kb: 3, sup });
     }
   }
+  if (M.crit) for (const p of out) if (p.d && rnd() < M.crit) { p.d = Math.round(p.d * 2); p.crit = 1; }
   return out;
 }
 function zapChain(W, h, a, S, extra, host) {
@@ -879,7 +894,7 @@ export function fireHero(W, h, kind, a, dist, seed) {
   const M = h.mods || baseMods();
   const host = !!W.host;
   h.aimA = a; h.aimT = 0.45; h.yaw = a; h.rec = 0.12; h.regen = 0; h.seen = W.t;
-  if (kind === 'sup') h.sup = 0; else { h.ammo = Math.max(0, h.ammo - 1); h.cd = S.cd; }
+  if (kind === 'sup') { h.sup = 0; if (M.supShield) h.shield = Math.max(h.shield || 0, Math.round(h.max * M.supShield)); } else { h.ammo = Math.max(0, h.ammo - 1); h.cd = S.cd; }
   emit(W, { k: 'fire', id: h.id, kind, hero: h.key, x: h.x, z: h.z, a, dist });
   const fx = Math.sin(a), fz = Math.cos(a);
   if (S.k === 'beam') {
@@ -1001,14 +1016,14 @@ export function stepHero(W, h, inp, dt) {
     h.vx = 0; h.vz = 0;
     let near = 0;
     for (const o of heroList(W)) if (o !== h && o.st === 0 && Math.hypot(o.x - h.x, o.z - h.z) < REVIVE_R) near += 1;
-    if (near) { h.rv += dt / (near >= 2 ? REVIVE_T * 0.65 : REVIVE_T); if (h.rv >= 1) reviveHero(W, h, 0.45, heroList(W).filter((o) => o !== h && o.st === 0 && Math.hypot(o.x - h.x, o.z - h.z) < REVIVE_R).map((o) => o.id)); }
+    if (near) { let fast = 1; for (const o of heroList(W)) if (o !== h && o.st === 0 && o.mods && o.mods.revive && Math.hypot(o.x - h.x, o.z - h.z) < REVIVE_R) fast = Math.max(fast, o.mods.revive); h.rv += dt * fast / (near >= 2 ? REVIVE_T * 0.65 : REVIVE_T); if (h.rv >= 1) reviveHero(W, h, 0.45, heroList(W).filter((o) => o !== h && o.st === 0 && Math.hypot(o.x - h.x, o.z - h.z) < REVIVE_R).map((o) => o.id)); }
     else { h.rv = Math.max(0, h.rv - dt * 0.4); h.downT -= dt; if (h.downT <= 0) { h.st = 2; h.downT = 0; emit(W, { k: 'out', id: h.id }); } }
     return;
   }
   if (h.st === 2) { h.vx = 0; h.vz = 0; return; }
   const M = h.mods || baseMods();
   h.dashCD = Math.max(0, h.dashCD - dt); h.gadCD = Math.max(0, h.gadCD - dt);
-  h.ocT = Math.max(0, h.ocT - dt); h.rfT = Math.max(0, h.rfT - dt); h.spT = Math.max(0, h.spT - dt);
+  h.ocT = Math.max(0, h.ocT - dt); h.rfT = Math.max(0, h.rfT - dt); h.spT = Math.max(0, h.spT - dt); h.rushT = Math.max(0, (h.rushT || 0) - dt);
   if (h.shT > 0) { h.shT -= dt; if (h.shT <= 0) h.shield = 0; }
   const ox = h.x, oz = h.z;
   if (h.jump) {
@@ -1041,7 +1056,7 @@ export function stepHero(W, h, inp, dt) {
   let mx = inp ? inp.mx || 0 : 0, mz = inp ? inp.mz || 0 : 0;
   const m = Math.hypot(mx, mz);
   if (m > 1) { mx /= m; mz /= m; }
-  const spd = H.spd * M.spd * (h.pw > 0 ? 1.08 : 1) * (h.spT > 0 ? 1.35 : 1);
+  const spd = H.spd * M.spd * (h.pw > 0 ? 1.08 : 1) * (h.spT > 0 ? 1.35 : 1) * (h.rushT > 0 ? 1.22 : 1);
   if (m > 0.05) moveCircle(W.A, h, mx * spd * dt, mz * spd * dt, 0.55);
   for (const b of W.robots) {
     if (b.hp <= 0) continue;

@@ -1,9 +1,10 @@
+import { backdropProps } from './tap.js';
 import React, { useEffect, useRef, useState } from 'react';
 import { Avatar, Portal, useBackClose, hapticTap, FONT, Spinner } from '../App.jsx';
 import { useGameLink, useRoomRelay, useWatchChannel, useMeshRoom } from './relay.jsx';
 import { setWatchAllowed, useLiveBeacon, useGamePrivacy } from './live.js';
 import { EMOTES, PingChip, Sheet, injectCss, useVoice } from './livekit.jsx';
-import { GC, GBtn, GPill, GPanel, GChip, GTitle, GJoy, GIcon, GControlsPanel, GHudBtn, GHudPanel, GHudSkill, GFeed, GRibbon, GHint, GIconCap, GStat, GNotices, useNotices, useWatchNotices, GSkillArt, useCtlLook, useGameStage, useJoystick, injectKitCss, kitTap, pressProps, maxDpr, INK, GVolBars, GLobby, GSlot, GLobbySheet , weakPhone , GTalkers, GWatchBar } from './gamekit.jsx';
+import { GC, GBtn, GPill, GPanel, GChip, GTitle, GJoy, GIcon, GControlsPanel, GHudBtn, GHudPanel, GHudSkill, GFeed, GRibbon, GHint, GIconCap, GStat, GNotices, useNotices, useWatchNotices, GSkillArt, useCtlLook, useGameStage, useJoystick, injectKitCss, kitTap, pressProps, maxDpr, INK, GVolBars, GLobby, GSlot, GLobbySheet , weakPhone , GTalkers, GWatchBar, GSkin, GChatFeed, useChatFeed } from './gamekit.jsx';
 import { Sfx } from './sfx.js';
 import { WW, WH, LIVES, MAXN, STAGES, SKILLS, SKILL_KEYS, SPECIES, rOf, viewOf, stageOf, clamp, makeGame, spawnFish, hostStep, applyGuestEvent, snap, applySnap, guestFollow, setNet, followNet, movePlayer, tickPlayer, canEat, canTake, canOpen, chestGain, eatGain, botInput, useSkill, addPlayer, dropPlayer, adoptHost } from './gulpengine.js';
 import { render, makeDeco, updateParts, bubbles, floatText, burst, bits, ring, zap, drawRadar, placeName, drawBadge, drawSpecies, fmtN, PLAYER_PAL, SLOT_KEYS, warmSprites } from './gulpdraw.js';
@@ -71,7 +72,7 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
   const myFirst = firstName(me && me.name, 'You');
   const peerFirst = isSolo ? 'Bot' : isWatch ? firstName(watch.names && watch.names.moon) : isDuel ? firstName(peer && peer.name) : 'Friend';
   const hostFirst = isWatch ? firstName(watch.names && watch.names.sun) : '';
-  const look = useCtlLook();
+  const look = useCtlLook('gulp');
   const lookNow = useRef(look); lookNow.current = look;
   const relay0 = useGameLink({ id: isDuel ? `gulp-${gameId}` : null, myId, peerId: peer && peer.id, enabled: isDuel, g: 'gulp', fast: ['gp', 'gs'] });
   const wrelay = useRoomRelay({ id: isWatch ? `gulp-${gameId}` : null, myId, enabled: isWatch, passive: true });
@@ -101,6 +102,7 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
   const [ctl, setCtl] = useState(false);
   const [chatText, setChatText] = useState('');
   const [log, setLog] = useState([]);
+  const [chatFeed, pushChat] = useChatFeed();
   const [result, setResult] = useState(null);
   const [score, setScore] = useState({ x: 0, o: 0 });
   const [leaveAsk, setLeaveAsk] = useState(false);
@@ -434,8 +436,8 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
       relay.on('ge', (m) => { heard(); const G = GR.current; if (host && G && m.seed === G.seed) applyGuestEvent(G, theirs, m.e); }),
       relay.on('pi', (m) => { heard(); relay.send('po', { n: m.n, t0: m.t0 }); }),
       relay.on('po', (m) => { heard(); const N = netRef.current; const rtt = Date.now() - (m.t0 || 0); if (rtt < 0 || rtt > 20000) return; N.pings = [...N.pings.slice(-4), rtt]; const so = [...N.pings].sort((a, b) => a - b); N.ping = Math.max(1, Math.round(so[Math.floor(so.length / 2)])); }),
-      relay.on('chat', (m) => { heard(); const text = String(m.text || '').slice(0, 90); if (!text) return; bubble(theirs, text); setLog((l) => [...l.slice(-30), { who: peerFirst, text }]); Sfx.play('pop'); }),
-      relay.on('emo', (m) => { heard(); const e = String(m.e || ''); if (!EMOTES.includes(e)) return; bubble(theirs, e, true); Sfx.play('bub3', { vol: 0.6 }); }),
+      relay.on('chat', (m) => { heard(); const text = String(m.text || '').slice(0, 90); if (!text) return; bubble(theirs, text); pushChat(peerFirst, text, theirs === 'sun' ? '#FFB066' : '#8CC8FF'); setLog((l) => [...l.slice(-30), { who: peerFirst, text }]); Sfx.play('pop'); }),
+      relay.on('emo', (m) => { heard(); const e = String(m.e || ''); if (!EMOTES.includes(e)) return; bubble(theirs, e, true); pushChat(peerFirst, e, theirs === 'sun' ? '#FFB066' : '#8CC8FF'); Sfx.play('bub3', { vol: 0.6 }); }),
       relay.on('hi', () => { heard(); if (host) { if (GR.current && phaseRef.current === 'play') relay.send('gl', { seed: GR.current.seed, sc: scoreRef.current }); else relay.send('gready', { sc: scoreRef.current }); } }),
       relay.on('hey', heard),
       relay.on('back', heard),
@@ -492,8 +494,8 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
       }),
       mesh.on('gp', (m) => { const G = GR.current; if (G && m.from !== myId && G.pl[m.from]) setNet(G.pl[m.from], m); }),
       mesh.on('ge', (m) => { const G = GR.current; if (G && hostRef.current === myId && m.seed === G.seed && G.pl[m.from]) applyGuestEvent(G, m.from, m.e); }),
-      mesh.on('chat', (m) => { const text = String(m.text || '').slice(0, 90); if (!text) return; bubble(m.from, text); setLog((l) => [...l.slice(-30), { who: nameOf(m.from), text }]); Sfx.play('pop'); }),
-      mesh.on('emo', (m) => { const e = String(m.e || ''); if (!EMOTES.includes(e)) return; bubble(m.from, e, true); Sfx.play('bub3', { vol: 0.6 }); }),
+      mesh.on('chat', (m) => { const text = String(m.text || '').slice(0, 90); if (!text) return; bubble(m.from, text); pushChat(nameOf(m.from), text, '#8CC8FF'); setLog((l) => [...l.slice(-30), { who: nameOf(m.from), text }]); Sfx.play('pop'); }),
+      mesh.on('emo', (m) => { const e = String(m.e || ''); if (!EMOTES.includes(e)) return; bubble(m.from, e, true); pushChat(nameOf(m.from), e, '#8CC8FF'); Sfx.play('bub3', { vol: 0.6 }); }),
     ];
     return () => offs.forEach((f) => f && f());
   }, [mesh.on]);
@@ -880,6 +882,7 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
     const t = String(text || '').trim().slice(0, 90);
     if (!t) return;
     bubble(mine, t);
+    pushChat('You', t);
     setLog((l) => [...l.slice(-30), { who: 'You', text: t }]);
     if (!isSolo) relay.send('chat', { text: t });
     setChatText(''); setSheet(null); setQuick(false);
@@ -1048,8 +1051,8 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
   );
 
   return (
-    <Portal>
-      <div ref={rootRef} style={{ position: 'fixed', left: 0, right: 0, top: 'var(--zvp-top, 0px)', height: 'var(--zvp-h, 100%)', zIndex: 90, background: '#0A2A4A', overflow: 'hidden', touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', fontFamily: FONT, color: '#FFFFFF' }}>
+    <Portal><GSkin k="gulp">
+      <div ref={rootRef} style={{ position: 'fixed', left: 0, right: 0, top: 'var(--zvp-top, 0px)', height: 'calc(var(--zvp-h, 100%) + var(--zgx, 0px))', zIndex: 90, background: '#0A2A4A', overflow: 'hidden', touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', fontFamily: FONT, color: '#FFFFFF' }}>
         <div ref={wrapRef} {...J.handlers} data-side={side ? '1' : '0'}
           style={GS.wrapStyle}>
           <canvas ref={cvRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block' }} />
@@ -1372,10 +1375,11 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
 
           <GTalkers ids={talking} nameOf={(k) => (k === 'me' || k === mine ? 'You' : k === 'peer' ? nameOf(theirs) : nameOf(k))} top={top(phase === 'play' ? (land ? 58 : 96) : 50)} />
           <GNotices items={notes} style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', ...(phase !== 'play' ? { top: top(64) } : land ? { top: top(100) } : { bottom: bottom(armB + 40) }), width: land ? 'min(52%, 420px)' : 'calc(100% - 40px)', zIndex: 30 }} />
+          {phase === 'play' && <GChatFeed items={chatFeed} style={{ position: 'absolute', left: left(land ? 194 : 12), top: top(land ? 48 : 150), width: land ? 'min(34%, 290px)' : 'calc(100% - 24px)', zIndex: 29 }} />}
           {chatSheet}
         </div>
       </div>
-    </Portal>
+    </GSkin></Portal>
   );
 }
 
@@ -1388,7 +1392,7 @@ export function GulpInviteSheet({ friends, onClose, onInvite, onSolo, already, s
   const toggle = (id) => { kitTap(); setSel((v) => (v.includes(id) ? v.filter((x) => x !== id) : v.length >= left ? v : [...v, id])); };
   return (
     <Portal>
-      <div onClick={onClose} data-side={side ? '1' : '0'} style={{ position: 'fixed', ...(side && typeof window !== 'undefined' ? { left: 0, top: 0, width: window.innerHeight, height: window.innerWidth, transformOrigin: '0 0', transform: `translateX(${window.innerWidth}px) rotate(90deg)` } : { inset: 0 }), zIndex: 96, background: 'rgba(4,14,30,0.6)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT, color: '#FFFFFF' }}>
+      <div {...backdropProps(onClose)} data-side={side ? '1' : '0'} style={{ position: 'fixed', ...(side && typeof window !== 'undefined' ? { left: 0, top: 0, width: window.innerHeight, height: window.innerWidth, transformOrigin: '0 0', transform: `translateX(${window.innerWidth}px) rotate(90deg)` } : { inset: 0 }), zIndex: 96, background: 'rgba(4,14,30,0.6)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT, color: '#FFFFFF' }}>
         <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 480, maxHeight: side ? '100%' : 'min(88vh, 660px)', display: 'flex', flexDirection: 'column', padding: side ? '10px 14px' : '14px 14px calc(14px + env(safe-area-inset-bottom))', boxSizing: 'border-box', animation: 'zgk-in 0.25s ease-out' }}>
           <GPanel color="rgba(10,40,74,0.96)" style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10, minHeight: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

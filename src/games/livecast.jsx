@@ -1,3 +1,4 @@
+import { backdropProps } from './tap.js';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
 import { supabase } from '../supabaseClient.js';
@@ -193,7 +194,7 @@ export function CastSheet({ cast, onClose, z = 45 }) {
   const P = cast.P;
   const tap = (patch) => { try { sfx('tap'); haptic(8); } catch {} setGamePrivacy(patch); };
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: z, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', pointerEvents: 'auto' }}>
+    <div {...backdropProps(onClose)} style={{ position: 'fixed', inset: 0, zIndex: z, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', pointerEvents: 'auto' }}>
       <div className="zgr-up" role="dialog" aria-label="Friends and this game" onClick={(e) => e.stopPropagation()}
         style={{ width: '100%', maxWidth: 480, maxHeight: '86%', overflowY: 'auto', borderRadius: '26px 26px 0 0', background: '#17141F', color: '#FFFFFF', padding: '18px 18px calc(18px + env(safe-area-inset-bottom))', boxSizing: 'border-box', boxShadow: '0 -12px 40px rgba(0,0,0,0.45)', fontFamily: 'inherit' }}>
         <div style={{ width: 38, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.2)', margin: '-6px auto 12px' }} />

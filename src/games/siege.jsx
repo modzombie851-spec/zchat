@@ -1,11 +1,13 @@
+import { backdropProps } from './tap.js';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Avatar, Portal, useBackClose, FONT, Spinner } from '../App.jsx';
 import { useRoomLink } from './relay.jsx';
+import { cloudOn } from './zcloud.js';
 import { EMOTES, Sheet, injectCss, useGameChat, ChatSheet } from './livekit.jsx';
-import { GBtn, GPill, GPanel, GChip, GTitle, GIcon, GHudBtn, GHudPanel, GNotices, useNotices, useWatchNotices, injectKitCss, kitTap, pressProps, maxDpr, weakPhone, INK, useCtlLook, useGameStage, GControlsPanel, GVolBars, GLobby, GSlot, GLobbySheet, GSeg, GTalkers, GJoy, useJoystick, stagePoint, TOUCHY, GWatchBar } from './gamekit.jsx';
+import { GBtn, GPill, GPanel, GChip, GTitle, GIcon, GHudBtn, GHudPanel, GNotices, useNotices, useWatchNotices, injectKitCss, kitTap, pressProps, maxDpr, weakPhone, INK, useCtlLook, useGameStage, GControlsPanel, GVolBars, GLobby, GSlot, GLobbySheet, GSeg, GTalkers, GJoy, useJoystick, stagePoint, TOUCHY, GWatchBar, GSkin, GChatFeed, useChatFeed, GJoinAsks } from './gamekit.jsx';
 import { mkNet, netPush, netRead } from './netlerp.js';
 import { Sfx } from './sfx.js';
-import { setWatchAllowed, useLiveBeacon, useGamePrivacy } from './live.js';
+import { setWatchAllowed, useLiveBeacon, useGamePrivacy, useJoinAsks } from './live.js';
 import { createRenderer, m4 } from './race3d.js';
 import * as E from './siegeengine.js';
 import { heroMeshes, robotMeshes, heroThumbEnv, fxSiege } from './siegemesh.js';
@@ -25,9 +27,26 @@ const savePref = (k, v) => { try { localStorage.setItem(k, String(v)); } catch {
 const num = (v, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
 const { clamp, wrapA } = E;
 const validHero = (k) => (E.HEROES[k] ? k : 'blaze');
+if (cloudOn()) E.setSquadMax(20);
+const HUE = [0, 150, 215, 290];
+function hsv(r, g, b) { const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn; let h = 0; if (d > 1e-6) { if (mx === r) h = ((g - b) / d) % 6; else if (mx === g) h = (b - r) / d + 2; else h = (r - g) / d + 4; h *= 60; if (h < 0) h += 360; } return [h, mx ? d / mx : 0, mx]; }
+function rgb(h, s0, v) { const c = v * s0, x = c * (1 - Math.abs(((h / 60) % 2) - 1)), m = v - c; const [r, g, b] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x] : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x]; return [r + m, g + m, b + m]; }
+function tintMesh(data, shift) {
+  if (!shift) return data;
+  const out = new Float32Array(data);
+  for (let i = 6; i < out.length; i += 10) {
+    const [h, sv, v] = hsv(out[i], out[i + 1], out[i + 2]);
+    if (sv < 0.34 || v < 0.16 || (h > 10 && h < 46 && sv < 0.6)) continue;
+    const c = rgb((h + shift) % 360, sv, v);
+    out[i] = c[0]; out[i + 1] = c[1]; out[i + 2] = c[2];
+  }
+  return out;
+}
+const heroTint = (k, c) => { const H = E.HEROES[k]; if (!H || !c) return H ? H.col : '#FFFFFF'; const n = parseInt(H.col.slice(1), 16); const [h, sv, v] = hsv(((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255); const o = rgb((h + HUE[c]) % 360, sv, v); return `#${o.map((q) => Math.round(q * 255).toString(16).padStart(2, '0')).join('')}`; };
 const validArena = (k) => (E.ARENAS[k] ? k : 'yard');
 const validLv = (k) => (E.LEVELS[k] ? k : 'normal');
 const BOT_NAMES = ['Ash', 'Bo', 'Cleo', 'Dex', 'Eli', 'Fay', 'Gus', 'Hana', 'Ivo'];
+const STREAK = 20;
 const SLOT_COLS = ['#FFC23D', '#4DA3FF', '#FF6FA8', '#7BE05A', '#B88CFF', '#FF8A3D', '#3DD9C4', '#FF5A5A', '#E6E6E6', '#C8E05A'];
 const SNAP_MS = 110, RE_MS = 80;
 const BOT_STEPS = [0, 1, 3, 5, 9];
@@ -158,16 +177,16 @@ function arenaThumb(key) {
   return url;
 }
 
-function HeroCard({ k, on, img, onPress, size = 64, label, lv }) {
+function HeroCard({ k, on, img, onPress, size = 64, label, lv, locked }) {
   const H = E.HEROES[k];
   return (
-    <button type="button" className="zgk-btn" aria-pressed={on} aria-label={label || `${H.name}, ${H.role}`} {...pressProps(onPress)}
-      style={{ position: 'relative', width: size, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: FONT, color: '#FFFFFF' }}>
+    <button type="button" className="zgk-btn" aria-pressed={on} aria-label={label || `${H.name}, ${H.role}${locked ? ', taken' : ''}`} {...pressProps(onPress)}
+      style={{ position: 'relative', width: size, flexShrink: 0, opacity: locked ? 0.42 : 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: FONT, color: '#FFFFFF' }}>
       <span style={{ width: size, height: size, borderRadius: 14, overflow: 'hidden', display: 'block', background: `radial-gradient(circle at 50% 35%, ${H.col}55, #141A2C 75%)`, boxShadow: on ? `0 0 0 3px #FFD45A, 0 4px 12px rgba(0,0,0,0.4)` : 'inset 0 0 0 1.5px rgba(255,255,255,0.16)' }}>
         {img ? <img src={img} alt="" draggable={false} style={{ width: '100%', height: '100%', display: 'block', objectFit: 'cover' }} /> : null}
       </span>
       {lv > 1 && <span aria-hidden="true" style={{ position: 'absolute', right: -3, top: -3, minWidth: 18, height: 18, padding: '0 4px', boxSizing: 'border-box', borderRadius: 9, background: 'linear-gradient(180deg, #FFE27A, #F5B321)', color: '#2A1D05', fontSize: 10.5, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 0 0 1.5px ${INK}` }}>{lv}</span>}
-      <span style={{ fontSize: 11.5, fontWeight: 900, color: on ? '#FFE15A' : '#FFFFFF', textShadow: '0 1px 3px rgba(0,0,0,0.5)' }}>{H.name}</span>
+      <span style={{ fontSize: 11.5, fontWeight: 900, color: on ? '#FFE15A' : '#FFFFFF', textShadow: '0 1px 3px rgba(0,0,0,0.5)' }}>{locked ? 'Taken' : H.name}</span>
     </button>
   );
 }
@@ -191,8 +210,9 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
   const hostId = solo ? 'me' : room && room.host;
   const myFirst = String((me && me.name) || 'You').split(' ')[0];
   const [heroKey, setHeroKey] = useState(() => validHero(readPref(PREF.hero, 'blaze')));
-  const meta = { n: myFirst, a: me && me.avatar, w: watch ? 1 : 0, h: heroKey };
-  const relay = useRoomLink({ id: solo || !room ? null : `siege-${room.rm}`, myId, enabled: !solo && !!room, meta, fast: ['hs', 'es'], audio: !watch });
+  const [heroCol, setHeroCol] = useState(() => clamp(Number(readPref('zchat-siege-hcol', 0)) | 0, 0, 3));
+  const meta = { n: myFirst, a: me && me.avatar, w: watch ? 1 : 0, h: heroKey, hc: heroCol };
+  const relay = useRoomLink({ id: solo || !room ? null : `siege-${room.rm}`, myId, enabled: !solo && !!room, meta, fast: ['hs', 'es'], audio: !watch, cloud: 'siege' });
   const [phase, setPhase] = useState('menu');
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -204,6 +224,9 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
   const [roster, setRoster] = useState(solo ? ['me'] : [room && room.host].filter(Boolean));
   const [names, setNames] = useState({});
   const [heroOf, setHeroOf] = useState({});
+  const [colOf, setColOf] = useState({});
+  const colOfRef = useRef(colOf); colOfRef.current = colOf;
+  const [powSheet, setPowSheet] = useState(false);
   const [watchers, setWatchers] = useState([]);
   const [hud, setHud] = useState({ wave: 0, st: 'intro', t: 0, left: 0, score: 0, team: [], boss: null, me: null });
   const [banner, setBanner] = useState(null);
@@ -233,7 +256,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
   const gamePriv = useGamePrivacy();
   const allowWatch = gamePriv.show && gamePriv.watch;
   const [notes, pushNote] = useNotices();
-  const look = useCtlLook();
+  const look = useCtlLook('siege');
   const GS = useGameStage(useMemo(() => ({ ...look, side: true }), [look]));
   const { top, right, bottom, left } = GS.at;
   const land = GS.land;
@@ -277,7 +300,10 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
   const nameOf = (k) => (k === kindOf() ? 'You' : G.current.botMeta[k] ? G.current.botMeta[k].n : namesRef.current[k] || names[k] || 'Friend');
   const [chatOpen, setChatOpen] = useState(false);
   const [chatNew, setChatNew] = useState(0);
-  const chat = useGameChat(solo || watch ? null : relay, nameOf, (s) => { pushNote(s, 'chat'); setChatNew((n) => n + 1); });
+  const [feed, pushFeed] = useChatFeed();
+  const jask = useJoinAsks({ myId, on: !solo && !!room && isHost && !watch, game: 'siege' });
+  const chatCol = (k) => { const W = G.current && G.current.W; const h = W && W.heroes && W.heroes[k]; return h && E.HEROES[h.key] ? heroTint(h.key, h.hc | 0) : '#A9CCFF'; };
+  const chat = useGameChat(solo || watch ? null : relay, nameOf, (s, who, t, from) => { pushFeed(who, t, chatCol(from)); setChatNew((n) => n + 1); }, (t) => pushFeed('You', t));
   const bannerT = useRef(0);
   const showBanner = (text, sub, tone, sec = 2.4) => { setBanner({ text, sub, tone, at: Date.now() }); clearTimeout(bannerT.current); bannerT.current = setTimeout(() => setBanner(null), sec * 1000); };
 
@@ -331,7 +357,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
   const heroMesh = (key) => {
     const st = RR.current;
     if (!st) return null;
-    if (!st.heroM[key]) { const H = heroMeshes(key); st.heroM[key] = { body: st.R.mesh(H.body), leg: st.R.mesh(H.leg), hip: H.hip }; }
+    if (!st.heroM[key]) { const [k0, c0] = key.split(':'); const H = heroMeshes(k0); const sh = HUE[Number(c0) | 0] || 0; st.heroM[key] = { body: st.R.mesh(tintMesh(H.body, sh)), leg: st.R.mesh(tintMesh(H.leg, sh)), hip: H.hip }; }
     return st.heroM[key];
   };
   const robotMesh = (type) => {
@@ -418,6 +444,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
     return [myId, ...order.filter((p) => p !== myId)].slice(0, E.SQUAD_MAX);
   };
   const heroFor = (k) => (k === kindOf() ? heroRef.current : validHero(heroOfRef.current[k] || (metaRef.current[k] && metaRef.current[k].h)));
+  const heroColRef = useRef(heroCol); heroColRef.current = heroCol;
 
   const beginGame = (cfg) => {
     const g = G.current;
@@ -430,6 +457,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
       const p = E.heroSpawn(W.A, i);
       const key = validHero(cfg.heroes && cfg.heroes[k]);
       const h = E.mkHero(k, key, p.x, p.z, k.startsWith('bot'), k === kindOf() && !watch ? levelOf(key) : 1);
+      h.hc = clamp(Number(cfg.cols && cfg.cols[k]) | 0, 0, 3);
       W.heroes[k] = h; W.order.push(k);
     });
     if (!watch && cfg.ids.includes(kindOf())) W.local.add(kindOf());
@@ -451,20 +479,30 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
     if (!isHost || !ready) return;
     Sfx.init();
     const ids = solo ? ['me'] : freshRoster();
-    const heroes = {};
-    ids.forEach((k) => { heroes[k] = heroFor(k); });
-    const used = new Set(Object.values(heroes));
+    const heroes = {}, cols = {}, count = {}, tone = {};
+    const cap = E.heroCap();
+    const least = () => E.HERO_KEYS.reduce((a, b) => ((count[b] || 0) < (count[a] || 0) ? b : a), E.HERO_KEYS[0]);
+    const place = (id, want0, c0) => {
+      const k = (count[want0] || 0) < cap ? want0 : least();
+      count[k] = (count[k] || 0) + 1;
+      const taken = tone[k] || (tone[k] = new Set());
+      let c = clamp(Number(c0) | 0, 0, 3);
+      if (taken.has(c)) c = [0, 1, 2, 3].find((q) => !taken.has(q)) || 0;
+      taken.add(c);
+      heroes[id] = k; cols[id] = c;
+    };
+    ids.forEach((k) => place(k, heroFor(k), k === kindOf() ? heroColRef.current : colOfRef.current[k] != null ? colOfRef.current[k] : metaRef.current[k] && metaRef.current[k].hc));
     const bots = [];
     const want = Math.min(E.SQUAD_MAX, ids.length + botNRef.current);
     for (let i = ids.length; i < want; i++) {
       const id = `bot${i}`;
-      const free = E.HERO_KEYS.filter((k) => !used.has(k));
-      const k = free.length ? (free.includes('mira') && !used.has('mira') && i === ids.length ? 'mira' : free[(i * 7) % free.length]) : E.HERO_KEYS[i % E.HERO_KEYS.length];
-      used.add(k);
+      const free = E.HERO_KEYS.filter((k) => !count[k]);
+      const k = free.length ? (free.includes('mira') && i === ids.length ? 'mira' : free[(i * 7) % free.length]) : least();
       bots.push({ id, n: BOT_NAMES[i % BOT_NAMES.length] });
-      ids.push(id); heroes[id] = k;
+      ids.push(id);
+      place(id, k, 0);
     }
-    const cfg = { rid: `${Date.now().toString(36)}${Math.floor(Math.random() * 1e4)}`, ids, heroes, bots, arena: arenaRef.current, lv: lvRef.current, en: endRef.current ? 1 : 0, seed: (Math.random() * 1e9) | 0 };
+    const cfg = { cols, rid: `${Date.now().toString(36)}${Math.floor(Math.random() * 1e4)}`, ids, heroes, bots, arena: arenaRef.current, lv: lvRef.current, en: endRef.current ? 1 : 0, seed: (Math.random() * 1e9) | 0 };
     if (!solo) { setRoster(ids.filter((k) => !k.startsWith('bot'))); relay.send('go', cfg); }
     beginGame(cfg);
   };
@@ -615,7 +653,9 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
       const heroes = {};
       for (const k of ids) heroes[k] = validHero(m.heroes && m.heroes[k]);
       const bots = Array.isArray(m.bots) ? m.bots.filter((b) => b && typeof b.id === 'string' && ids.includes(b.id)).map((b) => ({ id: b.id, n: String(b.n || 'Bot').slice(0, 16) })) : [];
-      return { rid: m.rid, ids, heroes, bots, arena: validArena(m.arena), lv: validLv(m.lv), en: m.en ? 1 : 0, seed: num(m.seed, 1) | 0 };
+      const cols = {};
+      for (const k of ids) cols[k] = clamp(Number(m.cols && m.cols[k]) | 0, 0, 3);
+      return { rid: m.rid, ids, heroes, cols, bots, arena: validArena(m.arena), lv: validLv(m.lv), en: m.en ? 1 : 0, seed: num(m.seed, 1) | 0 };
     };
     const offs = [
       relay.on('*', (m) => { if (m.m) { metaRef.current[m.from] = m.m; setNames((p) => (p[m.from] === m.m.n ? p : { ...p, [m.from]: m.m.n })); if (m.m.h && E.HEROES[m.m.h]) setHeroOf((p) => (p[m.from] ? p : { ...p, [m.from]: m.m.h })); } if (!joinOrder.current.includes(m.from)) joinOrder.current.push(m.from); }),
@@ -633,7 +673,16 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
       }),
       relay.on('go', (m) => { if (isHost) return; const cfg = cleanCfg(m); if (cfg) beginGame(cfg); }),
       relay.on('menu', () => { if (!isHost) toMenu(true); }),
-      relay.on('hero', (m) => { if (m && E.HEROES[m.k]) setHeroOf((p) => ({ ...p, [m.from]: m.k })); }),
+      relay.on('hero', (m) => { if (m && E.HEROES[m.k]) setHeroOf((p) => ({ ...p, [m.from]: m.k })); if (m && typeof m.c === 'number') setColOf((p) => ({ ...p, [m.from]: clamp(m.c | 0, 0, 3) })); }),
+      relay.on('swap', (m) => {
+        const g = G.current, W = g.W;
+        if (isHost || !W || m.r !== g.rid || typeof m.id !== 'string' || W.heroes[m.id] || !E.HEROES[m.k]) return;
+        const x = num(m.x), z = num(m.z);
+        if (typeof m.b === 'string' && W.heroes[m.b]) { W.order = W.order.map((k) => (k === m.b ? m.id : k)); g.ids = g.ids.map((k) => (k === m.b ? m.id : k)); g.bots = g.bots.filter((k) => k !== m.b); }
+        else { W.order.push(m.id); g.ids.push(m.id); }
+        const h = E.mkHero(m.id, m.k, x, z, false, 1); h.hc = clamp(m.c | 0, 0, 3);
+        W.heroes[m.id] = h;
+      }),
       relay.on('hs', (m) => {
         const g = G.current, W = g.W;
         if (!W || !m || m.r !== g.rid || m.from === kindOf()) return;
@@ -711,6 +760,22 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
       const cur = rosterRef.current;
       const playing = phaseRef.current !== 'menu';
       const next = playing ? cur.filter((p) => p === myId || present.includes(p)) : freshRoster();
+      const g1 = G.current, W1 = g1.W;
+      if (playing && W1 && !g1.over && phaseRef.current === 'play') {
+        for (const p of present) {
+          if (next.includes(p) || g1.ids.includes(p) || next.length >= E.SQUAD_MAX) continue;
+          const key = heroFor(p), c = clamp(Number(colOfRef.current[p] != null ? colOfRef.current[p] : metaRef.current[p] && metaRef.current[p].hc) | 0, 0, 3);
+          const bot = g1.bots.length ? g1.bots[g1.bots.length - 1] : null;
+          let x, z;
+          if (bot && W1.heroes[bot]) { x = W1.heroes[bot].x; z = W1.heroes[bot].z; W1.order = W1.order.map((k) => (k === bot ? p : k)); g1.ids = g1.ids.map((k) => (k === bot ? p : k)); g1.bots = g1.bots.filter((k) => k !== bot); W1.local.delete(bot); }
+          else { const sp = E.heroSpawn(W1.A, W1.order.length); x = sp.x; z = sp.z; W1.order.push(p); g1.ids.push(p); }
+          const h = E.mkHero(p, key, x, z, false, 1); h.hc = c;
+          W1.heroes[p] = h;
+          relay.send('swap', { r: g1.rid, b: bot, id: p, k: key, c, x: +x.toFixed(2), z: +z.toFixed(2) });
+          next.push(p);
+          pushNote(`${(metaRef.current[p] && metaRef.current[p].n) || 'A friend'} joined${bot ? ' in place of a bot' : ''}`, 'join');
+        }
+      }
       const w = relay.peers.filter((p) => metaRef.current[p] && metaRef.current[p].w);
       setWatchers((prev) => (prev.join('|') === w.join('|') ? prev : w));
       if (next.join('|') !== cur.join('|')) setRoster(next);
@@ -744,7 +809,20 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
   const watchList = useMemo(() => watchers.map((id) => ({ id, n: names[id] || 'Friend' })), [watchers, names]);
   useWatchNotices(watchList, pushNote, !solo && !watch);
 
-  const pickHero = (k) => { if (!E.HEROES[k]) return; kitTap(); setHeroKey(k); savePref(PREF.hero, k); if (!solo) relay.send('hero', { k }); };
+  const takenBy = (k) => roster.filter((p) => p !== kindOf() && validHero(heroOf[p] || (metaRef.current[p] && metaRef.current[p].h)) === k).length;
+  const pickHero = (k) => { if (!E.HEROES[k]) return; if (!solo && takenBy(k) >= E.heroCap()) { kitTap(); pushNote(`${E.HEROES[k].name} is taken by ${E.heroCap()} players`, 'info'); return; } kitTap(); setHeroKey(k); savePref(PREF.hero, k); let c = heroCol; const used = roster.filter((p) => p !== kindOf() && validHero(heroOf[p]) === k).map((p) => colOf[p] | 0); if (used.includes(c)) { c = [0, 1, 2, 3].find((q) => !used.includes(q)) || 0; setHeroCol(c); savePref('zchat-siege-hcol', c); } if (!solo) relay.send('hero', { k, c }); };
+  const openStreak = () => {
+    const g = G.current, W = g.W;
+    const h = W && W.heroes[kindOf()];
+    if (!h || !g.tokens || cardsRef.current) return;
+    const ch = E.cardChoices(h, Math.random);
+    g.tokens -= 1;
+    if (!ch.length) return;
+    const c = { n: 'streak', list: ch, until: performance.now() + 60000 };
+    cardsRef.current = c; setCards(c);
+    Sfx.play('star', { vol: 0.6 });
+  };
+  const pickCol = (c) => { kitTap(); setHeroCol(c); savePref('zchat-siege-hcol', c); if (!solo) relay.send('hero', { k: heroKey, c }); };
   const pickArena = (k) => { if (!isHost || !E.ARENAS[k]) return; kitTap(); setArena(k); savePref(PREF.arena, k); };
   const pickLv = (k) => { if (!isHost || !E.LEVELS[k]) return; kitTap(); setLv(k); savePref(PREF.lv, k); };
   const pickBots = (v) => { if (!isHost) return; const n = snapBots(clamp(Number(v) | 0, 0, E.SQUAD_MAX - 1)); kitTap(); setBotN(n); savePref(PREF.bots, n); };
@@ -907,6 +985,12 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
         P3({ x: e.x, y: 0.95, z: e.z, max: 0.1, s0: 0.5, s1: 1.1, a0: 0.8, type: e.block ? 6 : 7 });
         if (mine) { popNum(e.x, e.z, String(e.d), e.block ? '#B8C4D6' : e.d >= 1000 ? '#FFE15A' : '#FFFFFF', e.d >= 1000); if (e.block) zap('clank', 0.6); else Sfx.play('hit', { vol: 0.32 }); }
       } else if (k === 'kill') {
+        if (e.by === myK && W.heroes[myK]) {
+          const hh = W.heroes[myK];
+          if (hh.mods && hh.mods.rush) hh.rushT = 1.6 + hh.mods.rush;
+          g.myKills = (g.myKills || 0) + 1;
+          if (g.myKills % STREAK === 0 && !g.over) { g.tokens = (g.tokens || 0) + 1; pushNote(`${g.myKills} takedowns. A new power is ready`, 'join'); Sfx.play('star', { vol: 0.6 }); }
+        }
         const big = e.type === 'tank' || e.type === 'boss' || e.type === 'bomber';
         blast(e.x, 0.6, e.z, big, e.type === 'boss' ? 2 : e.type === 'tank' ? 1.2 : e.type === 'bomber' ? 1 : 0.65);
         if (e.type === 'boss') { for (let i = 1; i <= 3; i++) setTimeout(() => { if (G.current.W) blast(e.x + R0(-1.6, 1.6), 1.5, e.z + R0(-1.6, 1.6), true, 1.3); zap('bigboom', 0.8); }, i * 260); g.shake = 1; }
@@ -1012,7 +1096,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
           E.stepHero(W, mine, inp, step);
           if (mine.st === 0) for (let i = W.drops.length - 1; i >= 0; i--) {
             const d = W.drops[i];
-            if (Math.hypot(d.x - mine.x, d.z - mine.z) > 1.15) continue;
+            if (Math.hypot(d.x - mine.x, d.z - mine.z) > 1.15 + ((mine.mods && mine.mods.magnet) || 0)) continue;
             if (isHost) { E.takeDrop(W, mine, d); W.drops.splice(i, 1); W.net.push(['pg', d.id, '', 0]); }
             else if (!g.claimed.has(d.id)) { g.claimed.add(d.id); W.drops.splice(i, 1); relay.send('ev', { r: g.rid, k: 'pk', i: d.id }); }
           }
@@ -1025,7 +1109,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
           if (inp.gad) tryGadget(h, inp.gad);
           if (inp.dash != null) tryDash(h, inp.dash);
           E.stepHero(W, h, inp, step);
-          if (h.st === 0) for (let i = W.drops.length - 1; i >= 0; i--) { const d = W.drops[i]; if (Math.hypot(d.x - h.x, d.z - h.z) < 1.15) { E.takeDrop(W, h, d); W.drops.splice(i, 1); } }
+          if (h.st === 0) for (let i = W.drops.length - 1; i >= 0; i--) { const d = W.drops[i]; if (Math.hypot(d.x - h.x, d.z - h.z) < 1.15 + ((h.mods && h.mods.magnet) || 0)) { E.takeDrop(W, h, d); W.drops.splice(i, 1); } }
         }
         const kS = 1 - Math.exp(-step * 26);
         for (const id of W.order) {
@@ -1055,6 +1139,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
           else { showBanner(`Wave ${W.wave.n}`, W.wave.n === 1 ? 'Robots incoming' : W.endless || W.wave.n < E.WIN_WAVE ? null : 'Last wave', 'gold', 2); Sfx.play('cp', { vol: 0.6 }); }
           for (const id of W.local) { const h = W.heroes[id]; if (h && h.st === 2) { const p = E.heroSpawn(W.A, W.order.indexOf(id)); h.x = p.x; h.z = p.z; h.st = 0; h.hp = h.max; h.ammo = 3; h.downT = 0; W.ev.push({ k: 'revive', id, x: h.x, z: h.z }); } }
         }
+        if (W.wave.st === 'break' && (g.tokens || 0) > 0 && !cardsRef.current && !g.over && !(E.cardWave(W.wave.n) && g.cardDone !== W.wave.n)) openStreak();
         if (W.wave.st === 'break' && E.cardWave(W.wave.n) && g.cardDone !== W.wave.n && !g.over) {
           g.cardDone = W.wave.n;
           if (isHost) for (const id of g.bots) { const h = W.heroes[id]; if (h) { const ch = E.cardChoices(h, Math.random); if (ch.length) E.applyCard(h, ch[Math.floor(Math.random() * ch.length)]); } }
@@ -1113,7 +1198,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
       const ringAt = (x, z, r, tint, alpha) => { if (fx) items.push({ mesh: fx.ring, model: scl(m4.pose(x, 0.03, z, 0), r, 1, r), blend: 3, alpha, tint }); };
       const discAt = (x, z, r, tint, alpha, y = 0.025) => { if (fx) items.push({ mesh: fx.disc, model: scl(m4.pose(x, y, z, 0), r, 1, r), blend: 3, alpha, tint }); };
       const drawHero = (h, key, x, z, yaw, o = {}) => {
-        const HM = heroMesh(key);
+        const HM = heroMesh(`${key}:${h.hc | 0}`);
         if (!HM) return;
         const spd = Math.hypot(h.vx || 0, h.vz || 0);
         const mv = clamp(spd / 3, 0, 1);
@@ -1147,7 +1232,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
         list.forEach((k, i) => {
           const key = k === myK ? heroRef.current : validHero(heroOfRef.current[k] || (metaRef.current[k] && metaRef.current[k].h));
           const off = [[0, 0], [-1.6, -0.9], [1.6, -0.9], [0, -1.8]][i] || [0, 0];
-          const fake = { vx: 0, vz: 0, walk: 0, flash: 0, rec: 0 };
+          const fake = { vx: 0, vz: 0, walk: 0, flash: 0, rec: 0, hc: k === myK ? heroColRef.current : clamp(Number(colOfRef.current[k] != null ? colOfRef.current[k] : metaRef.current[k] && metaRef.current[k].hc) | 0, 0, 3) };
           drawHero(fake, key, cx + off[0], cz + off[1], Math.sin(tsec * 0.6 + i) * 0.25, { idle: true });
           ringAt(cx + off[0], cz + off[1], 0.7, k === myK ? TINT.me : TINT.ally, 0.75);
         });
@@ -1479,7 +1564,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
 
   const lobbyUi = phase !== 'menu' ? null : (
     <GLobby GS={GS} title="Scrap Siege" onClose={finish} closeLabel={solo ? 'Leave' : 'Back to chat'} tint="rgba(8,10,22,0.62)"
-      sub={solo ? (botN ? `You and ${botN === 1 ? 'a bot friend' : `${botN} bot friends`} against robot waves` : 'You alone against robot waves') : watch ? `Watching ${hostName} and friends` : 'Up to ten friends against robot waves'}
+      sub={solo ? (botN ? `You and ${botN === 1 ? 'a bot friend' : `${botN} bot friends`} against robot waves` : 'You alone against robot waves') : watch ? `Watching ${hostName} and friends` : (E.SQUAD_MAX > 10 ? 'Up to 20 players against robot waves' : 'Up to ten friends against robot waves')}
       badge={best ? <GChip style={{ height: 34, gap: 6 }}><GIcon k="crown" size={14} color="#FFD84E" />{`Best wave ${best}`}</GChip> : null}
       tools={(
         <>
@@ -1497,7 +1582,12 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
                 <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 800, color: H0.col, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{`${H0.name}, ${H0.role}`}</span>
                 {prog && <span style={{ display: 'flex', alignItems: 'center', gap: 4, height: 24, padding: '0 9px', borderRadius: 12, background: 'rgba(10,14,26,0.6)', fontSize: 11.5, fontWeight: 900, color: '#FFE15A', flexShrink: 0 }}><GIcon k="star" size={12} color="#FFE15A" ink="transparent" />{`${prog.scrap} scrap`}</span>}
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 6, justifyItems: 'center' }}>{E.HERO_KEYS.map((k) => <HeroCard key={k} k={k} on={heroKey === k} img={thumbs[k]} size={land ? 54 : 52} lv={prog ? prog.levels[k] : 0} onPress={() => pickHero(k)} />)}</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 6, justifyItems: 'center' }}>{E.HERO_KEYS.map((k) => <HeroCard key={k} k={k} on={heroKey === k} img={thumbs[k]} size={land ? 54 : 52} lv={prog ? prog.levels[k] : 0} locked={!solo && heroKey !== k && takenBy(k) >= E.heroCap()} onPress={() => pickHero(k)} />)}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 12, fontWeight: 800, color: 'rgba(255,255,255,0.75)' }}>Colour</span>
+                {[0, 1, 2, 3].map((c) => <button key={c} type="button" className="zgk-btn" aria-label={`Colour ${c + 1}`} aria-pressed={heroCol === c} {...pressProps(() => pickCol(c))} style={{ width: 24, height: 24, borderRadius: 4, border: 'none', cursor: 'pointer', background: heroTint(heroKey, c), boxShadow: heroCol === c ? '0 0 0 2px #1B1430, 0 0 0 4px #F2B21B' : 'inset 0 0 0 1px rgba(0,0,0,0.3)' }} />)}
+                {!solo && takenBy(heroKey) > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.6)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>A friend has this hero too</span>}
+              </div>
               <button type="button" className="zgk-btn" aria-label={`${H0.name} details and upgrades`} {...pressProps(() => { kitTap(); setUpMsg(''); setHeroSheet(true); })}
                 style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 7px', border: 'none', borderRadius: 12, background: 'rgba(255,255,255,0.07)', cursor: 'pointer', color: '#FFFFFF', fontFamily: FONT, textAlign: 'left' }}>
                 <span style={{ width: 34, height: 34, borderRadius: 17, flexShrink: 0, background: 'radial-gradient(circle at 40% 30%, #FFE98A, #F2A81D)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 0 0 2px ${INK}` }}><SuperArt k={heroKey} size={24} /></span>
@@ -1515,15 +1605,26 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
                 <span style={{ fontSize: 13.5, fontWeight: 900, flex: 1 }}>{watch ? 'Squad' : `Squad ${roster.length} of ${E.SQUAD_MAX}`}</span>
                 {watchers.length > 0 && <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 800, color: '#CFE6FF' }}><GIcon k="eye" size={14} color="#CFE6FF" />{`${watchers.length} watching`}</span>}
               </div>
+              {E.SQUAD_MAX > 10 ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
+                    {roster.slice(0, 9).map((k, i) => { const isMe = k === kindOf(); const hk = isMe ? heroKey : validHero(heroOf[k]); return <span key={k} title={isMe ? 'You' : names[k] || 'Friend'} style={{ width: 30, height: 30, marginLeft: i ? -7 : 0, borderRadius: 15, overflow: 'hidden', flexShrink: 0, background: '#141A2C', boxShadow: `0 0 0 2px ${heroTint(hk, isMe ? heroCol : colOf[k] | 0)}` }}>{thumbs[hk] ? <img src={thumbs[hk]} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} /> : null}</span>; })}
+                    {roster.length > 9 && <span style={{ marginLeft: 6, fontSize: 12.5, fontWeight: 900 }}>{`+${roster.length - 9}`}</span>}
+                  </div>
+                  <span style={{ flex: 1, fontSize: 11.5, fontWeight: 700, color: 'rgba(255,255,255,0.7)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{botN > 0 && isHost ? (Math.min(botN, E.SQUAD_MAX - roster.length) === 1 ? 'A bot fills 1 spot' : `Bots fill ${Math.min(botN, E.SQUAD_MAX - roster.length)} spots`) : ''}</span>
+                  {isHost && onInvite && !watch && roster.length < E.SQUAD_MAX && <GPill text="Invite" icon="plus" color="gold" small onPress={() => onInvite(roster.length, GS.side)} />}
+                </div>
+              ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', justifyItems: 'center', rowGap: 4 }}>
-                {Array.from({ length: E.SQUAD_MAX }, (_, i) => {
-                  const k = roster[i];
-                  if (!k) return <GSlot key={`e${i}`} size={34} empty name={isHost && onInvite && !watch ? 'Invite' : botN > i - roster.length && isHost ? 'Bot' : 'Open'} label="Invite a friend" onPress={isHost && onInvite && !watch ? () => onInvite(roster.length, GS.side) : null} />;
-                  const isMe = k === kindOf();
-                  const hk = isMe ? heroKey : validHero(heroOf[k]);
-                  return <GSlot key={k} size={34} art={thumbs[hk] ? <img src={thumbs[hk]} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} /> : <span style={{ width: 26, height: 26, borderRadius: 13, background: SLOT_COLS[i] }} />} name={isMe ? 'You' : names[k] || 'Friend'} ring={SLOT_COLS[i]} talk={micOf(k)} muted={!!relay.muted[k]} label={isMe ? 'You' : `${names[k] || 'Friend'}, voice and volume`} onPress={!isMe && !watch ? () => setPeople(true) : null} />;
-                })}
-              </div>
+                  {Array.from({ length: E.SQUAD_MAX }, (_, i) => {
+                    const k = roster[i];
+                    if (!k) return <GSlot key={`e${i}`} size={34} empty name={isHost && onInvite && !watch ? 'Invite' : botN > i - roster.length && isHost ? 'Bot' : 'Open'} label="Invite a friend" onPress={isHost && onInvite && !watch ? () => onInvite(roster.length, GS.side) : null} />;
+                    const isMe = k === kindOf();
+                    const hk = isMe ? heroKey : validHero(heroOf[k]);
+                    return <GSlot key={k} size={34} art={thumbs[hk] ? <img src={thumbs[hk]} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} /> : <span style={{ width: 26, height: 26, borderRadius: 13, background: SLOT_COLS[i] }} />} name={isMe ? 'You' : names[k] || 'Friend'} ring={SLOT_COLS[i]} talk={micOf(k)} muted={!!relay.muted[k]} label={isMe ? 'You' : `${names[k] || 'Friend'}, voice and volume`} onPress={!isMe && !watch ? () => setPeople(true) : null} />;
+                  })}
+                </div>
+              )}
               {!watch && (
                 <div style={{ display: 'flex', gap: 8 }}>
                   <GPill text={relay.mic.on ? 'Mic off' : 'Talk with mic'} icon={relay.mic.on ? 'micoff' : 'mic'} color={relay.mic.on ? 'white' : 'blue'} small wide onPress={relay.toggleMic} style={{ flex: 1 }} />
@@ -1552,6 +1653,29 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
             : <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 44, fontSize: 13.5, fontWeight: 800 }}><Spinner size={16} color="#FFFFFF" />{`${hostName} picks the arena and starts`}</div>}
         </GPanel>
       )}>
+      {powSheet && (() => {
+        const hh = G.current.W && G.current.W.heroes[kindOf()];
+        const cs = (hh && hh.cards) || [];
+        const cnt = {};
+        for (const k of cs) cnt[k] = (cnt[k] || 0) + 1;
+        const Hh = E.HEROES[hh ? hh.key : heroKey];
+        const left = STREAK - ((G.current.myKills || 0) % STREAK);
+        return (
+          <GLobbySheet GS={GS} title="Your powers" width={520} onClose={() => setPowSheet(false)}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ fontSize: 12, fontWeight: 800, color: 'rgba(255,255,255,0.7)' }}>{`${Hh.name}: super ${Hh.sup.name}, gadget ${Hh.gad.name}. Next power in ${left} takedowns.`}</div>
+              {Object.keys(cnt).length === 0 && <div style={{ fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.8)' }}>No powers yet. You get one every second wave and every {STREAK} takedowns.</div>}
+              {Object.entries(cnt).map(([k, n]) => (
+                <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 9px', borderRadius: 4, background: 'rgba(255,255,255,0.06)' }}>
+                  <span style={{ width: 32, height: 32, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', background: E.CARDS[k].hero ? 'linear-gradient(180deg, #FFE27A, #F2A81D)' : 'linear-gradient(180deg, #5A6474, #343B48)', flexShrink: 0 }}><GIcon k={E.CARDS[k].icon} size={18} color={E.CARDS[k].hero ? '#2A1D05' : '#FFE15A'} ink="transparent" /></span>
+                  <span style={{ flex: 1, minWidth: 0 }}><span style={{ display: 'block', fontSize: 14, fontWeight: 900 }}>{E.CARDS[k].name}</span><span style={{ display: 'block', fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.75)' }}>{E.CARDS[k].text}</span></span>
+                  {n > 1 && <span style={{ fontSize: 13, fontWeight: 900, color: '#F2B21B' }}>{`x${n}`}</span>}
+                </div>
+              ))}
+            </div>
+          </GLobbySheet>
+        );
+      })()}
       {arenaSheet && (
         <GLobbySheet GS={GS} title="Arena" width={600} onClose={() => setArenaSheet(false)}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
@@ -1656,8 +1780,8 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
   const superOn = !!(meHud && meHud.sup && meHud.st === 0);
   const ctrlScale = look.size;
   return (
-    <Portal>
-      <div ref={GS.rootRef} style={{ position: 'fixed', left: 0, right: 0, top: 'var(--zvp-top, 0px)', height: 'var(--zvp-h, 100%)', zIndex: 90, background: '#2A2620', overflow: 'hidden', touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', fontFamily: FONT, color: '#FFFFFF' }}>
+    <Portal><GSkin k="siege">
+      <div ref={GS.rootRef} style={{ position: 'fixed', left: 0, right: 0, top: 'var(--zvp-top, 0px)', height: 'calc(var(--zvp-h, 100%) + var(--zgx, 0px))', zIndex: 90, background: '#2A2620', overflow: 'hidden', touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', fontFamily: FONT, color: '#FFFFFF' }}>
         <div ref={wrapRef} data-side={GS.side ? '1' : '0'} style={GS.wrapStyle} onPointerDown={wrapDown} onPointerMove={wrapMove} onPointerUp={J.handlers.onPointerUp} onPointerCancel={J.handlers.onPointerCancel} onLostPointerCapture={J.handlers.onLostPointerCapture} onPointerLeave={(e) => { if (e.pointerType === 'mouse') G.current.mouse = null; }} onContextMenu={(e) => e.preventDefault()}>
           <canvas ref={cvRef} aria-label="Scrap Siege" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block' }} />
           <canvas ref={ovRef} aria-hidden="true" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block', pointerEvents: 'none', zIndex: 1 }} />
@@ -1673,6 +1797,20 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
                     {!endless && <span style={{ fontSize: 12, fontWeight: 900, opacity: 0.75 }}>{`of ${E.WIN_WAVE}`}</span>}
                   </span>
                   <GHudPanel style={{ height: 26, padding: '0 10px', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 900, whiteSpace: 'nowrap' }}>{waveLine}</GHudPanel>
+                  {(() => {
+                    const hh = G.current.W && G.current.W.heroes[kindOf()];
+                    const cs = (hh && hh.cards) || [];
+                    const tk = G.current.tokens || 0;
+                    if (watch || (!cs.length && !tk)) return null;
+                    const uniq = [...new Set(cs)].slice(-4);
+                    return (
+                      <button type="button" className="zgk-btn" aria-label={tk ? 'A new power is ready. Pick it' : `Your powers, ${cs.length}`} {...pressProps(() => { kitTap(); if (tk) openStreak(); else setPowSheet(true); })}
+                        style={{ pointerEvents: 'auto', height: 26, padding: '0 8px', border: 'none', borderRadius: 3, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', fontFamily: FONT, color: '#FFFFFF', background: tk ? 'linear-gradient(180deg, #FFE27A, #F2B21B)' : 'linear-gradient(180deg, rgba(50,57,68,0.92), rgba(25,29,37,0.92))', boxShadow: tk ? '0 0 0 2px #1B1430' : 'inset 0 2px 0 #F2B21B', animation: tk ? 'zgk-pulse 1.2s ease-in-out infinite' : 'none' }}>
+                        {tk ? <span style={{ fontSize: 12, fontWeight: 900, color: '#2A1D05' }}>New power</span> : uniq.map((k) => <GIcon key={k} k={E.CARDS[k].icon} size={14} color="#FFE15A" ink="transparent" />)}
+                        {!tk && <span style={{ fontSize: 12, fontWeight: 900 }}>{cs.length}</span>}
+                      </button>
+                    );
+                  })()}
                 </div>
                 {hud.team.length > 5 && phase === 'play' && !(cards && land) && (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 30px)', gap: 4 }}>
@@ -1892,6 +2030,8 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
           )}
           <GTalkers ids={talking} nameOf={nameOf} top={top(phase === 'play' ? (hud.boss ? 92 : 54) : 50)} />
           <GNotices items={notes} style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: top(phase === 'menu' ? 64 : 104), width: 'min(52%, 420px)', zIndex: 30 }} />
+          <GJoinAsks asks={jask.asks} onAnswer={jask.answer} style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: top(phase === 'menu' ? 110 : 150), width: 'min(80%, 380px)', zIndex: 35 }} />
+          {phase !== 'menu' && <GChatFeed items={feed} style={{ position: 'absolute', left: left(GS.land ? 222 : 12), top: top(GS.land ? 10 : 200), width: GS.land ? 'min(34%, 300px)' : 'calc(100% - 120px)', zIndex: 29 }} />}
           {people && !solo && (
             <Sheet title="Players and voice" text={relay.mic.on ? 'Your mic is on. Everyone in the game can hear you.' : 'Turn your mic on to talk while you play.'} onClose={() => setPeople(false)}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 12 }}>
@@ -1930,7 +2070,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
           )}
         </div>
       </div>
-    </Portal>
+    </GSkin></Portal>
   );
 }
 
@@ -1943,7 +2083,7 @@ export function SiegeInviteSheet({ friends, onClose, onInvite, already, side = f
   const toggle = (id) => { kitTap(); setSel((v) => (v.includes(id) ? v.filter((x) => x !== id) : v.length >= room ? v : [...v, id])); };
   return (
     <Portal>
-      <div onClick={onClose} data-side={side ? '1' : '0'} style={{ position: 'fixed', ...(side && typeof window !== 'undefined' ? { left: 0, top: 0, width: window.innerHeight, height: window.innerWidth, transformOrigin: '0 0', transform: `translateX(${window.innerWidth}px) rotate(90deg)` } : { inset: 0 }), zIndex: 96, background: 'rgba(10,8,24,0.55)', display: 'flex', alignItems: side ? 'center' : 'flex-end', justifyContent: 'center', fontFamily: FONT, color: '#FFFFFF' }}>
+      <div {...backdropProps(onClose)} data-side={side ? '1' : '0'} style={{ position: 'fixed', ...(side && typeof window !== 'undefined' ? { left: 0, top: 0, width: window.innerHeight, height: window.innerWidth, transformOrigin: '0 0', transform: `translateX(${window.innerWidth}px) rotate(90deg)` } : { inset: 0 }), zIndex: 96, background: 'rgba(10,8,24,0.55)', display: 'flex', alignItems: side ? 'center' : 'flex-end', justifyContent: 'center', fontFamily: FONT, color: '#FFFFFF' }}>
         <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 480, maxHeight: side ? '100%' : 'min(86vh, 640px)', display: 'flex', flexDirection: 'column', padding: side ? '10px 14px' : '14px 14px calc(14px + env(safe-area-inset-bottom))', boxSizing: 'border-box', animation: 'zgk-pop 0.25s ease-out' }}>
           <GPanel style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10, minHeight: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

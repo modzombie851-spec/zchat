@@ -1,10 +1,11 @@
+import { backdropProps } from './tap.js';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Avatar, Portal, useBackClose, FONT, Spinner } from '../App.jsx';
 import { useRoomLink } from './relay.jsx';
 import { EMOTES, Sheet, injectCss, useGameChat, ChatSheet } from './livekit.jsx';
-import { GBtn, GPill, GPanel, GChip, GTitle, GIcon, GHudBtn, GHudPanel, GNotices, useNotices, useWatchNotices, injectKitCss, kitTap, pressProps, maxDpr, INK, useCtlLook, useGameStage, GControlsPanel, GVolBars, GLobby, GSlot, GLobbySheet, GSwitchRow, GSeg , GTalkers, GWatchBar } from './gamekit.jsx';
+import { GBtn, GPill, GPanel, GChip, GTitle, GIcon, GHudBtn, GHudPanel, GNotices, useNotices, useWatchNotices, injectKitCss, kitTap, pressProps, maxDpr, INK, useCtlLook, useGameStage, GControlsPanel, GVolBars, GLobby, GSlot, GLobbySheet, GSwitchRow, GSeg , GTalkers, GWatchBar, GSkin, GChatFeed, useChatFeed, GJoinAsks } from './gamekit.jsx';
 import { Sfx } from './sfx.js';
-import { setWatchAllowed, useLiveBeacon, useGamePrivacy } from './live.js';
+import { setWatchAllowed, useLiveBeacon, useGamePrivacy, useJoinAsks } from './live.js';
 import { createRenderer, m4, MeshBuilder } from './race3d.js';
 import { buildTrack, buildWorld } from './racetrack.js';
 import { MAPS, MAP_KEYS, bottleSpots } from './racemaps.js';
@@ -224,7 +225,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
   const [bubbles, setBubbles] = useState({});
   const [failed, setFailed] = useState(false);
   const [notes, pushNote] = useNotices();
-  const look = useCtlLook();
+  const look = useCtlLook('rally');
   const GS = useGameStage(useMemo(() => ({ ...look, side: true }), [look]));
   const { top, right, bottom, left } = GS.at;
   const land = GS.land;
@@ -269,7 +270,9 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
   const nameOf = (k) => (k === kindOf() ? 'You' : G.current.botMeta[k] ? G.current.botMeta[k].n : names[k] || 'Friend');
   const [chatOpen, setChatOpen] = useState(false);
   const [chatNew, setChatNew] = useState(0);
-  const chat = useGameChat(solo || watch ? null : relay, nameOf, (s) => { pushNote(s, 'chat'); setChatNew((n) => n + 1); });
+  const [feed, pushFeed] = useChatFeed();
+  const jask = useJoinAsks({ myId, on: !solo && !!room && isHost && !watch, game: 'race' });
+  const chat = useGameChat(solo || watch ? null : relay, nameOf, (s, who, t, from) => { pushFeed(who, t, slotColor(from)); setChatNew((n) => n + 1); }, (t) => pushFeed('You', t));
   const nameRef = (k) => (k === kindOf() ? 'You' : G.current.botMeta[k] ? G.current.botMeta[k].n : namesRef.current[k] || 'Friend');
   const slotColor = (k) => { const i = G.current.ids.indexOf(k); return COLORS[(i >= 0 ? i : Math.max(0, rosterRef.current.indexOf(k))) % COLORS.length]; };
   const myColor = COLORS[Math.max(0, roster.indexOf(kindOf())) % COLORS.length];
@@ -1634,8 +1637,8 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
   );
 
   return (
-    <Portal>
-      <div ref={GS.rootRef} style={{ position: 'fixed', left: 0, right: 0, top: 'var(--zvp-top, 0px)', height: 'var(--zvp-h, 100%)', zIndex: 90, background: '#2A3446', overflow: 'hidden', touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', fontFamily: FONT, color: '#FFFFFF' }}>
+    <Portal><GSkin k="rally">
+      <div ref={GS.rootRef} style={{ position: 'fixed', left: 0, right: 0, top: 'var(--zvp-top, 0px)', height: 'calc(var(--zvp-h, 100%) + var(--zgx, 0px))', zIndex: 90, background: '#2A3446', overflow: 'hidden', touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', fontFamily: FONT, color: '#FFFFFF' }}>
         <div ref={wrapRef} data-side={GS.side ? '1' : '0'} style={GS.wrapStyle}>
           <canvas ref={cvRef} aria-label="Race" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block' }} />
           <div aria-hidden="true" style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 2 }}>
@@ -1852,6 +1855,8 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
           )}
           <GTalkers ids={talking} nameOf={nameOf} top={top(phase === 'count' ? 150 : 50)} />
           <GNotices items={notes} style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: top(phase === 'menu' ? 64 : 92), width: 'min(52%, 420px)', zIndex: 30 }} />
+          <GJoinAsks asks={jask.asks} onAnswer={jask.answer} style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: top(phase === 'menu' ? 110 : 140), width: 'min(80%, 380px)', zIndex: 35 }} />
+          {phase !== 'menu' && <GChatFeed items={feed} style={{ position: 'absolute', left: left(GS.land ? 164 : 12), top: top(GS.land ? 10 : 150), width: GS.land ? 'min(36%, 320px)' : 'calc(100% - 120px)', zIndex: 29 }} />}
           {people && !solo && (
             <Sheet title="Players and voice" text={relay.mic.on ? 'Your mic is on. Everyone in the race can hear you.' : 'Turn your mic on to talk while you race.'} onClose={() => setPeople(false)}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 12 }}>
@@ -1890,7 +1895,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
           )}
         </div>
       </div>
-    </Portal>
+    </GSkin></Portal>
   );
 }
 
@@ -1940,7 +1945,7 @@ export function RaceInviteSheet({ friends, onClose, onInvite, already, side = fa
   const toggle = (id) => { kitTap(); setSel((v) => (v.includes(id) ? v.filter((x) => x !== id) : v.length >= left ? v : [...v, id])); };
   return (
     <Portal>
-      <div onClick={onClose} data-side={side ? '1' : '0'} style={{ position: 'fixed', ...(side && typeof window !== 'undefined' ? { left: 0, top: 0, width: window.innerHeight, height: window.innerWidth, transformOrigin: '0 0', transform: `translateX(${window.innerWidth}px) rotate(90deg)` } : { inset: 0 }), zIndex: 96, background: 'rgba(10,8,24,0.55)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT, color: '#FFFFFF' }}>
+      <div {...backdropProps(onClose)} data-side={side ? '1' : '0'} style={{ position: 'fixed', ...(side && typeof window !== 'undefined' ? { left: 0, top: 0, width: window.innerHeight, height: window.innerWidth, transformOrigin: '0 0', transform: `translateX(${window.innerWidth}px) rotate(90deg)` } : { inset: 0 }), zIndex: 96, background: 'rgba(10,8,24,0.55)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT, color: '#FFFFFF' }}>
         <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 480, maxHeight: side ? '100%' : 'min(86vh, 640px)', display: 'flex', flexDirection: 'column', padding: side ? '10px 14px' : '14px 14px calc(14px + env(safe-area-inset-bottom))', boxSizing: 'border-box', animation: 'zgk-pop 0.25s ease-out' }}>
           <GPanel style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10, minHeight: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

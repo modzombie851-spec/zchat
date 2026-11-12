@@ -1,10 +1,11 @@
+import { backdropProps } from './tap.js';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Avatar, Portal, useBackClose, hapticTap, FONT, Spinner } from '../App.jsx';
 import { useRoomLink } from './relay.jsx';
 import { EMOTES, Sheet, injectCss, useGameChat, ChatSheet } from './livekit.jsx';
-import { GBtn, GHold, GPill, GPanel, GChip, GTitle, GIcon, GHudBtn, GHudPanel, GHint, GStat, GNotices, useNotices, useWatchNotices, stagePoint, injectKitCss, kitTap, pressProps, maxDpr, newBudget, budgetTick, INK, useCtlLook, useGameStage, GControlsPanel, GVolBars, GLobby, GSlot, GLobbySheet, GTalkers, GWatchBar } from './gamekit.jsx';
+import { GBtn, GHold, GPill, GPanel, GChip, GTitle, GIcon, GHudBtn, GHudPanel, GHint, GStat, GNotices, useNotices, useWatchNotices, stagePoint, injectKitCss, kitTap, pressProps, maxDpr, newBudget, budgetTick, INK, useCtlLook, useGameStage, GControlsPanel, GVolBars, GLobby, GSlot, GLobbySheet, GTalkers, GWatchBar, GSkin, GChatFeed, useChatFeed, GJoinAsks } from './gamekit.jsx';
 import { Sfx } from './sfx.js';
-import { setWatchAllowed, useLiveBeacon, useGamePrivacy } from './live.js';
+import { setWatchAllowed, useLiveBeacon, useGamePrivacy, useJoinAsks } from './live.js';
 import { WORLDS, LEVEL_N, BALLS, R, levelOf, levelName, makeWorld, mkBall, stepBall, interact, applyEvent, pressedButtons, gatesToOpen, stepPlates, foePos, clamp, demoSetup, demoStep, demoStarts, clipStart, clipRun, DEMO_DT } from './rollengine.js';
 import { render, drawBall, updateParts, burst, dust, popText, clearChunks, buildRollMini, drawRollMini } from './rolldraw.js';
 import { useTalking } from './talk.js';
@@ -95,7 +96,7 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
   const gamePriv = useGamePrivacy();
   const allowWatch = gamePriv.show && gamePriv.watch;
   const setAllowWatch = () => {};
-  const look = useCtlLook();
+  const look = useCtlLook('roll');
   const GS = useGameStage(look);
   const side = GS.side, land = GS.land;
   const padRef = useRef(null);
@@ -167,6 +168,7 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
   const rosterRef = useRef(roster); rosterRef.current = roster;
   const followRef = useRef(follow); followRef.current = follow;
   const namesRef = useRef(names); namesRef.current = names;
+  const feedRef = useRef(null);
   const hudKey = useRef('');
   const sendT = useRef(0);
   const doneRef = useRef(false);
@@ -243,7 +245,7 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
         if (m.ht != null && !isHost && m.from === room.host) { const target = m.ht - W.t; if (Math.abs(target - W.clk) > 0.5) W.clk = target; else W.clk += (target - W.clk) * 0.2; }
       }),
       relay.on('ev', (m) => { const W = WR.current; if (!W || m.i !== W.L.index || !m.e) return; applyEvent(W, m.e); if (m.e.k === 'home' && balls.current[m.e.who]) balls.current[m.e.who].home = true; }),
-      relay.on('emo', (m) => { const e = String(m.e || ''); if (!EMOTES.includes(e)) return; bubblesRef.current[m.from] = { text: e, t: 0, life: 1.8 }; Sfx.play('pop', { vol: 0.5 }); }),
+      relay.on('emo', (m) => { const e = String(m.e || ''); if (!EMOTES.includes(e)) return; bubblesRef.current[m.from] = { text: e, t: 0, life: 1.8 }; if (feedRef.current) feedRef.current(namesRef.current[m.from] || 'Friend', e, BALLS[Math.max(0, rosterRef.current.indexOf(m.from)) % 4].body); Sfx.play('pop', { vol: 0.5 }); }),
       relay.on('bye', (m) => { const n = namesRef.current[m.from] || 'A friend'; if (rosterRef.current.includes(m.from) && !rosterSeen.current.bye.has(m.from)) { rosterSeen.current.bye.add(m.from); pushNote(`${n} left the game`, 'leave'); } }),
     ];
     return () => offs.forEach((f) => f && f());
@@ -506,7 +508,10 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
   const nameOf = (k) => (k === kindOf() ? 'You' : names[k] || 'Friend');
   const [chatOpen, setChatOpen] = useState(false);
   const [chatNew, setChatNew] = useState(0);
-  const chat = useGameChat(solo || watch ? null : relay, nameOf, (s) => { pushNote(s, 'chat'); setChatNew((n) => n + 1); });
+  const [feed, pushFeed] = useChatFeed();
+  const jask = useJoinAsks({ myId, on: !solo && !!room && isHost && !watch, game: 'roll' });
+  feedRef.current = pushFeed;
+  const chat = useGameChat(solo || watch ? null : relay, nameOf, (s, who, t, from) => { pushFeed(who, t, BALLS[Math.max(0, roster.indexOf(from)) % 4].body); setChatNew((n) => n + 1); }, (t) => pushFeed('You', t));
   const { top, right, bottom, left } = GS.at;
   const hb = land ? 38 : 40;
   const talkOn = !solo && playing();
@@ -641,8 +646,8 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
   );
 
   return (
-    <Portal>
-      <div ref={GS.rootRef} style={{ position: 'fixed', left: 0, right: 0, top: 'var(--zvp-top, 0px)', height: 'var(--zvp-h, 100%)', zIndex: 90, background: '#6EC6FF', overflow: 'hidden', touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', fontFamily: FONT, color: '#FFFFFF' }}>
+    <Portal><GSkin k="roll">
+      <div ref={GS.rootRef} style={{ position: 'fixed', left: 0, right: 0, top: 'var(--zvp-top, 0px)', height: 'calc(var(--zvp-h, 100%) + var(--zgx, 0px))', zIndex: 90, background: '#6EC6FF', overflow: 'hidden', touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', fontFamily: FONT, color: '#FFFFFF' }}>
       <div ref={wrapRef} data-side={side ? '1' : '0'} style={GS.wrapStyle}>
         <canvas ref={cvRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block' }} />
 
@@ -756,6 +761,8 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
         )}
         <GTalkers ids={talking} nameOf={nameOf} top={top(phase === 'play' && land ? 46 : 50)} />
         <GNotices items={notes} style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', ...(phase !== 'play' ? { top: top(64) } : land ? { top: top(46) } : { bottom: bottom(112) }), width: land ? 'min(52%, 420px)' : 'calc(100% - 40px)', zIndex: 30 }} />
+        <GJoinAsks asks={jask.asks} onAnswer={jask.answer} style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: top(110), width: 'min(80%, 380px)', zIndex: 35 }} />
+        {phase === 'play' && <GChatFeed items={feed} style={{ position: 'absolute', left: left(12), top: top(land ? 82 : 150), width: land ? 'min(40%, 330px)' : 'calc(100% - 24px)', zIndex: 29 }} />}
         {people && !solo && (
           <Sheet title="Players and voice" text={relay.mic.on ? 'Your mic is on. Everyone in the game can hear you.' : 'Turn your mic on to talk while you play.'} onClose={() => setPeople(false)}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 12 }}>
@@ -795,7 +802,7 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
         )}
       </div>
       </div>
-    </Portal>
+    </GSkin></Portal>
   );
 }
 
@@ -808,7 +815,7 @@ export function RollInviteSheet({ friends, onClose, onInvite, already }) {
   const toggle = (id) => { kitTap(); setSel((v) => (v.includes(id) ? v.filter((x) => x !== id) : v.length >= left ? v : [...v, id])); };
   return (
     <Portal>
-      <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 96, background: 'rgba(10,8,24,0.55)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT, color: '#FFFFFF' }}>
+      <div {...backdropProps(onClose)} style={{ position: 'fixed', inset: 0, zIndex: 96, background: 'rgba(10,8,24,0.55)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT, color: '#FFFFFF' }}>
         <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 480, maxHeight: 'min(86vh, 640px)', display: 'flex', flexDirection: 'column', padding: '14px 14px calc(14px + env(safe-area-inset-bottom))', boxSizing: 'border-box', animation: 'zgk-in 0.25s ease-out' }}>
           <GPanel style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10, minHeight: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
