@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { SkillFace } from './gskill.jsx';
 
 const P = {
@@ -27,7 +27,7 @@ export function Ico({ k, size = 22, sw = 1.7, color = '#FFFFFF' }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ display: 'block', color }}>{P[k] || null}</svg>;
 }
 
-const CB_ICON = { bullet: 'bullets', scope: 'crosshair', mag: 'magazine', knife: 'knife', grenade: 'grenade', bottle: 'molotov', heart: 'revive', torch: 'flashlight', swap: 'cycle' };
+const CB_ICON = { emote: 'hand', bullet: 'bullets', scope: 'crosshair', mag: 'magazine', knife: 'knife', grenade: 'grenade', bottle: 'molotov', heart: 'revive', torch: 'flashlight', swap: 'cycle' };
 
 export function CBtn({ size = 54, icon, label, onDown, onUp, onMove, onTap, active, badge, ring, disabled, style, sub, big, tone }) {
   const st = useRef({ id: null, x: 0, y: 0, moved: 0 });
@@ -118,5 +118,98 @@ export function drawMinimap(cv, d) {
 }
 
 export const EMOTE_LIST = [['wave', 'Wave'], ['cheer', 'Cheer'], ['point', 'This way'], ['thumbs', 'Nice'], ['salute', 'Salute'], ['dance', 'Dance'], ['laugh', 'Laugh'], ['flip', 'Flip']];
-export const QUICK_EMOJI = ['😀', '😂', '😱', '😡', '👍', '🔥', '💀', '❤️'];
 export const QUICK_LINES = ['Behind you', 'Help me up', 'Reloading', 'Big one coming', 'Stay together', 'Nice shot'];
+
+let wheelCss = false;
+function injectWheelCss() {
+  if (wheelCss || typeof document === 'undefined') return;
+  wheelCss = true;
+  const st = document.createElement('style');
+  st.textContent = '@keyframes zw-in{from{opacity:0;transform:scale(.9)}to{opacity:1;transform:none}}.zw-in{animation:zw-in .16s ease-out}@media (prefers-reduced-motion: reduce){.zw-in{animation:none}}';
+  document.head.appendChild(st);
+}
+
+const WR_I = 30, WR_O = 97, W_GAP = 2.4;
+const wpt = (a, r) => [Math.sin(a) * r, -Math.cos(a) * r];
+function wedgePath(i, n) {
+  const step = (Math.PI * 2) / n;
+  const ao = W_GAP / WR_O, ai = W_GAP / WR_I;
+  const a0 = (i - 0.5) * step, a1 = (i + 0.5) * step;
+  const [x0, y0] = wpt(a0 + ao, WR_O), [x1, y1] = wpt(a1 - ao, WR_O), [x2, y2] = wpt(a1 - ai, WR_I), [x3, y3] = wpt(a0 + ai, WR_I);
+  const f = (v) => v.toFixed(2);
+  return `M${f(x0)} ${f(y0)}A${WR_O} ${WR_O} 0 0 1 ${f(x1)} ${f(y1)}L${f(x2)} ${f(y2)}A${WR_I} ${WR_I} 0 0 0 ${f(x3)} ${f(y3)}Z`;
+}
+function arcPath(i, n, r) {
+  const step = (Math.PI * 2) / n, d = W_GAP / r;
+  const [x0, y0] = wpt((i - 0.5) * step + d, r), [x1, y1] = wpt((i + 0.5) * step - d, r);
+  return `M${x0.toFixed(2)} ${y0.toFixed(2)}A${r} ${r} 0 0 1 ${x1.toFixed(2)} ${y1.toFixed(2)}`;
+}
+
+export function EmoteWheel({ icons, onPick, onClose }) {
+  injectWheelCss();
+  const [hot, setHot] = useState(-1);
+  const ref = useRef(null);
+  const down = useRef(false);
+  const n = EMOTE_LIST.length;
+  const at = (e) => {
+    const el = ref.current;
+    if (!el) return -1;
+    const b = el.getBoundingClientRect();
+    const x = e.clientX - (b.left + b.width / 2), y = e.clientY - (b.top + b.height / 2);
+    const r = (Math.hypot(x, y) / (b.width / 2)) * 100;
+    if (r < WR_I) return -2;
+    if (r > 122) return -1;
+    let a = Math.atan2(x, -y);
+    if (a < 0) a += Math.PI * 2;
+    return Math.round(a / ((Math.PI * 2) / n)) % n;
+  };
+  useEffect(() => {
+    const key = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); onClose(); return; }
+      const d = Number(e.key);
+      if (d >= 1 && d <= n) { e.preventDefault(); onPick(EMOTE_LIST[d - 1][0]); }
+    };
+    window.addEventListener('keydown', key);
+    return () => window.removeEventListener('keydown', key);
+  }, [n, onPick, onClose]);
+  const lab = hot >= 0 ? EMOTE_LIST[hot][1] : 'Emotes';
+  return (
+    <div role="dialog" aria-label="Emotes" onPointerDown={(e) => { e.stopPropagation(); if (e.target === e.currentTarget) onClose(); }}
+      style={{ position: 'absolute', inset: 0, zIndex: 25, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'radial-gradient(circle at 50% 50%, rgba(0,0,0,0.42), rgba(0,0,0,0.18) 70%)', touchAction: 'none' }}>
+      <div ref={ref} className="zw-in"
+        onPointerDown={(e) => { e.stopPropagation(); down.current = true; try { e.currentTarget.setPointerCapture(e.pointerId); } catch {} const i = at(e); setHot(i >= 0 ? i : -1); }}
+        onPointerMove={(e) => { if (!down.current && e.pointerType !== 'mouse') return; const i = at(e); setHot(i >= 0 ? i : -1); }}
+        onPointerUp={(e) => { e.stopPropagation(); const was = down.current; down.current = false; const i = at(e); setHot(-1); if (!was) return; if (i >= 0) onPick(EMOTE_LIST[i][0]); else onClose(); }}
+        onPointerCancel={() => { down.current = false; setHot(-1); }}
+        onPointerLeave={(e) => { if (e.pointerType === 'mouse' && !down.current) setHot(-1); }}
+        style={{ position: 'relative', width: 'min(80vmin, 330px)', aspectRatio: '1', maxWidth: '100%', cursor: 'pointer', userSelect: 'none', WebkitUserSelect: 'none' }}>
+        <svg viewBox="-104 -104 208 208" width="100%" height="100%" aria-hidden="true" style={{ position: 'absolute', inset: 0, overflow: 'visible' }}>
+          <defs>
+            <radialGradient id="zw-hot" cx="0" cy="0" r="100" gradientUnits="userSpaceOnUse">
+              <stop offset="0.3" stopColor="rgba(224,168,90,0.14)" />
+              <stop offset="1" stopColor="rgba(224,168,90,0.46)" />
+            </radialGradient>
+          </defs>
+          <circle r={WR_O + 5} fill="none" stroke="rgba(239,232,210,0.1)" strokeWidth="1" />
+          {EMOTE_LIST.map(([k], i) => (
+            <path key={k} d={wedgePath(i, n)} fill={hot === i ? 'url(#zw-hot)' : 'rgba(15,16,17,0.84)'} stroke={hot === i ? 'rgba(224,168,90,0.9)' : 'rgba(239,232,210,0.13)'} strokeWidth={hot === i ? 1.2 : 0.8} />
+          ))}
+          {hot >= 0 && <path d={arcPath(hot, n, WR_O + 5)} fill="none" stroke="#E0A85A" strokeWidth="3" strokeLinecap="round" />}
+          <circle r={WR_I - 4} fill="rgba(12,12,13,0.92)" stroke="rgba(239,232,210,0.18)" strokeWidth="1" />
+        </svg>
+        {EMOTE_LIST.map(([k, l], i) => {
+          const a = (i / n) * Math.PI * 2, rc = (WR_I + WR_O) / 2 + 1;
+          const x = 50 + (Math.sin(a) * rc) / 2.08, y = 50 - (Math.cos(a) * rc) / 2.08;
+          const on = hot === i;
+          return (
+            <div key={k} style={{ position: 'absolute', left: `${x}%`, top: `${y}%`, width: '25%', transform: `translate(-50%,-50%) scale(${on ? 1.08 : 1})`, transition: 'transform 0.1s ease-out', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, pointerEvents: 'none' }}>
+              {icons && icons[i] ? <img src={icons[i]} alt="" draggable={false} style={{ width: '88%', aspectRatio: '1', objectFit: 'contain', display: 'block', filter: on ? 'drop-shadow(0 0 6px rgba(224,168,90,0.55))' : 'drop-shadow(0 1px 2px rgba(0,0,0,0.6))' }} /> : null}
+              <span style={{ fontSize: 10.5, fontWeight: 900, lineHeight: 1.1, color: on ? '#F2C27E' : 'rgba(239,232,210,0.82)', whiteSpace: 'nowrap', textShadow: '0 1px 2px rgba(0,0,0,0.7)' }}>{l}</span>
+            </div>
+          );
+        })}
+        <div style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', width: '24%', textAlign: 'center', pointerEvents: 'none', fontSize: 13, fontWeight: 900, lineHeight: 1.1, color: hot >= 0 ? '#F2C27E' : 'rgba(239,232,210,0.7)' }}>{lab}</div>
+      </div>
+    </div>
+  );
+}

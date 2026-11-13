@@ -18596,7 +18596,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-export const APP_VERSION = '50.0V';
+export const APP_VERSION = '51.0V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -36511,7 +36511,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   useEffect(() => {
     if (!cloudOn()) return;
     const v = readLive(30000);
-    if (v) setZombieGame({ at: Date.now(), join: { reg: v.reg, r: v.r } });
+    if (v) setZombieGame({ at: Date.now(), join: { reg: v.reg, r: v.r, back: true } });
   }, []);
   const [siegePick, setSiegePick] = useState(null);
   const [watchGame, setWatchGame] = useState(null);
@@ -36648,7 +36648,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (st.g === 'roll') { setRollGame({ rm: st.rm || st.id, host: st.x }); return; }
     if (st.g === 'race') { setRaceGame({ rm: st.rm || st.id, host: st.x }); return; }
     if (st.g === 'siege') { setSiegeGame({ rm: st.rm || st.id, host: st.x }); return; }
-    if (st.g === 'zombie') { const [reg, r] = String(st.rm || '').split(':'); if (reg && r) { setShowGames(false); setZombieGame({ at: Date.now(), join: { reg, r } }); } return; }
+    if (st.g === 'zombie') { const [reg, r] = String(st.rm || '').split(':'); if (reg && r) { setShowGames(false); setZombieGame({ at: Date.now(), join: { reg, r, from: st.x !== session.user.id ? st.x : null } }); } return; }
     if (st.g === 'gulpco') { if (typeof st.rm === 'string') setGulpRoom({ rm: st.rm }); return; }
     setLiveGame({ state: st, messageId: msg.id, peer });
   };
@@ -47922,7 +47922,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onUpdate={async () => {
             try {
               if ('serviceWorker' in navigator) { const reg = await navigator.serviceWorker.getRegistration(); if (reg) await reg.update(); }
-              if (window.caches && caches.keys) { const keys = await caches.keys(); await Promise.all(keys.map((k) => caches.delete(k))); }
+              if (window.caches && caches.keys) { const keys = await caches.keys(); await Promise.all(keys.filter((k) => k !== 'zchat-dead-files').map((k) => caches.delete(k))); }
             } catch {}
             safeReload();
           }} />
@@ -48389,7 +48389,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onInvite={(ps) => { const rm = racePick.rm; setRacePick(null); setShowGames(false); startRaceWith(ps, rm); }} />
       )}
       {zombieGame && me && (
-        <ZombieGamePage key={zombieGame.at} me={me} myId={session.user.id} join={zombieGame.join || null} friends={gameFriends} onInvite={(ps, room) => startZombieWith(ps, room)} onClose={() => { setZombieGame(null); setShowGames(true); }} />
+        <ZombieGamePage key={zombieGame.at} me={me} myId={session.user.id} join={zombieGame.join || null} friends={gameFriends} online={onlineIds} onInvite={(ps, room) => startZombieWith(ps, room)} onClose={() => { setZombieGame(null); setShowGames(true); }} />
       )}
       {siegeGame && me && (
         <SiegeGamePage key={siegeGame.rm} solo={!!siegeGame.solo} room={siegeGame.solo ? null : siegeGame} me={me} myId={session.user.id} watch={!!siegeGame.watch}

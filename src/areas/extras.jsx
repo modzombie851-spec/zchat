@@ -6574,28 +6574,25 @@ function WnSegments({ total, at, onArt, dark }) {
   );
 }
 
-const WN_PHOTOS = { zombies49: '/wn49-zombies.webp', mutant49: '/wn49-mutant.webp', guns50: '/wn50-guns.webp', house50: '/wn50-house.webp', pond50: '/wn50-pond.webp', buttons50: '/wn50-buttons.webp', settings50: '/wn50-settings.webp' };
+const WN_PHOTOS = { zombies49: '/wn49-zombies.webp', mutant49: '/wn49-mutant.webp', guns50: '/wn50-guns.webp', house50: '/wn50-house.webp', pond50: '/wn50-pond.webp', buttons50: '/wn50-buttons.webp', settings50: '/wn50-settings.webp', pack51: '/wn51-pack.webp', emote51: '/wn51-emote.webp', lobby51: '/wn51-lobby.webp' };
 const WN_HIGHLIGHTS = [
-  { k: 'guns50', art: 'guns50', go: 'zombie', cta: 'Play now', title: 'Real guns in your hands', text: 'Five guns made by a real 3D artist, with real reloads, draws, melee hits and grenade throws. Aim down the sights, and every player holds the same guns.' },
-  { k: 'house50', art: 'house50', go: 'zombie', cta: 'Play now', title: 'A real town and a big house', text: 'Dead Town is now built from real 3D models. Walk into the big house and go upstairs, but zombies get in too and follow you up the stairs.' },
-  { k: 'pond50', art: 'pond50', go: 'zombie', cta: 'Play now', title: 'A pond and a waterfall', text: 'A pond with a waterfall behind the house, real fire and smoke around town, and recorded sounds for your steps, guns and every zombie.' },
+  { k: 'lobby51', art: 'lobby51', go: 'zombie', cta: 'Play now', title: 'A new Dead Town lobby', text: 'Your survivor stands big in the middle with your dog. Pick your survivor, gun and dog from the tabs below, see which friends are online and invite them with one tap.' },
+  { k: 'pack51', art: 'pack51', go: 'zombie', cta: 'Play now', title: 'Dead Town downloads once', text: 'The town, the zombies, your survivor and your guns download one time before you play and stay on your phone. Other survivors and guns come one by one in the lobby, and nothing downloads during a game.' },
+  { k: 'emote51', art: 'emote51', go: 'zombie', cta: 'Play now', title: 'A new emote wheel', text: 'Tap the hand button in a game to open eight emotes on one wheel. Tap one, or slide to it and let go, and your survivor does it.' },
 ];
 const WN_SECTIONS = [
   { title: 'Dead Town', items: [
-    { art: 'guns50', title: 'Real guns', text: 'Reloads, draws, melee and throws.' },
-    { art: 'house50', title: 'A big house to hold', text: 'Go upstairs, zombies follow.' },
-    { art: 'pond50', title: 'A pond and a waterfall', text: 'Plus real fire and smoke.' },
-    { art: 'room35', title: 'Rooms that work', text: 'Open rooms, play without bots, rejoin in 30 seconds.' },
-  ] },
-  { title: 'All games', items: [
-    { art: 'buttons50', title: 'New skill buttons', text: 'Clear buttons with real icons.' },
-    { art: 'settings50', title: 'Settings in sections', text: 'Graphics, controls, sound and more.' },
+    { art: 'lobby51', title: 'New lobby', text: 'Your survivor, friends and loadout in one place.' },
+    { art: 'pack51', title: 'Download once, play smooth', text: 'Nothing downloads during a game.' },
+    { art: 'emote51', title: 'Emote wheel', text: 'Eight emotes, slide to pick.' },
+    { art: 'room35', title: 'Invites wait for you', text: 'Pick your survivor, then join your friend.' },
   ] },
 ];
 const WN_NEW_COUNT = WN_SECTIONS.reduce((n, sec) => n + sec.items.length, 0);
 const WN_SUMMARY = `${WN_NEW_COUNT} new things to try.`;
 
 const WN_EARLIER = [
+  { title: 'Real guns and a real town', text: 'Five real guns, a town built from real 3D models with a big house, a pond with a waterfall, new skill buttons in every game and settings in sections.' },
   { title: 'Real zombies', text: 'Eleven zombies made by real 3D artists with recorded moves, and a giant mutant with blade arms every fifth wave.' },
   { title: 'Dead Town, rebuilt', text: 'First person with real sounds, nine kinds of zombies, your own dog, invites for friends, emotes and quick emojis.' },
   { title: 'Dead Town and servers near you', text: 'A new 3D zombie game, servers in Asia, USA and Europe, Scrap Siege for 20 players, a new look for every game and chat for everyone.' },

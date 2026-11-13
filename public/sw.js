@@ -11,6 +11,7 @@ const REMOTE_LIMIT = 700;
 const STATIC_EXT = /\.(png|jpe?g|webp|gif|svg|ico|woff2?|ttf|otf)$/i;
 const DECOR_PATH = /^\/set-[a-z0-9-]+\.webp$/i;
 const STICKER_PATH = /^\/as-[a-z0-9]+-[a-z0-9]+\.webp$/;
+const GAME_PACK = /^\/(dead\/(?!p_)|sounds\/dead\/)/;
 
 function assetsIn(html) {
   const out = new Set();
@@ -164,7 +165,7 @@ async function tidyStatic() {
       const res = await cache.match(req);
       let path = '';
       try { path = new URL(req.url).pathname; } catch {}
-      if (!keptFile(res) || (DECOR_PATH.test(path) && await decor.match(path))) await cache.delete(req);
+      if (!keptFile(res) || GAME_PACK.test(path) || (DECOR_PATH.test(path) && await decor.match(path))) await cache.delete(req);
     }
   } catch {}
 }
@@ -302,6 +303,7 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(assetFirst(request));
     return;
   }
+  if (GAME_PACK.test(url.pathname)) return;
   if (STICKER_PATH.test(url.pathname) && !request.headers.has('range')) {
     event.respondWith(stickerFile(event));
     return;

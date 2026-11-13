@@ -36,7 +36,7 @@ function reloadOnce() {
   return true;
 }
 
-function load(area) {
+function load(area, quiet) {
   if (mods.has(area)) return Promise.resolve(mods.get(area));
   if (jobs.has(area)) return jobs.get(area);
   const get = loaders.get(area);
@@ -45,7 +45,7 @@ function load(area) {
     .then((m) => { mods.set(area, m); jobs.delete(area); return m; })
     .catch((e) => {
       jobs.delete(area);
-      if (staleBuild(e) && typeof navigator !== 'undefined' && navigator.onLine !== false && reloadOnce()) return new Promise(() => {});
+      if (!quiet && staleBuild(e) && typeof navigator !== 'undefined' && navigator.onLine !== false && reloadOnce()) return new Promise(() => {});
       throw e;
     });
   jobs.set(area, job);
@@ -117,9 +117,10 @@ export function zLazyPrefetch(first) {
   const order = [...new Set([...(first || []), ...(slow ? [] : loaders.keys())])].filter((a) => loaders.has(a)).slice(0, slow ? 2 : 99);
   const idle = (fn) => (typeof window !== 'undefined' && window.requestIdleCallback ? window.requestIdleCallback(fn, { timeout: 4000 }) : setTimeout(fn, 400));
   const next = () => {
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) { window.addEventListener('online', () => setTimeout(next, 1500), { once: true }); return; }
     const area = order.shift();
     if (!area) return;
-    idle(() => { load(area).catch(() => {}).then(() => setTimeout(next, 250)); });
+    idle(() => { load(area, true).catch(() => {}).then(() => setTimeout(next, 250)); });
   };
   next();
 }

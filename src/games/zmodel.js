@@ -1,3 +1,4 @@
+import { resBlob } from './zres.js';
 export function parseModel(buf) {
   const dv = new DataView(buf);
   if (dv.getUint32(0, true) !== 0x4c444d5a) throw new Error('bad model');
@@ -130,11 +131,9 @@ function once(key, fn) {
   if (!cache.has(key)) { const p = fn(); cache.set(key, p); p.catch(() => cache.delete(key)); }
   return cache.get(key);
 }
-async function fetchBuf(url) { const r = await fetch(url); if (!r.ok) throw new Error(url + ' ' + r.status); return r.arrayBuffer(); }
+async function fetchBuf(url) { return (await resBlob(url)).arrayBuffer(); }
 async function fetchImg(url, half) {
-  const r = await fetch(url);
-  if (!r.ok) throw new Error(url + ' ' + r.status);
-  const b = await r.blob();
+  const b = await resBlob(url);
   if (typeof createImageBitmap === 'function') {
     try {
       const bm = await createImageBitmap(b, { premultiplyAlpha: 'none', colorSpaceConversion: 'none' });
@@ -142,16 +141,19 @@ async function fetchImg(url, half) {
       try { const sm = await createImageBitmap(bm, { resizeWidth: bm.width >> 1, resizeHeight: bm.height >> 1, resizeQuality: 'medium', premultiplyAlpha: 'none' }); bm.close(); return sm; } catch { return bm; }
     } catch {}
   }
-  return new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = URL.createObjectURL(b); });
+  return new Promise((res, rej) => { const im = new Image(); const u = URL.createObjectURL(b); im.onload = () => { URL.revokeObjectURL(u); res(im); }; im.onerror = (e) => { URL.revokeObjectURL(u); rej(e); }; im.src = u; });
 }
+export const dropImgs = (x) => { for (const im of [x && x.img, x && x.nrm]) if (im && im.close) { try { im.close(); } catch {} } };
 export function loadZAnims(base, file = 'zanim') {
   return once(`${base}/${file}`, async () => parseAnims(await fetchBuf(`${base}/${file}.bin`)));
 }
-export function loadZModel(base, n, withNormals, half) {
-  return once(`${base}/${n}:${withNormals ? 1 : 0}:${half ? 1 : 0}`, async () => {
-    const [buf, img, nrm] = await Promise.all([fetchBuf(`${base}/${n}.bin`), fetchImg(`${base}/${n}_d.webp`, half), withNormals ? fetchImg(`${base}/${n}_n.webp`).catch(() => null) : null]);
-    return { model: parseModel(buf), img, nrm };
-  });
+export async function loadZModel(base, n, withNormals, half) {
+  const [model, img, nrm] = await Promise.all([
+    once(`${base}/${n}.bin`, async () => parseModel(await fetchBuf(`${base}/${n}.bin`))),
+    fetchImg(`${base}/${n}_d.webp`, half),
+    withNormals ? fetchImg(`${base}/${n}_n.webp`, half).catch(() => null) : null,
+  ]);
+  return { model, img, nrm };
 }
 export function parseStatic(buf) {
   const dv = new DataView(buf);
@@ -169,12 +171,14 @@ export function parseStatic(buf) {
 export function loadStatic(base, id) {
   return once(`${base}/st_${id}`, async () => parseStatic(await fetchBuf(`${base}/st_${id}.bin`)));
 }
-export function loadTexArrays(base, man, shrink) {
-  return once(`${base}/tarr:${shrink}`, async () => {
+export function loadTexArrays(base, man, shrink, onP) {
+  return (async () => {
     const out = {};
+    const tot = Object.values(man.arrays).reduce((n, a) => n + a.files.length, 0) || 1;
+    let got = 0;
     for (const [k, a] of Object.entries(man.arrays)) {
       const size = Math.max(16, a.size >> shrink);
-      const strips = await Promise.all(a.files.map((f) => fetchImg(`${base}/${f}`)));
+      const strips = await Promise.all(a.files.map((f) => fetchImg(`${base}/${f}`).then((im) => { got++; if (onP) onP(got / tot); return im; })));
       const layers = [];
       for (let i = 0; i < a.layers; i++) {
         const src = strips[Math.floor(i / a.per)], j = i % a.per;
@@ -193,5 +197,5 @@ export function loadTexArrays(base, man, shrink) {
       out[k] = { size, layers };
     }
     return out;
-  });
+  })();
 }

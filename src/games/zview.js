@@ -1,16 +1,16 @@
 import { createRenderer } from './race3d.js';
 import { pondItems } from './zpond.js';
 import { townMeshes, townEnv } from './zmap.js';
-import { buildBody, buildDog } from './zbody.js';
-import { survLook, ZLOOKS, zLookIndex, DOGS, SURV_LOOK } from './zlooks.js';
-import { gunMesh, magMesh } from './zguns.js';
-import { buildFP, buildThrowFP, buildBatFP, buildThrowObj, makeFPState } from './zfp.js';
-import { getFPG, setFPGHalf } from './zfpgl.js';
+import { buildDog } from './zbody.js';
+import { DOGS } from './zlooks.js';
+import { buildThrowObj, buildFlash, fpState } from './zfp.js';
+import { getFPG, setFPGHalf, fpFiles, fpgFailed } from './zfpgl.js';
 import { floorH } from './ztown.js';
-import { loadZAnims, loadZModel } from './zmodel.js';
+import { loadZAnims, loadZModel, dropImgs } from './zmodel.js';
 import { loadTown } from './ztownview.js';
+import { resAll, resBlob, resReady } from './zres.js';
+import { SCHAR } from './zsurv.js';
 
-export const OUTFIT_SWATCH = (sv, i) => { const b = SURV_LOOK[sv] || SURV_LOOK.jay; return b.outfits[i] || b.shirt; };
 export const ZMODEL = {
   walker: ['zgirl', 'zwar', 'zyaku', 'zpris', 'zsurv', 'zclown'],
   worker: ['zwar', 'zpris', 'zsurv'],
@@ -29,11 +29,24 @@ export const TIERS = [
   { name: 'Best', dpr: 1.25, shadow: 2048, grass: 15000, trees: 1, zmax: 80, pmax: 40, post: true, near: 20, shadowN: 22 },
 ];
 
+export const GUN_KEYS = ['rifle', 'smg', 'pistol', 'shotgun', 'sniper'];
+export const survFiles = (k) => [`dead/s${k}.bin`, `dead/s${k}_d.webp`, `dead/s${k}_n.webp`];
+export const gunFiles = (g) => fpFiles(g);
+export function coreFiles(k, guns) {
+  const base = resAll((p) => p.startsWith('dead/town/') || /^dead\/z[^/]*$/.test(p) || p === 'dead/sanim.bin' || p === 'dead/fx-v1.webp' || p.startsWith('dead/emo/') || p.startsWith('dead/ui/') || p.startsWith('sounds/dead/'));
+  return [...new Set([...base, ...survFiles(k), ...fpFiles('throw'), ...guns.flatMap((g) => fpFiles(g))])];
+}
+export function packList(k, guns) {
+  const gs = [...GUN_KEYS.filter((g) => !guns.includes(g)), ...guns];
+  const cs = [...SCHAR.map((c) => c.k).filter((x) => x !== k), k];
+  return [...gs.map((g) => [`g:${g}`, fpFiles(g)]), ...cs.map((c) => [`s:${c}`, survFiles(c)])];
+}
+
 export function makeView(canvas, tierIdx, ov) {
   const T = { ...(TIERS[tierIdx] || TIERS[1]), ...(ov || {}) };
-  const R = createRenderer(canvas, { shadowSize: T.shadow || 256, aa: tierIdx > 0, fx: '/dead/fx-v1.webp' });
-  setFPGHalf(R, tierIdx === 0);
+  const R = createRenderer(canvas, { shadowSize: T.shadow || 256, aa: tierIdx > 0, fx: resBlob('/dead/fx-v1.webp').catch(() => null) });
   if (!R) return null;
+  setFPGHalf(R, tierIdx === 0);
   const env = townEnv({ mood: 'dusk', shadowRange: 24 });
   env.shadows = !!T.shadow;
   env.detail = tierIdx > 0 ? 1 : 0;
@@ -43,16 +56,6 @@ export function makeView(canvas, tierIdx, ov) {
   for (const p of parts0) statics.push({ mesh: R.mesh(p.data), bs: p.bs, cast: p.cast && !!T.shadow, model: p.model, kind: p.kind });
   for (const it of pondItems(R)) statics.push(it);
   const cache = new Map();
-  const human = (key, look, lod) => {
-    let c = cache.get(key);
-    if (c) return c;
-    const B = buildBody(look, lod);
-    c = { mesh: R.skin(B.data), joints: B.joints };
-    cache.set(key, c);
-    return c;
-  };
-  const surv = (sv, col, lod = 1) => human(`s:${sv}:${col}:${lod}`, survLook(sv, col), lod);
-  const zomb = (k, id, lod = 1) => { const L = ZLOOKS[k] || ZLOOKS.walker; const i = zLookIndex(k, id); return human(`z:${k}:${i}:${lod}`, L[i], lod); };
   const dog = (key) => {
     const k = `d:${key}`;
     let c = cache.get(k);
@@ -63,61 +66,85 @@ export function makeView(canvas, tierIdx, ov) {
     cache.set(k, c);
     return c;
   };
-  const gun = (kind) => { const k = `g:${kind}`; let c = cache.get(k); if (!c) { c = R.mesh(gunMesh(kind)); cache.set(k, c); } return c; };
-  const fp = (kind, sv, col) => {
-    const k = `fp:${kind}:${sv}:${col}`;
+  const flash = buildFlash(R);
+  const fp = (kind) => {
+    const k = `fp:${kind}`;
     let c = cache.get(k);
-    if (!c) { c = Object.assign(makeFPState(), buildFP(R, kind, sv, col)); cache.set(k, c); }
+    if (!c) { c = fpState(kind, flash); cache.set(k, c); }
     getFPG(R, kind);
     return c;
   };
-  const V = { R, env, statics, surv, zomb, dog, gun, fp, tier: T, cache, zm: null, dead: false, dispose: () => { V.dead = true; try { R.dispose(); } catch {} } };
+  const onLost = (e) => { try { e.preventDefault(); } catch {} if (V.dead) return; V.lost = true; if (V.onLost) V.onLost(); };
+  canvas.addEventListener('webglcontextlost', onLost);
+  const V = { R, env, statics, dog, fp, tier: T, cache, zm: null, dead: false, lost: false, err: null, mainK: null, onLost: null, dispose: () => { V.dead = true; canvas.removeEventListener('webglcontextlost', onLost); try { R.dispose(); } catch {} } };
+  V.zst = { done: 0, tot: ZORDER.length };
   loadZAnims('/dead').then(async (anims) => {
     if (V.dead) return;
     const zm = { anims, n: 0 };
-    V.zm = zm;
     for (const name of ZORDER) {
       try {
-        const x = await loadZModel('/dead', name, tierIdx > 0, tierIdx === 0);
-        if (V.dead) return;
+        const x = await loadZModel('/dead', name, tierIdx > 0, tierIdx < 2);
+        if (V.dead) { dropImgs(x); return; }
         zm[name] = { M: x.model, mesh: R.tskin(x.model), tex: R.texture(x.img), nrm: x.nrm ? R.texture(x.nrm) : null };
+        dropImgs(x);
         zm.n++;
       } catch {}
+      V.zst.done++;
     }
-  }).catch(() => {});
+    if (zm.n) V.zm = zm; else V.err = 'zombies';
+  }).catch(() => { V.err = 'zombies'; });
   const sm = { anims: null, chars: {}, want: [], fail: new Set(), busy: false };
   V.sm = sm;
   const pump = async () => {
     if (sm.busy || !sm.anims || V.dead) return;
-    const k = sm.want.find((x) => !sm.chars[x] && !sm.fail.has(x));
+    let k = sm.want.find((x) => !sm.chars[x] && !sm.fail.has(x));
+    let up = false;
+    if (!k && tierIdx === 1 && V.mainK && sm.chars[V.mainK] && sm.chars[V.mainK].half && !sm.upFail) { k = V.mainK; up = true; }
     if (!k) return;
     sm.busy = true;
     try {
-      const x = await loadZModel('/dead', `s${k}`, tierIdx > 0, tierIdx === 0);
-      if (!V.dead) sm.chars[k] = { M: x.model, mesh: R.tskin(x.model), tex: R.texture(x.img), nrm: x.nrm ? R.texture(x.nrm) : null };
-    } catch { sm.fail.add(k); }
+      const half = tierIdx === 0 || (tierIdx === 1 && k !== V.mainK);
+      const x = await loadZModel('/dead', `s${k}`, tierIdx > 0, half);
+      if (!V.dead) { const prev = sm.chars[k]; sm.chars[k] = { k, half, M: x.model, mesh: prev ? prev.mesh : R.tskin(x.model), tex: R.texture(x.img), nrm: x.nrm ? R.texture(x.nrm) : null }; }
+      dropImgs(x);
+    } catch { if (up) sm.upFail = true; else sm.fail.add(k); }
     sm.busy = false;
+    pump();
+  };
+  V.warm = (k) => {
+    if (sm.chars[k] || sm.want.includes(k) || !resReady(survFiles(k))) return;
+    sm.want.push(k);
     pump();
   };
   V.survModel = (k) => {
     const c = sm.chars[k];
     if (c) return c;
-    if (!sm.want.includes(k)) { sm.want.push(k); pump(); }
-    return null;
+    V.warm(k);
+    return sm.chars[V.mainK] || sm.chars[Object.keys(sm.chars)[0]] || null;
   };
-  loadZAnims('/dead', 'sanim').then((a) => { if (!V.dead) { sm.anims = a; pump(); } }).catch(() => {});
-  V.town = { ready: false, fail: 0 };
-  const getTown = () => loadTown(R, T, tierIdx, () => V.dead).then((res) => {
+  loadZAnims('/dead', 'sanim').then((a) => { if (!V.dead) { sm.anims = a; pump(); } }).catch(() => { V.err = 'survivors'; });
+  V.town = { ready: false, fail: 0, p: 0 };
+  const getTown = () => loadTown(R, T, tierIdx, () => V.dead, (f) => { V.town.p = f; }).then((res) => {
     if (!res || V.dead) return;
     if (res.ground) for (let i = statics.length - 1; i >= 0; i--) if (statics[i].kind === 'ground' || statics[i].kind === 'road' || statics[i].kind === 'marks') { R.drop(statics[i].mesh); statics.splice(i, 1); }
     for (const it of res.items) { if (!T.shadow) it.cast = false; statics.push(it); }
+    V.town.p = 1;
     V.town.ready = true;
-  }).catch(() => { V.town.fail++; if (!V.dead && V.town.fail < 4) setTimeout(getTown, 1500 * V.town.fail); });
+  }).catch(() => { V.town.fail++; if (!V.dead && V.town.fail < 3) setTimeout(getTown, 1200 * V.town.fail); else V.err = 'town'; });
   getTown();
-  V.shell = R.mesh(magMesh('shotgun'));
-  V.prepHands = (sv, col) => { V.nadeFP = buildThrowFP(R, 'grenade', sv, col); V.molFP = buildThrowFP(R, 'molotov', sv, col); V.batFP = buildBatFP(R, sv, col); if (!V.nadeObj) { V.nadeObj = buildThrowObj(R, 'grenade'); V.molObj = buildThrowObj(R, 'molotov'); } };
+  V.readyFor = (k, guns) => {
+    if (V.mainK !== k) { V.mainK = k; sm.upFail = false; pump(); }
+    V.warm(k);
+    const gs = [...new Set([...guns, 'throw'])];
+    let gOk = 0;
+    for (const g of gs) if (getFPG(R, g)) gOk++;
+    const err = V.err || (gs.some((g) => fpgFailed(R, g)) ? 'guns' : null) || (sm.fail.has(k) ? 'survivor' : null);
+    const pct = 0.55 * V.town.p + 0.25 * (V.zst.done / V.zst.tot) + (sm.anims ? 0.04 : 0) + (sm.chars[k] ? 0.06 : 0) + 0.1 * (gOk / gs.length);
+    return { pct: Math.min(1, pct), ok: !err && V.town.ready && !!V.zm && !!sm.chars[k] && gOk === gs.length, err };
+  };
+  V.prepHands = () => { if (!V.nadeObj) { V.nadeObj = buildThrowObj(R, 'grenade'); V.molObj = buildThrowObj(R, 'molotov'); } };
+  V.prepHands();
   return V;
 }
 
-export function toWorld(x, z, yaw, p) { const c = Math.cos(yaw), s = Math.sin(yaw); return [x + p[0] * c + p[2] * s, p[1], z - p[0] * s + p[2] * c]; }
 export const groundAt = floorH;

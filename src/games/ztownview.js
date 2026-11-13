@@ -1,4 +1,5 @@
 import { loadStatic, loadTexArrays } from './zmodel.js';
+import { resBlob } from './zres.js';
 import { PLACE, floorH, groundH, forestList, OAKS, hsh } from './ztown.js';
 import { groundParts, pondBed } from './zground.js';
 
@@ -37,18 +38,19 @@ export function mergeStatic(parts) {
   return { verts: vb, idx: ib, ni, nv, groups: [{ arr: parts[0].M.groups[0].arr, start: 0, count: ni }] };
 }
 
-export async function loadTown(R, T, tierIdx, isDead) {
-  const r = await fetch(`${TOWN_BASE}/town.json`);
-  if (!r.ok) throw new Error('town');
-  const man = await r.json();
+export async function loadTown(R, T, tierIdx, isDead, onP) {
+  const step = (f) => { if (onP) onP(f); };
+  const man = JSON.parse(await (await resBlob(`${TOWN_BASE}/town.json`)).text());
   const shrink = tierIdx === 0 ? 2 : tierIdx === 1 ? 1 : 0;
-  const ta = await loadTexArrays(TOWN_BASE, man, shrink);
+  step(0.05);
+  const ta = await loadTexArrays(TOWN_BASE, man, shrink, (f) => step(0.05 + f * 0.6));
   if (isDead()) return null;
   const arrs = Object.keys(man.arrays).map((k) => R.texArray(ta[k].layers, ta[k].size));
   for (const k of Object.keys(ta)) for (const l of ta[k].layers) if (l && l.close) l.close();
   const need = [...new Set(PLACE.map((p) => p[0]).concat(VEG))].filter((id) => man.models[id]);
   const M = {};
-  await Promise.all(need.map(async (id) => { M[id] = await loadStatic(TOWN_BASE, id); }));
+  let got = 0;
+  await Promise.all(need.map(async (id) => { M[id] = await loadStatic(TOWN_BASE, id); got++; step(0.7 + (got / need.length) * 0.25); }));
   if (isDead()) return null;
   const items = [];
   const meshes = {};

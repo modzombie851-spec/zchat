@@ -1,6 +1,8 @@
 import { m4 } from './race3d.js';
 import { parseFPM, fpmLocals, fpmBlend, fpmWorld, fpmSkin } from './zfpm.js';
 import { GUNS } from './zguns.js';
+import { resBlob, resReady } from './zres.js';
+import { gunzip } from './zinflate.js';
 
 const BASE = '/dead/fp';
 const RATE = 30;
@@ -22,24 +24,46 @@ const texStores = new WeakMap();
 const mapOf = (W, R) => { let m = W.get(R); if (!m) { m = new Map(); W.set(R, m); } return m; };
 
 async function fetchFPZ(url) {
-  const r = await fetch(url);
-  if (!r.ok) throw new Error(url);
-  const raw = await r.arrayBuffer();
+  const raw = await (await resBlob(url)).arrayBuffer();
   const u = new Uint8Array(raw, 0, 2);
   if (u[0] !== 0x1f || u[1] !== 0x8b) return raw;
   const DS = globalThis.DecompressionStream;
-  if (!DS) throw new Error('no gzip');
-  return new Response(new Blob([raw]).stream().pipeThrough(new DS('gzip'))).arrayBuffer();
+  if (DS) { try { return await new Response(new Blob([raw]).stream().pipeThrough(new DS('gzip'))).arrayBuffer(); } catch {} }
+  const out = gunzip(new Uint8Array(raw));
+  return out.buffer.slice(out.byteOffset, out.byteOffset + out.byteLength);
 }
 const halfOn = new WeakSet();
 export function setFPGHalf(R, on) { if (on) halfOn.add(R); else halfOn.delete(R); }
 async function fetchImg(url, half) {
-  const r = await fetch(url);
-  if (!r.ok) throw new Error(url);
-  const b = await r.blob();
-  const bm = await createImageBitmap(b, { premultiplyAlpha: 'none', colorSpaceConversion: 'none' });
+  const b = await resBlob(url);
+  let bm = null;
+  try { bm = await createImageBitmap(b, { premultiplyAlpha: 'none', colorSpaceConversion: 'none' }); } catch { bm = null; }
+  if (!bm) return new Promise((res, rej) => { const im = new Image(); const u = URL.createObjectURL(b); im.onload = () => { URL.revokeObjectURL(u); res(im); }; im.onerror = (e) => { URL.revokeObjectURL(u); rej(e); }; im.src = u; });
   if (!half || bm.width < 128) return bm;
   try { const sm = await createImageBitmap(bm, { resizeWidth: bm.width >> 1, resizeHeight: bm.height >> 1, resizeQuality: 'medium', premultiplyAlpha: 'none' }); bm.close(); return sm; } catch { return bm; }
+}
+const filesOf = new Map();
+export function fpFiles(kind) {
+  if (filesOf.has(kind)) return filesOf.get(kind);
+  const C = FPG[kind];
+  if (!C) return [];
+  const out = [`${BASE.slice(1)}/${kind}.fpz`];
+  filesOf.set(kind, out);
+  for (const name of new Set(Object.values(C.tex))) {
+    out.push(`${BASE.slice(1)}/${name}_d.webp`);
+    if (!/lens|glass/.test(name)) out.push(`${BASE.slice(1)}/${name}_n.webp`);
+  }
+  return out;
+}
+export function fpgReady(R, kind) {
+  const m = R && stores.get(R);
+  const e = m && m.get(kind);
+  return e && e.ready ? e : null;
+}
+export function fpgFailed(R, kind) {
+  const m = R && stores.get(R);
+  const e = m && m.get(kind);
+  return !!(e && !e.ready && e.fail >= 3);
 }
 function texOf(R, name) {
   const texStore = mapOf(texStores, R);
@@ -60,10 +84,11 @@ function texOf(R, name) {
 
 export function getFPG(R, kind) {
   const C = FPG[kind];
-  if (!C || typeof createImageBitmap !== 'function' || !R) return null;
+  if (!C || !R) return null;
   const store = mapOf(stores, R);
   let e = store.get(kind);
   if (!e) {
+    if (!resReady(fpFiles(kind))) return null;
     e = { ready: false, fail: 0 };
     store.set(kind, e);
     const go = () => {
@@ -229,9 +254,11 @@ const ARMS = new Float32Array([1, 1, 1, 0]);
 const GUNC = new Float32Array([1, 1, 1, 0]);
 const LENS = new Float32Array([0.35, 0.4, 0.45, 0.3]);
 
+const TP_ORDER = ['rifle', 'smg', 'pistol', 'shotgun', 'sniper'];
 export function tpGunItems(out, R, kind, Gm, cast) {
-  const e = FPG[kind] && FPG[kind].root != null ? getFPG(R, kind) : null;
-  if (!e || !e.tp) return null;
+  let e = FPG[kind] && FPG[kind].root != null ? getFPG(R, kind) : null;
+  if (!e || !e.tp) { e = null; for (const k of TP_ORDER) { const f = fpgReady(R, k); if (f && f.tp) { e = f; break; } } }
+  if (!e) return null;
   const model = m4.mul(Gm, e.tp.M);
   for (const g of e.tp.groups) out.push({ mesh: e.mesh, off: g.off, cnt: g.cnt, tex: g.tex, nrm: g.nrm, skin: e.tp.skin, model, gloss: !g.lens, col: g.lens ? LENS : GUNC, cast });
   return e.tp.muz;

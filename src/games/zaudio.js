@@ -1,4 +1,5 @@
 import { Sfx } from './sfx.js';
+import { resBuf } from './zres.js';
 
 const FILES = {
   g_rifle: 0.75, g_smg: 1.5, g_pistol: 0.8, g_sniper: 0.85, g_shotgun: 0.9,
@@ -49,7 +50,8 @@ function chain(o) {
   last.connect(o.out || bus);
   let send = null;
   if (rev && (o.rev || o.pos)) { send = ac.createGain(); send.gain.value = 0; last.connect(send); send.connect(revIn); }
-  return { g, lp, pan, send };
+  const free = () => { for (const n of [g, lp, pan, send]) if (n) { try { n.disconnect(); } catch {} } };
+  return { g, lp, pan, send, free };
 }
 function place(c, o, vol) {
   const t = ac.currentTime;
@@ -67,11 +69,13 @@ function place(c, o, vol) {
   if (c.send) c.send.gain.setValueAtTime(clamp((o.rev == null ? 0.12 : o.rev) + d / 70, 0, 0.6) * vol * 0.8, t);
   return k;
 }
+const MAXV = 26;
 function track(v, cat, lim) {
   if (cat) {
     const same = voices.filter((q) => q.cat === cat);
     if (same.length >= lim) { const old = same[0]; try { old.stop(); } catch {} const i = voices.indexOf(old); if (i >= 0) voices.splice(i, 1); }
   }
+  while (voices.length >= MAXV) { const old = voices.shift(); try { old.stop(); } catch {} }
   v.cat = cat;
   voices.push(v);
   v.onEnd = () => { const i = voices.indexOf(v); if (i >= 0) voices.splice(i, 1); };
@@ -81,24 +85,33 @@ export const ZA = {
   ok: false,
   init() {
     Sfx.init();
-    const b = Sfx.bus();
-    if (!b) return false;
-    if (ac !== b.ac) {
-      ac = b.ac;
-      bus = ac.createGain(); bus.gain.value = 0.9; bus.connect(b.out);
-      const mb = Sfx.mbus ? Sfx.mbus() : null;
-      mus = ac.createGain(); mus.gain.value = 1; mus.connect(mb ? mb.out : b.out);
-      try { rev = ac.createConvolver(); rev.buffer = makeIR(); revIn = ac.createGain(); revIn.gain.value = 0.5; revIn.connect(rev); rev.connect(bus); } catch { rev = null; }
-      amb = null; loadJob = null;
-      for (const k of Object.keys(bufs)) delete bufs[k];
-    }
+    if (!this.sync()) return false;
     this.ok = true;
     this.load();
     return true;
   },
+  sync() {
+    const b = Sfx.bus();
+    if (!b) return false;
+    if (ac === b.ac) return true;
+    const had = !!ac;
+    ac = b.ac;
+    bus = ac.createGain(); bus.gain.value = 0.9; bus.connect(b.out);
+    const mb = Sfx.mbus ? Sfx.mbus() : null;
+    mus = ac.createGain(); mus.gain.value = 1; mus.connect(mb ? mb.out : b.out);
+    try { rev = ac.createConvolver(); rev.buffer = makeIR(); revIn = ac.createGain(); revIn.gain.value = 0.5; revIn.connect(rev); rev.connect(bus); } catch { rev = null; }
+    voices.length = 0;
+    if (had) {
+      for (const h of loops) h.wire();
+      const want = this.ambOn;
+      amb = null;
+      if (want) this.ambience(true, this.ambLevel || 0);
+    }
+    return true;
+  },
   load() {
     if (!ac || loadJob) return loadJob;
-    loadJob = Promise.all(Object.keys(FILES).map((n) => fetch(`/sounds/dead/${n}.mp3`).then((r) => (r.ok ? r.arrayBuffer() : null)).then((ab) => (ab ? new Promise((res) => ac.decodeAudioData(ab, res, () => res(null))) : null)).then((buf) => {
+    loadJob = Promise.all(Object.keys(FILES).map((n) => resBuf(`/sounds/dead/${n}.mp3`).then((ab) => (ab ? new Promise((res) => ac.decodeAudioData(ab, res, () => res(null))) : null)).then((buf) => {
       if (!buf) return;
       bufs[n] = buf;
       const d = buf.getChannelData(0);
@@ -109,15 +122,16 @@ export const ZA = {
   },
   listen(x, y, z, yaw) {
     L.x = x; L.y = y; L.z = z; L.yaw = yaw;
+    if (ac) this.sync();
     if (ac && loops.length) { lt++; if (lt % 4 === 0) for (const h of loops) place(h.c, { ...h.o, pos: h.pos }, (h.o.vol || 1) * (Sfx.sfxOn ? 1 : 0)); }
   },
   play(name, o = {}) {
-    if (!ac || !Sfx.sfxOn) return null;
+    if (!ac || !Sfx.sfxOn || !this.sync() || ac.state !== 'running') return null;
     const buf = bufs[name];
     if (!buf) return null;
     const c = chain(o);
     const vol = (FILES[name] || 0.6) * (o.vol == null ? 1 : o.vol);
-    if (place(c, o, vol) < 0.012) { try { c.g.disconnect(); } catch {} return null; }
+    if (place(c, o, vol) < 0.012) { c.free(); return null; }
     const s = ac.createBufferSource();
     s.buffer = buf;
     s.playbackRate.value = (o.rate || 1) * (o.vary ? rnd(1 - o.vary, 1 + o.vary) : 1);
@@ -127,7 +141,7 @@ export const ZA = {
     if (o.dur) { s.start(t, off, o.dur); c.g.gain.setValueAtTime(c.g.gain.value, t + Math.max(0, o.dur - 0.08)); c.g.gain.linearRampToValueAtTime(0, t + o.dur); }
     else s.start(t, off);
     const v = { stop: () => { try { s.stop(); } catch {} }, s };
-    s.onended = () => { v.onEnd && v.onEnd(); try { c.g.disconnect(); } catch {} };
+    s.onended = () => { v.onEnd && v.onEnd(); c.free(); };
     track(v, o.cat, o.lim || 8);
     return v;
   },
@@ -173,20 +187,26 @@ export const ZA = {
       const g = ac.createGain(); g.gain.value = 0; g.connect(mus);
       const mk = (b, v) => { const src = ac.createBufferSource(); src.buffer = b; src.loop = true; const gg = ac.createGain(); gg.gain.value = v; src.connect(gg); gg.connect(g); src.start(0, Math.random() * Math.max(0.1, b.duration - 0.1)); return { src, gg }; };
       const w = mk(bufs.amb_wind, 0.26), n = mk(bufs.amb_night, 0.2);
-      amb = { g, w, n, stop: () => { try { w.src.stop(); n.src.stop(); } catch {} try { g.disconnect(); } catch {} } };
+      amb = { g, w, n, stop: () => { try { w.src.stop(); n.src.stop(); } catch {} for (const x of [g, w.gg, n.gg]) { try { x.disconnect(); } catch {} } } };
       g.gain.setTargetAtTime(1, ac.currentTime, 1.5);
     }
     this.ambOn = true;
+    this.ambLevel = level;
     amb.w.gg.gain.setTargetAtTime(0.22 + level * 0.12, ac.currentTime, 2.5);
     amb.n.gg.gain.setTargetAtTime(0.24 - level * 0.1, ac.currentTime, 2.5);
   },
   loopAt(name, pos, o = {}) {
-    if (!ac || !bufs[name]) return null;
-    const c = chain({ pos });
-    const src = ac.createBufferSource(); src.buffer = bufs[name]; src.loop = true; src.connect(c.g); src.start(0, Math.random() * bufs[name].duration);
-    const h = { name, pos, o, c, src, stop: () => { try { src.stop(); } catch {} try { c.g.disconnect(); } catch {} const i = loops.indexOf(h); if (i >= 0) loops.splice(i, 1); } };
+    if (!ac || !bufs[name] || !this.sync()) return null;
+    const h = { name, pos, o, c: null, src: null };
+    h.wire = () => {
+      const c = chain({ pos });
+      const src = ac.createBufferSource(); src.buffer = bufs[name]; src.loop = true; src.connect(c.g); src.start(0, Math.random() * bufs[name].duration);
+      h.c = c; h.src = src;
+      place(c, { ...o, pos }, (o.vol || 1) * (Sfx.sfxOn ? 1 : 0));
+    };
+    h.stop = () => { try { h.src.stop(); } catch {} if (h.c) h.c.free(); const i = loops.indexOf(h); if (i >= 0) loops.splice(i, 1); };
+    h.wire();
     loops.push(h);
-    place(c, { ...o, pos }, (o.vol || 1) * (Sfx.sfxOn ? 1 : 0));
     return h;
   },
   stopAll() { for (const v of voices.slice()) v.stop(); voices.length = 0; for (const h of loops.slice()) h.stop(); this.ambOn = false; this.ambience(false); },

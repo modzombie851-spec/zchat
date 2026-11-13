@@ -3013,7 +3013,7 @@ async function measureCaches() {
   let total = 0;
   try {
     if (!window.caches) return 0;
-    const names = (await caches.keys()).filter((k) => !/^zchat-(shell|share|prefs)/.test(k));
+    const names = (await caches.keys()).filter((k) => !/^zchat-(shell|share|prefs|dead)/.test(k));
     for (const n of names) {
       const c = await caches.open(n);
       const reqs = (await c.keys()).slice(0, 500);
@@ -3080,7 +3080,7 @@ export function StorageSection({ uid: uidIn, names }) {
   const flash = (t) => { setNote(t); setTimeout(() => setNote(''), 2600); };
   const clearMedia = async () => {
     setBusy('media');
-    try { if (window.caches) { const keys = await caches.keys(); await Promise.all(keys.filter((k) => !/^zchat-(shell|share|prefs)/.test(k)).map((k) => caches.delete(k))); } } catch {}
+    try { if (window.caches) { const keys = await caches.keys(); await Promise.all(keys.filter((k) => !/^zchat-(shell|share|prefs|dead)/.test(k)).map((k) => caches.delete(k))); } } catch {}
     try { Object.keys(localStorage).filter((k) => k.startsWith('zchat-img-') || k.startsWith('zchat-media-')).forEach((k) => localStorage.removeItem(k)); } catch {}
     mediaBlobCache.clear();
     setBusy('');

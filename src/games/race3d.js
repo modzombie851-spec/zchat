@@ -798,7 +798,7 @@ export function createRenderer(canvas, opts = {}) {
   let WP = null, fxTex = null;
   const ZIMP = [0, 0, 0];
   if (opts.fx && typeof fetch !== 'undefined') {
-    fetch(opts.fx).then((r) => (r.ok ? r.blob() : null)).then((b) => (b ? createImageBitmap(b, { premultiplyAlpha: 'none' }) : null)).then((bm) => {
+    (typeof opts.fx === 'string' ? fetch(opts.fx).then((r) => (r.ok ? r.blob() : null)) : Promise.resolve(opts.fx)).then((b) => (b ? createImageBitmap(b, { premultiplyAlpha: 'none' }) : null)).then((bm) => {
       if (!bm || gl.isContextLost()) return;
       const t = gl.createTexture();
       gl.bindTexture(gl.TEXTURE_2D, t);
@@ -1095,7 +1095,11 @@ export function createRenderer(canvas, opts = {}) {
     return true;
   }
   let lastDrawn = 0;
+  let goodCam = null;
   function render(scene) {
+    const c0 = scene.cam;
+    const okCam = c0 && Number.isFinite(c0.pos[0]) && Number.isFinite(c0.pos[1]) && Number.isFinite(c0.pos[2]) && Number.isFinite(c0.at[0]) && Number.isFinite(c0.at[1]) && Number.isFinite(c0.at[2]) && Number.isFinite(c0.fov);
+    if (!okCam) { if (!goodCam) return; scene = { ...scene, cam: goodCam }; } else goodCam = { ...c0, pos: [c0.pos[0], c0.pos[1], c0.pos[2]], at: [c0.at[0], c0.at[1], c0.at[2]] };
     const { env, cam, items, parts } = scene;
     const W = canvas.width, H = canvas.height;
     const view = m4.look(cam.pos, cam.at, [0, 1, 0]);

@@ -847,9 +847,11 @@ export function useGameStage(look) {
     const de = document.documentElement;
     const can = TOUCHY && isAndroid() && !!(de.requestFullscreen || de.webkitRequestFullscreen);
     let mine = false, tried = false;
-    const onFs = () => setFsOn(!!fsEl());
+    const onFs = () => { const on = !!fsEl(); setFsOn(on); if (!on) tried = false; };
+    const onVis = () => { if (document.visibilityState === 'visible' && !fsEl()) tried = false; };
     document.addEventListener('fullscreenchange', onFs);
     document.addEventListener('webkitfullscreenchange', onFs);
+    document.addEventListener('visibilitychange', onVis);
     const go = () => {
       if (tried || !can || fsEl()) return;
       tried = true;
@@ -868,6 +870,7 @@ export function useGameStage(look) {
       el.removeEventListener('pointerup', go, true);
       document.removeEventListener('fullscreenchange', onFs);
       document.removeEventListener('webkitfullscreenchange', onFs);
+      document.removeEventListener('visibilitychange', onVis);
       window.removeEventListener('resize', fix);
       window.removeEventListener('orientationchange', fix);
       if (mine && fsEl()) { try { const r = document.exitFullscreen ? document.exitFullscreen() : document.webkitExitFullscreen(); if (r && r.catch) r.catch(() => {}); } catch {} }
