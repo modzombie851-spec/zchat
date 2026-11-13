@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { FONT } from '../App.jsx';
 import { CFONT } from './zlobby.jsx';
 import { surf } from './ztownview.js';
-import { makeEditView, camRay, MAP_CATS, MAP_PARTS, PART_BY, MARKS, EDGE, isMark, mkPart, clampPart, pineCreek, emptyMap, mapToFile, mapFromFile, mapWeight } from './zeditview.js';
+import { makeEditView, camRay, MAP_CATS, MAP_PARTS, PART_BY, MARKS, EDGE, isMark, mkPart, clampPart, pineCreek, emptyMap, mapToFile, mapFromFile, mapWeight, forestParts } from './zeditview.js';
 
 const AMBER = '#E0A85A', CREAM = '#EFE8D2', MUTED = 'rgba(239,232,210,0.62)', PANEL = 'rgba(14,13,12,0.82)', LINE = 'rgba(239,232,210,0.14)', RED = '#E06A4E', GREEN = '#86C873', SHEET = '#17150F';
 const cut = (n) => `polygon(0 0, calc(100% - ${n}px) 0, 100% ${n}px, 100% 100%, ${n}px 100%, 0 calc(100% - ${n}px))`;
@@ -131,6 +131,7 @@ export function ZMaker({ GS, tier, onClose }) {
   const [lost, setLost] = useState(false);
   const [wInfo, setWInfo] = useState(false);
   const [askDel, setAskDel] = useState(null);
+  const [forestMenu, setForestMenu] = useState(false);
   const [, setHv] = useState(0);
   const H = useRef({ undo: [], redo: [] });
   const camR = useRef({ ...CAM0 });
@@ -209,7 +210,7 @@ export function ZMaker({ GS, tier, onClose }) {
       if (cv.width !== W0 || cv.height !== H0) { cv.width = W0; cv.height = H0; }
       const c = camR.current, sc = S.current;
       E.env.fogDen = 0.0042 * clamp(70 / c.dist, 0.3, 1.2);
-      E.draw(camOf(c), sc.cur ? sc.cur.parts : [], sc.sel, sc.cur ? !!sc.cur.forest : true);
+      E.draw(camOf(c), sc.cur ? sc.cur.parts : [], sc.sel, sc.cur ? sc.cur.forest | 0 : 1);
     };
     raf = requestAnimationFrame(frame);
     return () => { cancelAnimationFrame(raf); cv.removeEventListener('webglcontextlost', onLost); E.dispose(); if (ER.current === E) ER.current = null; };
@@ -340,6 +341,7 @@ export function ZMaker({ GS, tier, onClose }) {
     if (isMark(p.id) || !E.M || !E.M[p.id]) { const cy = camR.current.yaw; dx = Math.cos(cy) * 2.5; dz = -Math.sin(cy) * 2.5; }
     else { const m = E.M[p.id], w = (m.max[0] - m.min[0]) * p.s + (sc.snap ? 0 : 0.1), a = (p.yaw * Math.PI) / 180; dx = Math.cos(a) * w; dz = -Math.sin(a) * w; }
     const np = clampPart({ ...p, x: p.x + dx, z: p.z + dz });
+    delete np.f;
     commit([...c.parts, np]);
     setSel(c.parts.length);
   };
@@ -434,7 +436,21 @@ export function ZMaker({ GS, tier, onClose }) {
     S.current.cur = nx;
     setCur(nx);
   };
-  const setForest = () => { const c = S.current.cur; if (!c) return; const nx = { ...c, forest: c.forest ? 0 : 1 }; S.current.cur = nx; setCur(nx); poke(); };
+  const setForest = (m) => {
+    const c = S.current.cur;
+    setForestMenu(false);
+    if (!c || (c.forest | 0) === m) return;
+    let parts = c.parts.filter((q) => !q.f);
+    if (m === 2) parts = [...parts, ...forestParts()];
+    const nx = { ...c, forest: m, parts };
+    S.current.cur = nx;
+    H.current = { undo: [], redo: [] };
+    setHv((n) => n + 1);
+    setCur(nx);
+    setSel(-1);
+    poke();
+    say(m === 2 ? 'Every tree in the town can now be moved, turned or deleted' : m === 1 ? 'Trees are back to the normal forest' : 'Trees removed');
+  };
   const fileOf = () => {
     const c = S.current.cur;
     const text = JSON.stringify(mapToFile(c));
@@ -501,8 +517,8 @@ export function ZMaker({ GS, tier, onClose }) {
           <Btn u={u} icon="undo" label="Undo" disabled={!canUndo} onPress={undo} />
           <Btn u={u} icon="redo" label="Redo" disabled={!canRedo} onPress={redo} />
           <Btn u={u} icon="grid" label="Snap to grid" on={snap} onPress={() => setSnap((v) => !v)} />
-          <Btn u={u} icon="tree" label="Forest" on={!!cur.forest} onPress={setForest} />
-          <button type="button" aria-label="Map weight" onClick={() => setWInfo((v) => !v)}
+          <Btn u={u} icon="tree" label="Trees" on={!!cur.forest} onPress={() => { setWInfo(false); setForestMenu((v) => !v); }} />
+          <button type="button" aria-label="Map weight" onClick={() => { setForestMenu(false); setWInfo((v) => !v); }}
             style={{ height: u(36), display: 'flex', alignItems: 'center', gap: u(7), padding: `0 ${u(10)}px`, border: 'none', cursor: 'pointer', background: PANEL, boxShadow: `inset 0 0 0 1px ${LINE}`, clipPath: cut(u(7)), color: CREAM }}>
             <span style={{ fontSize: u(11.5), fontWeight: 800, color: MUTED }}>Weight</span>
             <span aria-hidden="true" style={{ width: u(46), height: u(6), background: 'rgba(239,232,210,0.12)', overflow: 'hidden' }}>
@@ -511,6 +527,18 @@ export function ZMaker({ GS, tier, onClose }) {
             <span style={{ fontFamily: CFONT, fontSize: u(14), fontWeight: 800, color: wCol, minWidth: u(34), textAlign: 'right' }}>{W8 ? `${Math.round(W8.k * 100)}%` : ''}</span>
           </button>
           <Btn u={u} icon="send" text="Send" tone="amber" label="Send your map" onPress={() => { setSel(-1); setSheet('send'); }} />
+        </div>
+      )}
+
+      {cur && load.ready && forestMenu && (
+        <div onPointerDown={(e) => e.stopPropagation()} style={{ position: 'absolute', top: `calc(${top(8)} + ${u(44)}px)`, right: `calc(${right(10)} + ${u(170)}px)`, width: u(230), padding: u(8), background: SHEET, boxShadow: `inset 0 0 0 1px ${LINE}`, clipPath: cut(u(9)), display: 'flex', flexDirection: 'column', gap: u(5) }}>
+          {[[1, 'Normal forest', 'Trees grow on their own'], [2, 'Move trees myself', 'Pick, move or delete any tree'], [0, 'No trees', 'Only what you place']].map(([m, t, sub]) => (
+            <button key={m} type="button" onClick={() => setForest(m)}
+              style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: u(1), padding: `${u(7)}px ${u(9)}px`, border: 'none', cursor: 'pointer', background: (cur.forest | 0) === m ? 'rgba(224,168,90,0.18)' : 'rgba(239,232,210,0.05)', boxShadow: `inset 0 0 0 1px ${(cur.forest | 0) === m ? AMBER : LINE}`, clipPath: cut(u(6)), color: CREAM, textAlign: 'left' }}>
+              <span style={{ fontFamily: CFONT, fontSize: u(15), fontWeight: 800, color: (cur.forest | 0) === m ? AMBER : CREAM }}>{t}</span>
+              <span style={{ fontSize: u(11), fontWeight: 700, color: MUTED }}>{sub}</span>
+            </button>
+          ))}
         </div>
       )}
 

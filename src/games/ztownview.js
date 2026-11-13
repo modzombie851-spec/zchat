@@ -110,13 +110,19 @@ export async function loadTown(R, T, tierIdx, isDead, onP, o = {}) {
     items.push(partItem(m, meshOf(id), arrs, id, x, y, z, yaw, s, far));
   }
   const chunks = new Map();
+  const sp = o.split;
   const put = (id, x, z, yaw, s, sink) => {
     const m = M[id];
     if (!m) return;
-    const key = `${Math.floor(x / 48)},${Math.floor(z / 48)}`;
+    const vin = !!(sp && x > sp[0] && x < sp[2] && z > sp[1] && z < sp[3]);
+    const key = `${Math.floor(x / 48)},${Math.floor(z / 48)}${vin ? ',i' : ''}`;
     let c = chunks.get(key);
-    if (!c) { c = { parts: [], x0: 1e9, z0: 1e9, x1: -1e9, z1: -1e9, top: 0 }; chunks.set(key, c); }
-    const y = Math.min(groundH(x, z), meshH(x, z)) - (sink || 0.05);
+    if (!c) { c = { parts: [], x0: 1e9, z0: 1e9, x1: -1e9, z1: -1e9, top: 0, vin }; chunks.set(key, c); }
+    const gh = (qx, qz) => Math.min(groundH(qx, qz), meshH(qx, qz));
+    const rr = Math.max(0.5, Math.min(1.2, (m.max[0] - m.min[0]) * s * 0.12));
+    let lo = gh(x, z);
+    for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; lo = Math.min(lo, gh(x + Math.cos(a) * rr, z + Math.sin(a) * rr)); }
+    const y = lo - (sink || 0.05);
     c.parts.push({ M: m, x, y, z, yaw, s });
     c.x0 = Math.min(c.x0, x); c.x1 = Math.max(c.x1, x); c.z0 = Math.min(c.z0, z); c.z1 = Math.max(c.z1, z); c.top = Math.max(c.top, y + m.max[1] * s);
   };
@@ -150,7 +156,7 @@ export async function loadTown(R, T, tierIdx, isDead, onP, o = {}) {
   for (const c of chunks.values()) {
     const mesh = R.tstat(mergeStatic(c.parts));
     const cx = (c.x0 + c.x1) / 2, cz = (c.z0 + c.z1) / 2;
-    items.push({ mesh, model: null, arrs, cast: true, bs: [cx, c.top / 2, cz, Math.hypot(c.x1 - c.x0, c.z1 - c.z0) / 2 + 12], veg: true });
+    items.push({ mesh, model: null, arrs, cast: true, bs: [cx, c.top / 2, cz, Math.hypot(c.x1 - c.x0, c.z1 - c.z0) / 2 + 12], veg: true, vin: c.vin });
   }
   let ground = false;
   if (man.ground && man.ground.grass) {

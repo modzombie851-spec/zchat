@@ -5,7 +5,7 @@ import { fetchImg, loadStatic, loadTexArrays } from './zmodel.js';
 import { resBlob } from './zres.js';
 import { loadTown, partY, partItem, surf } from './ztownview.js';
 import { loadRail } from './zrail.js';
-import { BOUNDS, PLACE, PROPS2, SPAWNS, PSPAWN } from './ztown.js';
+import { BOUNDS, PLACE, PROPS2, SPAWNS, PSPAWN, forestList, OAKS, hsh } from './ztown.js';
 import { TIERS } from './zview.js';
 
 export const MAP_CATS = [['build', 'Buildings'], ['cars', 'Cars'], ['walls', 'Walls'], ['props', 'Props'], ['trees', 'Trees'], ['nature', 'Plants and rocks'], ['spawn', 'Spawns']];
@@ -43,6 +43,27 @@ export function pineCreek() {
   return { name: 'Pine Creek copy', forest: 1, parts };
 }
 export const emptyMap = (name = 'New map') => ({ name, forest: 1, parts: [] });
+const VEGS = new Set(['pineA', 'pineB', 'treeB', 'treeS', 'bushBig', 'bushMed', 'bushMed2', 'bushSmall', 'bushFlower', 'mush', 'grassA', 'grassB', 'plant', 'reeds', 'cattail']);
+const inEdge = (x, z) => x > EDGE[0] && x < EDGE[2] && z > EDGE[1] && z < EDGE[3];
+export function forestParts() {
+  const out = [], r1 = (v) => Math.round(v * 100) / 100;
+  const add = (id, x, z, yawRad, s) => out.push({ ...mkPart(id, r1(x), r1(z), Math.round((((yawRad * 180) / Math.PI) % 360 + 360) % 360), Math.max(0.3, Math.min(4, r1(s))), -0.08), f: 1 });
+  const { trees, bushes } = forestList(1);
+  for (const t of trees) {
+    if (!inEdge(t.x, t.z)) continue;
+    const h = hsh(t.i, 7);
+    const id = t.pine ? (h < 0.55 ? 'pineA' : 'pineB') : (h < 0.7 ? 'treeB' : 'treeS');
+    const H = id === 'pineA' ? 13.1 : id === 'pineB' ? 13.9 : id === 'treeB' ? 5.4 : 3.4;
+    add(id, t.x, t.z, h * Math.PI * 2, (t.s * (t.pine ? 1 : 0.62)) / H);
+  }
+  for (const [x, z, s] of OAKS) if (inEdge(x, z)) add('treeB', x, z, hsh(x | 0, z | 0) * 6.28, (s * 0.9) / 5.4);
+  for (const b of bushes) {
+    if (!inEdge(b.x, b.z)) continue;
+    const h = hsh(b.i, 3);
+    add(h < 0.22 ? 'bushMed' : h < 0.44 ? 'bushMed2' : h < 0.6 ? 'bushBig' : h < 0.75 ? 'mush' : h < 0.9 ? 'bushSmall' : 'bushFlower', b.x, b.z, h * 40, 0.6 + b.s * 0.45);
+  }
+  return out;
+}
 
 export function mapToFile(m) {
   const parts = [], ps = [], zs = [], boss = [];
@@ -50,32 +71,34 @@ export function mapToFile(m) {
     if (p.id === '@p') ps.push([r2(p.x), r2(p.z)]);
     else if (p.id === '@z') zs.push([r2(p.x), r2(p.z)]);
     else if (p.id === '@b') boss.push([r2(p.x), r2(p.z)]);
-    else parts.push([p.id, r2(p.x), r2(p.z), Math.round(p.yaw * 10) / 10, r2(p.s), r2(p.dy)]);
+    else parts.push(p.f ? [p.id, r2(p.x), r2(p.z), Math.round(p.yaw * 10) / 10, r2(p.s), r2(p.dy), 1] : [p.id, r2(p.x), r2(p.z), Math.round(p.yaw * 10) / 10, r2(p.s), r2(p.dy)]);
   }
-  return { zmap: 1, name: m.name, forest: m.forest ? 1 : 0, parts, ps, zs, boss };
+  return { zmap: 1, name: m.name, forest: m.forest === 2 ? 2 : m.forest ? 1 : 0, parts, ps, zs, boss };
 }
 export function mapFromFile(o) {
   if (!o || typeof o !== 'object' || o.zmap !== 1 || !Array.isArray(o.parts)) return null;
   const parts = [];
   for (const q of o.parts.slice(0, 3000)) {
     if (!Array.isArray(q) || typeof q[0] !== 'string' || !PART_BY[q[0]] || isMark(q[0])) continue;
-    parts.push(clampPart(mkPart(q[0], fin(q[1]), fin(q[2]), fin(q[3]), fin(q[4], 1), fin(q[5]))));
+    const np = clampPart(mkPart(q[0], fin(q[1]), fin(q[2]), fin(q[3]), fin(q[4], 1), fin(q[5])));
+    if (q[6] === 1) np.f = 1;
+    parts.push(np);
   }
   const pts = (a, id) => (Array.isArray(a) ? a.slice(0, 200) : []).forEach((q) => { if (Array.isArray(q)) parts.push(clampPart(mkPart(id, fin(q[0]), fin(q[1])))); });
   pts(o.ps, '@p'); pts(o.zs, '@z'); pts(o.boss, '@b');
   const name = typeof o.name === 'string' && o.name.trim() ? o.name.trim().slice(0, 40) : 'My map';
-  return { name, forest: o.forest === 0 ? 0 : 1, parts };
+  return { name, forest: o.forest === 0 ? 0 : o.forest === 2 ? 2 : 1, parts };
 }
 
 export function mapWeight(parts, models) {
   let tris = 0, n = 0;
   for (const p of parts) {
     if (isMark(p.id)) continue;
-    n++;
+    n += VEGS.has(p.id) ? 0.05 : 1;
     const m = models && models[p.id];
     tris += m ? (m.tris || m.ni / 3) : 0;
   }
-  return { tris, n, k: Math.max(tris / BUDGET.tris, n / BUDGET.parts) };
+  return { tris, n: Math.round(n), k: Math.max(tris / BUDGET.tris, n / BUDGET.parts) };
 }
 
 function markMesh(R, hex, k) {
@@ -133,7 +156,7 @@ export function makeEditView(canvas, tierIdx) {
     const meshes = {};
     kit2 = { arrs, M, meshOf: (id) => meshes[id] || (meshes[id] = R.tstat(M[id])) };
   })().catch(() => {}).finally(() => { kitOk = true; done(); });
-  loadTown(R, T, tierIdx, () => E.dead, (f) => { E.p = f; E.dirty = true; }, { place: [], all: true }).then((res) => {
+  loadTown(R, T, tierIdx, () => E.dead, (f) => { E.p = f; E.dirty = true; }, { place: [], all: true, split: EDGE }).then((res) => {
     if (!res || E.dead) return;
     if (res.ground) for (let i = statics.length - 1; i >= 0; i--) if (statics[i].kind === 'ground' || statics[i].kind === 'road' || statics[i].kind === 'marks') { R.drop(statics[i].mesh); statics.splice(i, 1); }
     for (const it of res.items) { if (!T.shadow) it.cast = false; statics.push(it); }
@@ -175,7 +198,7 @@ export function makeEditView(canvas, tierIdx) {
   E.baseY = baseY;
   E.draw = (cam, parts, selIdx, forest) => {
     const items = [];
-    for (const it of statics) if (forest || !it.veg) items.push(it);
+    for (const it of statics) if (!it.veg || (forest === 1) || (forest === 2 && !it.vin)) items.push(it);
     for (let i = 0; i < parts.length; i++) {
       const c = itemOf(parts[i]);
       if (c) items.push(i === selIdx && c.sel ? c.sel : c.it);
