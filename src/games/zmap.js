@@ -857,7 +857,7 @@ export function townMeshes(o = {}) {
 export function townEnv(o = {}) {
   const lin = (h) => hexRgb(h).map((v) => v ** 2.2);
   if (o.mood === 'dusk') {
-    const s = [-0.78, 0.2, 0.6], L = Math.hypot(s[0], s[1], s[2]);
+    const s = o.sun || [-0.78, 0.2, 0.6], L = Math.hypot(s[0], s[1], s[2]);
     return { sunDir: [s[0] / L, s[1] / L, s[2] / L], sunCol: [1.45, 0.84, 0.5], skyCol: [0.27, 0.3, 0.37], gndCol: [0.13, 0.11, 0.09], fogCol: lin('#5C6066'), fogSun: hexRgb('#C47E52'), fogSunLin: lin('#C47E52'), horizon: hexRgb('#7E6252'), zenith: hexRgb('#1C2634'), reflHor: hexRgb('#6A5A50'), reflZen: hexRgb('#2A3442'), fogDen: o.fogDen || 0.0085, exposure: o.exposure || 1.14, shadowRange: o.shadowRange || 30, clouds: 0.6, cloud: [0.62, 0.52, 0.5], time: 0, detail: o.detail == null ? 1 : o.detail, shadows: o.shadows !== false };
   }
   const s = o.sun || [-0.62, 0.36, 0.7], L = Math.hypot(s[0], s[1], s[2]);

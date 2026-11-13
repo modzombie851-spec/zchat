@@ -13,7 +13,7 @@ export function fbm(x, z, s = 0, o = 3) { let t = 0, a = 0.5, f = 1, n = 0; for 
 export function rng(seed) { let a = (seed >>> 0) || 1; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 
 export const TOWN = { roadW: 4, sideX: 46, sideW: 3.5, lot: [-15, -45, 20, -4.6], store: [-7.2, -40, 7.9, -31], canopy: [-6.5, -31.4, 0.8, -22.6] };
-export const BOUNDS = [-56, -72, 76, 37];
+export const BOUNDS = [-92, -100, 108, 70];
 export const POND = { x: -42.2, z: -24, rx: 7.4, rz: 8.6, y: -0.2 };
 export const FALL = { x: -49.15, z: -24, top: 2.35, w: 1.4 };
 export const pondR = (a) => 1 + 0.06 * Math.sin(3 * a + 1.1) + 0.035 * Math.sin(5 * a + 2.3) + 0.02 * Math.sin(9 * a);
@@ -98,12 +98,50 @@ export const BALES = [[-5, 15.6, 0.2], [-3.4, 16.4, 1.4], [13.4, 15.2, 0.6], [14
 export const TENTS = [[-25, 17, 0.35], [-30, 21.5, -0.5], [-26.5, 26, 1.25], [50, 15, 0.2], [55, 19, -0.7]];
 export const CRATES = [[-46, -12, 0.2, 1], [-44.4, -13.6, 0.9, 2], [-30, -20, 0.5, 1], [40, -30, 0.3, 2], [52, 21, 0.6, 1], [53.6, 22.8, 0.1, 1], [-48, 14, 1.1, 2], [24, -52, 0.4, 1], [-22, -46, 0.8, 2], [30, -40, 1.6, 1], [62, 8, 0.3, 2], [-8, -54, 0.5, 1]];
 export const FENCES = [[-56, -24, 9.5], [-20, 8, 9.5], [12, 40, 9.5]];
-export const BARRIERS = [[-56, -6, -56, 6], [76, -6, 76, 6], [42, -72, 50, -72]];
+export const BARRIERS = [[-92.35, -5.6, -92.35, 5.6], [108.35, -5.6, 108.35, 5.6], [40.5, -100.35, 51.5, -100.35]];
+export const GATES = [[-93, -6, -91, 6], [107, -6, 109, 6], [40.6, -101, 51.4, -99]];
 
 let solidCache = null;
+const POLES = [[-21.52, -0.58, 0.32], [-8, -0.57, 0.24], [-5.61, -0.57, 0.24], [6.02, -0.51, 0.32], [9.01, -0.57, 0.42], [21.58, -0.58, 0.32]];
+const EXTRA_R = [[60.7, -55.2, 68, -47.4]];
+const BOX = { tent: [2.64, 4.1], crates: [1.82, 0.54], crate: [0.42, 0.4], pallets: [1.17, 1.08], houseB: [5.4, 4.88], shed: [3.13, 2.33], hay: [0.78, 1.06], burnt: [2.35, 1.21], tires: [0.5, 1], truck: [1.26, 2.71], container: [2.89, 1.51], hatch: [2.04, 0.83], sedan: [1.4, 2.33], policeA: [1.54, 2.68], policeB: [1.43, 2.57], bus: [1.99, 4.96] };
+export const PROPS2 = [
+  ['tent', -76, 36, 0], ['tent', -66.5, 41.5, 90], ['crates', -70.5, 33.2, 0], ['crate', -74.8, 43.6, 25], ['barrelR', -63.6, 38.4, 0], ['barrelB', -62.8, 37.6, 0], ['pallets', -79.6, 43.4, 90],
+  ['houseB', 90, 50, 180], ['shed', 77.6, 58, 90], ['hay', 84, 36, 10], ['hay', 86.4, 37.2, 80], ['barrelR', 96.8, 44, 0],
+  ['burnt', 94, 1.8, 75], ['tires', 100.5, -7.2, 20], ['sedan', -80, 2.4, 100],
+  ['truck', 50.6, -82, 4], ['container', 37.2, -90.2, 0], ['crates', 39.4, -84.5, 90], ['barrelB', 41.2, -88.4, 0],
+  ['shed', -80, -42, 0], ['tires', -74.4, -45.2, 70], ['hatch', -70, -66, 0],
+  ['bus', 24, 58, 60], ['policeB', 14.6, 54.2, -35],
+];
+function propSolid(id, x, z, yaw, s, rects, circles) {
+  if (id === 'barrelR' || id === 'barrelB') { circles.push([x, z, 0.34 * s]); return; }
+  const b = BOX[id];
+  if (!b) return;
+  const hx = b[0] * s, hz = b[1] * s;
+  const q = ((yaw % 180) + 180) % 180;
+  if (q < 12 || q > 168) { rects.push([x - hx, z - hz, x + hx, z + hz]); return; }
+  if (Math.abs(q - 90) < 12) { rects.push([x - hz, z - hx, x + hz, z + hx]); return; }
+  const a = yaw * Math.PI / 180, c = Math.cos(a), n = Math.sin(a);
+  const long = Math.max(hx, hz), r = Math.min(hx, hz), alongX = hx >= hz;
+  const k = Math.max(1, Math.ceil(long / r));
+  for (let i = 0; i < k; i++) {
+    const t = k === 1 ? 0 : -long + r + (i / (k - 1)) * (2 * long - 2 * r);
+    const lx = alongX ? t : 0, lz = alongX ? 0 : t;
+    circles.push([x + c * lx + n * lz, z - n * lx + c * lz, r]);
+  }
+}
+const OLD_GATE = (c) => c[2] === 0.29 && ((Math.abs(c[0] + 56) < 0.01 && Math.abs(c[1]) < 4.5) || (Math.abs(c[0] - 76) < 0.01 && Math.abs(c[1]) < 4.5) || (Math.abs(c[1] + 72) < 0.01 && c[0] > 41 && c[0] < 51));
+const EXTRA_C = [[-45.2, -32.35, 0.6], [-51.6, -25.6, 1.5], [-52.1, -22.6, 1.4], [-50, -24.4, 0.8], [-49.5, -23, 0.55], [-50.8, -21, 0.6], [-50.7, -26.1, 0.6], [-49.9, -25.1, 0.5]];
 export function solids() {
   if (solidCache) return solidCache;
-  const rects = SOLID_R.map((r) => r.slice()), circles = SOLID_C.map((c) => c.slice());
+  const rects = SOLID_R.map((r) => r.slice()), circles = SOLID_C.filter((c) => !OLD_GATE(c)).map((c) => c.slice());
+  for (const [id, x, z, yaw, s = 1] of PROPS2) propSolid(id, x, z, yaw, s, rects, circles);
+  for (const [id, px, pz] of PLACE) {
+    if (id !== 'polerow') continue;
+    for (const [lx, lz, r] of POLES) if (inRect(px + lx, pz + lz, BOUNDS, 1)) circles.push([px + lx, pz + lz, r]);
+  }
+  rects.push(...EXTRA_R);
+  circles.push(...EXTRA_C);
   for (const [x, z, s] of OAKS) if (inRect(x, z, BOUNDS, 2)) circles.push([x, z, 0.5 + s * 0.02]);
   for (const t of forestList(1).trees) if (inRect(t.x, t.z, BOUNDS, 2)) circles.push([t.x, t.z, 0.42 + t.s * 0.012]);
   for (let k = 0; k < 16; k++) {

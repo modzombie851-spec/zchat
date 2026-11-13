@@ -231,7 +231,7 @@ export function fpGLItems(out, R, F, s, cam, camM) {
   fpmSkin(M, st.W, st.skin, st.A);
   const L = camM;
   const hide = s.scope && a > 0.85;
-  if (!hide) for (const g of e.groups) out.push({ mesh: e.mesh, off: g.off, cnt: g.cnt, tex: g.tex, nrm: g.nrm, skin: st.skin, model: L, gloss: !g.arms && !g.lens, col: g.lens ? LENS : g.arms ? ARMS : GUNC });
+  if (!hide) for (const g of e.groups) { if (g.lens && a > 0.45) continue; out.push({ mesh: e.mesh, off: g.off, cnt: g.cnt, tex: g.tex, nrm: g.nrm, skin: st.skin, model: L, gloss: !g.arms && !g.lens, col: g.lens ? LENS : g.arms ? ARMS : GUNC }); }
   const res = { L, a, hide };
   const A = st.A, W = st.W;
   const toCam = (x, y, z) => [A[0] * x + A[1] * y + A[2] * z + A[3], A[4] * x + A[5] * y + A[6] * z + A[7], A[8] * x + A[9] * y + A[10] * z + A[11]];

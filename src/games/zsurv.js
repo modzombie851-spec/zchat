@@ -1,14 +1,14 @@
 import { sampleClip, poseSkin } from './zmodel.js';
 
 export const SCHAR = [
-  { k: 'ch06', n: 'Jay', gun: 'rifle' },
-  { k: 'ch02', n: 'Maya', gun: 'shotgun' },
-  { k: 'ch31', n: 'Rin', gun: 'sniper' },
-  { k: 'remy', n: 'Remy', gun: 'smg' },
-  { k: 'ch05', n: 'Kane', gun: 'shotgun' },
-  { k: 'ch03', n: 'Zoe', gun: 'smg' },
-  { k: 'ch29', n: 'Lily', gun: 'pistol' },
-  { k: 'medea', n: 'Medea', gun: 'rifle' },
+  { k: 'ch06', n: 'Jay', gun: 'rifle', v: 'm' },
+  { k: 'ch02', n: 'Maya', gun: 'shotgun', v: 'f' },
+  { k: 'ch31', n: 'Rin', gun: 'sniper', v: 'f' },
+  { k: 'remy', n: 'Remy', gun: 'smg', v: 'm' },
+  { k: 'ch05', n: 'Kane', gun: 'shotgun', v: 'm' },
+  { k: 'ch03', n: 'Zoe', gun: 'smg', v: 'f' },
+  { k: 'ch29', n: 'Lily', gun: 'pistol', v: 'f' },
+  { k: 'medea', n: 'Medea', gun: 'rifle', v: 'f' },
 ];
 export const GUN_SV = { rifle: 'jay', shotgun: 'maya', smg: 'tom', sniper: 'rin', pistol: 'doc' };
 export function charOf(sv, col) {

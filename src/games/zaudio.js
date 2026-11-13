@@ -11,14 +11,33 @@ const FILES = {
   st_wood0: 0.45, st_wood1: 0.45, st_wood2: 0.45, st_wood3: 0.45, st_wood4: 0.45, hit0: 0.5, hit1: 0.5, hit2: 0.5, hithead: 0.6,
   glass0: 0.65, glass1: 0.65, slime0: 0.55, slime1: 0.55, fire: 0.5, slash0: 0.55, slash1: 0.55, chop: 0.65, ui_click: 0.35, ui_tap: 0.3,
   wave_ok: 0.5, shell: 0.45, thud: 0.6, over: 0.75, boom3: 0.85, scream0: 0.75, scream1: 0.75, z_g1: 0.55, z_g2: 0.55, z_g3: 0.55, r_shell: 0.55,
-  amb_wind: 1, amb_night: 1, water: 1,
+  amb_wind: 1, amb_night: 1, water: 1, wave_go: 0.95,
+  vo_prepare: 0.95, vo_survival: 0.95, vo_fight: 0.95, vo_r1: 0.95, vo_r2: 0.95, vo_r3: 0.95, vo_r4: 0.95, vo_r5: 0.95, vo_final: 0.95, vo_gameover: 0.95, vo_flawless: 0.95, vo_multi: 0.9, vo_sudden: 0.95,
+  vo_obj: 0.8, vo_ready: 0.8, vo_best: 0.8, vo_failed: 0.8, vo_hurry: 0.8,
+  cm_reload_m: 0.6, cm_nade_m: 0.65, cm_medic_m: 0.65, cm_cover_m: 0.6, cm_look_m: 0.65, cm_go_m: 0.6, cm_kill_m: 0.6, cm_back_m: 0.6, cm_help_m: 0.65,
+  cm_reload_f: 0.6, cm_nade_f: 0.65, cm_medic_f: 0.65, cm_cover_f: 0.6, cm_look_f: 0.65, cm_go_f: 0.6, cm_kill_f: 0.6, cm_back_f: 0.6, cm_help_f: 0.65,
 };
+const MUSV = 1.4;
+const musBufs = {};
+function musLoad(name) {
+  if (!musBufs[name]) {
+    musBufs[name] = resBuf(`/sounds/dead/${name}.mp3`).then((ab) => (ab ? new Promise((res) => ac.decodeAudioData(ab, res, () => res(null))) : null)).then((b) => {
+      if (!b) { delete musBufs[name]; return null; }
+      const d = b.getChannelData(0);
+      let i = 0, j = d.length - 1;
+      while (i < d.length && Math.abs(d[i]) < 0.0001) i++;
+      while (j > i && Math.abs(d[j]) < 0.0001) j--;
+      return { b, a: i / b.sampleRate, e: (j + 1) / b.sampleRate };
+    }).catch(() => { delete musBufs[name]; return null; });
+  }
+  return musBufs[name];
+}
 const STEP = { grass: 'st_grass', conc: 'st_conc', wood: 'st_wood' };
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const rnd = (a, b) => a + Math.random() * (b - a);
 const pick = (a) => a[(Math.random() * a.length) | 0];
 
-let ac = null, bus = null, mus = null, rev = null, revIn = null, loadJob = null;
+let ac = null, bus = null, mus = null, duck = null, rev = null, revIn = null, loadJob = null;
 const bufs = {}, offs = {};
 const L = { x: 0, y: 1.6, z: 0, yaw: 0 };
 const voices = [];
@@ -66,7 +85,7 @@ function place(c, o, vol) {
   c.g.gain.setValueAtTime(vol * k, t);
   if (c.pan) c.pan.pan.setValueAtTime(clamp(side * 0.85, -0.9, 0.9), t);
   if (c.lp) c.lp.frequency.setValueAtTime(clamp(17000 * Math.exp(-d / (o.muff || 30)), 700, 17000) * (Math.cos(ang) < -0.3 ? 0.7 : 1), t);
-  if (c.send) c.send.gain.setValueAtTime(clamp((o.rev == null ? 0.12 : o.rev) + d / 70, 0, 0.6) * vol * 0.8, t);
+  if (c.send) c.send.gain.setValueAtTime(clamp((o.rev == null ? 0.12 : o.rev) + d / (o.revD || 70), 0, 0.6) * vol * 0.8, t);
   return k;
 }
 const MAXV = 26;
@@ -83,6 +102,62 @@ function track(v, cat, lim) {
 
 export const ZA = {
   ok: false,
+  start() {
+    Sfx.init();
+    return this.sync();
+  },
+  music(name, o = {}) {
+    const vol = o.vol == null ? 1 : o.vol;
+    this.musWant = name ? { name, vol } : null;
+    if (!ac || !this.sync()) return;
+    const cur = this.musCur;
+    if (cur && name && cur.name === name) { this.musLevel(vol); return; }
+    if (cur) {
+      const t = ac.currentTime;
+      cur.g.gain.cancelScheduledValues(t); cur.g.gain.setValueAtTime(cur.g.gain.value, t); cur.g.gain.linearRampToValueAtTime(0, t + (o.fade || 1.6));
+      setTimeout(() => { try { cur.src.stop(); } catch {} try { cur.g.disconnect(); } catch {} }, ((o.fade || 1.6) + 0.2) * 1000);
+      this.musCur = null;
+    }
+    if (!name) return;
+    musLoad(name).then((m) => {
+      const w = this.musWant;
+      if (!m || !ac || !w || w.name !== name || (this.musCur && this.musCur.name === name)) return;
+      const src = ac.createBufferSource();
+      src.buffer = m.b; src.loop = true; src.loopStart = m.a; src.loopEnd = m.e;
+      const g = ac.createGain(); g.gain.value = 0;
+      src.connect(g); g.connect(mus);
+      src.start(0, m.a);
+      g.gain.setTargetAtTime(MUSV * w.vol, ac.currentTime + 0.05, 0.7);
+      this.musCur = { name, src, g };
+    });
+  },
+  musLevel(v) {
+    if (this.musWant) this.musWant.vol = v;
+    if (this.musCur && ac) this.musCur.g.gain.setTargetAtTime(MUSV * v, ac.currentTime, 1.1);
+  },
+  say(name, o = {}) {
+    if (!ac || !Sfx.sfxOn || !bufs[name]) return;
+    const now = ac.currentTime;
+    const at = Math.max(now + (o.at || 0), this.sayEnd || 0);
+    if (at - now > 3.5) return;
+    const d = bufs[name].duration;
+    this.play(name, { at: at - now, cat: 'vo', lim: 3 });
+    this.sayEnd = at + d + 0.12;
+    if (duck) { duck.gain.setTargetAtTime(0.45, at, 0.05); duck.gain.setTargetAtTime(1, at + d, 0.35); }
+  },
+  call(kind, sex, o = {}) {
+    if (!ac || !Sfx.sfxOn) return false;
+    const now = performance.now();
+    this.cmT = this.cmT || {};
+    if (now < (this.cmT[kind] || 0) || now < (this.cmAny || 0)) return false;
+    if (o.chance != null && Math.random() > o.chance) return false;
+    const n = `cm_${kind}_${sex === 'f' ? 'f' : 'm'}`;
+    if (!bufs[n]) return false;
+    this.cmT[kind] = now + (o.cd || 8) * 1000;
+    this.cmAny = now + 1500;
+    this.play(n, { at: o.at || 0, cat: 'cm', lim: 1, vary: 0.02 });
+    return true;
+  },
   init() {
     Sfx.init();
     if (!this.sync()) return false;
@@ -98,9 +173,14 @@ export const ZA = {
     ac = b.ac;
     bus = ac.createGain(); bus.gain.value = 0.9; bus.connect(b.out);
     const mb = Sfx.mbus ? Sfx.mbus() : null;
-    mus = ac.createGain(); mus.gain.value = 1; mus.connect(mb ? mb.out : b.out);
+    duck = ac.createGain(); duck.gain.value = 1; duck.connect(mb ? mb.out : b.out);
+    mus = ac.createGain(); mus.gain.value = 1; mus.connect(duck);
     try { rev = ac.createConvolver(); rev.buffer = makeIR(); revIn = ac.createGain(); revIn.gain.value = 0.5; revIn.connect(rev); rev.connect(bus); } catch { rev = null; }
     voices.length = 0;
+    this.musCur = null;
+    this.sayQ = [];
+    this.sayEnd = 0;
+    if (this.musWant) { const w = this.musWant; this.musWant = null; this.music(w.name, { vol: w.vol }); }
     if (had) {
       for (const h of loops) h.wire();
       const want = this.ambOn;
@@ -166,7 +246,7 @@ export const ZA = {
   gun(kind, o = {}) {
     const n = { rifle: 'g_rifle', smg: 'g_smg', pistol: 'g_pistol', sniper: 'g_sniper', shotgun: 'g_shotgun' }[kind] || 'g_rifle';
     const mine = !o.pos;
-    this.play(n, { ...o, vary: 0.04, cat: mine ? 'mygun' : 'gun', lim: mine ? 4 : 8, rev: mine ? 0.18 : 0.2, ref: 9, muff: 60 });
+    this.play(n, { ...o, vary: 0.04, cat: mine ? 'mygun' : 'gun', lim: mine ? 4 : 6, rev: mine ? 0.18 : 0.12, revD: 170, ref: 6, roll: 1.25, muff: 38, max: 72 });
   },
   reload(kind, dur) {
     if (kind === 'shotgun') { const n = Math.max(2, Math.min(5, Math.floor((dur - 0.7) / 0.38))); for (let i = 0; i < n; i++) this.play('r_shell', { at: 0.22 + i * 0.38, vary: 0.05 }); this.play('r_pump', { at: Math.max(0.1, dur - 0.55) }); return; }
@@ -209,5 +289,5 @@ export const ZA = {
     loops.push(h);
     return h;
   },
-  stopAll() { for (const v of voices.slice()) v.stop(); voices.length = 0; for (const h of loops.slice()) h.stop(); this.ambOn = false; this.ambience(false); },
+  stopAll() { for (const v of voices.slice()) v.stop(); voices.length = 0; for (const h of loops.slice()) h.stop(); this.ambOn = false; this.ambience(false); this.music(null, { fade: 0.4 }); },
 };

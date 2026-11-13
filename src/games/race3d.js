@@ -544,7 +544,8 @@ precision highp float;
 in vec2 vP;
 uniform mat4 uInvVP;
 uniform vec3 uSunDir, uZenith, uHorizon, uSunCol, uFogSun, uCam, uCloud;
-uniform float uExposure, uTime, uClouds, uStars;
+uniform float uExposure, uTime, uClouds, uStars, uSkyOn;
+uniform sampler2D uSkyTex;
 out vec4 o;
 float h21(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 float vn(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(h21(i), h21(i + vec2(1, 0)), f.x), mix(h21(i + vec2(0, 1)), h21(i + vec2(1, 1)), f.x), f.y); }
@@ -553,6 +554,21 @@ vec3 aces(vec3 x) { return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59
 void main() {
   vec4 a = uInvVP * vec4(vP, -1.0, 1.0), b = uInvVP * vec4(vP, 1.0, 1.0);
   vec3 dir = normalize(b.xyz / b.w - a.xyz / a.w);
+  if (uSkyOn > 0.5) {
+    float u1 = atan(dir.x, -dir.z) * 0.15915494 + 0.5;
+    float u2 = fract(u1 + 0.5) - 0.5;
+    float eld = degrees(asin(clamp(dir.y, -1.0, 1.0)));
+    float v = (90.0 - eld) / 98.0;
+    vec2 a1 = vec2(dFdx(u1), dFdy(u1)), a2 = vec2(dFdx(u2), dFdy(u2));
+    vec2 gu = dot(a1, a1) < dot(a2, a2) ? a1 : a2;
+    vec3 c = textureGrad(uSkyTex, vec2(u1, clamp(v, 0.0, 1.0)), vec2(gu.x, dFdx(v)), vec2(gu.y, dFdy(v))).rgb;
+    c = pow(c, vec3(2.2));
+    float sd0 = max(dot(dir, uSunDir), 0.0);
+    c += uSunCol * pow(sd0, 2200.0) * 1.6;
+    c = mix(c, pow(uHorizon, vec3(2.2)) * 0.62, smoothstep(-1.5, -6.0, eld));
+    o = vec4(pow(c, vec3(1.0 / 2.2)), 1.0);
+    return;
+  }
   float el = max(dir.y, 0.0);
   vec3 sky = mix(pow(uHorizon, vec3(2.2)), pow(uZenith, vec3(2.2)), pow(el, 0.42));
   float sd = max(dot(dir, uSunDir), 0.0);
@@ -1030,6 +1046,26 @@ export function createRenderer(canvas, opts = {}) {
     owned.push(m);
     return m;
   }
+  let skyTex = null;
+  function setSky(img) {
+    if (skyTex) { gl.deleteTexture(skyTex); const i = texs.indexOf(skyTex); if (i >= 0) texs.splice(i, 1); skyTex = null; }
+    if (!img) return;
+    const t = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+    gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.BROWSER_DEFAULT_WEBGL);
+    gl.generateMipmap(gl.TEXTURE_2D);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    texs.push(t);
+    skyTex = t;
+  }
   function texture(img) {
     const t = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, t);
@@ -1186,6 +1222,8 @@ export function createRenderer(canvas, opts = {}) {
     gl.uniform1f(K.u.uStars, env.stars || 0);
     gl.uniform1f(K.u.uExposure, env.exposure || 1);
     gl.uniform1f(K.u.uTime, env.time || 0);
+    gl.uniform1f(K.u.uSkyOn, skyTex && env.skyTex !== false ? 1 : 0);
+    if (skyTex) { gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, skyTex); gl.uniform1i(K.u.uSkyTex, 0); }
     gl.bindVertexArray(skyVao);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.enable(gl.DEPTH_TEST);
@@ -1408,7 +1446,7 @@ export function createRenderer(canvas, opts = {}) {
     if (usePost) runPost(env);
     return VP;
   }
-  return { gl, mesh, skin, tskin, tstat, wmesh, texture, texArray, drop, render, dispose, lose, drawn: () => lastDrawn };
+  return { gl, mesh, skin, tskin, tstat, wmesh, texture, texArray, setSky, maxTex: () => gl.getParameter(gl.MAX_TEXTURE_SIZE), drop, render, dispose, lose, drawn: () => lastDrawn };
 }
 const IDENT = m4.ident();
 const DEFCOL = new Float32Array([1, 1, 1, 0]);

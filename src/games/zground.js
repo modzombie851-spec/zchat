@@ -31,6 +31,22 @@ function dirtW(x, z) {
   return Math.min(1, d);
 }
 
+const GN = 150, GR = 900;
+const gwarp = (u) => Math.sign(u) * (Math.pow(Math.abs(u), 2.6) * 0.86 + Math.abs(u) * 0.14) * GR;
+let GX = null;
+const gy = (I, J) => groundH(GX[J], GX[I]) - (pondE(GX[J], GX[I]) < 1.6 ? 2.5 : 0);
+function cell(x) {
+  let lo = 0, hi = GN;
+  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (GX[m] <= x) lo = m; else hi = m; }
+  return lo;
+}
+export function meshH(x, z) {
+  if (!GX) { GX = new Float64Array(GN + 1); for (let k = 0; k <= GN; k++) GX[k] = gwarp(-1 + (k / GN) * 2); }
+  const J = cell(x), I = cell(z);
+  const s = Math.max(0, Math.min(1, (x - GX[J]) / (GX[J + 1] - GX[J]))), t = Math.max(0, Math.min(1, (z - GX[I]) / (GX[I + 1] - GX[I])));
+  const ya = gy(I, J), yb = gy(I, J + 1), yc = gy(I + 1, J), yd = gy(I + 1, J + 1);
+  return s + t <= 1 ? ya + s * (yb - ya) + t * (yc - ya) : yd + (1 - s) * (yc - yd) + (1 - t) * (yb - yd);
+}
 export function groundParts(L, arr) {
   const out = [];
   const G = L.grass, D = L.dirt, A = L.asphalt, CO = L.concrete;

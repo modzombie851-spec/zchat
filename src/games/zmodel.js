@@ -132,7 +132,7 @@ function once(key, fn) {
   return cache.get(key);
 }
 async function fetchBuf(url) { return (await resBlob(url)).arrayBuffer(); }
-async function fetchImg(url, half) {
+export async function fetchImg(url, half) {
   const b = await resBlob(url);
   if (typeof createImageBitmap === 'function') {
     try {

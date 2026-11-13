@@ -67,9 +67,17 @@ const GROUPS = [
     ],
   },
   {
+    t: 'Music and voices',
+    items: [
+      ['Horror Game Intro and Zombie Game music', 'Eric Matyas', 'https://soundimage.org', 'Free with credit'],
+      ['Announcer and survivor voices', 'Kenney', 'https://kenney.nl/assets/voiceover-pack', 'CC0'],
+    ],
+  },
+  {
     t: 'Textures and effects',
     items: [
       ['Grass, ground, asphalt and concrete', 'ambientCG', 'https://ambientcg.com', 'CC0'],
+      ['Evening field sky', 'Sergej Majboroda, Poly Haven', 'https://polyhaven.com/a/evening_field', 'CC0'],
       ['Fire, smoke and flash sprites', 'Kenney', 'https://kenney.nl/assets/particle-pack', 'CC0'],
     ],
   },

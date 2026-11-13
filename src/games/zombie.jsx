@@ -3,12 +3,12 @@ import { Avatar, Portal, useBackClose, FONT } from '../App.jsx';
 import { createRenderer, m4 } from './race3d.js';
 import { Sfx } from './sfx.js';
 import { Sheet, injectCss } from './livekit.jsx';
-import { GPill, GPanel, GTitle, GIcon, GNotices, useNotices, useJoystick, GJoy, injectKitCss, kitTap, pressProps, useCtlLook, useGameStage, GLobbySheet, GSeg, GFeed, GSkin, GChatFeed, useChatFeed, TOUCHY, weakPhone, GSettings, GSetRow, GSetSlider, GSetToggle } from './gamekit.jsx';
-import { makeSim, collide, rayBlocked, WEAPONS, WKEYS, THROW, ZT, ZKEYS, SURV, SURV_GUN, hitDamage, PETS, ACID } from './zsim.js';
+import { GPill, GPanel, GTitle, GNotices, useNotices, useJoystick, GJoy, injectKitCss, kitTap, useCtlLook, useGameStage, GLobbySheet, GSeg, GFeed, GSkin, GChatFeed, useChatFeed, TOUCHY, weakPhone, GSettings, GSetRow, GSetSlider, GSetToggle } from './gamekit.jsx';
+import { makeSim, collide, rayBlocked, WEAPONS, WKEYS, THROW, ZT, ZKEYS, SURV, SURV_GUN, hitDamage, PETS, ACID, waveSize } from './zsim.js';
 import { makeView, TIERS, ZMODEL, coreFiles, packList } from './zview.js';
 import { resIndex, resFetch, resLock, resQueue, resFront, resItem, resOn, resSize, resHas, resUrl, resWipe } from './zres.js';
 import { ZBoot } from './zboot.jsx';
-import { ZLobby } from './zlobby.jsx';
+import { ZLobby, CFONT as WFONT } from './zlobby.jsx';
 import { sampleClip, blendInto, blendMask, poseSkin } from './zmodel.js';
 import { makeRig, poseDog, solve } from './zrig.js';
 import { GUNS } from './zguns.js';
@@ -275,6 +275,28 @@ function arcLand(o, yaw, pitch, speed, lv0) {
   return { x, z, lv: landLv(x, z, lv0), pts };
 }
 
+const WAVE_NEW = { 2: 'Workers and crawlers join in', 3: 'Runners join in. They are fast', 4: 'Bloaters and screamers join in', 5: 'Riot zombies join in. They wear armor', 6: 'Spitters join in. Stay out of their acid' };
+function waveNote(w) { return [WAVE_NEW[w], w % 5 === 0 ? 'Brutes are coming' : ''].filter(Boolean).join('. '); }
+const TIPS = [
+  'Reload now so the wave starts with a full magazine',
+  'Grenades refill when the next wave starts',
+  'You heal a little after every wave',
+  'Hold the green heart near a downed friend to help them up',
+  'Head shots do the most damage',
+  'Kill screamers first. Their scream makes others angry',
+  'Shoot bloaters from far away. They explode',
+  'Stay out of the green acid spitters leave behind',
+  'Brutes come every fifth wave. Throw grenades at them',
+  'Your dog bites zombies that get close to you',
+  'Stay close to your team so they can help you up',
+];
+function breakTip(wave) {
+  const next = (wave || 0) + 1;
+  if (WAVE_NEW[next] && Math.floor(Date.now() / 5000) % 2 === 0) return `Next wave: ${WAVE_NEW[next].toLowerCase()}`;
+  if (next % 5 === 0 && Math.floor(Date.now() / 5000) % 2 === 0) return 'Next wave brings brutes. Save your grenades';
+  return TIPS[Math.floor(Date.now() / 6000) % TIPS.length];
+}
+
 export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], onInvite = null, online = null }) {
   injectKitCss();
   injectCss();
@@ -328,13 +350,15 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
   const [resTick, setResTick] = useState(0);
   const [lo, setLo] = useState({ ok: false, f: 0 });
   const pendRef = useRef(null);
-  const [picked, setPicked] = useState([]);
   const cvRef = useRef(null);
   const wrapRef = useRef(null);
   const mapRef = useRef(null);
   const hitRef = useRef(null);
   const hurtRef = useRef(null);
   const xhRef = useRef(null);
+  const sexRef = useRef('m');
+  useEffect(() => { sexRef.current = charOf(sv, col).v || 'm'; }, [sv, col]);
+  const rdRef = useRef(null);
   const dmgRef = useRef(null);
   const hbRef = useRef(null);
   const dirRef = useRef(null);
@@ -361,6 +385,9 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
         resLock(false);
         if (bootFails.current >= 2) { bootFails.current = 0; await resWipe(); }
         await resIndex();
+        const mu = 'sounds/dead/mu_lobby.mp3';
+        if (!resHas(mu)) { try { await resFetch([mu]); } catch {} }
+        if (alive && ZA.start()) ZA.music('mu_lobby', { vol: 0.9 });
         const core = coreFiles(k, guns);
         const tot = resSize(core.filter((p) => !resHas(p)));
         if (tot > 0) {
@@ -412,7 +439,11 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
     return () => { alive = false; clearInterval(iv); };
   }, [phase]);
   useEffect(() => {
-    if (phase === 'menu' || phase === 'play') { Sfx.music(null, false); if (ZA.init()) ZA.ambience(true, phase === 'play' ? 0.3 : 0); }
+    if (phase === 'menu' || phase === 'play') {
+      Sfx.music(null, false);
+      if (ZA.init()) { ZA.ambience(true, phase === 'play' ? 0.3 : 0); ZA.music(phase === 'play' ? 'mu_game' : 'mu_lobby', { vol: phase === 'play' ? 0.5 : 0.9 }); }
+      if (phase === 'play') { const g = G.current; g.voStart = true; g.bestSaid = false; g.waveDown = 0; g.lastTl = -1; }
+    }
   }, [phase]);
   useEffect(() => () => { ZA.ambience(false); }, []);
   useEffect(() => {
@@ -634,15 +665,33 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
     g.snaps.push({ at, zs, ps, ac: s.ac || [] });
     if (g.snaps.length > 4) g.snaps.shift();
     g.wave = s.w; g.ph = s.ph; g.tl = s.tl; g.zl = s.zl;
+    if (g.voStart) { g.voStart = false; ZA.say('vo_survival', { at: 0.6 }); }
+    if (s.ph === 0 && s.tl !== g.lastTl) {
+      if (s.tl === 6) ZA.say('vo_prepare');
+      if (s.tl > 0 && s.tl <= 3) ZA.play('thud', { rate: 0.6, vol: 1 });
+    }
+    g.lastTl = s.ph === 0 ? s.tl : -1;
     const mine = ps.get(myId);
+    const sex = sexRef.current;
     if (mine && g.me) {
       const was = g.me.st;
       if (mine.hp < g.me.hp - 0.5 && mine.st === 0) g.hurtT = Math.max(g.hurtT, 0.35);
+      if (mine.st === 0 && mine.hp < 35 && g.me.hp >= 35) ZA.call('medic', sex, { cd: 25 });
       g.me.hp = mine.hp; g.me.st = mine.st; g.me.rev = mine.rev; g.me.kills = mine.kills; g.me.pts = mine.pts;
       if (was !== 0 && mine.st === 0 && Math.hypot(mine.x - g.me.x, mine.z - g.me.z) > 3) { g.me.x = mine.x; g.me.z = mine.z; g.me.lv = mine.lv; }
-      if (was === 0 && mine.st === 1) { ZA.synth('thump', { vol: 0.8, f: 50, len: 0.4 }); g.F && (g.F.rel = -1); g.me.rel = 0; }
+      if (was === 0 && mine.st === 1) { ZA.synth('thump', { vol: 0.8, f: 50, len: 0.4 }); g.F && (g.F.rel = -1); g.me.rel = 0; ZA.call('help', sex, { cd: 10, at: 0.7 }); }
+      if (s.ph === 1 && mine.st === 0) {
+        let near = 0;
+        for (const z of zs.values()) if (Math.abs(z.x - g.me.x) < 6 && Math.abs(z.z - g.me.z) < 6) near++;
+        if (near >= 6) ZA.call('back', sex, { cd: 40, chance: 0.5 });
+        if (ps.size > 1 && g.suddenW !== s.w) {
+          let up = 0;
+          for (const q of ps.values()) if (q.st === 0) up++;
+          if (up === 1) { g.suddenW = s.w; ZA.say('vo_sudden'); }
+        }
+      }
     }
-    for (const z of zs.values()) if (z.k === 'brute' && !g.seenBrute.has(z.id)) { g.seenBrute.add(z.id); ZA.play('stinger', { vol: 0.9 }); pushFeed('A brute is here', '#FF8A7A'); }
+    for (const z of zs.values()) if (z.k === 'brute' && !g.seenBrute.has(z.id)) { g.seenBrute.add(z.id); ZA.play('stinger', { vol: 0.9 }); ZA.call('look', sex, { cd: 20, at: 0.9 }); pushFeed('A brute is here', '#FF8A7A'); }
     for (const e of s.ev || []) onEvent(e, ps, zs);
   };
 
@@ -654,7 +703,7 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
     tracer(o, [o[0] + d[0] * L, o[1] + d[1] * L, o[2] + d[2] * L]);
     fxPush({ x: o[0], y: o[1], z: o[2], size: 0.5, alpha: 1, type: 16, life: 0.06 });
     lightPush(o, 6, [2.6, 1.6, 0.7], 0.06);
-    ZA.gun(w || 'rifle', { pos: o, vol: 0.8 });
+    ZA.gun(w || 'rifle', { pos: o, vol: 0.7 });
     const P = G.current.panim.get(id);
     if (P) P.fireT = 0.15;
   };
@@ -683,7 +732,14 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
         if (e[3]) ZA.play('bone', { pos: [src.x, y + 1.6, src.z], vol: 0.6, rate: 1.3 });
       }
       g.anim.delete(e[1]);
-      if (e[2] === myId) { g.hmKill = 0.35; g.hm = 0.25; ZA.synth('click', { f: 4200, vol: 0.35 }); }
+      if (e[2] === myId) {
+        g.hmKill = 0.35; g.hm = 0.25; ZA.synth('click', { f: 4200, vol: 0.35 });
+        const now = performance.now();
+        g.kt = (g.kt || []).filter((t) => now - t < 1600);
+        g.kt.push(now);
+        if (g.kt.length >= 3 && now > (g.multiT || 0)) { g.multiT = now + 9000; g.kt = []; ZA.say('vo_multi'); }
+        if (src && ((A && A.k) || (last && last.k)) === 'brute') ZA.call('kill', sexRef.current, { cd: 4, at: 0.5 });
+      }
     } else if (k === 'ex') {
       const x = e[1] / 10, z = e[2] / 10, r = e[3] / 10, y = fy(x, z, e[5]);
       for (let i = 0; i < 26; i++) { const a = Math.random() * 6.28, d = Math.random() * r * 0.6; fxPush({ x: x + Math.cos(a) * d, y: y + 0.4 + Math.random() * 2.2, z: z + Math.sin(a) * d, size: 1.2 + Math.random() * 1.6, alpha: 0.95, type: 12, life: 0.45 + Math.random() * 0.4, vy: 1.2 }); }
@@ -716,28 +772,39 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
         if (tg) tracer(o, [tg.x, tg.y + 1.2, tg.z]);
         fxPush({ x: o[0], y: o[1], z: o[2], size: 0.45, alpha: 1, type: 16, life: 0.05 });
         lightPush(o, 5, [2.4, 1.5, 0.6], 0.05);
-        ZA.gun(p.w, { pos: o, vol: 0.75 });
+        ZA.gun(p.w, { pos: o, vol: 0.6 });
         if (P) P.fireT = 0.15;
       }
     } else if (k === 'dn') {
+      g.waveDown = (g.waveDown || 0) + 1;
       pushFeed(`${nameOf(e[1])} is down`, '#FF8A7A');
     } else if (k === 'rv') {
       if (e[2]) pushFeed(`${nameOf(e[2])} helped ${nameOf(e[1])} up`, '#9CF0B4');
       if (e[1] === myId) ZA.synth('calm', { vol: 0.6 });
     } else if (k === 'w') {
       if (g.me) { g.me.nades = 2; g.me.molos = 1; }
-      setBanner({ t: `Wave ${e[1]}`, s: e[1] % 5 === 0 ? 'Brute wave' : '', at: Date.now() });
-      ZA.synth('horn', { vol: 0.9 });
+      setBanner({ t: `Wave ${e[1]}`, s: waveNote(e[1]), d: waveSize(e[1], Math.max(1, ps ? [...ps.values()].filter((q) => q.st !== 2).length : 1)), w: e[1], at: Date.now() });
+      ZA.play('wave_go');
+      if (e[1] <= 5) { ZA.say(`vo_r${e[1]}`, { at: 0.75 }); ZA.say('vo_fight'); } else ZA.say('vo_fight', { at: 0.75 });
+      ZA.call('go', sexRef.current, { at: 2.9, cd: 40, chance: 0.5 });
+      ZA.musLevel(0.8);
+      g.waveDown = 0;
       ZA.ambience(true, 1);
     } else if (k === 'wc') {
-      setBanner({ t: `Wave ${e[1]} cleared`, s: '', at: Date.now() });
+      const healed = g.me && g.me.st === 0 && g.me.hp < 100;
+      setBanner({ t: `Wave ${e[1]} cleared`, s: '', clear: true, pts: 25 * e[1], heal: healed, back: g.waveDown > 0, w: e[1], at: Date.now() });
       ZA.synth('calm', { vol: 0.8 });
+      ZA.say(g.waveDown ? 'vo_obj' : 'vo_flawless', { at: 0.4 });
+      if (e[1] > g.best && !g.bestSaid) { g.bestSaid = true; ZA.say('vo_best'); }
+      ZA.musLevel(0.5);
       ZA.ambience(true, 0.3);
     } else if (k === 'go') {
       const best = Math.max(g.best, e[1]);
       g.best = best; setPref(PREF.best, best);
       setResult({ wave: e[1], kills: g.me ? g.me.kills : 0, pts: g.me ? g.me.pts : 0, best, at: Date.now() });
       ZA.synth('horn', { vol: 0.6 });
+      ZA.say('vo_failed', { at: 0.5 }); ZA.say('vo_gameover');
+      ZA.musLevel(0.3);
     } else if (k === 'rs') {
       if (e[1] === '*') { setResult(null); if (g.me) { for (const s0 of g.me.slots) g.me.mag[s0] = WEAPONS[s0].mag; } }
     } else if (k === 'pj') {
@@ -862,6 +929,7 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
     M.rel = W.rel; M.relMax = W.rel;
     if (g.F) g.F.rel = 0;
     ZA.reload(M.w, W.rel);
+    ZA.call('reload', sexRef.current, { cd: 9, chance: 0.55, at: 0.15 });
   };
   const swapGun = () => {
     const g = G.current, M = g.me;
@@ -916,6 +984,7 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
     g.lastThrowK = T.k;
     const L = g.aimLand;
     ZA.play('whoosh', { vol: 0.9 });
+    ZA.call('nade', sexRef.current, { cd: 4 });
     if (g.sim) g.sim.throwAt(myId, T.k, L.x, L.z);
     else if (g.net) g.net.send({ t: 'th', k: T.k, x: Math.round(L.x * 10) / 10, z: Math.round(L.z * 10) / 10 });
     g.fx.push({ nade: true, k: T.k, x0: M.x, z0: M.z, lv0: M.lv | 0, x1: L.x, z1: L.z, lv1: L.lv | 0, t: 0, life: T.k === 'grenade' ? THROW.grenade.fuse : 0.9, arc: L.pts, mine: true });
@@ -1554,6 +1623,8 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
       const xc = onZ ? '#FF3B30' : XCOL[(g.opt && g.opt.xcol) || 'white'] || '#FFFFFF';
       if (xh.dataset.xc !== xc) { xh.dataset.xc = xc; xh.style.setProperty('--xc', xc); }
       xh.style.opacity = M.st === 0 && !g.thr && !g.emo && !(g.ads && g.view === 'fp') && !M.sprint ? '1' : '0';
+      const rd = rdRef.current;
+      if (rd) { const on = M.w === 'rifle' && g.ads && g.view === 'fp' && M.st === 0 && !g.thr && g.F && g.F.ads > 0.8; rd.style.opacity = on ? '1' : '0'; if (on && rd.dataset.xc !== xc) { rd.dataset.xc = xc; rd.style.background = onZ ? '#FF3B30' : '#FF2A1F'; } }
     }
     const sc = scopeRef.current;
     if (sc) { const on = g.ads && M.w === 'sniper' && g.view === 'fp' && g.F && g.F.ads > 0.85; sc.style.display = on ? 'block' : 'none'; const dot = sc.nextSibling; if (dot) dot.style.display = g.ads && M.w !== 'sniper' && g.view === 'fp' && g.F && g.F.ads > 0.6 && !g.thr ? 'block' : 'none'; }
@@ -1623,7 +1694,7 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
       else if (e.code === 'KeyG') throwStart('grenade');
       else if (e.code === 'KeyF') throwStart('molotov');
       else if (e.code === 'KeyV') melee();
-      else if (e.code === 'KeyE') g.revHold = true;
+      else if (e.code === 'KeyE') { if (!g.revHold && hudRef.current && hudRef.current.near) ZA.call('cover', sexRef.current, { cd: 12 }); g.revHold = true; }
       else if (e.code === 'KeyB') setSheet('emote');
       else if (e.code === 'Enter' && mode && !mode.solo) setSheet('chat');
     };
@@ -1650,18 +1721,15 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
     setMyRoom(rm);
     return rm;
   };
-  const sendInvites = () => {
+  const inviteNow = (fr) => {
     const g = G.current;
-    const ps = friends.filter((fr) => picked.includes(fr.id));
-    if (!ps.length || !onInvite) return;
+    if (!onInvite || !fr) return;
     let room;
     if (phase === 'play' && mode && !mode.solo && g.net) room = { reg: mode.reg, r: String(mode.r) };
     else { room = ensureRoom(); setLobbyMode('friends'); }
-    try { onInvite(ps, room); } catch {}
-    setInvited((s0) => { const n = new Set(s0); for (const p0 of ps) n.add(p0.id); return n; });
-    setPicked([]); setSheet(null);
-    const first = String(ps[0].name || 'Friend').split(' ')[0];
-    pushNote(ps.length === 1 ? `Invite sent to ${first}` : `Invites sent to ${ps.length} friends`, 'join');
+    try { onInvite([fr], room); } catch {}
+    setInvited((s0) => new Set(s0).add(fr.id));
+    pushNote(`Invite sent to ${String(fr.name || 'Friend').split(' ')[0]}`, 'join');
   };
   const inviteOne = (f) => {
     if (!onInvite) return;
@@ -1779,6 +1847,7 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
         <div style={{ position: 'absolute', left: '50%', top: '50%', width: 6, height: 6, margin: -3, borderRadius: 3, background: '#FF3B2E' }} />
       </div>
       <div aria-hidden="true" style={{ position: 'absolute', left: '50%', top: '50%', width: 6, height: 6, margin: -3, borderRadius: 3, background: '#FF2A1E', boxShadow: '0 0 6px rgba(255,40,30,0.9)', display: 'none' }} />
+      <div ref={rdRef} aria-hidden="true" style={{ position: 'absolute', left: '50%', top: '50%', width: 5, height: 5, marginLeft: -2.5, marginTop: -2.5, borderRadius: '50%', background: '#FF2A1F', boxShadow: '0 0 4px 1px rgba(255,40,30,0.85)', opacity: 0, transition: 'opacity 0.08s', pointerEvents: 'none' }} />
       <div ref={xhRef} aria-hidden="true" data-k="0" style={{ position: 'absolute', left: '50%', top: '50%', width: 0, height: 0, transition: 'opacity 0.12s' }}>
         {[[0, -1], [0, 1], [-1, 0], [1, 0]].map(([dx, dy], i) => <span key={i} style={{ position: 'absolute', left: dx ? (dx < 0 ? 'calc(-1 * var(--gap, 8px) - 10px)' : 'var(--gap, 8px)') : -1, top: dy ? (dy < 0 ? 'calc(-1 * var(--gap, 8px) - 10px)' : 'var(--gap, 8px)') : -1, width: dx ? 10 : 2, height: dy ? 10 : 2, borderRadius: 1, background: 'var(--xc, #FFFFFF)', boxShadow: '0 0 0 0.6px rgba(0,0,0,0.55), 0 0 3px rgba(0,0,0,0.35)' }} />)}
         <span style={{ position: 'absolute', left: 'calc(-1 * var(--rr, 16px))', top: 'calc(-1 * var(--rr, 16px))', width: 'calc(2 * var(--rr, 16px))', height: 'calc(2 * var(--rr, 16px))', boxSizing: 'border-box', borderRadius: '50%', border: '1.6px solid var(--xc, #FFFFFF)', boxShadow: '0 0 0 0.6px rgba(0,0,0,0.45), inset 0 0 0 0.6px rgba(0,0,0,0.45)', display: 'none' }} />
@@ -1806,6 +1875,7 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
           <span style={{ fontSize: 22, fontWeight: 900, lineHeight: 1.1, color: '#FFFFFF', fontVariantNumeric: 'tabular-nums' }}>{H.wave || 0}</span>
         </div>
         <span style={{ fontSize: 12, fontWeight: 800, color: H.ph === 0 ? '#9CF0B4' : '#FFD7C8' }}>{H.ph === 0 ? `Next wave in ${H.tl || 0}` : H.ph === 2 ? 'Overrun' : `${H.zl || 0} zombies left`}</span>
+        {H.ph === 0 && H.st !== 2 ? <span style={{ maxWidth: land ? 360 : 250, marginTop: 3, padding: '3px 10px', textAlign: 'center', fontSize: 11.5, fontWeight: 600, lineHeight: 1.3, color: '#EFE8D2', background: 'rgba(12,11,10,0.5)', boxShadow: 'inset 2px 0 0 #E0A85A', textShadow: 'none' }}>{breakTip(H.wave)}</span> : null}
       </div>
       <div style={{ position: 'absolute', right: right(12), top: top(8), display: 'flex', alignItems: 'flex-start', gap: 8 }}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', textShadow: '0 1px 3px rgba(0,0,0,0.9)', paddingTop: 1 }}>
@@ -1821,10 +1891,22 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
       <GFeed items={feedK} style={{ position: 'absolute', right: right(12), top: top(56), maxWidth: '40%' }} />
       <GChatFeed items={chatFeed} style={{ position: 'absolute', left: left(12), top: top(134), width: land ? 'min(30%, 260px)' : 'calc(100% - 24px)' }} />
       <GNotices items={notes} style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: top(land ? 58 : 110), width: 'min(52%, 420px)' }} />
-      {banner && Date.now() - banner.at < 3200 && (
-        <div key={banner.at} style={{ position: 'absolute', left: 0, right: 0, top: '24%', display: 'flex', flexDirection: 'column', alignItems: 'center', animation: 'zgk-rib 3.2s ease-out forwards' }}>
-          <div style={{ padding: '6px 42px 7px', background: 'linear-gradient(90deg, rgba(10,8,8,0) 0%, rgba(30,8,8,0.8) 22%, rgba(30,8,8,0.8) 78%, rgba(10,8,8,0) 100%)', fontSize: 26, fontWeight: 900, color: '#FFFFFF', letterSpacing: 0.5, textShadow: '0 2px 0 rgba(0,0,0,0.5)' }}>{banner.t}</div>
-          {banner.s ? <div style={{ marginTop: 3, fontSize: 13, fontWeight: 800, color: '#FFC9BC', textShadow: '0 1px 3px rgba(0,0,0,0.9)' }}>{banner.s}</div> : null}
+      {banner && Date.now() - banner.at < 4200 && (
+        <div key={banner.at} aria-live="polite" style={{ position: 'absolute', left: 0, right: 0, top: land ? '25%' : '27%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, pointerEvents: 'none', fontFamily: WFONT, animation: 'zgk-rib 4.2s ease-out forwards' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ width: 46, height: 2, background: 'linear-gradient(90deg, rgba(224,168,90,0), #E0A85A)' }} />
+            <span style={{ fontSize: banner.clear ? 30 : 40, fontWeight: 800, lineHeight: 1, letterSpacing: 1, color: banner.clear ? '#EFE8D2' : '#FFFFFF', textShadow: banner.clear ? '0 2px 10px rgba(0,0,0,0.85)' : '0 0 18px rgba(200,40,24,0.75), 0 2px 6px rgba(0,0,0,0.9)' }}>{banner.t}</span>
+            <span style={{ width: 46, height: 2, background: 'linear-gradient(90deg, #E0A85A, rgba(224,168,90,0))' }} />
+          </div>
+          {!banner.clear && banner.d ? <span style={{ fontSize: 15, fontWeight: 700, color: '#E0A85A', textShadow: '0 1px 4px rgba(0,0,0,0.95)' }}>{`${banner.d} zombies are coming`}</span> : null}
+          {banner.s ? <span style={{ maxWidth: '86%', textAlign: 'center', fontSize: 13, fontWeight: 600, color: '#EFE8D2', textShadow: '0 1px 4px rgba(0,0,0,0.95)' }}>{banner.s}</span> : null}
+          {banner.clear ? (
+            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 6, marginTop: 2 }}>
+              {[`+${banner.pts} points`, banner.heal ? 'Some health back' : '', banner.back ? 'Downed friends are back up' : '', 'Grenades refill next wave'].filter(Boolean).map((x) => (
+                <span key={x} style={{ padding: '3px 10px', fontSize: 12, fontWeight: 700, color: '#EFE8D2', background: 'rgba(16,14,12,0.62)', boxShadow: 'inset 0 0 0 1px rgba(224,168,90,0.45)', clipPath: 'polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%)' }}>{x}</span>
+              ))}
+            </div>
+          ) : null}
         </div>
       )}
       <div style={{ position: 'absolute', left: '50%', bottom: bottom(12), transform: 'translateX(-50%)', width: land ? 'min(28%, 250px)' : '52%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
@@ -1862,7 +1944,7 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
           <CBtn size={px(42)} icon="emote" label="Emotes" style={{ right: right(px(118)), bottom: bottom(px(190)) }} onTap={() => setSheet('emote')} />
           {TOUCHY && <CBtn size={px(60)} icon="bullet" label="Shoot with left hand" active={!!G.current.fireL} style={{ left: left(px(150)), bottom: bottom(px(178)) }}
             onDown={() => { ZA.init(); G.current.fireL = true; }} onMove={(dx, dy) => lookBy(dx, dy)} onUp={() => { G.current.fireL = false; }} />}
-          {H.near && <CBtn size={px(66)} icon="heart" tone="green" label="Hold to help up your friend" style={{ right: right(px(280)), bottom: bottom(px(110)) }} onDown={() => { G.current.revHold = true; }} onUp={() => { G.current.revHold = false; }} sub="Hold" />}
+          {H.near && <CBtn size={px(66)} icon="heart" tone="green" label="Hold to help up your friend" style={{ right: right(px(280)), bottom: bottom(px(110)) }} onDown={() => { G.current.revHold = true; ZA.call('cover', sexRef.current, { cd: 12 }); }} onUp={() => { G.current.revHold = false; }} sub="Hold" />}
           {H.aiming && <div ref={cancelRef} style={{ position: 'absolute', right: right(px(290)), top: top(90), width: 56, height: 56, borderRadius: 28, background: 'rgba(160,20,20,0.45)', boxShadow: 'inset 0 0 0 1.5px rgba(255,255,255,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }}><Ico k="close" size={22} /><span style={{ fontSize: 9.5, fontWeight: 800, color: '#FFFFFF' }}>Cancel</span></div>}
           {H.sprint && <div style={{ position: 'absolute', left: left(px(70)), bottom: bottom(px(186)), display: 'flex', alignItems: 'center', gap: 4, padding: '3px 9px', borderRadius: 12, background: 'rgba(10,12,14,0.45)' }}><Ico k="run" size={16} /><span style={{ fontSize: 11, fontWeight: 800, color: '#FFFFFF' }}>Running</span></div>}
         </div>
@@ -1921,23 +2003,33 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
         <GLobbySheet GS={GS} title="Invite friends" onClose={() => setSheet(null)} width={420}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <div style={{ fontSize: 12.5, fontWeight: 700, color: 'rgba(239,232,210,0.75)', lineHeight: 1.4 }}>
-              {phase === 'play' && mode && !mode.solo ? 'Friends join your server. Each one takes a bot spot right away.' : phase === 'play' ? 'Your game moves to a server so friends can join. Bots fill the empty spots until they arrive.' : 'You start on a server near you. Friends who tap the invite join you and take a bot spot.'}
+              {phase === 'play' && mode && !mode.solo ? 'Friends join your server. Each one takes a bot spot right away.' : phase === 'play' ? 'Your game moves to a server so friends can join. Bots fill the empty spots until they arrive.' : 'Tap Invite next to a friend. They join you here before the game starts.'}
             </div>
             {friends.length === 0 && <div style={{ fontSize: 13, fontWeight: 800, color: 'rgba(239,232,210,0.8)', padding: '8px 0' }}>Chat with a friend first, then they show up here.</div>}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 230, overflowY: 'auto' }}>
-              {friends.map((fr) => {
-                const on = picked.includes(fr.id);
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 236, overflowY: 'auto', touchAction: 'pan-y', overscrollBehavior: 'contain' }}>
+              {[...friends].sort((a, b) => (online && online.has && online.has(b.id) ? 1 : 0) - (online && online.has && online.has(a.id) ? 1 : 0)).map((fr) => {
+                const sent = invited.has(fr.id);
+                const on = !!(online && online.has && online.has(fr.id));
                 return (
-                  <button key={fr.id} type="button" className="zgk-btn" aria-pressed={on} {...pressProps(() => { kitTap(); setPicked((v) => (v.includes(fr.id) ? v.filter((x) => x !== fr.id) : [...v, fr.id].slice(0, 10))); })}
-                    style={{ display: 'flex', alignItems: 'center', gap: 10, height: 50, padding: '0 10px', border: 'none', borderRadius: 10, cursor: 'pointer', fontFamily: FONT, color: '#EFE8D2', background: on ? 'rgba(224,168,90,0.16)' : 'rgba(239,232,210,0.05)', textAlign: 'left' }}>
-                    <Avatar emoji={fr.avatar} name={fr.name} size={34} />
-                    <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fr.name}</span>
-                    <span style={{ width: 22, height: 22, borderRadius: 11, boxShadow: on ? 'none' : 'inset 0 0 0 2px rgba(239,232,210,0.4)', background: on ? '#E0A85A' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{on && <GIcon k="check" size={13} color="#15181A" line halo={false} stroke={3} />}</span>
-                  </button>
+                  <div key={fr.id} style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 52, padding: '0 6px 0 10px', borderRadius: 10, color: '#EFE8D2', background: 'rgba(239,232,210,0.05)' }}>
+                    <span style={{ position: 'relative', flexShrink: 0 }}>
+                      <Avatar emoji={fr.avatar} name={fr.name} size={34} />
+                      {on ? <span style={{ position: 'absolute', right: -1, bottom: -1, width: 10, height: 10, borderRadius: 5, background: '#5BD37A', boxShadow: '0 0 0 2px #1B1A17' }} /> : null}
+                    </span>
+                    <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+                      <span style={{ fontSize: 14, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fr.name}</span>
+                      <span style={{ fontSize: 11.5, fontWeight: 700, color: on ? '#8FDCA2' : 'rgba(239,232,210,0.5)' }}>{on ? 'Online' : 'Offline'}</span>
+                    </span>
+                    <button type="button" className="zgk-btn" disabled={sent} aria-label={sent ? `Invited ${fr.name}` : `Invite ${fr.name}`}
+                      onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); if (sent) return; kitTap(); inviteNow(fr); }}
+                      style={{ flexShrink: 0, minWidth: 92, height: 38, padding: '0 14px', border: 'none', cursor: sent ? 'default' : 'pointer', fontFamily: WFONT, fontSize: 16, fontWeight: 800, letterSpacing: 0.3, color: sent ? 'rgba(239,232,210,0.7)' : '#1B140C', background: sent ? 'rgba(239,232,210,0.1)' : 'linear-gradient(180deg, #F1C27A, #D99A48)', clipPath: 'polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%)' }}>
+                      {sent ? 'Invited' : 'Invite'}
+                    </button>
+                  </div>
                 );
               })}
             </div>
-            <GPill text={picked.length > 1 ? `Invite ${picked.length} friends` : 'Send invite'} color="gold" wide disabled={!picked.length} onPress={sendInvites} />
+            <GPill text="Done" color="white" wide onPress={() => setSheet(null)} />
           </div>
         </GLobbySheet>
       )}

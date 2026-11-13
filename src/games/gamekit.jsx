@@ -751,9 +751,14 @@ export function GLobbySheet({ title, onClose, children, width = 560, GS }) {
   return (
     <div onPointerDown={(e) => { if (e.target === e.currentTarget) { e.stopPropagation(); onClose(); } }} style={{ position: 'absolute', inset: 0, zIndex: 40, background: 'rgba(4,6,14,0.58)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box', padding: at ? `${at.top(10)} ${at.right(12)} ${at.bottom(10)} ${at.left(12)}` : 12, fontFamily: FONT, color: '#FFFFFF' }}>
       <GPanel style={{ width: '100%', maxWidth: width, maxHeight: '100%', display: 'flex', flexDirection: 'column', padding: '12px 14px 14px', boxSizing: 'border-box', animation: 'zgk-pop 0.25s ease-out' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexShrink: 0 }} onPointerDown={(e) => e.stopPropagation()}>
           <div style={{ flex: 1, minWidth: 0 }}><GTitle text={title} size={24} /></div>
-          <GBtn icon="close" color="white" size={36} fast={false} label="Close" onPress={onClose} />
+          <button type="button" aria-label="Close" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); kitTap(); onClose(); }}
+            style={{ width: 48, height: 48, margin: -6, padding: 6, border: 'none', background: 'transparent', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', touchAction: 'manipulation' }}>
+            <span style={{ width: 36, height: 36, borderRadius: '50%', background: 'rgba(239,232,210,0.12)', boxShadow: 'inset 0 0 0 1.5px rgba(239,232,210,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3l10 10M13 3L3 13" stroke="#EFE8D2" strokeWidth="2.2" strokeLinecap="round" /></svg>
+            </span>
+          </button>
         </div>
         <div style={{ minHeight: 0, overflowY: 'auto', touchAction: 'pan-y' }}>{children}</div>
       </GPanel>

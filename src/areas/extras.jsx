@@ -6574,24 +6574,25 @@ function WnSegments({ total, at, onArt, dark }) {
   );
 }
 
-const WN_PHOTOS = { zombies49: '/wn49-zombies.webp', mutant49: '/wn49-mutant.webp', guns50: '/wn50-guns.webp', house50: '/wn50-house.webp', pond50: '/wn50-pond.webp', buttons50: '/wn50-buttons.webp', settings50: '/wn50-settings.webp', pack51: '/wn51-pack.webp', emote51: '/wn51-emote.webp', lobby51: '/wn51-lobby.webp' };
+const WN_PHOTOS = { zombies49: '/wn49-zombies.webp', mutant49: '/wn49-mutant.webp', guns50: '/wn50-guns.webp', house50: '/wn50-house.webp', pond50: '/wn50-pond.webp', buttons50: '/wn50-buttons.webp', settings50: '/wn50-settings.webp', pack51: '/wn51-pack.webp', emote51: '/wn51-emote.webp', lobby51: '/wn51-lobby.webp', waves52: '/wn52-waves.webp', sky52: '/wn52-sky.webp', map52: '/wn52-map.webp' };
 const WN_HIGHLIGHTS = [
-  { k: 'lobby51', art: 'lobby51', go: 'zombie', cta: 'Play now', title: 'A new Dead Town lobby', text: 'Your survivor stands big in the middle with your dog. Pick your survivor, gun and dog from the tabs below, see which friends are online and invite them with one tap.' },
-  { k: 'pack51', art: 'pack51', go: 'zombie', cta: 'Play now', title: 'Dead Town downloads once', text: 'The town, the zombies, your survivor and your guns download one time before you play and stay on your phone. Other survivors and guns come one by one in the lobby, and nothing downloads during a game.' },
-  { k: 'emote51', art: 'emote51', go: 'zombie', cta: 'Play now', title: 'A new emote wheel', text: 'Tap the hand button in a game to open eight emotes on one wheel. Tap one, or slide to it and let go, and your survivor does it.' },
+  { k: 'waves52', art: 'waves52', go: 'zombie', cta: 'Play now', title: 'Horror music and real voices', text: 'Dead Town now has horror music from the loading screen to the last wave. An announcer starts every wave with a deep impact, and your survivor calls out reloading, medic and fire in the hole.' },
+  { k: 'sky52', art: 'sky52', go: 'zombie', cta: 'Play now', title: 'A real dusk sky', text: 'The sky is now a real photo of an evening field, with soft clouds and a low sun over the town.' },
+  { k: 'map52', art: 'map52', go: 'zombie', cta: 'Play now', title: 'A bigger town to explore', text: 'The town is much bigger, with a fence all around it instead of invisible walls. Find a camp, a farm house, a crashed bus and roadblocks on every road.' },
 ];
 const WN_SECTIONS = [
   { title: 'Dead Town', items: [
-    { art: 'lobby51', title: 'New lobby', text: 'Your survivor, friends and loadout in one place.' },
-    { art: 'pack51', title: 'Download once, play smooth', text: 'Nothing downloads during a game.' },
-    { art: 'emote51', title: 'Emote wheel', text: 'Eight emotes, slide to pick.' },
-    { art: 'room35', title: 'Invites wait for you', text: 'Pick your survivor, then join your friend.' },
+    { art: 'waves52', title: 'Every wave tells you more', text: 'See how many zombies are coming and what you earned.' },
+    { art: 'sky52', title: 'Real sky', text: 'A photo sky with soft clouds at dusk.' },
+    { art: 'map52', title: 'Bigger town', text: 'New places to explore inside a fence.' },
+    { art: 'room35', title: 'Invite with one tap', text: 'Each friend has an Invite button now.' },
   ] },
 ];
 const WN_NEW_COUNT = WN_SECTIONS.reduce((n, sec) => n + sec.items.length, 0);
 const WN_SUMMARY = `${WN_NEW_COUNT} new things to try.`;
 
 const WN_EARLIER = [
+  { title: 'A new lobby and one download', text: 'A Dead Town lobby with your survivor and dog in the middle, everything downloads once before you play, and an emote wheel with eight emotes.' },
   { title: 'Real guns and a real town', text: 'Five real guns, a town built from real 3D models with a big house, a pond with a waterfall, new skill buttons in every game and settings in sections.' },
   { title: 'Real zombies', text: 'Eleven zombies made by real 3D artists with recorded moves, and a giant mutant with blade arms every fifth wave.' },
   { title: 'Dead Town, rebuilt', text: 'First person with real sounds, nine kinds of zombies, your own dog, invites for friends, emotes and quick emojis.' },

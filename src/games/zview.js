@@ -6,7 +6,7 @@ import { DOGS } from './zlooks.js';
 import { buildThrowObj, buildFlash, fpState } from './zfp.js';
 import { getFPG, setFPGHalf, fpFiles, fpgFailed } from './zfpgl.js';
 import { floorH } from './ztown.js';
-import { loadZAnims, loadZModel, dropImgs } from './zmodel.js';
+import { loadZAnims, loadZModel, dropImgs, fetchImg } from './zmodel.js';
 import { loadTown } from './ztownview.js';
 import { resAll, resBlob, resReady } from './zres.js';
 import { SCHAR } from './zsurv.js';
@@ -33,7 +33,7 @@ export const GUN_KEYS = ['rifle', 'smg', 'pistol', 'shotgun', 'sniper'];
 export const survFiles = (k) => [`dead/s${k}.bin`, `dead/s${k}_d.webp`, `dead/s${k}_n.webp`];
 export const gunFiles = (g) => fpFiles(g);
 export function coreFiles(k, guns) {
-  const base = resAll((p) => p.startsWith('dead/town/') || /^dead\/z[^/]*$/.test(p) || p === 'dead/sanim.bin' || p === 'dead/fx-v1.webp' || p.startsWith('dead/emo/') || p.startsWith('dead/ui/') || p.startsWith('sounds/dead/'));
+  const base = resAll((p) => p.startsWith('dead/town/') || /^dead\/z[^/]*$/.test(p) || p === 'dead/sanim.bin' || p === 'dead/fx-v1.webp' || p.startsWith('dead/emo/') || p.startsWith('dead/ui/') || p.startsWith('dead/sky/') || p.startsWith('sounds/dead/'));
   return [...new Set([...base, ...survFiles(k), ...fpFiles('throw'), ...guns.flatMap((g) => fpFiles(g))])];
 }
 export function packList(k, guns) {
@@ -42,12 +42,15 @@ export function packList(k, guns) {
   return [...gs.map((g) => [`g:${g}`, fpFiles(g)]), ...cs.map((c) => [`s:${c}`, survFiles(c)])];
 }
 
+const SKY_SUN = [-0.781, 0.170, 0.601];
+const FOG_SKY = [0.115, 0.088, 0.071];
 export function makeView(canvas, tierIdx, ov) {
   const T = { ...(TIERS[tierIdx] || TIERS[1]), ...(ov || {}) };
   const R = createRenderer(canvas, { shadowSize: T.shadow || 256, aa: tierIdx > 0, fx: resBlob('/dead/fx-v1.webp').catch(() => null) });
   if (!R) return null;
   setFPGHalf(R, tierIdx === 0);
-  const env = townEnv({ mood: 'dusk', shadowRange: 24 });
+  const env = townEnv({ mood: 'dusk', shadowRange: 24, sun: SKY_SUN });
+  env.fogCol = env.fogCol.map((v, i) => v * 0.35 + FOG_SKY[i] * 0.65);
   env.shadows = !!T.shadow;
   env.detail = tierIdx > 0 ? 1 : 0;
   if (T.post) env.post = { bloom: 0.55, th: 0.8, sat: 0.84, con: 1.1, vig: 0.5, lo: [0.9, 0.97, 1.08], hi: [1.08, 0.98, 0.88] };
@@ -74,6 +77,8 @@ export function makeView(canvas, tierIdx, ov) {
     getFPG(R, kind);
     return c;
   };
+  const skyFile = tierIdx === 0 || !(R.maxTex && R.maxTex() >= 4096) ? 'dusk2k' : 'dusk3k';
+  fetchImg(`/dead/sky/${skyFile}.webp`).then((im) => { if (!V.dead && R.setSky) R.setSky(im); if (im && im.close) { try { im.close(); } catch {} } }).catch(() => {});
   const onLost = (e) => { try { e.preventDefault(); } catch {} if (V.dead) return; V.lost = true; if (V.onLost) V.onLost(); };
   canvas.addEventListener('webglcontextlost', onLost);
   const V = { R, env, statics, dog, fp, tier: T, cache, zm: null, dead: false, lost: false, err: null, mainK: null, onLost: null, dispose: () => { V.dead = true; canvas.removeEventListener('webglcontextlost', onLost); try { R.dispose(); } catch {} } };
