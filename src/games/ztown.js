@@ -1,4 +1,5 @@
-import { PLACE, SOLID_R, SOLID_C } from './ztowndata.js';
+import { PLACE } from './ztowndata.js';
+import { MAP } from './zmapdata.js';
 const H32 = (n) => { let x = (n | 0) * 374761393; x = (x ^ (x >>> 13)) * 1274126177; return ((x ^ (x >>> 16)) >>> 0) / 4294967296; };
 export const hsh = (a, b, c = 0) => H32(a * 73856093 ^ b * 19349663 ^ c * 83492791);
 export const sat = (t) => (t < 0 ? 0 : t > 1 ? 1 : t);
@@ -103,9 +104,7 @@ export const BARRIERS = [[-92.35, -5.6, -92.35, 5.6], [108.35, -5.6, 108.35, 5.6
 export const GATES = [[-93, -6, -91, 6], [107, -6, 109, 6], [40.6, -101, 51.4, -99]];
 
 let solidCache = null;
-const POLES = [[-21.52, -0.58, 0.32], [-8, -0.57, 0.24], [-5.61, -0.57, 0.24], [6.02, -0.51, 0.32], [9.01, -0.57, 0.42], [21.58, -0.58, 0.32]];
 const EXTRA_R = [[60.7, -55.2, 68, -47.4], [-50.9, 62.1, -39.9, 67.1], [-37.4, 62.4, -16.4, 65.8]];
-const BOX = { tent: [2.64, 4.1], crates: [1.82, 0.54], crate: [0.42, 0.4], pallets: [1.17, 1.08], houseB: [5.4, 4.88], shed: [3.13, 2.33], hay: [0.78, 1.06], burnt: [2.35, 1.21], tires: [0.5, 1], truck: [1.26, 2.71], container: [2.89, 1.51], hatch: [2.04, 0.83], sedan: [1.4, 2.33], policeA: [1.54, 2.68], policeB: [1.43, 2.57], bus: [1.99, 4.96] };
 export const PROPS2 = [
   ['tent', -76, 36, 0], ['tent', -66.5, 41.5, 90], ['crates', -70.5, 33.2, 0], ['crate', -74.8, 43.6, 25], ['barrelR', -63.6, 38.4, 0], ['barrelB', -62.8, 37.6, 0], ['pallets', -79.6, 43.4, 90],
   ['houseB', 90, 50, 180], ['shed', 77.6, 58, 90], ['hay', 84, 36, 10], ['hay', 86.4, 37.2, 80], ['barrelR', 96.8, 44, 0],
@@ -114,37 +113,19 @@ export const PROPS2 = [
   ['shed', -80, -42, 0], ['tires', -74.4, -45.2, 70], ['hatch', -70, -66, 0],
   ['bus', 24, 58, 60], ['policeB', 14.6, 54.2, -35],
 ];
-function propSolid(id, x, z, yaw, s, rects, circles) {
-  if (id === 'barrelR' || id === 'barrelB') { circles.push([x, z, 0.34 * s]); return; }
-  const b = BOX[id];
-  if (!b) return;
-  const hx = b[0] * s, hz = b[1] * s;
-  const q = ((yaw % 180) + 180) % 180;
-  if (q < 12 || q > 168) { rects.push([x - hx, z - hz, x + hx, z + hz]); return; }
-  if (Math.abs(q - 90) < 12) { rects.push([x - hz, z - hx, x + hz, z + hx]); return; }
-  const a = yaw * Math.PI / 180, c = Math.cos(a), n = Math.sin(a);
-  const long = Math.max(hx, hz), r = Math.min(hx, hz), alongX = hx >= hz;
-  const k = Math.max(1, Math.ceil(long / r));
-  for (let i = 0; i < k; i++) {
-    const t = k === 1 ? 0 : -long + r + (i / (k - 1)) * (2 * long - 2 * r);
-    const lx = alongX ? t : 0, lz = alongX ? 0 : t;
-    circles.push([x + c * lx + n * lz, z - n * lx + c * lz, r]);
-  }
-}
-const OLD_GATE = (c) => c[2] === 0.29 && ((Math.abs(c[0] + 56) < 0.01 && Math.abs(c[1]) < 4.5) || (Math.abs(c[0] - 76) < 0.01 && Math.abs(c[1]) < 4.5) || (Math.abs(c[1] + 72) < 0.01 && c[0] > 41 && c[0] < 51));
 const EXTRA_C = [[-45.2, -32.35, 0.6], [-51.6, -25.6, 1.5], [-52.1, -22.6, 1.4], [-50, -24.4, 0.8], [-49.5, -23, 0.55], [-50.8, -21, 0.6], [-50.7, -26.1, 0.6], [-49.9, -25.1, 0.5]];
+export const PLAY = MAP.parts;
+export const PLAY_FOREST = MAP.forest;
+export const PLAY_BOSS = MAP.boss.length ? MAP.boss[0] : null;
 export function solids() {
   if (solidCache) return solidCache;
-  const rects = SOLID_R.map((r) => r.slice()), circles = SOLID_C.filter((c) => !OLD_GATE(c)).map((c) => c.slice());
-  for (const [id, x, z, yaw, s = 1] of PROPS2) propSolid(id, x, z, yaw, s, rects, circles);
-  for (const [id, px, pz] of PLACE) {
-    if (id !== 'polerow') continue;
-    for (const [lx, lz, r] of POLES) if (inRect(px + lx, pz + lz, BOUNDS, 1)) circles.push([px + lx, pz + lz, r]);
-  }
+  const rects = MAP.r.map((r) => r.slice()), circles = MAP.c.filter((c) => inRect(c[0], c[1], BOUNDS, 2)).map((c) => c.slice());
   rects.push(...EXTRA_R);
   circles.push(...EXTRA_C);
-  for (const [x, z, s] of OAKS) if (inRect(x, z, BOUNDS, 2)) circles.push([x, z, 0.5 + s * 0.02]);
-  for (const t of forestList(1).trees) if (inRect(t.x, t.z, BOUNDS, 2)) circles.push([t.x, t.z, 0.42 + t.s * 0.012]);
+  if (MAP.forest !== 2) {
+    for (const [x, z, s] of OAKS) if (inRect(x, z, BOUNDS, 2)) circles.push([x, z, 0.5 + s * 0.02]);
+    for (const t of forestList(1).trees) if (inRect(t.x, t.z, BOUNDS, 2)) circles.push([t.x, t.z, 0.42 + t.s * 0.012]);
+  }
   for (let k = 0; k < 16; k++) {
     const q = (k / 16) * Math.PI * 2, w = pondR(q), c = Math.cos(q), n = Math.sin(q);
     circles.push([POND.x + c * POND.rx * 0.6 * w, POND.z + n * POND.rz * 0.6 * w, 0.33 * w * Math.hypot(POND.rx * c, POND.rz * n)]);
@@ -155,3 +136,5 @@ export function solids() {
 }
 export const SPAWNS = [[-50, -66], [-20, -68], [12, -68], [36, -68], [72, -62], [-52, -40], [-52, 26], [-14, 33], [-4, 33], [46, 31], [72, 28], [72, -12], [72, -40], [-46, 7.5], [74, -4], [46, -70]];
 export const PSPAWN = [[-4.6, -20.6], [-1.6, -20.4], [1.4, -20.6], [4.4, -20.8], [-3.2, -18.4], [0, -18.2], [3.2, -18.4], [6.4, -19.4]];
+export const PLAY_ZS = MAP.zs.length ? MAP.zs : SPAWNS;
+export const PLAY_PS = MAP.ps.length ? MAP.ps : PSPAWN;

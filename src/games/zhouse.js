@@ -1,4 +1,8 @@
 import { HOUSE_DATA as D } from './zhousedata.js';
+import { MAP } from './zmapdata.js';
+
+const HDY = ((MAP.parts.find((p) => p[0] === 'vhouse') || [])[5]) || 0;
+const F0 = D.f0 + HDY, F1 = D.f1 + HDY;
 
 const N = D.W * D.H;
 const hb0 = new Uint8Array(N), fb0 = new Uint8Array(N), hb1 = new Uint8Array(N), fb1 = new Uint8Array(N);
@@ -12,7 +16,7 @@ function dec(L, hb, fb) {
 dec(D.l0, hb0, fb0);
 dec(D.l1, hb1, fb1);
 
-export const HOUSE = { x0: D.x0, z0: D.z0, x1: D.x0 + D.W * D.R, z1: D.z0 + D.H * D.R, W: D.W, H: D.H, R: D.R, f0: D.f0, f1: D.f1, st: D.st };
+export const HOUSE = { x0: D.x0, z0: D.z0, x1: D.x0 + D.W * D.R, z1: D.z0 + D.H * D.R, W: D.W, H: D.H, R: D.R, f0: F0, f1: F1, st: D.st };
 export const HOUSE_SPAWNS = D.sp;
 const ST = D.st;
 const WALL_R = 0.45;
@@ -28,11 +32,11 @@ export function stairT(x, z) {
 }
 export function houseY(x, z, lv) {
   const t = stairT(x, z);
-  if (t >= 0) return D.f0 + t * (D.f1 - D.f0);
+  if (t >= 0) return F0 + t * (F1 - F0);
   const k = hcell(x, z);
   if (k < 0) return null;
   const h = (lv ? hb1 : hb0)[k];
-  return h === 255 ? null : h * 0.05 - 1;
+  return h === 255 ? null : h * 0.05 - 1 + HDY;
 }
 export function cellBlocked(k, lv, shot) {
   if (k < 0) return false;
@@ -97,9 +101,9 @@ export function rayHouse(x0, z0, y0, x1, z1, y1) {
     const k = hcell(x, z);
     if (k < 0) continue;
     const up = hb1[k] !== 255, st = stairT(x, z) >= 0;
-    if (up && !st && y > D.f1 - 0.3 && y < D.f1 + 0.05) return true;
-    if (!up && y > D.f1 + 0.05) continue;
-    if (cellBlocked(k, up && y > D.f1 ? 1 : 0, true)) return true;
+    if (up && !st && y > F1 - 0.3 && y < F1 + 0.05) return true;
+    if (!up && y > F1 + 0.05) continue;
+    if (cellBlocked(k, up && y > F1 ? 1 : 0, true)) return true;
   }
   return false;
 }

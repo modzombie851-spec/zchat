@@ -8,10 +8,14 @@ const P = {
   mag: <><path d="M8.4 3.5h6.4l-.6 6.2 1.9 9.8a1 1 0 0 1-1 1.2H9.4a1 1 0 0 1-1-1.1l.8-9.9z" /><path d="M9.4 7.5h4.8M9.2 11h5.4" /></>,
   grenade: <><path d="M12 8.2a6 6 0 1 1-.01 0z" /><path d="M10.2 8.6V5.8h3.6v2.8M13.8 6.4l3.4-2.2M17.2 4.2l1.3 2.6" /><path d="M8.6 14.2h6.8M12 10.8v6.8" opacity=".55" /></>,
   bottle: <><path d="M10 2.8h4v3.6l1.6 2.4v11.3a1.2 1.2 0 0 1-1.2 1.2H9.6a1.2 1.2 0 0 1-1.2-1.2V8.8L10 6.4z" /><path d="M8.4 13h7.2" /><path d="M12 1.2c1.2.8 1.6 1.8 1.2 2.8" /></>,
+  plate: <><path d="M7.2 3.6h9.6l2.7 3.1v11.6a2 2 0 0 1-2 2H6.5a2 2 0 0 1-2-2V6.7z" /><path d="M8.2 9.6h7.6M8.2 13.2h7.6" opacity=".6" /></>,
+  c4: <><path d="M3.8 9.2h16.4v8.6H3.8z" /><path d="M7.6 9.2v8.6M16.4 9.2v8.6" opacity=".6" /><path d="M10.2 11.6h3.6v2.6h-3.6z" /><path d="M6 9.2c0-2.6 1.8-4 4.2-3.8M18 9.2c0-2.2-1.4-3.6-3.6-3.6" /></>,
+  det: <><path d="M8.2 9h7.6a1.6 1.6 0 0 1 1.6 1.6v8.2a1.6 1.6 0 0 1-1.6 1.6H8.2a1.6 1.6 0 0 1-1.6-1.6v-8.2A1.6 1.6 0 0 1 8.2 9z" /><path d="M14.6 9V3.6" /><path d="M12 13.4a1.9 1.9 0 1 0 .01 0z" /><path d="M17.4 4.4a3 3 0 0 1 2.1 2.1M17.2 1.8a5.6 5.6 0 0 1 4.6 4.6" /></>,
   knife: <><path d="M4.2 19.8l9.3-9.3 2.6 2.6-9.3 9.3H4.2z" /><path d="M13.5 10.5l5.8-6.9 1.1 1.1-6.9 5.8" /><path d="M11.6 8.6l4.5 4.5" /></>,
   swap: <><path d="M5 8.5h13M14.5 5l3.5 3.5-3.5 3.5M19 15.5H6M9.5 12L6 15.5 9.5 19" /></>,
   jump: <><path d="M6.5 12.5L12 7l5.5 5.5" /><path d="M6.5 18L12 12.5l5.5 5.5" opacity=".6" /><path d="M5 21h14" opacity=".45" /></>,
-  crouch: <><circle cx="13.6" cy="5.2" r="2.1" /><path d="M13 8.4l-2.6 5.2 4.6 1.8-1 5.4" /><path d="M10.4 13.6L7.2 19.8" /><path d="M12.4 9.8l4.6 1.6" /><path d="M5 21h14" opacity=".45" /></>,
+  crouch: <><circle cx="14.4" cy="4.6" r="2.15" fill="currentColor" stroke="none" /><path d="M13.6 7.8l-2.9 5.4 5 1.2-.4 6" /><path d="M10.7 13.2l-1.1 6.2H5.8" /><path d="M12.9 9.4l5.2 1.1" /><path d="M3.8 21.6h16.4" opacity=".45" /></>,
+  slide: <><circle cx="6.8" cy="8.4" r="2.1" fill="currentColor" stroke="none" /><path d="M8.4 10.6l4.4 5.2 7.8 1.8" /><path d="M12.8 15.8l-1.7 3.6 4 .8" /><path d="M9.5 11.9l-4.3 3" /><path d="M1.8 18.5h3.4M3 15.6h2.2" opacity=".6" /><path d="M3.8 21.6h17" opacity=".45" /></>,
   smile: <><circle cx="12" cy="12" r="8.6" /><path d="M8.2 14.2c1 1.5 2.3 2.2 3.8 2.2s2.8-.7 3.8-2.2" /><circle cx="9" cy="10" r="1.1" fill="currentColor" stroke="none" /><circle cx="15" cy="10" r="1.1" fill="currentColor" stroke="none" /></>,
   chat: <><path d="M4.5 5.5h15a1.5 1.5 0 0 1 1.5 1.5v8.4a1.5 1.5 0 0 1-1.5 1.5H11l-4.6 3.6v-3.6H4.5A1.5 1.5 0 0 1 3 15.4V7a1.5 1.5 0 0 1 1.5-1.5z" /></>,
   people: <><circle cx="9" cy="8.5" r="3.3" /><path d="M2.8 19.5c.6-3.4 3-5.3 6.2-5.3s5.6 1.9 6.2 5.3" /><path d="M15.5 5.6a3.1 3.1 0 0 1 0 5.9M17.4 14.6c2 .7 3.4 2.4 3.8 4.9" /></>,
@@ -22,8 +26,18 @@ const P = {
   run: <><circle cx="14.6" cy="4.4" r="1.9" /><path d="M9 21l2.6-5.4 3 2.4v3.6M8.2 9.6l3.6-2.4 3.2 2.6 3.4.6M11.8 7.2l-1.4 6.4 3.4 2.4M6.8 13.4l2.8-.6" /></>,
   invite: <><circle cx="9.5" cy="8.4" r="3.4" /><path d="M3 19.6c.6-3.5 3.2-5.5 6.5-5.5 2 0 3.7.7 4.9 2" /><path d="M18 11.5v7M14.5 15h7" /></>,
   close: <><path d="M6 6l12 12M18 6L6 18" /></>,
+  bandage: <><path d="M5.2 14.6l9.4-9.4a3 3 0 0 1 4.2 4.2l-9.4 9.4a3 3 0 0 1-4.2-4.2z" /><path d="M10 10l4 4" /><circle cx="11.2" cy="12.8" r=".3" /><circle cx="12.8" cy="11.2" r=".3" /></>,
+  syringe: <><path d="M14.5 4.5l5 5M17 7l-8.8 8.8-2.9.6.6-2.9L14.7 4.7" /><path d="M10.6 8.2l1.6 1.6M8.6 10.2l1.6 1.6M5.4 18.6L3.8 20.2" /></>,
+  shop: <><path d="M4 9.5h16l-1.2 10H5.2z" /><path d="M8.5 9.5V7a3.5 3.5 0 0 1 7 0v2.5" /></>,
+  cam: <><circle cx="12" cy="9" r="2.8" /><path d="M7 19.5c.7-3 2.6-4.6 5-4.6s4.3 1.6 5 4.6" /><path d="M4.2 13.5A8.2 8.2 0 0 1 7 4.6M19.8 13.5A8.2 8.2 0 0 0 17 4.6" /><path d="M5.8 3.8L7 4.6l-.4 1.4M18.2 3.8L17 4.6l.4 1.4" /></>,
   map: <><path d="M3.5 6.2l5.5-2.2 6 2.2 5.5-2.2v13.6l-5.5 2.2-6-2.2-5.5 2.2z" /><path d="M9 4v13.6M15 6.2v13.6" /></>,
   down: <><path d="M6 9l6 6 6-6" /></>,
+  left: <><path d="M15 6l-6 6 6 6" /></>,
+  mic: <><path d="M12 3.2a2.9 2.9 0 0 1 2.9 2.9v5.6a2.9 2.9 0 0 1-5.8 0V6.1A2.9 2.9 0 0 1 12 3.2z" /><path d="M6 11.4a6 6 0 0 0 12 0M12 17.4v3.4" /></>,
+  micoff: <><path d="M12 3.2a2.9 2.9 0 0 1 2.9 2.9v5.6a2.9 2.9 0 0 1-5.8 0V6.1A2.9 2.9 0 0 1 12 3.2z" /><path d="M6 11.4a6 6 0 0 0 12 0M12 17.4v3.4M4.5 4.5l15 15" /></>,
+  spk: <><path d="M4.5 9.5h3.2l4.3-3.6v12.2l-4.3-3.6H4.5z" /><path d="M15.4 9.2a4 4 0 0 1 0 5.6M17.8 6.8a7.4 7.4 0 0 1 0 10.4" /></>,
+  spkoff: <><path d="M4.5 9.5h3.2l4.3-3.6v12.2l-4.3-3.6H4.5z" /><path d="M15.5 9.5l5 5M20.5 9.5l-5 5" /></>,
+  right: <><path d="M9 6l6 6-6 6" /></>,
 };
 
 export function Ico({ k, size = 22, sw = 1.7, color = '#FFFFFF' }) {
@@ -53,7 +67,9 @@ export function CBtn({ size = 54, icon, label, onDown, onUp, onMove, onTap, acti
     setDown(true);
     onDown && onDown(e);
   };
-  useEffect(() => () => { if (live.current) live.current(); }, []);
+  const upRef = useRef(onUp);
+  upRef.current = onUp;
+  useEffect(() => () => { if (live.current) { live.current(); if (upRef.current) upRef.current({ cancel: true, clientX: -1e9, clientY: -1e9 }); } }, []);
   const move = (e) => {
     if (st.current.id !== e.pointerId) return;
     const dx = e.clientX - st.current.x, dy = e.clientY - st.current.y;
@@ -77,10 +93,10 @@ export function CBtn({ size = 54, icon, label, onDown, onUp, onMove, onTap, acti
   );
 }
 
-export function TopBtn({ icon, label, onTap, style, badge }) {
+export function TopBtn({ icon, label, onTap, style, badge, on }) {
   return (
     <button type="button" aria-label={label} onClick={(e) => { e.stopPropagation(); onTap(); }} onPointerDown={(e) => e.stopPropagation()}
-      style={{ width: 36, height: 36, borderRadius: '50%', border: 'none', padding: 0, cursor: 'pointer', background: 'rgba(14,17,22,0.44)', boxShadow: 'inset 0 0 0 1.6px rgba(255,255,255,0.62)', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'auto', position: 'relative', ...style }}>
+      style={{ width: 36, height: 36, borderRadius: '50%', border: 'none', padding: 0, cursor: 'pointer', background: on ? 'rgba(46,170,96,0.82)' : 'rgba(14,17,22,0.44)', boxShadow: on ? 'inset 0 0 0 1.6px rgba(190,255,210,0.9)' : 'inset 0 0 0 1.6px rgba(255,255,255,0.62)', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'auto', position: 'relative', ...style }}>
       <Ico k={icon} size={19} />
       {badge ? <span style={{ position: 'absolute', right: -3, top: -3, width: 9, height: 9, borderRadius: 5, background: '#FF5A4A' }} /> : null}
     </button>
@@ -108,8 +124,22 @@ export function drawMinimap(cv, d) {
   for (const R of d.roads || []) { const [a, b] = tx(R[0], R[1]), [c, e] = tx(R[2], R[3]); ctx.fillRect(Math.min(a, c), Math.min(b, e), Math.abs(c - a), Math.abs(e - b)); }
   ctx.fillStyle = 'rgba(150,140,120,0.55)';
   for (const R of d.blocks || []) { const [a, b] = tx(R[0], R[1]), [c, e] = tx(R[2], R[3]); ctx.fillRect(Math.min(a, c), Math.min(b, e), Math.abs(c - a), Math.abs(e - b)); }
-  for (const z of d.zs || []) { const [a, b] = tx(z[0], z[1]); ctx.fillStyle = z[2] ? '#FF3B2E' : 'rgba(255,70,60,0.85)'; ctx.beginPath(); ctx.arc(a, b, z[2] ? 3.4 : 2.3, 0, Math.PI * 2); ctx.fill(); }
+  for (const z of d.zs || []) {
+    const [a, b] = tx(z[0], z[1]), L = Math.hypot(a, b);
+    if (L > r - 7) {
+      const ux = a / L, uy = b / L, ex = ux * (r - 7), ey = uy * (r - 7);
+      ctx.fillStyle = z[2] ? '#FF3B2E' : 'rgba(255,70,60,0.9)';
+      ctx.beginPath(); ctx.moveTo(ex + ux * 5, ey + uy * 5); ctx.lineTo(ex - uy * 3.6, ey + ux * 3.6); ctx.lineTo(ex + uy * 3.6, ey - ux * 3.6); ctx.closePath(); ctx.fill();
+      continue;
+    }
+    ctx.fillStyle = z[2] ? '#FF3B2E' : 'rgba(255,70,60,0.85)'; ctx.beginPath(); ctx.arc(a, b, z[2] ? 3.4 : 2.3, 0, Math.PI * 2); ctx.fill();
+  }
   for (const a0 of d.acid || []) { const [a, b] = tx(a0[0], a0[1]); ctx.fillStyle = 'rgba(140,220,60,0.45)'; ctx.beginPath(); ctx.arc(a, b, 2.2 * sc, 0, Math.PI * 2); ctx.fill(); }
+  for (const n0 of d.nests || []) { const [a, b] = tx(n0[0], n0[1]); ctx.fillStyle = 'rgba(150,210,60,0.95)'; ctx.strokeStyle = 'rgba(20,30,10,0.9)'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(a, b, Math.max(3.2, 1.6 * sc), 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
+  for (const m0 of d.drops || []) { const [a, b] = tx(m0[0], m0[1]); ctx.fillStyle = '#FF6A4A'; ctx.strokeStyle = 'rgba(40,10,0,0.9)'; ctx.lineWidth = 1.2; ctx.fillRect(a - 3.4, b - 2.6, 6.8, 5.2); ctx.strokeRect(a - 3.4, b - 2.6, 6.8, 5.2); }
+  if (d.heli) { const [a, b] = tx(d.heli[0], d.heli[1]); ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(a - 5, b); ctx.lineTo(a + 5, b); ctx.moveTo(a, b - 5); ctx.lineTo(a, b + 5); ctx.stroke(); ctx.beginPath(); ctx.arc(a, b, 2, 0, Math.PI * 2); ctx.fillStyle = '#FFFFFF'; ctx.fill(); }
+  for (const m0 of d.ammo || []) { const [a, b] = tx(m0[0], m0[1]); ctx.fillStyle = '#FFD84A'; ctx.strokeStyle = 'rgba(40,30,0,0.9)'; ctx.lineWidth = 1; ctx.fillRect(a - 2.6, b - 2, 5.2, 4); ctx.strokeRect(a - 2.6, b - 2, 5.2, 4); }
+  for (const h0 of d.heal || []) { const [a, b] = tx(h0[0], h0[1]); ctx.fillStyle = 'rgba(80,240,130,0.32)'; ctx.strokeStyle = 'rgba(120,255,160,0.95)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(a, b, Math.max(3, h0[2] * sc), 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
   for (const p of d.ps || []) {
     const [a, b] = tx(p[0], p[1]);
     ctx.save(); ctx.translate(a, b); ctx.rotate(-p[2]);
@@ -120,6 +150,10 @@ export function drawMinimap(cv, d) {
   if (d.pet) { const [a, b] = tx(d.pet[0], d.pet[1]); ctx.fillStyle = '#F2D27A'; ctx.beginPath(); ctx.arc(a, b, 2.6, 0, Math.PI * 2); ctx.fill(); }
   ctx.restore();
   ctx.save(); ctx.translate(r, r);
+  const cg = ctx.createRadialGradient(0, 0, 4, 0, 0, r * 0.82);
+  cg.addColorStop(0, 'rgba(255,214,90,0.42)'); cg.addColorStop(1, 'rgba(255,214,90,0)');
+  ctx.fillStyle = cg;
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, r * 0.82, -Math.PI / 2 - 0.62, -Math.PI / 2 + 0.62); ctx.closePath(); ctx.fill();
   ctx.fillStyle = '#FFFFFF';
   ctx.beginPath(); ctx.moveTo(0, -7); ctx.lineTo(5, 5); ctx.lineTo(0, 2.4); ctx.lineTo(-5, 5); ctx.closePath(); ctx.fill();
   ctx.restore();
@@ -130,7 +164,7 @@ export function drawMinimap(cv, d) {
   ctx.fillText('N', nx, ny);
 }
 
-export const EMOTE_LIST = [['wave', 'Wave'], ['cheer', 'Cheer'], ['point', 'This way'], ['thumbs', 'Nice'], ['salute', 'Salute'], ['dance', 'Dance'], ['laugh', 'Laugh'], ['flip', 'Flip']];
+export const EMOTE_LIST = [['wave', 'Wave'], ['cheer', 'Cheer'], ['point', 'This way'], ['thumbs', 'Nice'], ['salute', 'Salute'], ['dance', 'Dance'], ['laugh', 'Laugh'], ['flip', 'Flip'], ['samba', 'Samba'], ['hiphop', 'Hip hop'], ['clap', 'Clap'], ['victory', 'Victory']];
 export const QUICK_LINES = ['Behind you', 'Help me up', 'Reloading', 'Big one coming', 'Stay together', 'Nice shot'];
 
 let wheelCss = false;
@@ -215,9 +249,9 @@ export function EmoteWheel({ icons, onPick, onClose }) {
           const x = 50 + (Math.sin(a) * rc) / 2.08, y = 50 - (Math.cos(a) * rc) / 2.08;
           const on = hot === i;
           return (
-            <div key={k} style={{ position: 'absolute', left: `${x}%`, top: `${y}%`, width: '25%', transform: `translate(-50%,-50%) scale(${on ? 1.08 : 1})`, transition: 'transform 0.1s ease-out', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, pointerEvents: 'none' }}>
+            <div key={k} style={{ position: 'absolute', left: `${x}%`, top: `${y}%`, width: `${Math.min(25, 200 / n)}%`, transform: `translate(-50%,-50%) scale(${on ? 1.08 : 1})`, transition: 'transform 0.1s ease-out', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, pointerEvents: 'none' }}>
               {icons && icons[i] ? <img src={icons[i]} alt="" draggable={false} style={{ width: '88%', aspectRatio: '1', objectFit: 'contain', display: 'block', filter: on ? 'drop-shadow(0 0 6px rgba(224,168,90,0.55))' : 'drop-shadow(0 1px 2px rgba(0,0,0,0.6))' }} /> : null}
-              <span style={{ fontSize: 10.5, fontWeight: 900, lineHeight: 1.1, color: on ? '#F2C27E' : 'rgba(239,232,210,0.82)', whiteSpace: 'nowrap', textShadow: '0 1px 2px rgba(0,0,0,0.7)' }}>{l}</span>
+              <span style={{ fontSize: n > 8 ? 9.5 : 10.5, fontWeight: 900, lineHeight: 1.1, color: on ? '#F2C27E' : 'rgba(239,232,210,0.82)', whiteSpace: 'nowrap', textShadow: '0 1px 2px rgba(0,0,0,0.7)' }}>{l}</span>
             </div>
           );
         })}

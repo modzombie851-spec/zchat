@@ -9,6 +9,9 @@ export const SCHAR = [
   { k: 'ch03', n: 'Zoe', gun: 'smg', v: 'f' },
   { k: 'ch29', n: 'Lily', gun: 'pistol', v: 'f' },
   { k: 'medea', n: 'Medea', gun: 'rifle', v: 'f' },
+  { k: 'lola', n: 'Lola', gun: 'smg', v: 'f' },
+  { k: 'eve', n: 'Eve', gun: 'sniper', v: 'f' },
+  { k: 'ch20', n: 'Max', gun: 'rifle', v: 'm' },
 ];
 export const GUN_SV = { rifle: 'jay', shotgun: 'maya', smg: 'tom', sniper: 'rin', pistol: 'doc' };
 export function charOf(sv, col) {
@@ -20,8 +23,9 @@ export function charOf(sv, col) {
 }
 export const charCol = (k) => 100 + Math.max(0, SCHAR.findIndex((c) => c.k === k));
 
-export const EMO_CLIP = { wave: 'e_wave', cheer: 'e_cheer', point: 'e_point', thumbs: 'e_thumbs', salute: 'e_salute', dance: 'e_dance', laugh: 'e_laugh', flip: 'e_flip' };
-export const EMO_DUR = { wave: 2.6, cheer: 2.9, point: 1.95, thumbs: 3.5, salute: 2.8, dance: 2.6, laugh: 3.6, flip: 2.0 };
+export const EMO_CLIP = { wave: 'e_wave', cheer: 'e_cheer', point: 'e_point', thumbs: 'e_thumbs', salute: 'e_salute', dance: 'e_dance', laugh: 'e_laugh', flip: 'e_flip', samba: 'e_samba', hiphop: 'e_hiphop', clap: 'e_clap', victory: 'e_victory' };
+export const EMO_DUR = { wave: 3.2, cheer: 5.8, point: 3.9, thumbs: 3.6, salute: 3.4, dance: 10.4, laugh: 6.5, flip: 2.0, samba: 10.7, hiphop: 12.6, clap: 4.6, victory: 5.6 };
+const EMO_REP = { wave: 'pp', cheer: 'pp', point: 'pp', thumbs: 'pp', laugh: 'pp', dance: 'loop', samba: 'loop', hiphop: 'loop', clap: 'loop', victory: 'loop' };
 export const emoDur = (k) => EMO_DUR[k] || 2.7;
 
 const NB = 52, HAND_R = 28;
@@ -37,7 +41,7 @@ const LOCO_C = { F: { walk: ['c_fwd'], run: [] }, B: { walk: ['c_back'], run: []
 const ss = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const first = (C, L) => { for (const n of L) if (C[n]) return n; return null; };
-const pistolish = (w) => w === 'pistol';
+const pistolish = (w) => w === 'pistol' || w === 'deagle';
 
 function qmul(o, oi, a, ai, b, bi) {
   const ax = a[ai], ay = a[ai + 1], az = a[ai + 2], aw = a[ai + 3];
@@ -246,11 +250,18 @@ export function ssPose(md, C, S, inp, dt) {
   else if ((inp.st === 1 || inp.kneel) && C.s_kneel) { mode = 'kneel'; full = 's_kneel'; }
   else if (inp.slide && C.slide) { mode = 'slide'; full = 'slide'; }
   else if (inp.air && C.j_loop) { mode = 'air'; full = 'j_loop'; }
-  else if (inp.emo && C[EMO_CLIP[inp.emo]]) { mode = 'emo:' + inp.emo; full = EMO_CLIP[inp.emo]; fullT = inp.emoT || 0; }
+  else if (inp.emo && C[EMO_CLIP[inp.emo]]) {
+    mode = 'emo:' + inp.emo; full = EMO_CLIP[inp.emo]; fullT = inp.emoT || 0;
+    const ec = C[full], rep = EMO_REP[inp.emo];
+    if (rep === 'pp') { const pq = fullT % (2 * ec.dur); fullT = pq > ec.dur ? 2 * ec.dur - pq : pq; } else if (rep === 'loop') fullT %= ec.dur;
+  }
   if (mode !== S.mode) {
     if (S.mode) { S.qs.set(S.q); S.hs[0] = S.hp[0]; S.hs[1] = S.hp[1]; S.hs[2] = S.hp[2]; S.snapW = 1; }
     S.mode = mode; S.modeT = 0;
   }
+  const crNow = mode === 'loco' && !!inp.crouch && !!C.c_idle;
+  if (S.crP != null && crNow !== S.crP && S.snapW < 0.6) { S.qs.set(S.q); S.hs[0] = S.hp[0]; S.hs[1] = S.hp[1]; S.hs[2] = S.hp[2]; S.snapW = 1; }
+  S.crP = crNow;
   S.modeT += dt;
   const q = S.q, hp = S.hp;
   if (full) {
@@ -262,7 +273,8 @@ export function ssPose(md, C, S, inp, dt) {
     S.it += dt;
     const crouch = !!inp.crouch && !!C.c_idle;
     const idle = crouch ? 'c_idle' : pist && C.p_idle ? 'p_idle' : 's_idle';
-    sampleK(md, C, idle, S.it, S.qb, S.hb);
+    const idur = C[idle].dur, ip = S.it % (2 * idur);
+    sampleK(md, C, idle, ip > idur ? 2 * idur - ip : ip, S.qb, S.hb);
     const wMove = ss(0.12, 0.6, S.v);
     if (wMove > 0.001 && locomotion(md, C, S, crouch ? { ...inp, crouch } : inp, dt)) {
       for (let i = 0; i < NB; i++) nlerp(q, i * 4, S.qb, i * 4, S.qa, i * 4, wMove);
@@ -278,7 +290,7 @@ export function ssPose(md, C, S, inp, dt) {
         const fix = gunYaw(md, C, runClip, 0) * 0.5;
         applyUpper(S, q, null, S.qu, 0, 'full', wMove * (1 - wSpr), fix);
         if (wSpr > 0.001) {
-          sampleK(md, C, idle, S.it, S.qv, S.hv);
+          sampleK(md, C, idle, ip > idur ? 2 * idur - ip : ip, S.qv, S.hv);
           applyUpper(S, q, null, S.qv, 0, 'arms', wSpr * wMove, 0);
         }
       }

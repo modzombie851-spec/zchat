@@ -18596,7 +18596,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-export const APP_VERSION = '53.3V';
+export const APP_VERSION = '54.0V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -36537,7 +36537,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [rollPick, setRollPick] = useState(null);
   const [gulpRoom, setGulpRoom] = useState(null);
   const [gulpPick, setGulpPick] = useState(null);
-  if (typeof window !== 'undefined' && window.__zfake) { window.__zopenGulpRoom = (rm) => setGulpRoom({ rm }); window.__zopenZombie = () => setZombieGame({ at: Date.now() }); window.__zopenRoll = (rm, host, watch) => setRollGame({ rm, host, watch: !!watch }); window.__zopenRace = (rm, host, watch) => setRaceGame({ rm, host, watch: !!watch }); window.__zraceSolo = () => setRaceGame({ solo: true, rm: 'solo' }); window.__zsiegeSolo = () => setSiegeGame({ solo: true, rm: 'solo' }); window.__zopenSiege = (rm, host, watch) => setSiegeGame({ rm, host, watch: !!watch }); }
+  if (typeof window !== 'undefined' && window.__zfake) { window.__zopenGulpRoom = (rm) => setGulpRoom({ rm }); window.__zopenZombie = (j) => setZombieGame({ at: Date.now(), join: j || null }); window.__zopenRoll = (rm, host, watch) => setRollGame({ rm, host, watch: !!watch }); window.__zopenRace = (rm, host, watch) => setRaceGame({ rm, host, watch: !!watch }); window.__zraceSolo = () => setRaceGame({ solo: true, rm: 'solo' }); window.__zsiegeSolo = () => setSiegeGame({ solo: true, rm: 'solo' }); window.__zopenSiege = (rm, host, watch) => setSiegeGame({ rm, host, watch: !!watch }); }
   const joinLivePlay = async (r) => {
     const info = (r && r.info) || {};
     if (!r) return;

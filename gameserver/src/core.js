@@ -1,6 +1,6 @@
 import { makeSim } from '../../src/games/zsim.js';
 
-export const CAP = { siege: 20, race: 12, roll: 8, gulp: 12, duo: 2, zombie: 50 };
+export const CAP = { siege: 20, race: 12, roll: 8, gulp: 12, duo: 2, zombie: 5 };
 export const REGIONS = { asia: 'apac', usa: 'enam', eu: 'weur' };
 const TICK = 1 / 15;
 
@@ -42,7 +42,7 @@ export class RoomCore {
     if (this.zombie) {
       this.ensureSim();
       this.idleAt = 0;
-      this.sim.addPlayer(c.id, { n: c.m && c.m.n, sv: c.m && c.m.sv, col: c.m && c.m.col, w: c.m && c.m.w, pet: c.m && c.m.pet });
+      this.sim.addPlayer(c.id, { n: c.m && c.m.n, sv: c.m && c.m.sv, col: c.m && c.m.col, w: c.m && c.m.w, pet: c.m && c.m.pet, cash: c.m && c.m.cash });
       if (this.io.away) this.io.away(c.id, this.name, false);
       this.sendTo(c, { t: '$hi', me: c.id, at: Date.now(), room: this.name, cap: this.cap, roster: this.sim.roster(), s: this.sim.snap() });
       this.startLoop();
@@ -97,7 +97,7 @@ export class RoomCore {
     if (this.zombie) {
       const S = this.sim;
       if (!S) return;
-      if (t === 'p') { S.setPlayer(c.id, m); if (Array.isArray(m.h) && m.h.length) S.shoot(c.id, m.w, m.h); if (m.sh) this.broadcast({ t: 'sh', from: c.id, sh: m.sh, w: m.w }, c.id); return; }
+      if (t === 'p') { S.setPlayer(c.id, m); if (Array.isArray(m.h) && m.h.length) S.shoot(c.id, m.w, m.h); if (Array.isArray(m.nh) && m.nh.length && S.shootNest) S.shootNest(c.id, m.w, m.nh); if (m.sh) this.broadcast({ t: 'sh', from: c.id, sh: m.sh, w: m.w }, c.id); return; }
       if (t === 'ml') { S.melee(c.id, m.k); return; }
       if (t === 'th') { S.throwAt(c.id, m.k, Number(m.x), Number(m.z)); return; }
       if (t === 'ct' || t === 'emo') { this.broadcast({ ...m, from: c.id, at: Date.now() }, c.id); return; }
@@ -110,7 +110,7 @@ export class RoomCore {
 
   ensureSim() {
     if (this.sim) return;
-    this.sim = makeSim({ maxAlive: 80, botFill: this.noBots ? 0 : 4 });
+    this.sim = makeSim({ maxAlive: 80, botFill: this.noBots ? 0 : 4, firstBreak: 25 });
     for (const c of this.conns()) this.sim.addPlayer(c.id, c.m || {});
   }
 

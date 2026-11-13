@@ -595,9 +595,10 @@ layout(location=1) in vec4 aCenter;
 layout(location=2) in vec3 aInfo;
 layout(location=3) in vec4 aDir;
 uniform mat4 uVP; uniform vec3 uRight, uUp, uCam;
-out vec2 vUv; out vec3 vInfo; out vec3 vPos;
+out vec2 vUv; out vec3 vInfo; out vec3 vPos; out float vGy;
 void main() {
   vec3 p;
+  vGy = -1e4;
   if (aDir.w > 0.0) {
     vec3 ax = aDir.xyz;
     float al = length(ax);
@@ -613,13 +614,18 @@ void main() {
     float an = aInfo.z * 6.2832, ca = cos(an), sa = sin(an);
     p = aCenter.xyz + n * 0.012 + ((t1 * ca + t2 * sa) * aCorner.x + (t2 * ca - t1 * sa) * aCorner.y) * aCenter.w;
   } else if (aDir.w < 0.0) p = aCenter.xyz + vec3(aCorner.x, 0.0, aCorner.y) * aCenter.w;
-  else p = aCenter.xyz + (uRight * aCorner.x + uUp * aCorner.y) * aCenter.w;
+  else {
+    float an = aDir.x, ca = cos(an), sa = sin(an);
+    vec2 cr = vec2(aCorner.x * ca - aCorner.y * sa, aCorner.x * sa + aCorner.y * ca);
+    p = aCenter.xyz + (uRight * cr.x + uUp * cr.y) * aCenter.w;
+    if (aDir.y != 0.0) vGy = aDir.y - 1000.0;
+  }
   vUv = aCorner; vInfo = aInfo; vPos = p;
   gl_Position = uVP * vec4(p, 1.0);
 }`;
 const PFS = `#version 300 es
 precision highp float;
-in vec2 vUv; in vec3 vInfo; in vec3 vPos;
+in vec2 vUv; in vec3 vInfo; in vec3 vPos; in float vGy;
 uniform vec3 uCam, uFogCol; uniform float uFogDen, uFxOn, uFx2On, uBoomOn;
 uniform sampler2D uFx, uFx2, uBoom;
 out vec4 o;
@@ -635,8 +641,9 @@ float vn(vec2 p) { vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 
 void main() {
   float r = length(vUv);
   if (r > 1.0) discard;
+  float VX = vInfo.x * (vGy > -9000.0 ? smoothstep(vGy - 0.05, vGy + 0.75, vPos.y) : 1.0);
   float t = vInfo.y;
-  float a = (1.0 - smoothstep(0.15, 1.0, r)) * vInfo.x;
+  float a = (1.0 - smoothstep(0.15, 1.0, r)) * VX;
   vec3 c; float add = 0.0;
   if (t > 27.5) {
     float d0 = length(uCam - vPos);
@@ -644,33 +651,65 @@ void main() {
     vec3 fc = pow(uFogCol, vec3(1.0 / 2.2));
     vec2 uv = vec2(vUv.x * 0.5 + 0.5, 0.5 - vUv.y * 0.5);
     if (t < 28.5) {
-      if (uFx2On < 0.5) { float e = 1.0 - smoothstep(0.15, 0.5, r); float a3 = e * vInfo.x * 0.85; o = vec4(vec3(0.02) * a3, a3); return; }
+      if (uFx2On < 0.5) { float e = 1.0 - smoothstep(0.15, 0.5, r); float a3 = e * VX * 0.85; o = vec4(vec3(0.02) * a3, a3); return; }
       vec4 tx = texture(uFx2, vec2(uv.x * 0.25, 0.5 + uv.y * 0.5));
-      float a3 = tx.a * vInfo.x;
+      float a3 = tx.a * VX;
       o = vec4(mix(tx.rgb * 0.45, fc, f0) * a3, a3);
       return;
     }
     if (t < 29.5) {
-      if (uFx2On < 0.5) { float e = 1.0 - smoothstep(0.0, 1.0, r); o = vec4(vec3(1.0, 0.8, 0.45) * 2.0 * e * e * vInfo.x, 0.0); return; }
+      if (uFx2On < 0.5) { float e = 1.0 - smoothstep(0.0, 1.0, r); o = vec4(vec3(1.0, 0.8, 0.45) * 2.0 * e * e * VX, 0.0); return; }
       float tile = floor(vInfo.z * 3.999), an = vInfo.z * 41.0, ca = cos(an), sa = sin(an);
       vec2 q = vec2(ca * vUv.x - sa * vUv.y, sa * vUv.x + ca * vUv.y);
       vec3 tx = texture(uFx2, vec2((tile + q.x * 0.5 + 0.5) * 0.25, (0.5 - q.y * 0.5) * 0.5)).rgb;
-      o = vec4(tx * vec3(1.15, 1.0, 0.86) * 1.7 * vInfo.x, 0.0);
+      o = vec4(tx * vec3(1.15, 1.0, 0.86) * 1.7 * VX, 0.0);
       return;
     }
     if (t < 30.5) {
-      if (uFx2On < 0.5) { float e = 1.0 - smoothstep(0.0, 1.0, r); o = vec4(vec3(1.0, 0.75, 0.4) * 1.6 * e * e * vInfo.x, 0.0); return; }
+      if (uFx2On < 0.5) { float e = 1.0 - smoothstep(0.0, 1.0, r); o = vec4(vec3(1.0, 0.75, 0.4) * 1.6 * e * e * VX, 0.0); return; }
       vec3 tx = texture(uFx2, vec2((1.0 + vUv.y * 0.5 + 0.5) * 0.25, 0.5 + (0.5 - vUv.x * 0.5) * 0.5)).rgb;
-      o = vec4(tx * vec3(1.15, 0.95, 0.8) * 1.5 * vInfo.x, 0.0);
+      o = vec4(tx * vec3(1.15, 0.95, 0.8) * 1.5 * VX, 0.0);
       return;
     }
-    if (uBoomOn < 0.5) { float e = 1.0 - smoothstep(0.0, 1.0, r); o = vec4(vec3(1.0, 0.6, 0.25) * 1.6 * e * vInfo.x * (1.0 - vInfo.z), 0.0); return; }
+    if (t > 32.5) {
+      float sd2 = vInfo.z * 17.0;
+      float n2 = vn(vUv * 2.4 + sd2) * 0.6 + vn(vUv * 5.6 - sd2 * 1.3) * 0.4;
+      if (t < 33.5) {
+        float m2 = uFxOn > 0.5 ? fxTile(6.0 + floor(vInfo.z * 5.99), vInfo.z * 6.283) : 1.0 - smoothstep(0.35 + n2 * 0.35, 1.0, r);
+        float a2 = m2 * VX;
+        vec3 c2 = mix(vec3(0.06, 0.055, 0.05), vec3(0.38, 0.36, 0.33), clamp(0.45 + vUv.y * 0.3 + m2 * 0.2, 0.0, 1.0));
+        o = vec4(mix(c2, fc, f0) * a2, a2);
+        return;
+      }
+      if (t < 34.5) {
+        float e2 = 1.0 - smoothstep(0.42 + n2 * 0.4, 0.6 + n2 * 0.4, r);
+        vec3 c2 = mix(vec3(0.06, 0.05, 0.035), vec3(0.22, 0.17, 0.12), n2);
+        float a2 = e2 * VX;
+        o = vec4(mix(c2, fc, f0) * a2, a2);
+        return;
+      }
+      float ring2 = smoothstep(0.5, 0.88, r) * (1.0 - smoothstep(0.88, 1.0, r));
+      float br2 = 0.55 + 0.45 * vn(vec2(atan(vUv.y, vUv.x) * 6.0, sd2));
+      float a2 = ring2 * br2 * VX * 0.6;
+      o = vec4(mix(vec3(0.6, 0.55, 0.48), fc, f0) * a2, a2);
+      return;
+    }
+    if (t > 31.5 && t < 32.5) {
+      float ring = smoothstep(0.84, 0.93, r) * (1.0 - smoothstep(0.95, 1.0, r));
+      float pulse = 0.7 + 0.3 * sin(vInfo.z * 6.2832);
+      float wave = smoothstep(0.06, 0.0, abs(r - fract(vInfo.z * 2.0))) * 0.45;
+      float fill = (1.0 - smoothstep(0.0, 0.92, r)) * 0.16 + wave * step(r, 0.92);
+      float a2 = (ring * pulse + fill) * VX;
+      o = vec4(vec3(0.3, 1.0, 0.5) * 1.5 * a2, 0.0);
+      return;
+    }
+    if (uBoomOn < 0.5) { float e = 1.0 - smoothstep(0.0, 1.0, r); o = vec4(vec3(1.0, 0.6, 0.25) * 1.6 * e * VX * (1.0 - vInfo.z), 0.0); return; }
     float fr = clamp(vInfo.z, 0.0, 1.0) * 15.0, fa = floor(fr), fb = min(15.0, fa + 1.0), k = fr - fa;
     vec4 b0 = texture(uBoom, (vec2(mod(fa, 4.0), floor(fa / 4.0)) + uv) * 0.25);
     vec4 b1 = texture(uBoom, (vec2(mod(fb, 4.0), floor(fb / 4.0)) + uv) * 0.25);
     vec4 tx = mix(b0, b1, k);
-    float a3 = tx.a * vInfo.x;
-    o = vec4(mix(tx.rgb * 1.3, fc * tx.a, f0 * 0.7) * vInfo.x, a3);
+    float a3 = tx.a * VX;
+    o = vec4(mix(tx.rgb * 1.3, fc * tx.a, f0 * 0.7) * VX, a3);
     return;
   }
   if (t > 21.5) {
@@ -683,21 +722,21 @@ void main() {
       float e = 1.0 - smoothstep(0.5 + n * 0.38, 0.6 + n * 0.38, r);
       float wet = smoothstep(0.55, 0.0, length(vUv - vec2(-0.2, 0.25))) * 0.35;
       vec3 c2 = mix(vec3(0.13, 0.01, 0.008), vec3(0.26, 0.018, 0.012), n) + wet * vec3(0.3, 0.12, 0.1);
-      float a2 = e * vInfo.x;
+      float a2 = e * VX;
       o = vec4(mix(c2, fc, f0) * a2, a2);
       return;
     }
     if (t < 23.5) {
       float e = 1.0 - smoothstep(0.2 + n * 0.5, 1.0, r);
       vec3 c2 = mix(vec3(0.32, 0.015, 0.012), vec3(0.6, 0.05, 0.035), n);
-      float a2 = e * vInfo.x * smoothstep(0.3, 1.2, d0);
+      float a2 = e * VX * smoothstep(0.3, 1.2, d0);
       o = vec4(mix(c2, fc, f0) * a2, a2);
       return;
     }
     if (t < 24.5) {
       float e = 1.0 - smoothstep(0.3 + n * 0.4, 1.0, r);
       vec3 c2 = mix(vec3(0.34, 0.31, 0.27), vec3(0.55, 0.51, 0.45), clamp(0.5 - vUv.y * 0.4 + n * 0.3, 0.0, 1.0));
-      float a2 = e * vInfo.x * 0.8 * smoothstep(0.6, 2.5, d0);
+      float a2 = e * VX * 0.8 * smoothstep(0.6, 2.5, d0);
       o = vec4(mix(c2, fc, f0) * a2, a2);
       return;
     }
@@ -705,26 +744,26 @@ void main() {
       float core = 1.0 - smoothstep(0.0, 0.6, r);
       float e = 1.0 - smoothstep(0.25 + n * 0.45, 1.0, r);
       vec3 c2 = mix(vec3(0.25, 0.75, 0.08), vec3(0.75, 1.0, 0.35), core) * 1.4;
-      float a2 = e * vInfo.x;
+      float a2 = e * VX;
       o = vec4(mix(c2, fc, f0 * 0.5) * a2, 0.0);
       return;
     }
     if (t < 26.5) {
       float e = 1.0 - smoothstep(0.5 + n * 0.35, 0.62 + n * 0.35, r);
       vec3 c2 = mix(vec3(0.18, 0.42, 0.05), vec3(0.42, 0.75, 0.12), n) * 1.3;
-      float a2 = e * vInfo.x;
+      float a2 = e * VX;
       o = vec4(mix(c2, fc, f0 * 0.5) * a2, a2 * 0.5);
       return;
     }
     float e = 1.0 - smoothstep(0.0, 1.0, r);
     vec3 c2 = vec3(1.0, 0.75, 0.4) * 2.2;
-    float a2 = e * e * vInfo.x;
+    float a2 = e * e * VX;
     o = vec4(c2 * a2, 0.0);
     return;
   }
   if (t > 20.5) {
     float e = 1.0 - smoothstep(0.0, 1.0, r);
-    float a2 = e * e * vInfo.x;
+    float a2 = e * e * VX;
     o = vec4(0.0, 0.0, 0.0, a2);
     return;
   }
@@ -736,16 +775,16 @@ void main() {
     vec3 c1; float a1;
     if (t < 11.5) {
       float m = fxTile(6.0 + floor(sd * 5.99), sd * 6.283);
-      a1 = m * vInfo.x * 0.85;
+      a1 = m * VX * 0.85;
       c1 = mix(vec3(0.2, 0.19, 0.19), vec3(0.55, 0.53, 0.51), clamp(0.55 - vUv.y * 0.35 + m * 0.3, 0.0, 1.0));
     } else if (t < 12.5) {
       float m = sd < 0.45 ? fxTile(floor(sd * 4.44), sd * 6.283) : fxTile(2.0 + floor((sd - 0.45) * 7.27), (sd - 0.7) * 0.6);
-      a1 = m * vInfo.x;
+      a1 = m * VX;
       c1 = mix(vec3(0.95, 0.24, 0.04), vec3(1.0, 0.86, 0.45), clamp(m * m * 1.3, 0.0, 1.0)) * 1.55;
       add1 = 0.65;
     } else {
       float m = fxTile(12.0 + floor(sd * 1.99), sd * 6.283);
-      a1 = m * vInfo.x;
+      a1 = m * VX;
       c1 = vec3(1.0, 0.9, 0.7) * 2.2;
       add1 = 1.0;
     }
@@ -757,16 +796,16 @@ void main() {
   if (t > 10.5) {
     float sd = vInfo.z * 17.0;
     float n = vn(vUv * 2.6 + sd) * 0.62 + vn(vUv * 5.3 - sd * 1.7) * 0.38;
-    if (t < 11.5) { float e = 1.0 - smoothstep(0.38 + n * 0.32, 0.98, r); a = e * vInfo.x * 0.92; c = mix(vec3(0.34, 0.33, 0.33), vec3(0.62, 0.6, 0.58), clamp(0.5 - vUv.y * 0.5 + n * 0.3, 0.0, 1.0)); }
-    else if (t < 12.5) { float e = 1.0 - smoothstep(0.3 + n * 0.4, 1.0, r); float core = 1.0 - smoothstep(0.0, 0.55 + n * 0.2, r); c = mix(vec3(0.95, 0.22, 0.04), mix(vec3(1.0, 0.62, 0.12), vec3(1.0, 0.96, 0.7), core), clamp(core * 1.4 + n * 0.3, 0.0, 1.0)) * 1.7; a = e * vInfo.x; add = 1.0; }
-    else if (t < 13.5) { float ring = smoothstep(0.5, 0.86, r) * (1.0 - smoothstep(0.86, 1.0, r)); float br = 0.6 + 0.4 * vn(vec2(atan(vUv.y, vUv.x) * 5.0, sd)); a = (ring * br + (1.0 - smoothstep(0.0, 0.86, r)) * 0.12) * vInfo.x * 1.2; c = mix(vec3(0.85, 0.62, 0.38), vec3(1.0, 0.9, 0.7), ring) * 1.25; add = 0.6; }
-    else if (t < 14.5) { float ring = smoothstep(0.58, 0.88, r) * (1.0 - smoothstep(0.88, 1.0, r)); float br = 0.55 + 0.45 * vn(vec2(atan(vUv.y, vUv.x) * 7.0, sd)); a = (ring * br + (1.0 - smoothstep(0.0, 0.88, r)) * 0.16) * vInfo.x * 1.3; c = mix(vec3(0.16, 0.55, 1.0), vec3(0.62, 0.94, 1.0), ring) * 1.45; add = 1.0; }
-    else if (t < 15.5) { float core = 1.0 - smoothstep(0.0, 0.42, r); a = (core * 1.25 + (1.0 - smoothstep(0.2, 1.0, r)) * 0.45) * vInfo.x; c = mix(vec3(0.25, 0.62, 1.0), vec3(0.94, 0.98, 1.0), core) * 1.7; add = 1.0; }
-    else if (t < 16.5) { a = (1.0 - smoothstep(0.0, 1.0, r)) * vInfo.x; c = vec3(1.0, 0.94, 0.8) * 2.4; add = 1.0; }
-    else if (t < 17.5) { float e = 1.0 - smoothstep(0.55, 0.95, r); float hi = 1.0 - smoothstep(0.0, 0.3, length(vUv - vec2(-0.3, 0.35))); a = e * vInfo.x; c = vec3(0.04, 0.04, 0.06) + hi * 0.55; }
-    else if (t < 18.5) { float e = 1.0 - smoothstep(0.35 + n * 0.35, 1.0, r); a = e * vInfo.x * 0.7; c = mix(vec3(0.72, 0.72, 0.74), vec3(0.92, 0.92, 0.94), n); }
-    else if (t < 19.5) { float core = 1.0 - smoothstep(0.0, 0.5, r); c = mix(vec3(0.22, 0.32, 1.0), vec3(0.72, 0.9, 1.0), core) * 1.5; a = (1.0 - smoothstep(0.1 + n * 0.3, 1.0, r)) * vInfo.x; add = 1.0; }
-    else { float core = 1.0 - smoothstep(0.0, 0.35, r); c = mix(vec3(0.12, 0.32, 1.0), vec3(0.8, 0.9, 1.0), core) * 1.8; a = (core * 0.9 + (1.0 - smoothstep(0.0, 1.0, r)) * 0.6) * vInfo.x; add = 1.0; }
+    if (t < 11.5) { float e = 1.0 - smoothstep(0.38 + n * 0.32, 0.98, r); a = e * VX * 0.92; c = mix(vec3(0.34, 0.33, 0.33), vec3(0.62, 0.6, 0.58), clamp(0.5 - vUv.y * 0.5 + n * 0.3, 0.0, 1.0)); }
+    else if (t < 12.5) { float e = 1.0 - smoothstep(0.3 + n * 0.4, 1.0, r); float core = 1.0 - smoothstep(0.0, 0.55 + n * 0.2, r); c = mix(vec3(0.95, 0.22, 0.04), mix(vec3(1.0, 0.62, 0.12), vec3(1.0, 0.96, 0.7), core), clamp(core * 1.4 + n * 0.3, 0.0, 1.0)) * 1.7; a = e * VX; add = 1.0; }
+    else if (t < 13.5) { float ring = smoothstep(0.5, 0.86, r) * (1.0 - smoothstep(0.86, 1.0, r)); float br = 0.6 + 0.4 * vn(vec2(atan(vUv.y, vUv.x) * 5.0, sd)); a = (ring * br + (1.0 - smoothstep(0.0, 0.86, r)) * 0.12) * VX * 1.2; c = mix(vec3(0.85, 0.62, 0.38), vec3(1.0, 0.9, 0.7), ring) * 1.25; add = 0.6; }
+    else if (t < 14.5) { float ring = smoothstep(0.58, 0.88, r) * (1.0 - smoothstep(0.88, 1.0, r)); float br = 0.55 + 0.45 * vn(vec2(atan(vUv.y, vUv.x) * 7.0, sd)); a = (ring * br + (1.0 - smoothstep(0.0, 0.88, r)) * 0.16) * VX * 1.3; c = mix(vec3(0.16, 0.55, 1.0), vec3(0.62, 0.94, 1.0), ring) * 1.45; add = 1.0; }
+    else if (t < 15.5) { float core = 1.0 - smoothstep(0.0, 0.42, r); a = (core * 1.25 + (1.0 - smoothstep(0.2, 1.0, r)) * 0.45) * VX; c = mix(vec3(0.25, 0.62, 1.0), vec3(0.94, 0.98, 1.0), core) * 1.7; add = 1.0; }
+    else if (t < 16.5) { a = (1.0 - smoothstep(0.0, 1.0, r)) * VX; c = vec3(1.0, 0.94, 0.8) * 2.4; add = 1.0; }
+    else if (t < 17.5) { float e = 1.0 - smoothstep(0.55, 0.95, r); float hi = 1.0 - smoothstep(0.0, 0.3, length(vUv - vec2(-0.3, 0.35))); a = e * VX; c = vec3(0.04, 0.04, 0.06) + hi * 0.55; }
+    else if (t < 18.5) { float e = 1.0 - smoothstep(0.35 + n * 0.35, 1.0, r); a = e * VX * 0.7; c = mix(vec3(0.72, 0.72, 0.74), vec3(0.92, 0.92, 0.94), n); }
+    else if (t < 19.5) { float core = 1.0 - smoothstep(0.0, 0.5, r); c = mix(vec3(0.22, 0.32, 1.0), vec3(0.72, 0.9, 1.0), core) * 1.5; a = (1.0 - smoothstep(0.1 + n * 0.3, 1.0, r)) * VX; add = 1.0; }
+    else { float core = 1.0 - smoothstep(0.0, 0.35, r); c = mix(vec3(0.12, 0.32, 1.0), vec3(0.8, 0.9, 1.0), core) * 1.8; a = (core * 0.9 + (1.0 - smoothstep(0.0, 1.0, r)) * 0.6) * VX; add = 1.0; }
     float d0 = length(uCam - vPos);
     a *= smoothstep(1.2, 5.5, d0);
     float f0 = 1.0 - exp(-pow(d0 * uFogDen, 1.35));
@@ -1460,9 +1499,10 @@ export function createRenderer(canvas, opts = {}) {
       if (scene.vmLights) setLights(P, { lights: scene.vmLights, spot: scene.spot });
       gl.uniform1f(P.u.uMode, 0);
       gl.uniform1f(P.u.uAlpha, 1);
-      let vb = null, vt = null;
+      let vb = null, vt = null, va = null;
       for (const it of vm) {
         if (it.blend) { (vb || (vb = [])).push(it); continue; }
+        if (it.arrs) { (va || (va = [])).push(it); continue; }
         if (it.mesh.tsk) { (vt || (vt = [])).push(it); continue; }
         gl.uniformMatrix4fv(P.u.uModel, false, it.model || IDENT);
         gl.bindVertexArray(it.mesh.vao);
@@ -1486,6 +1526,28 @@ export function createRenderer(canvas, opts = {}) {
           gl.bindVertexArray(it.mesh.vao);
           gl.drawElements(gl.TRIANGLES, it.cnt || it.mesh.n, gl.UNSIGNED_SHORT, (it.off || 0) * 2);
         }
+        gl.activeTexture(gl.TEXTURE0);
+        gl.useProgram(P.p);
+        gl.uniformMatrix4fv(P.u.uVP, false, VVP);
+      }
+      if (va && TAP) {
+        setMain(TAP);
+        gl.uniformMatrix4fv(TAP.u.uVP, false, VVP);
+        if (scene.vmLights) setLights(TAP, { lights: scene.vmLights, spot: scene.spot });
+        gl.uniform1i(TAP.u.uArr, 1);
+        gl.activeTexture(gl.TEXTURE1);
+        let lt = null;
+        for (const it of va) {
+          gl.uniform4fv(TAP.u.uCol, it.col || DEFCOL);
+          gl.uniformMatrix4fv(TAP.u.uModel, false, it.model || IDENT);
+          gl.bindVertexArray(it.mesh.vao);
+          for (const g of it.mesh.groups) {
+            const tx = it.arrs[g.arr];
+            if (tx !== lt) { gl.bindTexture(gl.TEXTURE_2D_ARRAY, tx); lt = tx; }
+            gl.drawElements(gl.TRIANGLES, g.count, it.mesh.it, g.off);
+          }
+        }
+        gl.bindTexture(gl.TEXTURE_2D_ARRAY, null);
         gl.activeTexture(gl.TEXTURE0);
         gl.useProgram(P.p);
         gl.uniformMatrix4fv(P.u.uVP, false, VVP);

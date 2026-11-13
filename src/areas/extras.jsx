@@ -6574,26 +6574,34 @@ function WnSegments({ total, at, onArt, dark }) {
   );
 }
 
-const WN_PHOTOS = { zombies49: '/wn49-zombies.webp', mutant49: '/wn49-mutant.webp', guns50: '/wn50-guns.webp', house50: '/wn50-house.webp', pond50: '/wn50-pond.webp', buttons50: '/wn50-buttons.webp', settings50: '/wn50-settings.webp', pack51: '/wn51-pack.webp', emote51: '/wn51-emote.webp', lobby51: '/wn51-lobby.webp', waves52: '/wn52-waves.webp', sky52: '/wn52-sky.webp', map52: '/wn52-map.webp', boss53: '/wn53-boss.webp', fire53: '/wn53-fire.webp', dog53: '/wn53-dog.webp', train53: '/wn53-train.webp', hud531: '/wn531-hud.webp', moves531: '/wn531-moves.webp', pc531: '/wn531-pc.webp' };
+const WN_PHOTOS = { zombies49: '/wn49-zombies.webp', mutant49: '/wn49-mutant.webp', guns50: '/wn50-guns.webp', house50: '/wn50-house.webp', pond50: '/wn50-pond.webp', buttons50: '/wn50-buttons.webp', settings50: '/wn50-settings.webp', pack51: '/wn51-pack.webp', emote51: '/wn51-emote.webp', lobby51: '/wn51-lobby.webp', waves52: '/wn52-waves.webp', sky52: '/wn52-sky.webp', map52: '/wn52-map.webp', boss53: '/wn53-boss.webp', fire53: '/wn53-fire.webp', dog53: '/wn53-dog.webp', train53: '/wn53-train.webp', hud531: '/wn531-hud.webp', moves531: '/wn531-moves.webp', pc531: '/wn531-pc.webp', squad54: '/wn54-squad.webp', boom54: '/wn54-boom.webp', heli54: '/wn54-heli.webp', gas54: '/wn54-gas.webp' };
 const WN_HIGHLIGHTS = [
-  { k: 'hud531', art: 'hud531', go: 'zombie', cta: 'Play now', title: 'Make the buttons yours', text: 'In Dead Town, open Settings, then Controls, then Custom HUD. Drag any button where you like it, make it bigger or smaller and choose how see through it is.' },
-  { k: 'moves531', art: 'moves531', go: 'zombie', cta: 'Play now', title: 'Real crouch, jump and slide', text: 'Your survivor now really crouches, jumps and slides, so everyone in the game sees your moves. Sprint and tap Crouch to slide.' },
-  { k: 'pc531', art: 'pc531', go: 'zombie', cta: 'Play now', title: 'Mouse and keyboard on a computer', text: 'Click once and the mouse turns the camera like any computer game. Every key is shown on screen, and Esc frees the mouse.' },
+  { k: 'squad54', art: 'squad54', go: 'zombie', cta: 'Play now', title: 'Play as a squad of five', text: 'Invite up to four friends to Dead Town. They stand next to you in the lobby, everyone can do emotes, and the leader taps Start.' },
+  { k: 'boom54', art: 'boom54', go: 'zombie', cta: 'Play now', title: 'Real explosions', text: 'Fireballs with thick smoke, bodies that fly and break apart, zombies that burn and scream, and C4 you set off yourself.' },
+  { k: 'heli54', art: 'heli54', go: 'zombie', cta: 'Play now', title: 'Airdrops from a helicopter', text: 'A helicopter flies over the town and drops a crate with guns, armor plates, C4 and cash. Get to it first.' },
+  { k: 'gas54', art: 'gas54', go: 'zombie', cta: 'Play now', title: 'A new gas station and a seller', text: 'Buy new guns, armor plates and more from the seller. The cash you earn now stays with you between games.' },
 ];
 const WN_SECTIONS = [
   { title: 'Dead Town', items: [
-    { art: 'hud531', title: 'Custom HUD', text: 'Move, resize and fade every button.' },
-    { art: 'moves531', title: 'Real moves', text: 'Crouch, jump and slide that everyone can see.' },
-    { art: 'hud531', title: 'Tap or hold to aim', text: 'Choose how the aim button works.' },
-    { art: 'hud531', title: 'Turn while aiming', text: 'Drag the aim button to turn the camera.' },
-    { art: 'moves531', title: 'Always sprint', text: 'Push the stick forward and you run.' },
-    { art: 'pc531', title: 'Mouse and keyboard', text: 'Real mouse look on a computer.' },
+    { art: 'squad54', title: 'Squad lobby', text: 'Up to five players, with your friends next to you.' },
+    { art: 'waves52', title: 'Join at the next wave', text: 'Join a game and come in when the wave ends.' },
+    { art: 'gas54', title: 'Cash you keep', text: 'Your cash stays with you between games.' },
+    { art: 'guns50', title: 'Nine new guns', text: 'AK47, Uzi, QQ9, M249, XPR, AWM, Desert Eagle, SPAS 12 and a bomb gun.' },
+    { art: 'boom54', title: 'Armor plates and C4', text: 'Put in plates to block damage and set off C4 when you like.' },
+    { art: 'heli54', title: 'Airdrops', text: 'A helicopter drops a crate full of loot.' },
+    { art: 'fire53', title: 'Real explosions', text: 'Smoke, fire, flying bodies and zombies that burn.' },
+    { art: 'boss53', title: 'A new boss and survivors', text: 'Warrok the boss, plus Lola, Eve and Max.' },
+    { art: 'map52', title: 'Nests, ammo and healing', text: 'Zombie nests, ammo boxes and green zones that heal you.' },
+    { art: 'lobby51', title: 'Voice chat', text: 'Talk to your team with your mic.' },
+    { art: 'emote51', title: 'More emotes', text: 'Four new emotes with sounds and a free camera while you emote.' },
+    { art: 'pc531', title: 'Clearer sights', text: 'Every gun lines up when you aim.' },
   ] },
 ];
 const WN_NEW_COUNT = WN_SECTIONS.reduce((n, sec) => n + sec.items.length, 0);
 const WN_SUMMARY = `${WN_NEW_COUNT} new things to try.`;
 
 const WN_EARLIER = [
+  { title: 'Custom buttons, real moves and mouse controls', text: 'Move, resize and fade every button, crouch, jump and slide that everyone sees, and real mouse look on a computer.' },
   { title: 'A giant boss, real gun fire and a real dog', text: 'A giant brute every fifth wave, real muzzle fire, bullet holes and fireballs, a new grenade and fire bottle, a German Shepherd, talking zombies, footsteps on every ground and trains.' },
   { title: 'Horror music, a real sky and a bigger town', text: 'Horror music and an announcer for every wave, survivor callouts, a real dusk sky and a much bigger town inside a fence.' },
   { title: 'A new lobby and one download', text: 'A Dead Town lobby with your survivor and dog in the middle, everything downloads once before you play, and an emote wheel with eight emotes.' },

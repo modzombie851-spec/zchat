@@ -1,10 +1,13 @@
 import { hitAdd, hitReset } from './zhit.js';
 import { loadStatic, loadTexArrays } from './zmodel.js';
 import { resBlob } from './zres.js';
-import { PLACE, PROPS2, BOUNDS, GATES, RAIL, floorH, groundH, forestList, OAKS, hsh, pondE, inRect, TOWN } from './ztown.js';
+import { PLAY, PLAY_FOREST, BOUNDS, GATES, RAIL, floorH, groundH, forestList, OAKS, hsh, pondE, inRect, TOWN } from './ztown.js';
 import { groundParts, pondBed, meshH } from './zground.js';
 
 export const TOWN_BASE = '/dead/town';
+const KIT_BASE = '/dead/kit';
+const EDGE_IN = [BOUNDS[0] - 30, BOUNDS[1] - 30, BOUNDS[2] + 30, BOUNDS[3] + 30];
+const KVEG = new Set(['kFern1', 'kFern2', 'kFern3', 'kFern4', 'kFern5', 'kOak1', 'kOak2', 'kOak3', 'kOak4', 'kTree1', 'kTree2', 'kTree3', 'kTree4', 'kTree5', 'kTree6', 'kTree7', 'kTree8']);
 const VEG = ['pineA', 'pineB', 'treeB', 'treeS', 'bushBig', 'bushMed', 'bushMed2', 'bushSmall', 'mush', 'bushFlower', 'grassA', 'grassB', 'plant'];
 const ROCKS = new Set(['rock2', 'rock3', 'rock4', 'rock5', 'rock9']);
 const ROCK_COL = [0.62, 0.62, 0.57, 0];
@@ -91,41 +94,65 @@ export async function loadTown(R, T, tierIdx, isDead, onP, o = {}) {
   if (isDead()) return null;
   const arrs = Object.keys(man.arrays).map((k) => R.texArray(ta[k].layers, ta[k].size));
   for (const k of Object.keys(ta)) for (const l of ta[k].layers) if (l && l.close) l.close();
-  const place = o.place || PLACE.concat(PROPS2);
+  const place = o.place || PLAY;
+  const hideIn = o.hideIn != null ? !!o.hideIn : !o.place && PLAY_FOREST === 2;
   const need = [...new Set((o.all ? Object.keys(man.models) : place.map((p) => p[0])).concat(VEG, ['corrug', 'barbed']))].filter((id) => man.models[id]);
   const M = {};
   let got = 0;
   await Promise.all(need.map(async (id) => { M[id] = await loadStatic(TOWN_BASE, id); got++; step(0.7 + (got / need.length) * 0.25); }));
   if (isDead()) return null;
+  const kitIds = o.place ? [] : [...new Set(place.map((p) => p[0]).filter((id) => !man.models[id]))];
+  let kit = null;
+  if (kitIds.length) {
+    try {
+      const km = JSON.parse(await (await resBlob(`${KIT_BASE}/kit.json`)).text());
+      const kta = await loadTexArrays(KIT_BASE, km, shrink);
+      if (isDead()) return null;
+      const karrs = Object.keys(km.arrays).map((k) => R.texArray(kta[k].layers, kta[k].size));
+      for (const k of Object.keys(kta)) for (const l of kta[k].layers) if (l && l.close) l.close();
+      const KM = {};
+      await Promise.all(kitIds.filter((id) => km.models[id]).map(async (id) => { KM[id] = await loadStatic(KIT_BASE, id); }));
+      kit = { arrs: karrs, M: KM, meshes: {} };
+    } catch { kit = null; }
+    if (isDead()) return null;
+  }
   const items = [];
   const meshes = {};
   const meshOf = (id) => meshes[id] || (meshes[id] = R.tstat(M[id]));
   const far = tierIdx === 0 ? 34 : tierIdx === 1 ? 52 : 80;
   hitReset();
+  const ownVeg = [];
   for (const [id, x, z, yaw, s = 1, dy = 0] of place) {
-    const m = M[id];
+    if (!o.place && VEG.includes(id) && M[id]) { ownVeg.push([id, x, z, yaw, s, dy]); continue; }
+    const km = !M[id] && kit ? kit.M[id] : null;
+    const m = M[id] || km;
     if (!m) continue;
     const y = partY(m, id, x, z, yaw, s) + dy;
-    if (!VEG.includes(id)) hitAdd(m, x, y, z, yaw, s);
-    items.push(partItem(m, meshOf(id), arrs, id, x, y, z, yaw, s, far));
+    if (!VEG.includes(id) && !KVEG.has(id)) hitAdd(m, x, y, z, yaw, s);
+    items.push(partItem(m, km ? kit.meshes[id] || (kit.meshes[id] = R.tstat(km)) : meshOf(id), km ? kit.arrs : arrs, id, x, y, z, yaw, s, far));
   }
   const chunks = new Map();
   const sp = o.split;
-  const put = (id, x, z, yaw, s, sink) => {
+  const put = (id, x, z, yaw, s, sink, own, yAbs) => {
     const m = M[id];
     if (!m) return;
+    if (hideIn && !own && x > EDGE_IN[0] && x < EDGE_IN[2] && z > EDGE_IN[1] && z < EDGE_IN[3]) return;
     const vin = !!(sp && x > sp[0] && x < sp[2] && z > sp[1] && z < sp[3]);
     const key = `${Math.floor(x / 48)},${Math.floor(z / 48)}${vin ? ',i' : ''}`;
     let c = chunks.get(key);
     if (!c) { c = { parts: [], x0: 1e9, z0: 1e9, x1: -1e9, z1: -1e9, top: 0, vin }; chunks.set(key, c); }
-    const gh = (qx, qz) => Math.min(groundH(qx, qz), meshH(qx, qz));
-    const rr = Math.max(0.5, Math.min(1.2, (m.max[0] - m.min[0]) * s * 0.12));
-    let lo = gh(x, z);
-    for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; lo = Math.min(lo, gh(x + Math.cos(a) * rr, z + Math.sin(a) * rr)); }
-    const y = lo - (sink || 0.05);
+    let y = yAbs;
+    if (y == null) {
+      const gh = (qx, qz) => Math.min(groundH(qx, qz), meshH(qx, qz));
+      const rr = Math.max(0.5, Math.min(1.2, (m.max[0] - m.min[0]) * s * 0.12));
+      let lo = gh(x, z);
+      for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; lo = Math.min(lo, gh(x + Math.cos(a) * rr, z + Math.sin(a) * rr)); }
+      y = lo - (sink || 0.05);
+    }
     c.parts.push({ M: m, x, y, z, yaw, s });
     c.x0 = Math.min(c.x0, x); c.x1 = Math.max(c.x1, x); c.z0 = Math.min(c.z0, z); c.z1 = Math.max(c.z1, z); c.top = Math.max(c.top, y + m.max[1] * s);
   };
+  for (const [id, x, z, yaw, s, dy] of ownVeg) put(id, x, z, (yaw * Math.PI) / 180, s, 0, true, partY(M[id], id, x, z, yaw, s) + dy);
   const { trees, bushes } = forestList(T.trees);
   for (const t of trees) {
     const h = hsh(t.i, 7);

@@ -48,7 +48,10 @@ export function fpItems(out, V, F, s, cam) {
       F.flashRot += 1.7;
       out.push({ mesh: F.flashMesh, model: m4.mul(Lg, m4.pose(r.muz[0], r.muz[1], r.muz[2] + 0.01, 0, 0, F.flashRot, 0.8 + F.flash * 9)), blend: 2, alpha: 1 });
     }
-    if (r.hand && !(F.thr >= 0 && F.thr > 0.1)) {
+    if (r.hand && !(F.thr >= 0 && F.thr > 0.1) && s.throwK === 'c4') {
+      const PC = V.props && V.props.c4;
+      if (PC) out.push({ mesh: PC.mesh, model: m4.mul(Lg, m4.pose(r.hand[0] - 0.01, r.hand[1] - 0.09, r.hand[2] - 0.02, 0.4, 0.2, 0, 0.55)), arrs: V.props.arrs });
+    } else if (r.hand && !(F.thr >= 0 && F.thr > 0.1)) {
       const mol = (s.throwK || 'grenade') === 'molotov';
       const TM = V.thrM && V.thrM[mol ? 'molo' : 'nade'];
       const HO = mol ? HOLD_M : HOLD_N;
@@ -58,6 +61,10 @@ export function fpItems(out, V, F, s, cam) {
         if (mesh) out.push({ mesh, model: m4.mul(Lg, m4.pose(r.hand[0], r.hand[1] - (mol ? 0.05 : 0.0), r.hand[2] + 0.02, 0, 0, 0)) });
       }
     }
+  }
+  if (s.plate >= 0 && V.props && V.props.plate) {
+    const u = s.plate, up = u < 0.35 ? u / 0.35 : u < 0.62 ? 1 : 1 - (u - 0.62) / 0.38, e = up * up * (3 - 2 * up);
+    out.push({ mesh: V.props.plate.mesh, model: m4.mul(Cg, m4.pose(0.05, -0.6 + 0.3 * e, 0.56, 0.3, 0.55 - 0.3 * e, 0.12, 0.6)), arrs: V.props.arrs });
   }
   return { L: Lg, Cm: Cg, a };
 }

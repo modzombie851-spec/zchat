@@ -5,9 +5,10 @@ import { buildDog } from './zbody.js';
 import { DOGS } from './zlooks.js';
 import { buildThrowObj, buildFlash, fpState } from './zfp.js';
 import { getFPG, setFPGHalf, fpFiles, fpgFailed } from './zfpgl.js';
-import { floorH } from './ztown.js';
-import { loadZAnims, loadZModel, dropImgs, fetchImg } from './zmodel.js';
-import { loadTown } from './ztownview.js';
+import { floorH, PLAY } from './ztown.js';
+import { hitAdd } from './zhit.js';
+import { loadZAnims, loadZModel, dropImgs, fetchImg, loadStatic, loadTexArrays } from './zmodel.js';
+import { loadTown, poseM } from './ztownview.js';
 import { loadRail } from './zrail.js';
 import { resAll, resBlob, resReady } from './zres.js';
 import { SCHAR } from './zsurv.js';
@@ -23,18 +24,19 @@ export const ZMODEL = {
   riot: ['zcop'],
   spitter: ['zpara'],
 };
-const ZORDER = ['zgirl', 'zmutant', 'zwar', 'zcop', 'zskel', 'zpara', 'zclown', 'zpump', 'zyaku', 'zpris', 'zsurv'];
+const ZORDER = ['zgirl', 'zmutant', 'zwar', 'zcop', 'zskel', 'zpara', 'zclown', 'zpump', 'zyaku', 'zpris', 'zsurv', 'zwarrok'];
 export const TIERS = [
   { name: 'Fast', dpr: 0.7, shadow: 0, grass: 0, trees: 0.25, zmax: 34, pmax: 12, post: false, near: 9, shadowN: 0 },
   { name: 'Balanced', dpr: 0.9, shadow: 1024, grass: 6500, trees: 0.5, zmax: 56, pmax: 20, post: false, near: 14, shadowN: 10 },
   { name: 'Best', dpr: 1.25, shadow: 2048, grass: 15000, trees: 1, zmax: 80, pmax: 40, post: true, near: 20, shadowN: 22 },
 ];
 
-export const GUN_KEYS = ['rifle', 'smg', 'pistol', 'shotgun', 'sniper'];
+export const GUN_KEYS = ['rifle', 'smg', 'pistol', 'shotgun', 'sniper', 'deagle', 'uzi', 'qq9', 'ak47', 'xpr', 'lmg', 'spas', 'awm', 'mgl'];
 export const survFiles = (k) => [`dead/s${k}.bin`, `dead/s${k}_d.webp`, `dead/s${k}_n.webp`];
 export const gunFiles = (g) => fpFiles(g);
+const KIT_CORE = new Set(PLAY.map((q) => q[0]).filter((id) => /^k[A-Z]/.test(id)).map((id) => `dead/kit/st_${id}.bin`));
 export function coreFiles(k, guns) {
-  const base = resAll((p) => p.startsWith('dead/town/') || /^dead\/z[^/]*$/.test(p) || p === 'dead/sanim.bin' || p === 'dead/fx-v1.webp' || p.startsWith('dead/nade') || p.startsWith('dead/molo') || p === 'dead/fx2-v1.webp' || p === 'dead/boom-v1.webp' || p.startsWith('dead/emo/') || p.startsWith('dead/ui/') || p.startsWith('dead/sky/') || p.startsWith('dead/rail/') || p.startsWith('dead/sdog') || p === 'dead/danim.bin' || p.startsWith('sounds/dead/'));
+  const base = resAll((p) => p.startsWith('dead/town/') || p === 'dead/kit/kit.json' || p.startsWith('dead/kit/tex_') || KIT_CORE.has(p) || /^dead\/z[^/]*$/.test(p) || p === 'dead/sanim.bin' || p === 'dead/fx-v1.webp' || p.startsWith('dead/nade') || p.startsWith('dead/molo') || p === 'dead/fx2-v1.webp' || p === 'dead/boom-v1.webp' || p.startsWith('dead/emo/') || p.startsWith('dead/ui/') || p.startsWith('dead/sky/') || p.startsWith('dead/rail/') || p.startsWith('dead/sdog') || p.startsWith('dead/sell') || p.startsWith('dead/props/') || p === 'dead/danim.bin' || p.startsWith('sounds/dead/'));
   return [...new Set([...base, ...survFiles(k), ...fpFiles('throw'), ...guns.flatMap((g) => fpFiles(g))])];
 }
 export function packList(k, guns) {
@@ -84,8 +86,9 @@ export function makeView(canvas, tierIdx, ov) {
   canvas.addEventListener('webglcontextlost', onLost);
   const V = { R, env, statics, dog, fp, tier: T, cache, zm: null, dead: false, lost: false, err: null, mainK: null, onLost: null, dispose: () => { V.dead = true; canvas.removeEventListener('webglcontextlost', onLost); try { R.dispose(); } catch {} } };
   V.zst = { done: 0, tot: ZORDER.length };
-  loadZAnims('/dead').then(async (anims) => {
+  Promise.all([loadZAnims('/dead'), loadZAnims('/dead', 'zanim2').catch(() => null)]).then(async ([anims, a2]) => {
     if (V.dead) return;
+    if (a2 && a2.clips) for (const [k, c] of Object.entries(a2.clips)) if (!anims.clips[k]) anims.clips[k] = c;
     const zm = { anims, n: 0 };
     for (const name of ZORDER) {
       try {
@@ -136,6 +139,8 @@ export function makeView(canvas, tierIdx, ov) {
     for (const it of res.items) { if (!T.shadow) it.cast = false; statics.push(it); }
     V.town.p = 1;
     V.town.ready = true;
+    V.propHitOn = false;
+    addPropHits();
   }).catch(() => { V.town.fail++; if (!V.dead && V.town.fail < 3) setTimeout(getTown, 1200 * V.town.fail); else V.err = 'town'; });
   getTown();
   V.realDog = null;
@@ -145,7 +150,38 @@ export function makeView(canvas, tierIdx, ov) {
     for (const k of ['luna', 'bear', 'goldie']) { try { const im = await fetchImg(`/dead/sdog_${k}_d.webp`, tierIdx === 0); if (V.dead) return; tex[k] = R.texture(im); if (im.close) im.close(); } catch {} }
     V.realDog = { M: x.model, mesh: R.tskin(x.model), tex, nrm: x.nrm ? R.texture(x.nrm) : null, clips: an.clips };
     dropImgs(x);
+  }).catch(() => { V.realDogFail = true; });
+  V.seller = null;
+  Promise.all([loadZAnims('/dead', 'sellanim'), loadZModel('/dead', 'seller', tierIdx > 0, tierIdx === 0)]).then(([an, x]) => {
+    if (V.dead) { dropImgs(x); return; }
+    V.seller = { M: x.model, mesh: R.tskin(x.model), tex: R.texture(x.img), nrm: x.nrm ? R.texture(x.nrm) : null, clips: an.clips };
+    dropImgs(x);
   }).catch(() => {});
+  V.props = null;
+  const PROP_PARTS = new Set(['gas2']);
+  let propHit = null;
+  const addPropHits = () => { if (!propHit || !V.town.ready || V.propHitOn) return; V.propHitOn = true; for (const h of propHit) hitAdd(...h); };
+  (async () => {
+    const man = JSON.parse(await (await resBlob('/dead/props/props.json')).text());
+    const ta = await loadTexArrays('/dead/props', man, tierIdx === 0 ? 2 : tierIdx === 1 ? 1 : 0);
+    if (V.dead) return;
+    const arrs = Object.keys(man.arrays).map((k) => R.texArray(ta[k].layers, ta[k].size));
+    for (const k of Object.keys(ta)) for (const l of ta[k].layers) if (l && l.close) l.close();
+    const P = { arrs };
+    for (const id of Object.keys(man.models)) { try { const M0 = await loadStatic('/dead/props', id); P[id] = { mesh: R.tstat(M0), max: man.models[id].max, off: man.models[id].off || [0, 0, 0], M0: PROP_PARTS.has(id) ? M0 : null }; } catch {} }
+    if (V.dead) return;
+    V.props = P;
+    const own = [];
+    for (const [id, x, z, yaw = 0, s = 1, dy = 0] of PLAY) {
+      if (!PROP_PARTS.has(id) || !P[id] || !P[id].M0) continue;
+      const y = floorH(x, z) - P[id].off[1] * s + dy;
+      const mx = P[id].max;
+      statics.push({ mesh: P[id].mesh, model: poseM(x, y, z, yaw, s), arrs: P.arrs, cast: !!T.shadow, bs: [x, y + mx[1] * s * 0.5, z, Math.hypot(mx[0], mx[1], mx[2]) * s] });
+      own.push([P[id].M0, x, y, z, yaw, s]);
+    }
+    propHit = own;
+    addPropHits();
+  })().catch(() => {});
   loadRail(R, tierIdx, () => V.dead).then((res) => { if (!res || V.dead) return; for (const it of res.items) { if (!T.shadow) it.cast = false; statics.push(it); } V.rail = res; V.tick = res.tick; }).catch(() => {});
   V.readyFor = (k, guns) => {
     if (V.mainK !== k) { V.mainK = k; sm.upFail = false; pump(); }

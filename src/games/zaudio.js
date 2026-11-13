@@ -2,7 +2,7 @@ import { Sfx } from './sfx.js';
 import { resBuf } from './zres.js';
 
 const FILES = {
-  g_rifle: 0.75, g_smg: 1.5, g_pistol: 0.8, g_sniper: 0.85, g_shotgun: 0.9,
+  cash: 0.75, heart: 0.9, nbounce: 0.6, g_ak47: 0.85, g_uzi: 1.7, g_qq9: 1.55, g_lmg: 1.0, g_deagle: 0.85, g_awm: 0.9, g_xpr: 0.9, g_mgl: 0.95, g_spas: 0.8, sv_what: 1, sv_lost: 1, sv_alive: 1, sv_salut: 1, sv_greet: 1, sv_time: 1, velcro: 0.9, gore: 1, heli: 0.9, em_laugh_m: 1, em_laugh_f: 1, em_cheer_m: 1, em_cheer_f: 1, em_hey: 1, em_dance: 0.8, g_rifle: 0.75, g_smg: 1.5, g_pistol: 0.8, g_sniper: 0.85, g_shotgun: 0.9,
   r_rifle: 0.55, r_pistol: 0.9, r_sniper: 0.6, r_pump: 0.65, r_cock: 0.75, dry: 0.6,
   boom: 0.95, boom2: 0.9, whoosh: 0.7, pin: 0.5,
   z_growl: 0.6, z_hurt: 0.6, z_death: 0.6, z_moan: 0.55, z_war: 0.6, z_die1: 0.6, z_die2: 0.6, z_pain1: 0.6, z_pain2: 0.55, z_pain3: 0.5,
@@ -17,6 +17,7 @@ const FILES = {
   cm_reload_m: 0.6, cm_nade_m: 0.65, cm_medic_m: 0.65, cm_cover_m: 0.6, cm_look_m: 0.65, cm_go_m: 0.6, cm_kill_m: 0.6, cm_back_m: 0.6, cm_help_m: 0.65,
   cm_reload_f: 0.6, cm_nade_f: 0.65, cm_medic_f: 0.65, cm_cover_f: 0.6, cm_look_f: 0.65, cm_go_f: 0.6, cm_kill_f: 0.6, cm_back_f: 0.6, cm_help_f: 0.65,
 };
+const GCLS = { rifle: 'rifle', smg: 'smg', pistol: 'pistol', sniper: 'sniper', shotgun: 'shotgun', deagle: 'pistol', uzi: 'smg', qq9: 'smg', ak47: 'rifle', lmg: 'rifle', xpr: 'sniper', awm: 'sniper', spas: 'shotgun', mgl: 'shotgun' };
 const MUSV = 1.4;
 const musBufs = {};
 function musLoad(name) {
@@ -139,6 +140,19 @@ export const ZA = {
       this.musCur = { name, src, g };
     });
   },
+  duckFor(sec, lvl) {
+    if (!duck || !ac) return;
+    const t = ac.currentTime;
+    duck.gain.cancelScheduledValues(t);
+    duck.gain.setTargetAtTime(lvl == null ? 0.2 : lvl, t, 0.15);
+    duck.gain.setTargetAtTime(1, t + Math.max(0.2, sec), 0.5);
+  },
+  unduck() {
+    if (!duck || !ac) return;
+    const t = ac.currentTime;
+    duck.gain.cancelScheduledValues(t);
+    duck.gain.setTargetAtTime(1, t, 0.4);
+  },
   musLevel(v) {
     if (this.musWant) this.musWant.vol = v;
     if (this.musCur && ac) this.musCur.g.gain.setTargetAtTime(MUSV * v, ac.currentTime, 1.1);
@@ -230,7 +244,7 @@ export const ZA = {
     const off = offs[name] || 0;
     if (o.dur) { s.start(t, off, o.dur); c.g.gain.setValueAtTime(c.g.gain.value, t + Math.max(0, o.dur - 0.08)); c.g.gain.linearRampToValueAtTime(0, t + o.dur); }
     else s.start(t, off);
-    const v = { stop: () => { try { s.stop(); } catch {} }, s };
+    const v = { stop: () => { try { s.stop(); } catch {} }, s, fade: (d) => { try { const t1 = ac.currentTime, gn = c.g.gain; gn.cancelScheduledValues(t1); gn.setValueAtTime(gn.value, t1); gn.linearRampToValueAtTime(0, t1 + d); s.stop(t1 + d + 0.02); } catch {} } };
     s.onended = () => { v.onEnd && v.onEnd(); c.free(); };
     track(v, o.cat, o.lim || 8, o.pri || 0);
     return v;
@@ -255,7 +269,7 @@ export const ZA = {
     if (kind === 'calm') { this.play('wave_ok', o); }
   },
   gun(kind, o = {}) {
-    const n = { rifle: 'g_rifle', smg: 'g_smg', pistol: 'g_pistol', sniper: 'g_sniper', shotgun: 'g_shotgun' }[kind] || 'g_rifle';
+    const n = FILES[`g_${kind}`] != null ? `g_${kind}` : `g_${GCLS[kind] || 'rifle'}`;
     const mine = !o.pos;
     this.play(n, { ...o, vary: 0.04, cat: mine ? 'mygun' : 'gun', lim: mine ? 4 : 6, rev: mine ? 0.18 : 0.12, revD: 170, ref: 6, roll: 1.25, muff: 38, max: 72 });
   },

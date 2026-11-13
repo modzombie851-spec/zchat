@@ -93,7 +93,11 @@ export function ZLobby({ L }) {
   const tab = L.tab;
   const plateGun = L.gunIcon(L.gun);
   return (
-    <div style={{ position: 'absolute', inset: 0, zIndex: 5, overflow: 'hidden', fontFamily: FONT, color: CREAM }} onPointerDown={() => { if (tab) L.setTab(null); }}>
+    <div style={{ position: 'absolute', inset: 0, zIndex: 5, overflow: 'hidden', fontFamily: FONT, color: CREAM, touchAction: 'none' }}
+      onPointerDown={(e) => { if (tab) L.setTab(null); if (L.spin) { L.spin(e, 0); try { e.currentTarget.setPointerCapture(e.pointerId); } catch {} } }}
+      onPointerMove={(e) => { if (L.spin) L.spin(e, 1); }}
+      onPointerUp={(e) => { if (L.spin) L.spin(e, 2); }}
+      onPointerCancel={(e) => { if (L.spin) L.spin(e, 2); }}>
       <div aria-hidden="true" style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: 'linear-gradient(90deg, rgba(8,7,6,0.62) 0%, rgba(8,7,6,0) 30%, rgba(8,7,6,0) 70%, rgba(8,7,6,0.62) 100%), linear-gradient(180deg, rgba(8,7,6,0.55) 0%, rgba(8,7,6,0) 18%, rgba(8,7,6,0) 72%, rgba(8,7,6,0.7) 100%)' }} />
 
       <div style={{ position: 'absolute', top: top(8), left: left(12), right: right(12), display: 'flex', alignItems: 'center', gap: u(10) }} onPointerDown={(e) => e.stopPropagation()}>
@@ -104,6 +108,10 @@ export function ZLobby({ L }) {
             <span style={{ fontFamily: CFONT, fontSize: u(16), fontWeight: 800, lineHeight: 1.05, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: u(150) }}>{L.name}</span>
             {L.best > 0 ? <span style={{ fontSize: u(11), fontWeight: 700, color: AMBER, whiteSpace: 'nowrap' }}>{`Best wave ${L.best}`}</span> : null}
           </span>
+        </div>
+        <div role="status" aria-label={`Your cash, ${L.cash} dollars`}
+          style={{ height: u(36), display: 'flex', alignItems: 'center', padding: `0 ${u(12)}px`, background: PANEL, clipPath: cut(u(7)), boxShadow: `inset 0 0 0 1px ${LINE}` }}>
+          <span style={{ fontFamily: CFONT, fontSize: u(18), fontWeight: 800, color: '#86F09A', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{`$${(L.cash || 0).toLocaleString()}`}</span>
         </div>
         <div style={{ flex: 1 }} />
         {L.cloud && (
@@ -182,13 +190,17 @@ export function ZLobby({ L }) {
         <button type="button" className="zl-b" onClick={() => L.setTab('survivor')} aria-label={`Survivor, ${L.charName}`}
           style={{ height: u(36), display: 'flex', alignItems: 'center', gap: u(9), padding: `0 ${u(12)}px`, background: 'rgba(14,13,12,0.82)', clipPath: cut(u(7)), boxShadow: `inset 0 -2px 0 ${AMBER}`, color: CREAM }}>
           <span style={{ fontFamily: CFONT, fontSize: u(19), fontWeight: 800 }}>{L.charName}</span>
-          {plateGun ? <img src={plateGun} alt="" draggable={false} style={{ height: u(18), width: 'auto', opacity: 0.9 }} /> : null}
-          <span style={{ fontSize: u(12), fontWeight: 800, color: MUTED }}>{L.gunName}</span>
+          <span style={{ fontSize: u(12), fontWeight: 800, color: MUTED }}>Starts with a pistol</span>
         </button>
       </div>
 
       <div role="tablist" aria-label="Loadout" style={{ position: 'absolute', left: '50%', bottom: bottom(10), transform: 'translateX(-50%)', display: 'flex', gap: u(4) }} onPointerDown={(e) => e.stopPropagation()}>
-        {[['survivor', 'Survivor'], ['loadout', 'Loadout'], ['dog', 'Dog']].map(([key, t]) => {
+        <button type="button" className="zl-b" onClick={L.onEmote} aria-label="Emotes"
+          style={{ width: u(88), height: u(52), display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: u(2), background: PANEL, clipPath: cut(u(8)), boxShadow: `inset 0 -2px 0 ${LINE}`, color: CREAM, padding: 0 }}>
+          <Ico k="smile" size={u(20)} color={CREAM} />
+          <span style={{ fontFamily: CFONT, fontSize: u(14), fontWeight: 800 }}>Emotes</span>
+        </button>
+        {[['survivor', 'Survivor'], ['dog', 'Dog']].map(([key, t]) => {
           const on = tab === key;
           return (
             <button key={key} type="button" role="tab" aria-selected={on} className="zl-b" onClick={() => L.setTab(on ? null : key)}
@@ -202,9 +214,24 @@ export function ZLobby({ L }) {
         })}
       </div>
 
+      {L.mates && L.mates.length > 0 && (
+        <div ref={L.tagRef} aria-hidden="true" style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' }}>
+          {L.mates.map((m) => (
+            <div key={m.id} data-sq={m.id} style={{ position: 'absolute', left: 0, top: 0, opacity: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: u(2) }}>
+              <span style={{ padding: `${u(2)}px ${u(9)}px`, background: 'rgba(14,13,12,0.74)', clipPath: cut(u(4)), fontFamily: CFONT, fontSize: u(15), fontWeight: 800, color: CREAM, whiteSpace: 'nowrap' }}>{m.n}</span>
+              {m.lead || m.rdy ? <span style={{ fontSize: u(10.5), fontWeight: 800, color: m.lead ? AMBER : '#8FD07E', textShadow: '0 1px 2px rgba(0,0,0,0.8)' }}>{m.lead ? 'Leader' : 'Ready'}</span> : null}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {L.startNote ? (
+        <div role="status" style={{ position: 'absolute', right: right(12), bottom: `calc(${bottom(10)} + ${u(62)}px)`, width: colW, textAlign: 'center', fontSize: u(12), fontWeight: 800, color: CREAM, textShadow: '0 1px 3px rgba(0,0,0,0.85)', pointerEvents: 'none' }}>{L.startNote}</div>
+      ) : null}
+
       <button type="button" className="zl-b" onClick={L.onStart} onPointerDown={(e) => e.stopPropagation()} aria-label={L.startLabel}
         style={{ position: 'absolute', right: right(12), bottom: bottom(10), width: colW, height: u(58), display: 'flex', alignItems: 'center', justifyContent: 'center', gap: u(10), clipPath: `polygon(${u(14)}px 0, 100% 0, calc(100% - ${u(14)}px) 100%, 0 100%)`, background: L.startReady ? 'linear-gradient(180deg, #F2C04E 0%, #E3A233 55%, #C9862A 100%)' : 'linear-gradient(180deg, #8C7A55, #6E5F43)', color: '#17140F', boxShadow: 'inset 0 -3px 0 rgba(0,0,0,0.25)' }}>
-        {L.startReady ? <svg width={u(20)} height={u(22)} viewBox="0 0 20 22" aria-hidden="true"><path d="M3 2.2v17.6c0 .9 1 1.4 1.7.9l13.3-8.8c.6-.4.6-1.4 0-1.8L4.7 1.3C4 .8 3 1.3 3 2.2z" fill="currentColor" /></svg> : null}
+        {L.startReady && L.startIcon !== false ? <svg width={u(20)} height={u(22)} viewBox="0 0 20 22" aria-hidden="true"><path d="M3 2.2v17.6c0 .9 1 1.4 1.7.9l13.3-8.8c.6-.4.6-1.4 0-1.8L4.7 1.3C4 .8 3 1.3 3 2.2z" fill="currentColor" /></svg> : null}
         <span style={{ fontFamily: CFONT, fontSize: L.startReady ? u(28) : u(18), fontWeight: 800, letterSpacing: '0.01em' }}>{L.startText}</span>
       </button>
 
