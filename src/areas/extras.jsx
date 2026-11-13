@@ -6574,24 +6574,29 @@ function WnSegments({ total, at, onArt, dark }) {
   );
 }
 
-const WN_PHOTOS = { zombies49: '/wn49-zombies.webp', mutant49: '/wn49-mutant.webp', guns50: '/wn50-guns.webp', house50: '/wn50-house.webp', pond50: '/wn50-pond.webp', buttons50: '/wn50-buttons.webp', settings50: '/wn50-settings.webp', pack51: '/wn51-pack.webp', emote51: '/wn51-emote.webp', lobby51: '/wn51-lobby.webp', waves52: '/wn52-waves.webp', sky52: '/wn52-sky.webp', map52: '/wn52-map.webp' };
+const WN_PHOTOS = { zombies49: '/wn49-zombies.webp', mutant49: '/wn49-mutant.webp', guns50: '/wn50-guns.webp', house50: '/wn50-house.webp', pond50: '/wn50-pond.webp', buttons50: '/wn50-buttons.webp', settings50: '/wn50-settings.webp', pack51: '/wn51-pack.webp', emote51: '/wn51-emote.webp', lobby51: '/wn51-lobby.webp', waves52: '/wn52-waves.webp', sky52: '/wn52-sky.webp', map52: '/wn52-map.webp', boss53: '/wn53-boss.webp', fire53: '/wn53-fire.webp', dog53: '/wn53-dog.webp', train53: '/wn53-train.webp' };
 const WN_HIGHLIGHTS = [
-  { k: 'waves52', art: 'waves52', go: 'zombie', cta: 'Play now', title: 'Horror music and real voices', text: 'Dead Town now has horror music from the loading screen to the last wave. An announcer starts every wave with a deep impact, and your survivor calls out reloading, medic and fire in the hole.' },
-  { k: 'sky52', art: 'sky52', go: 'zombie', cta: 'Play now', title: 'A real dusk sky', text: 'The sky is now a real photo of an evening field, with soft clouds and a low sun over the town.' },
-  { k: 'map52', art: 'map52', go: 'zombie', cta: 'Play now', title: 'A bigger town to explore', text: 'The town is much bigger, with a fence all around it instead of invisible walls. Find a camp, a farm house, a crashed bus and roadblocks on every road.' },
+  { k: 'boss53', art: 'boss53', go: 'zombie', cta: 'Play now', title: 'A giant boss every fifth wave', text: 'Every fifth wave a giant brute stomps into Dead Town with its own health bar. The ground shakes when it walks and its slam hits everyone close to it.' },
+  { k: 'fire53', art: 'fire53', go: 'zombie', cta: 'Play now', title: 'Real gun fire and explosions', text: 'Guns flash with real fire, bullets leave black holes on walls and the ground, and grenades blow up in real fireballs. The grenade and fire bottle are brand new too.' },
+  { k: 'dog53', art: 'dog53', go: 'zombie', cta: 'Play now', title: 'A real German Shepherd', text: 'Your dog is now a real German Shepherd with recorded moves, real barks and paw steps you can hear.' },
+  { k: 'train53', art: 'train53', go: 'zombie', cta: 'Play now', title: 'Trains and a station', text: 'Freight trains now roll past a real train station at the edge of town. Listen for the horn.' },
 ];
 const WN_SECTIONS = [
   { title: 'Dead Town', items: [
-    { art: 'waves52', title: 'Every wave tells you more', text: 'See how many zombies are coming and what you earned.' },
-    { art: 'sky52', title: 'Real sky', text: 'A photo sky with soft clouds at dusk.' },
-    { art: 'map52', title: 'Bigger town', text: 'New places to explore inside a fence.' },
-    { art: 'room35', title: 'Invite with one tap', text: 'Each friend has an Invite button now.' },
+    { art: 'boss53', title: 'Giant boss', text: 'A huge brute with a health bar every fifth wave.' },
+    { art: 'fire53', title: 'Crouch, jump and slide', text: 'Crouch to sneak, jump, and slide when you sprint.' },
+    { art: 'fire53', title: 'Real gun fire', text: 'Real muzzle fire, bullet holes and fireballs.' },
+    { art: 'boss53', title: 'Zombies talk', text: 'They call for brains and say they will get you.' },
+    { art: 'dog53', title: 'Real dog', text: 'A German Shepherd with real barks.' },
+    { art: 'train53', title: 'Footsteps on every ground', text: 'Concrete, grass, gravel, wood, metal and water sound different.' },
+    { art: 'train53', title: 'Trains', text: 'Freight trains and a station by the rails.' },
   ] },
 ];
 const WN_NEW_COUNT = WN_SECTIONS.reduce((n, sec) => n + sec.items.length, 0);
 const WN_SUMMARY = `${WN_NEW_COUNT} new things to try.`;
 
 const WN_EARLIER = [
+  { title: 'Horror music, a real sky and a bigger town', text: 'Horror music and an announcer for every wave, survivor callouts, a real dusk sky and a much bigger town inside a fence.' },
   { title: 'A new lobby and one download', text: 'A Dead Town lobby with your survivor and dog in the middle, everything downloads once before you play, and an emote wheel with eight emotes.' },
   { title: 'Real guns and a real town', text: 'Five real guns, a town built from real 3D models with a big house, a pond with a waterfall, new skill buttons in every game and settings in sections.' },
   { title: 'Real zombies', text: 'Eleven zombies made by real 3D artists with recorded moves, and a giant mutant with blade arms every fifth wave.' },

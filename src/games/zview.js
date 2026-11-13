@@ -8,6 +8,7 @@ import { getFPG, setFPGHalf, fpFiles, fpgFailed } from './zfpgl.js';
 import { floorH } from './ztown.js';
 import { loadZAnims, loadZModel, dropImgs, fetchImg } from './zmodel.js';
 import { loadTown } from './ztownview.js';
+import { loadRail } from './zrail.js';
 import { resAll, resBlob, resReady } from './zres.js';
 import { SCHAR } from './zsurv.js';
 
@@ -33,7 +34,7 @@ export const GUN_KEYS = ['rifle', 'smg', 'pistol', 'shotgun', 'sniper'];
 export const survFiles = (k) => [`dead/s${k}.bin`, `dead/s${k}_d.webp`, `dead/s${k}_n.webp`];
 export const gunFiles = (g) => fpFiles(g);
 export function coreFiles(k, guns) {
-  const base = resAll((p) => p.startsWith('dead/town/') || /^dead\/z[^/]*$/.test(p) || p === 'dead/sanim.bin' || p === 'dead/fx-v1.webp' || p.startsWith('dead/emo/') || p.startsWith('dead/ui/') || p.startsWith('dead/sky/') || p.startsWith('sounds/dead/'));
+  const base = resAll((p) => p.startsWith('dead/town/') || /^dead\/z[^/]*$/.test(p) || p === 'dead/sanim.bin' || p === 'dead/fx-v1.webp' || p.startsWith('dead/nade') || p.startsWith('dead/molo') || p === 'dead/fx2-v1.webp' || p === 'dead/boom-v1.webp' || p.startsWith('dead/emo/') || p.startsWith('dead/ui/') || p.startsWith('dead/sky/') || p.startsWith('dead/rail/') || p.startsWith('dead/sdog') || p === 'dead/danim.bin' || p.startsWith('sounds/dead/'));
   return [...new Set([...base, ...survFiles(k), ...fpFiles('throw'), ...guns.flatMap((g) => fpFiles(g))])];
 }
 export function packList(k, guns) {
@@ -46,7 +47,7 @@ const SKY_SUN = [-0.781, 0.170, 0.601];
 const FOG_SKY = [0.115, 0.088, 0.071];
 export function makeView(canvas, tierIdx, ov) {
   const T = { ...(TIERS[tierIdx] || TIERS[1]), ...(ov || {}) };
-  const R = createRenderer(canvas, { shadowSize: T.shadow || 256, aa: tierIdx > 0, fx: resBlob('/dead/fx-v1.webp').catch(() => null) });
+  const R = createRenderer(canvas, { shadowSize: T.shadow || 256, aa: tierIdx > 0, fx: resBlob('/dead/fx-v1.webp').catch(() => null), fx2: resBlob('/dead/fx2-v1.webp').catch(() => null), boom: resBlob('/dead/boom-v1.webp').catch(() => null) });
   if (!R) return null;
   setFPGHalf(R, tierIdx === 0);
   const env = townEnv({ mood: 'dusk', shadowRange: 24, sun: SKY_SUN });
@@ -137,6 +138,15 @@ export function makeView(canvas, tierIdx, ov) {
     V.town.ready = true;
   }).catch(() => { V.town.fail++; if (!V.dead && V.town.fail < 3) setTimeout(getTown, 1200 * V.town.fail); else V.err = 'town'; });
   getTown();
+  V.realDog = null;
+  Promise.all([loadZAnims('/dead', 'danim'), loadZModel('/dead', 'sdog', tierIdx > 0, tierIdx === 0)]).then(async ([an, x]) => {
+    if (V.dead) { dropImgs(x); return; }
+    const tex = { rex: R.texture(x.img) };
+    for (const k of ['luna', 'bear', 'goldie']) { try { const im = await fetchImg(`/dead/sdog_${k}_d.webp`, tierIdx === 0); if (V.dead) return; tex[k] = R.texture(im); if (im.close) im.close(); } catch {} }
+    V.realDog = { M: x.model, mesh: R.tskin(x.model), tex, nrm: x.nrm ? R.texture(x.nrm) : null, clips: an.clips };
+    dropImgs(x);
+  }).catch(() => {});
+  loadRail(R, tierIdx, () => V.dead).then((res) => { if (!res || V.dead) return; for (const it of res.items) { if (!T.shadow) it.cast = false; statics.push(it); } V.rail = res; V.tick = res.tick; }).catch(() => {});
   V.readyFor = (k, guns) => {
     if (V.mainK !== k) { V.mainK = k; sm.upFail = false; pump(); }
     V.warm(k);
@@ -148,6 +158,8 @@ export function makeView(canvas, tierIdx, ov) {
     return { pct: Math.min(1, pct), ok: !err && V.town.ready && !!V.zm && !!sm.chars[k] && gOk === gs.length, err };
   };
   V.prepHands = () => { if (!V.nadeObj) { V.nadeObj = buildThrowObj(R, 'grenade'); V.molObj = buildThrowObj(R, 'molotov'); } };
+  V.thrM = {};
+  for (const k of ['nade', 'molo']) loadZModel('/dead', k, true, tierIdx === 0).then((x) => { if (V.dead) { dropImgs(x); return; } V.thrM[k] = { M: x.model, mesh: R.tskin(x.model), tex: R.texture(x.img), nrm: x.nrm ? R.texture(x.nrm) : null }; dropImgs(x); }).catch(() => {});
   V.prepHands();
   return V;
 }

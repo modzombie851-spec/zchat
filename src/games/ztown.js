@@ -14,6 +14,7 @@ export function rng(seed) { let a = (seed >>> 0) || 1; return () => { a = (a + 0
 
 export const TOWN = { roadW: 4, sideX: 46, sideW: 3.5, lot: [-15, -45, 20, -4.6], store: [-7.2, -40, 7.9, -31], canopy: [-6.5, -31.4, 0.8, -22.6] };
 export const BOUNDS = [-92, -100, 108, 70];
+export const RAIL = { z: 71.9, sx: -40, sz: 70, plat: [-64.05, 61.17, -15.95, 70], top: 0.52 };
 export const POND = { x: -42.2, z: -24, rx: 7.4, rz: 8.6, y: -0.2 };
 export const FALL = { x: -49.15, z: -24, top: 2.35, w: 1.4 };
 export const pondR = (a) => 1 + 0.06 * Math.sin(3 * a + 1.1) + 0.035 * Math.sin(5 * a + 2.3) + 0.02 * Math.sin(9 * a);
@@ -51,9 +52,9 @@ export function groundH(x, z) {
   const d = Math.hypot(x * 0.85, z * 1.0);
   const u = (fbm(x / 70, z / 70, 3, 3) - 0.5) * 3.2 * ss(70, 170, d);
   const hills = ss(180, 460, d) * (34 + 80 * fbm(x / 260, z / 260, 9, 3));
-  return u + hills;
+  return (u + hills) * ss(6, 22, Math.abs(z - RAIL.z));
 }
-export function floorH(x, z) { return z > -4.6 && z < 4.6 ? 0.1 : z < -4.6 && x > -15 && x < 20 && z > -45 ? 0.08 : groundH(x, z) + pondDepth(x, z); }
+export function floorH(x, z) { return inRect(x, z, RAIL.plat, 0) ? RAIL.top : z > -4.6 && z < 4.6 ? 0.1 : z < -4.6 && x > -15 && x < 20 && z > -45 ? 0.08 : groundH(x, z) + pondDepth(x, z); }
 export function forestD(x, z) {
   if (roadDist(x, z) < 7 || inRect(x, z, [TOWN.lot[0] - 6, TOWN.lot[1] - 8, TOWN.lot[2] + 4, TOWN.lot[3]], 0) || nearHouse(x, z, 6)) return 0;
   const n = fbm(x / 55, z / 55, 41, 3);
@@ -81,7 +82,7 @@ export function forestList(keep = 1) {
     n++;
     const inside = inRect(x, z, BOUNDS, 6);
     if (!inside && hsh(i, 99) > (far ? keep * keep : keep)) continue;
-    if (pondE(x, z) < 1.55 || inRect(x, z, [-55, -32, -46, -16], 0)) continue;
+    if (pondE(x, z) < 1.55 || inRect(x, z, [-55, -32, -46, -16], 0) || Math.abs(z - RAIL.z) < 9 || inRect(x, z, RAIL.plat, 4)) continue;
     trees.push({ x, z, s, far, pine, i });
   }
   for (let i = 0; i < 160; i++) {
@@ -103,7 +104,7 @@ export const GATES = [[-93, -6, -91, 6], [107, -6, 109, 6], [40.6, -101, 51.4, -
 
 let solidCache = null;
 const POLES = [[-21.52, -0.58, 0.32], [-8, -0.57, 0.24], [-5.61, -0.57, 0.24], [6.02, -0.51, 0.32], [9.01, -0.57, 0.42], [21.58, -0.58, 0.32]];
-const EXTRA_R = [[60.7, -55.2, 68, -47.4]];
+const EXTRA_R = [[60.7, -55.2, 68, -47.4], [-50.9, 62.1, -39.9, 67.1], [-37.4, 62.4, -16.4, 65.8]];
 const BOX = { tent: [2.64, 4.1], crates: [1.82, 0.54], crate: [0.42, 0.4], pallets: [1.17, 1.08], houseB: [5.4, 4.88], shed: [3.13, 2.33], hay: [0.78, 1.06], burnt: [2.35, 1.21], tires: [0.5, 1], truck: [1.26, 2.71], container: [2.89, 1.51], hatch: [2.04, 0.83], sedan: [1.4, 2.33], policeA: [1.54, 2.68], policeB: [1.43, 2.57], bus: [1.99, 4.96] };
 export const PROPS2 = [
   ['tent', -76, 36, 0], ['tent', -66.5, 41.5, 90], ['crates', -70.5, 33.2, 0], ['crate', -74.8, 43.6, 25], ['barrelR', -63.6, 38.4, 0], ['barrelB', -62.8, 37.6, 0], ['pallets', -79.6, 43.4, 90],

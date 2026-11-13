@@ -6,12 +6,12 @@ const FILES = {
   r_rifle: 0.55, r_pistol: 0.9, r_sniper: 0.6, r_pump: 0.65, r_cock: 0.75, dry: 0.6,
   boom: 0.95, boom2: 0.9, whoosh: 0.7, pin: 0.5,
   z_growl: 0.6, z_hurt: 0.6, z_death: 0.6, z_moan: 0.55, z_war: 0.6, z_die1: 0.6, z_die2: 0.6, z_pain1: 0.6, z_pain2: 0.55, z_pain3: 0.5,
-  stinger: 0.7, bone: 0.55, d_bark1: 0.6, d_bark2: 0.6, d_bark3: 0.6, d_growl: 0.5, d_whine: 0.5,
-  st_grass0: 0.42, st_grass1: 0.42, st_grass2: 0.42, st_grass3: 0.42, st_grass4: 0.42, st_conc0: 0.4, st_conc1: 0.4, st_conc2: 0.4, st_conc3: 0.4, st_conc4: 0.4,
-  st_wood0: 0.45, st_wood1: 0.45, st_wood2: 0.45, st_wood3: 0.45, st_wood4: 0.45, hit0: 0.5, hit1: 0.5, hit2: 0.5, hithead: 0.6,
+  z_pain4: 0.6, z_die3: 0.7, z_call1: 0.6, z_call2: 0.6, z_call3: 0.6, z_horde: 0.7, zt_brains1: 0.8, zt_brains2: 0.8, zt_come: 0.8, zt_kill: 0.8, zt_gib: 0.75,
+  stinger: 0.7, bone: 0.55, d_bark1: 0.75, d_bark2: 0.75, d_bark3: 0.75, d_bark4: 0.75, d_angry: 0.7, d_growl: 0.5, d_whine: 0.5,
+  d_step0: 0.35, d_step1: 0.35, d_step2: 0.35, d_step3: 0.35, hit0: 0.5, hit1: 0.5, hit2: 0.5, hithead: 0.6,
   glass0: 0.65, glass1: 0.65, slime0: 0.55, slime1: 0.55, fire: 0.5, slash0: 0.55, slash1: 0.55, chop: 0.65, ui_click: 0.35, ui_tap: 0.3,
   wave_ok: 0.5, shell: 0.45, thud: 0.6, over: 0.75, boom3: 0.85, scream0: 0.75, scream1: 0.75, z_g1: 0.55, z_g2: 0.55, z_g3: 0.55, r_shell: 0.55,
-  amb_wind: 1, amb_night: 1, water: 1, wave_go: 0.95,
+  amb_wind: 1, amb_night: 1, water: 1, wave_go: 0.95, tr_pass: 1, tr_horn: 1,
   vo_prepare: 0.95, vo_survival: 0.95, vo_fight: 0.95, vo_r1: 0.95, vo_r2: 0.95, vo_r3: 0.95, vo_r4: 0.95, vo_r5: 0.95, vo_final: 0.95, vo_gameover: 0.95, vo_flawless: 0.95, vo_multi: 0.9, vo_sudden: 0.95,
   vo_obj: 0.8, vo_ready: 0.8, vo_best: 0.8, vo_failed: 0.8, vo_hurry: 0.8,
   cm_reload_m: 0.6, cm_nade_m: 0.65, cm_medic_m: 0.65, cm_cover_m: 0.6, cm_look_m: 0.65, cm_go_m: 0.6, cm_kill_m: 0.6, cm_back_m: 0.6, cm_help_m: 0.65,
@@ -32,7 +32,9 @@ function musLoad(name) {
   }
   return musBufs[name];
 }
-const STEP = { grass: 'st_grass', conc: 'st_conc', wood: 'st_wood' };
+const STEPN = { conc: 6, grass: 6, dirt: 6, wood: 6, metal: 6, water: 5 };
+const STEPV = { conc: 0.42, grass: 0.4, dirt: 0.42, wood: 0.45, metal: 0.42, water: 0.5 };
+for (const k of Object.keys(STEPN)) for (let i = 0; i < STEPN[k]; i++) FILES[`st_${k}${i}`] = STEPV[k];
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const rnd = (a, b) => a + Math.random() * (b - a);
 const pick = (a) => a[(Math.random() * a.length) | 0];
@@ -42,6 +44,7 @@ const bufs = {}, offs = {};
 const L = { x: 0, y: 1.6, z: 0, yaw: 0 };
 const voices = [];
 const loops = [];
+const movers = [];
 let lt = 0;
 let amb = null;
 
@@ -89,13 +92,18 @@ function place(c, o, vol) {
   return k;
 }
 const MAXV = 26;
-function track(v, cat, lim) {
+function track(v, cat, lim, pri = 0) {
   if (cat) {
     const same = voices.filter((q) => q.cat === cat);
     if (same.length >= lim) { const old = same[0]; try { old.stop(); } catch {} const i = voices.indexOf(old); if (i >= 0) voices.splice(i, 1); }
   }
-  while (voices.length >= MAXV) { const old = voices.shift(); try { old.stop(); } catch {} }
+  while (voices.length >= MAXV) {
+    let k = 0;
+    for (let i = 1; i < voices.length; i++) if ((voices[i].pri || 0) < (voices[k].pri || 0)) k = i;
+    const old = voices.splice(k, 1)[0]; try { old.stop(); } catch {}
+  }
   v.cat = cat;
+  v.pri = pri;
   voices.push(v);
   v.onEnd = () => { const i = voices.indexOf(v); if (i >= 0) voices.splice(i, 1); };
 }
@@ -141,7 +149,7 @@ export const ZA = {
     const at = Math.max(now + (o.at || 0), this.sayEnd || 0);
     if (at - now > 3.5) return;
     const d = bufs[name].duration;
-    this.play(name, { at: at - now, cat: 'vo', lim: 3 });
+    this.play(name, { at: at - now, cat: 'vo', lim: 3, pri: 3 });
     this.sayEnd = at + d + 0.12;
     if (duck) { duck.gain.setTargetAtTime(0.45, at, 0.05); duck.gain.setTargetAtTime(1, at + d, 0.35); }
   },
@@ -155,7 +163,7 @@ export const ZA = {
     if (!bufs[n]) return false;
     this.cmT[kind] = now + (o.cd || 8) * 1000;
     this.cmAny = now + 1500;
-    this.play(n, { at: o.at || 0, cat: 'cm', lim: 1, vary: 0.02 });
+    this.play(n, { at: o.at || 0, cat: 'cm', lim: 1, vary: 0.02, pri: 2 });
     return true;
   },
   init() {
@@ -177,6 +185,7 @@ export const ZA = {
     mus = ac.createGain(); mus.gain.value = 1; mus.connect(duck);
     try { rev = ac.createConvolver(); rev.buffer = makeIR(); revIn = ac.createGain(); revIn.gain.value = 0.5; revIn.connect(rev); rev.connect(bus); } catch { rev = null; }
     voices.length = 0;
+    movers.length = 0;
     this.musCur = null;
     this.sayQ = [];
     this.sayEnd = 0;
@@ -204,6 +213,7 @@ export const ZA = {
     L.x = x; L.y = y; L.z = z; L.yaw = yaw;
     if (ac) this.sync();
     if (ac && loops.length) { lt++; if (lt % 4 === 0) for (const h of loops) place(h.c, { ...h.o, pos: h.pos }, (h.o.vol || 1) * (Sfx.sfxOn ? 1 : 0)); }
+    if (ac && movers.length) for (const h of movers) place(h.c, { ...h.o, pos: h.pos }, h.vol * (Sfx.sfxOn ? 1 : 0));
   },
   play(name, o = {}) {
     if (!ac || !Sfx.sfxOn || !this.sync() || ac.state !== 'running') return null;
@@ -222,14 +232,15 @@ export const ZA = {
     else s.start(t, off);
     const v = { stop: () => { try { s.stop(); } catch {} }, s };
     s.onended = () => { v.onEnd && v.onEnd(); c.free(); };
-    track(v, o.cat, o.lim || 8);
+    track(v, o.cat, o.lim || 8, o.pri || 0);
     return v;
   },
   synth(kind, o = {}) {
     if (!ac || !Sfx.sfxOn) return;
     const r = (n) => (Math.random() * n) | 0;
-    if (kind === 'step') { this.play(`${STEP[o.surf] || (o.grass ? 'st_grass' : 'st_conc')}${r(5)}`, { ...o, vary: 0.07, cat: 'step', lim: 3 }); return; }
-    if (kind === 'shuffle') { this.play(`st_grass${r(5)}`, { ...o, vol: (o.vol || 1) * 0.5, rate: 0.85, vary: 0.05, cat: 'step', lim: 3 }); return; }
+    if (kind === 'step') { const k = STEPN[o.surf] ? o.surf : o.grass ? 'grass' : 'conc'; const n = STEPN[k]; let i = r(n); if (i === this.lastStep) i = (i + 1) % n; this.lastStep = i; this.play(`st_${k}${i}`, { ...o, vary: 0.06, cat: 'step', lim: 3 }); return; }
+    if (kind === 'shuffle') { const k = STEPN[o.surf] ? o.surf : 'dirt'; this.play(`st_${k}${r(STEPN[k])}`, { ...o, vol: (o.vol || 1) * 0.45, rate: 0.82, vary: 0.05, cat: 'step', lim: 3 }); return; }
+    if (kind === 'paw') { this.play(`d_step${r(4)}`, { ...o, vary: 0.08, cat: 'paw', lim: 2 }); return; }
     if (kind === 'hit') { this.play(o.head ? 'hithead' : `hit${r(3)}`, { ...o, vary: 0.08, cat: 'hit', lim: 4 }); return; }
     if (kind === 'thump') { this.play('thud', o); return; }
     if (kind === 'click') { this.play('ui_click', { ...o, rate: o.f ? Math.max(0.7, Math.min(1.5, o.f / 3200)) : 1 }); return; }
@@ -256,7 +267,12 @@ export const ZA = {
   },
   zvoice(kind, pos, what) {
     const pitch = { brute: 0.62, bloater: 0.78, runner: 1.18, riot: 0.88, screamer: 1.25, spitter: 1.1, crawler: 0.95, worker: 0.9 }[kind] || 1;
-    const names = what === 'die' ? ['z_death', 'z_die1', 'z_die2'] : what === 'hurt' ? ['z_hurt', 'z_pain1', 'z_pain2', 'z_pain3'] : what === 'attack' ? ['z_war', 'z_pain2', 'z_growl'] : kind === 'runner' ? ['z_war', 'z_pain2', 'z_moan', 'z_g3'] : ['z_growl', 'z_moan', 'z_g1', 'z_g2', 'z_g3', 'z_growl'];
+    if (what === 'talk') {
+      const n = pick(['zt_brains1', 'zt_brains2', 'zt_come', 'zt_kill', 'zt_gib', 'zt_brains1', 'zt_kill']);
+      return this.play(n, { pos, rate: clamp(0.92 + (pitch - 1) * 0.35, 0.8, 1.12), vary: 0.04, cat: 'zt', lim: 2, pri: 1, ref: 5, roll: 0.9, rev: 0.2, muff: 26, max: 42, vol: 1.25 });
+    }
+    const names = what === 'die' ? ['z_death', 'z_die1', 'z_die2', 'z_die3', 'z_die3'] : what === 'hurt' ? ['z_hurt', 'z_pain1', 'z_pain2', 'z_pain3', 'z_pain4'] : what === 'attack' ? ['z_war', 'z_pain2', 'z_growl'] : kind === 'runner' ? ['z_war', 'z_pain2', 'z_moan', 'z_g3', 'z_call2'] : ['z_growl', 'z_moan', 'z_g1', 'z_g2', 'z_g3', 'z_call1', 'z_call2', 'z_call3'];
+    if (what === 'die') return this.play(pick(names), { pos, rate: pitch, vary: 0.06, cat: 'zd', lim: 4, pri: 2, at: 0.05, ref: 6, roll: 0.85, rev: 0.22, muff: 30, max: 52, vol: 1.6 });
     return this.play(pick(names), { pos, rate: pitch, vary: 0.08, cat: 'zv', lim: 6, ref: 3.5, roll: 1.1, rev: 0.16, muff: 22, max: 34, vol: what === 'idle' ? 0.8 : 1 });
   },
   ambience(on, level = 0) {
@@ -289,5 +305,19 @@ export const ZA = {
     loops.push(h);
     return h;
   },
-  stopAll() { for (const v of voices.slice()) v.stop(); voices.length = 0; for (const h of loops.slice()) h.stop(); this.ambOn = false; this.ambience(false); this.music(null, { fade: 0.4 }); },
+  mover(name, pos, o = {}) {
+    if (!ac || !Sfx.sfxOn || !bufs[name] || !this.sync() || ac.state !== 'running') return null;
+    const c = chain({ pos });
+    const s = ac.createBufferSource();
+    s.buffer = bufs[name];
+    s.connect(c.g);
+    const h = { c, s, pos, o, vol: (FILES[name] || 0.6) * (o.vol == null ? 1 : o.vol) };
+    place(c, { ...o, pos }, h.vol);
+    s.onended = () => { c.free(); const i = movers.indexOf(h); if (i >= 0) movers.splice(i, 1); };
+    h.stop = () => { try { s.stop(); } catch {} };
+    s.start(ac.currentTime + (o.at || 0));
+    movers.push(h);
+    return h;
+  },
+  stopAll() { for (const h of movers.slice()) h.stop(); for (const v of voices.slice()) v.stop(); voices.length = 0; for (const h of loops.slice()) h.stop(); this.ambOn = false; this.ambience(false); this.music(null, { fade: 0.4 }); },
 };

@@ -44,14 +44,19 @@ export function fpItems(out, V, F, s, cam) {
   const Lg = m4.mul(Cg, m4.mul(m4.pose(P0[0] + gx, P0[1] + gy, P0[2] + gz, gry, grx, grz), m4.pose(-P0[0], -P0[1], -P0[2], 0, 0, 0)));
   const r = V.R ? fpGLItems(out, V.R, F, s, cam, Lg) : null;
   if (r) {
-    if (!r.hide && F.flash > 0 && r.muz && F.flashMesh) {
+    if (!r.hide && F.flash > 0 && r.muz && F.flashMesh && !(V.R.fxOk && V.R.fxOk())) {
       F.flashRot += 1.7;
       out.push({ mesh: F.flashMesh, model: m4.mul(Lg, m4.pose(r.muz[0], r.muz[1], r.muz[2] + 0.01, 0, 0, F.flashRot, 0.8 + F.flash * 9)), blend: 2, alpha: 1 });
     }
     if (r.hand && !(F.thr >= 0 && F.thr > 0.1)) {
       const mol = (s.throwK || 'grenade') === 'molotov';
-      const mesh = mol ? V.molObj : V.nadeObj;
-      if (mesh) out.push({ mesh, model: m4.mul(Lg, m4.pose(r.hand[0], r.hand[1] - (mol ? 0.05 : 0.0), r.hand[2] + 0.02, 0, 0, 0)) });
+      const TM = V.thrM && V.thrM[mol ? 'molo' : 'nade'];
+      const HO = mol ? HOLD_M : HOLD_N;
+      if (TM) out.push({ mesh: TM.mesh, model: m4.mul(Lg, m4.pose(r.hand[0] + HO[0], r.hand[1] + HO[1], r.hand[2] + HO[2], HO[3], HO[4], HO[5])), skin: ID_SKIN, tex: TM.tex, nrm: TM.nrm, col: THR_COL, gloss: true });
+      else {
+        const mesh = mol ? V.molObj : V.nadeObj;
+        if (mesh) out.push({ mesh, model: m4.mul(Lg, m4.pose(r.hand[0], r.hand[1] - (mol ? 0.05 : 0.0), r.hand[2] + 0.02, 0, 0, 0)) });
+      }
     }
   }
   return { L: Lg, Cm: Cg, a };
@@ -90,6 +95,10 @@ function throwObj(m, kind) {
 }
 
 const camM = (pos, yaw, pitch) => m4.pose(pos[0], pos[1], pos[2], yaw, -pitch, 0);
+export const ID_SKIN = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0]);
+const THR_COL = new Float32Array([1, 1, 1, 0]);
+const HOLD_N = [-0.012, 0.008, -0.06, 0, 0.25, 0];
+const HOLD_M = [0, -0.06, -0.03, 0, 0, 0];
 const PIVOT = [-0.12, -0.17, 0.36];
 
 export function buildThrowObj(R, kind) {

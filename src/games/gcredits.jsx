@@ -33,6 +33,9 @@ const GROUPS = [
       ['Reed plants pack', 'Nicholas 3D', 'reed-plants-pack-bc77ea5218e44f2dbc23b2a4aef0c898'],
       ['Cattail', 'Hakujin', 'cattail-00cf5598ba274050b784b8a4beb00f03'],
       ['Stylized rocks pack', 'PolyOne Studio', 'free-pack-rocks-stylized-7c60b4d1b8ab4187965f30c5e0212fc0'],
+      ['Train station', 'A9908244', 'train-station-eef3e666293e4eeea7282562ebb9c256'],
+      ['Diesel locomotive', 'Runteratroll', 'free-diesel-locomotive-korail-c2c8e60ead2c4dac9704096fbde80997'],
+      ['Freight train car', 'Вячеслав', 'freight-train-car-ca2084ce43a64a809be5ba0a0ec6cfa8'],
     ],
   },
   {
@@ -45,11 +48,16 @@ const GROUPS = [
       ['Animated SMG', 'DJMaesen', 'fps-animated-smg-ea3dad7478624495a5a46f40127b0579'],
       ['Animated sniper', 'DJMaesen', 'sniper-animated-b48999a250b2433da59f705c371a49b2'],
       ['Throwing arms', 'DJMaesen', 'fps-arms-throwing-99ff0b0e5b144cbfbf67cb34f8ce83bb'],
+      ['M67 fragmentation grenade', 'Vextin', 'm67-fragmentation-grenade-05e2a29118c3408eaa574bcec6997aba'],
+      ['Molotov', 'Armory3D, CGTrader', 'https://www.cgtrader.com', 'Royalty free'],
     ],
   },
   {
     t: 'Characters',
-    items: [['Survivors, zombies and their animations', 'Mixamo by Adobe', 'https://www.mixamo.com', 'Mixamo license']],
+    items: [
+      ['Survivors, zombies and their animations', 'Mixamo by Adobe', 'https://www.mixamo.com', 'Mixamo license'],
+      ['German Shepherd dog', 'RetroStyle Games', 'https://retrostylegames.artstation.com/store/5Y6zX/german-shepherd-3d-model', 'ArtStation standard license'],
+    ],
   },
   {
     t: 'Icons',
@@ -64,6 +72,10 @@ const GROUPS = [
       ['Zombie sound effects', 'EditingCorp', 'https://www.editingcorp.com/zombie-sound-effects-pack-free-download/', 'Royalty free'],
       ['Explosions, cars, water, wind and night sounds', 'Mixkit', 'https://mixkit.co/free-sound-effects/', 'Mixkit license'],
       ['Grenade, dog and older zombie sounds', 'freesound.org and OpenGameArt creators', '/sounds/dead/CREDITS.txt', 'CC0'],
+      ['Footsteps on different surfaces', 'congusbongus, OpenGameArt', 'https://opengameart.org/content/footsteps-on-different-surfaces', 'CC BY 3.0'],
+      ['Talking zombies, pain and death', 'Mike Koenig, SoundBible', 'https://soundbible.com/tags-zombie.html', 'CC BY 3.0'],
+      ['Zombie calls', 'DRAGON STUDIO, Pixabay', 'https://pixabay.com/sound-effects/search/zombie%20voice/', 'Pixabay license'],
+      ['Trains, dog barks and explosions', 'Mixkit', 'https://mixkit.co/free-sound-effects/', 'Mixkit license'],
     ],
   },
   {
@@ -79,6 +91,7 @@ const GROUPS = [
       ['Grass, ground, asphalt and concrete', 'ambientCG', 'https://ambientcg.com', 'CC0'],
       ['Evening field sky', 'Sergej Majboroda, Poly Haven', 'https://polyhaven.com/a/evening_field', 'CC0'],
       ['Fire, smoke and flash sprites', 'Kenney', 'https://kenney.nl/assets/particle-pack', 'CC0'],
+      ['Muzzle flash and explosion footage', 'ActionVFX', 'https://www.actionvfx.com', 'ActionVFX license'],
     ],
   },
 ];

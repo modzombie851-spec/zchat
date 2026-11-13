@@ -1,6 +1,7 @@
+import { hitAdd, hitReset } from './zhit.js';
 import { loadStatic, loadTexArrays } from './zmodel.js';
 import { resBlob } from './zres.js';
-import { PLACE, PROPS2, BOUNDS, GATES, floorH, groundH, forestList, OAKS, hsh, pondE, inRect, TOWN } from './ztown.js';
+import { PLACE, PROPS2, BOUNDS, GATES, RAIL, floorH, groundH, forestList, OAKS, hsh, pondE, inRect, TOWN } from './ztown.js';
 import { groundParts, pondBed, meshH } from './zground.js';
 
 export const TOWN_BASE = '/dead/town';
@@ -26,7 +27,7 @@ function fenceParts(M) {
   const out = [];
   if (!M.corrug) return out;
   const [x0, z0, x1, z1] = BOUNDS, o = 0.12, S = 1.3, W = 2.26 * S * 0.8;
-  const gate = (x, z) => GATES.some((g) => x > g[0] && x < g[2] && z > g[1] && z < g[3]);
+  const gate = (x, z) => GATES.some((g) => x > g[0] && x < g[2] && z > g[1] && z < g[3]) || (z > RAIL.plat[3] - 1 && x > RAIL.plat[0] - 1.2 && x < RAIL.plat[2] + 1.2);
   const side = (ax, az, bx, bz, yaw) => {
     const L = Math.hypot(bx - ax, bz - az), n = Math.ceil(L / W);
     for (let i = 0; i < n; i++) {
@@ -93,10 +94,12 @@ export async function loadTown(R, T, tierIdx, isDead, onP) {
   const meshes = {};
   const meshOf = (id) => meshes[id] || (meshes[id] = R.tstat(M[id]));
   const far = tierIdx === 0 ? 34 : tierIdx === 1 ? 52 : 80;
+  hitReset();
   for (const [id, x, z, yaw, s = 1] of PLACE.concat(PROPS2)) {
     const m = M[id];
     if (!m) continue;
     const y = seat(m, x, z, yaw, s) - (ROCKS.has(id) ? 0.12 : 0.02);
+    if (!VEG.includes(id)) hitAdd(m, x, y, z, yaw, s);
     const rad = Math.hypot(m.max[0] - m.min[0], m.max[1] - m.min[1], m.max[2] - m.min[2]) * 0.5 * s;
     items.push({ mesh: meshOf(id), model: poseM(x, y, z, yaw, s), arrs, cast: true, bs: [x, y + (m.max[1] + m.min[1]) * 0.5 * s, z, rad], maxD: SMALL.has(id) ? far : 0, col: ROCKS.has(id) ? ROCK_COL : undefined });
   }
@@ -130,6 +133,7 @@ export async function loadTown(R, T, tierIdx, isDead, onP) {
     let c = fence.get(key);
     if (!c) { c = { parts: [], x0: 1e9, z0: 1e9, x1: -1e9, z1: -1e9 }; fence.set(key, c); }
     c.parts.push({ M: M[f.id], x: f.x, y: f.y, z: f.z, yaw: f.yaw, s: f.s });
+    hitAdd(M[f.id], f.x, f.y, f.z, f.yaw * 180 / Math.PI, f.s);
     c.x0 = Math.min(c.x0, f.x); c.x1 = Math.max(c.x1, f.x); c.z0 = Math.min(c.z0, f.z); c.z1 = Math.max(c.z1, f.z);
   }
   const fenceFar = tierIdx === 0 ? 120 : tierIdx === 1 ? 170 : 0;

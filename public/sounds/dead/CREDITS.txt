@@ -29,7 +29,7 @@ Older sounds still in use (Creative Commons 0, public domain)
   Zombie moans, war cries, deaths and pain: 80 CC0 creature sfx by rubberduck, opengameart.org, from VoxeLibre
   Wave stinger: by bevibeldesign, freesound.org, from VoxeLibre
   Bone crack: by Cribbler, freesound.org, from VoxeLibre
-  Dog barks, growl and whine: dogblocks mod by Hybrid Dog
+  Dog growl and whine: dogblocks mod by Hybrid Dog
 
 Music
   Horror Game Intro and Zombie Game by Eric Matyas, soundimage.org (free to use with credit)
@@ -39,3 +39,19 @@ Announcer and survivor voices
 
 Wave start impact
   Made from the explosion, stinger and whoosh sounds listed above
+
+Footsteps on concrete, grass, gravel, wood, metal and water, and dog paws
+  Footsteps on different surfaces by congusbongus, opengameart.org (CC BY 3.0)
+  Made from footstep recordings by swuing, sabotovat, Eelke, EminYILDIRIM and ceberation (CC BY 3.0)
+  and Ali 6868 (CC0), all on freesound.org
+
+Talking zombies, zombie pain and long death
+  Zombie Brain Eater, Zombie Kill You, Zombie Come Here, Zombie Gibberish, Zombie In Pain,
+  Zombie Long Death and Enraged Zombies by Mike Koenig, soundbible.com (CC BY 3.0)
+  Zombie sound 2 by DRAGON STUDIO, pixabay.com (Pixabay license)
+
+Dog barks
+  Dog barking twice and Annoyed big dog barking, mixkit.co (Mixkit free license)
+
+Trains
+  Steam train passing and Distant train horn, mixkit.co (Mixkit free license)

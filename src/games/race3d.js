@@ -606,6 +606,12 @@ void main() {
     float sl = length(sd);
     sd = sl > 1e-4 ? sd / sl : uRight;
     p = aCenter.xyz + ax * (aCorner.y * aDir.w) + sd * (aCorner.x * aCenter.w);
+  } else if (aDir.w < -1.5) {
+    vec3 n = normalize(aDir.xyz);
+    vec3 t1 = normalize(abs(n.y) < 0.95 ? cross(n, vec3(0.0, 1.0, 0.0)) : cross(n, vec3(1.0, 0.0, 0.0)));
+    vec3 t2 = cross(n, t1);
+    float an = aInfo.z * 6.2832, ca = cos(an), sa = sin(an);
+    p = aCenter.xyz + n * 0.012 + ((t1 * ca + t2 * sa) * aCorner.x + (t2 * ca - t1 * sa) * aCorner.y) * aCenter.w;
   } else if (aDir.w < 0.0) p = aCenter.xyz + vec3(aCorner.x, 0.0, aCorner.y) * aCenter.w;
   else p = aCenter.xyz + (uRight * aCorner.x + uUp * aCorner.y) * aCenter.w;
   vUv = aCorner; vInfo = aInfo; vPos = p;
@@ -614,8 +620,8 @@ void main() {
 const PFS = `#version 300 es
 precision highp float;
 in vec2 vUv; in vec3 vInfo; in vec3 vPos;
-uniform vec3 uCam, uFogCol; uniform float uFogDen, uFxOn;
-uniform sampler2D uFx;
+uniform vec3 uCam, uFogCol; uniform float uFogDen, uFxOn, uFx2On, uBoomOn;
+uniform sampler2D uFx, uFx2, uBoom;
 out vec4 o;
 float fxTile(float tile, float rot) {
   float c = cos(rot), s = sin(rot);
@@ -632,6 +638,41 @@ void main() {
   float t = vInfo.y;
   float a = (1.0 - smoothstep(0.15, 1.0, r)) * vInfo.x;
   vec3 c; float add = 0.0;
+  if (t > 27.5) {
+    float d0 = length(uCam - vPos);
+    float f0 = 1.0 - exp(-pow(d0 * uFogDen, 1.35));
+    vec3 fc = pow(uFogCol, vec3(1.0 / 2.2));
+    vec2 uv = vec2(vUv.x * 0.5 + 0.5, 0.5 - vUv.y * 0.5);
+    if (t < 28.5) {
+      if (uFx2On < 0.5) { float e = 1.0 - smoothstep(0.15, 0.5, r); float a3 = e * vInfo.x * 0.85; o = vec4(vec3(0.02) * a3, a3); return; }
+      vec4 tx = texture(uFx2, vec2(uv.x * 0.25, 0.5 + uv.y * 0.5));
+      float a3 = tx.a * vInfo.x;
+      o = vec4(mix(tx.rgb * 0.45, fc, f0) * a3, a3);
+      return;
+    }
+    if (t < 29.5) {
+      if (uFx2On < 0.5) { float e = 1.0 - smoothstep(0.0, 1.0, r); o = vec4(vec3(1.0, 0.8, 0.45) * 2.0 * e * e * vInfo.x, 0.0); return; }
+      float tile = floor(vInfo.z * 3.999), an = vInfo.z * 41.0, ca = cos(an), sa = sin(an);
+      vec2 q = vec2(ca * vUv.x - sa * vUv.y, sa * vUv.x + ca * vUv.y);
+      vec3 tx = texture(uFx2, vec2((tile + q.x * 0.5 + 0.5) * 0.25, (0.5 - q.y * 0.5) * 0.5)).rgb;
+      o = vec4(tx * vec3(1.15, 1.0, 0.86) * 1.7 * vInfo.x, 0.0);
+      return;
+    }
+    if (t < 30.5) {
+      if (uFx2On < 0.5) { float e = 1.0 - smoothstep(0.0, 1.0, r); o = vec4(vec3(1.0, 0.75, 0.4) * 1.6 * e * e * vInfo.x, 0.0); return; }
+      vec3 tx = texture(uFx2, vec2((1.0 + vUv.y * 0.5 + 0.5) * 0.25, 0.5 + (0.5 - vUv.x * 0.5) * 0.5)).rgb;
+      o = vec4(tx * vec3(1.15, 0.95, 0.8) * 1.5 * vInfo.x, 0.0);
+      return;
+    }
+    if (uBoomOn < 0.5) { float e = 1.0 - smoothstep(0.0, 1.0, r); o = vec4(vec3(1.0, 0.6, 0.25) * 1.6 * e * vInfo.x * (1.0 - vInfo.z), 0.0); return; }
+    float fr = clamp(vInfo.z, 0.0, 1.0) * 15.0, fa = floor(fr), fb = min(15.0, fa + 1.0), k = fr - fa;
+    vec4 b0 = texture(uBoom, (vec2(mod(fa, 4.0), floor(fa / 4.0)) + uv) * 0.25);
+    vec4 b1 = texture(uBoom, (vec2(mod(fb, 4.0), floor(fb / 4.0)) + uv) * 0.25);
+    vec4 tx = mix(b0, b1, k);
+    float a3 = tx.a * vInfo.x;
+    o = vec4(mix(tx.rgb * 1.3, fc * tx.a, f0 * 0.7) * vInfo.x, a3);
+    return;
+  }
   if (t > 21.5) {
     float sd = vInfo.z * 17.0;
     float n = vn(vUv * 3.1 + sd) * 0.6 + vn(vUv * 7.7 - sd * 1.3) * 0.4;
@@ -811,8 +852,28 @@ export function createRenderer(canvas, opts = {}) {
   const gl = canvas.getContext('webgl2', { antialias: opts.aa !== false, alpha: false, powerPreference: 'high-performance', preserveDrawingBuffer: !!opts.keep });
   if (!gl) return null;
   const P = compile(gl, VS, FS), S = compile(gl, SVS, SFS), K = compile(gl, SKYVS, SKYFS), Q = compile(gl, PVS, PFS);
-  let WP = null, fxTex = null;
+  let WP = null, fxTex = null, fx2Tex = null, boomTex = null;
   const ZIMP = [0, 0, 0];
+  const fxLoad = (src, set) => {
+    if (!src || typeof fetch === 'undefined') return;
+    (typeof src === 'string' ? fetch(src).then((r) => (r.ok ? r.blob() : null)) : Promise.resolve(src)).then((b) => (b ? createImageBitmap(b, { premultiplyAlpha: 'none' }) : null)).then((bm) => {
+      if (!bm || gl.isContextLost()) return;
+      const t = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, t);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, bm);
+      gl.generateMipmap(gl.TEXTURE_2D);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.bindTexture(gl.TEXTURE_2D, null);
+      if (bm.close) bm.close();
+      set(t);
+      texs.push(t);
+    }).catch(() => {});
+  };
+  fxLoad(opts.fx2, (t) => { fx2Tex = t; });
+  fxLoad(opts.boom, (t) => { boomTex = t; });
   if (opts.fx && typeof fetch !== 'undefined') {
     (typeof opts.fx === 'string' ? fetch(opts.fx).then((r) => (r.ok ? r.blob() : null)) : Promise.resolve(opts.fx)).then((b) => (b ? createImageBitmap(b, { premultiplyAlpha: 'none' }) : null)).then((bm) => {
       if (!bm || gl.isContextLost()) return;
@@ -1375,6 +1436,11 @@ export function createRenderer(canvas, opts = {}) {
       gl.uniform1f(Q.u.uFogDen, env.fogDen);
       gl.uniform1f(Q.u.uFxOn, fxTex ? 1 : 0);
       if (fxTex) { gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, fxTex); gl.uniform1i(Q.u.uFx, 3); gl.activeTexture(gl.TEXTURE0); }
+      gl.uniform1f(Q.u.uFx2On, fx2Tex ? 1 : 0);
+      gl.uniform1f(Q.u.uBoomOn, boomTex ? 1 : 0);
+      if (fx2Tex) { gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_2D, fx2Tex); gl.uniform1i(Q.u.uFx2, 4); }
+      if (boomTex) { gl.activeTexture(gl.TEXTURE5); gl.bindTexture(gl.TEXTURE_2D, boomTex); gl.uniform1i(Q.u.uBoom, 5); }
+      gl.activeTexture(gl.TEXTURE0);
       gl.bindVertexArray(partVao);
       gl.bindBuffer(gl.ARRAY_BUFFER, partBuf);
       gl.bufferData(gl.ARRAY_BUFFER, partData.subarray(0, n * 11), gl.DYNAMIC_DRAW);
@@ -1446,7 +1512,7 @@ export function createRenderer(canvas, opts = {}) {
     if (usePost) runPost(env);
     return VP;
   }
-  return { gl, mesh, skin, tskin, tstat, wmesh, texture, texArray, setSky, maxTex: () => gl.getParameter(gl.MAX_TEXTURE_SIZE), drop, render, dispose, lose, drawn: () => lastDrawn };
+  return { gl, mesh, skin, tskin, tstat, wmesh, texture, texArray, setSky, fxOk: () => !!fx2Tex, maxTex: () => gl.getParameter(gl.MAX_TEXTURE_SIZE), drop, render, dispose, lose, drawn: () => lastDrawn };
 }
 const IDENT = m4.ident();
 const DEFCOL = new Float32Array([1, 1, 1, 0]);

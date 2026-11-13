@@ -22,7 +22,7 @@ function nrmAt(x, z) {
   const nx = -hx, ny = 2 * e, nz = -hz, L = Math.hypot(nx, ny, nz);
   return [nx / L, ny / L, nz / L];
 }
-function dirtW(x, z) {
+export function dirtW(x, z) {
   const rd = roadDist(x, z);
   let d = ss(4.8, 1.6, rd) * 0.75;
   if (inRect(x, z, TOWN.lot, 2.8)) d = Math.max(d, 0.55);

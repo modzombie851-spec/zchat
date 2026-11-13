@@ -33,6 +33,7 @@ const LOCO = {
   L: { walk: ['w_strl', 's_strl'], run: ['l_str', 's_strl'] },
   R: { walk: ['w_strr', 's_strr'], run: ['r_str', 'w_strr'] },
 };
+const LOCO_C = { F: { walk: ['c_fwd'], run: [] }, B: { walk: ['c_back'], run: [] }, L: { walk: ['c_left'], run: [] }, R: { walk: ['c_right'], run: [] } };
 const ss = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const first = (C, L) => { for (const n of L) if (C[n]) return n; return null; };
@@ -96,14 +97,15 @@ function locomotion(md, C, S, inp, dt) {
   const pist = pistolish(inp.w);
   const dirs = [['F', Math.max(0, S.dc)], ['B', Math.max(0, -S.dc)], ['L', Math.max(0, S.ds)], ['R', Math.max(0, -S.ds)]];
   const tot = dirs.reduce((a, d) => a + d[1], 0) || 1;
-  const RUNAT = { F: [1.7, 3.0], B: [1.3, 2.4], L: [0.8, 1.5], R: [0.8, 1.5] }, wSpr = inp.sprint ? ss(4.4, 5.6, v) : 0;
+  const crouch = !!inp.crouch;
+  const RUNAT = { F: [1.7, 3.0], B: [1.3, 2.4], L: [0.8, 1.5], R: [0.8, 1.5] }, wSpr = inp.sprint && !crouch ? ss(4.4, 5.6, v) : 0;
   const parts = [];
   for (const [d, wd0] of dirs) {
     const wd = wd0 / tot;
     if (wd < 0.02) continue;
-    const L = LOCO[d], wRun = ss(RUNAT[d][0], RUNAT[d][1], v);
-    const walk = d === 'F' && pist ? first(C, ['p_walk']) : first(C, L.walk);
-    const run = d === 'F' && pist ? first(C, ['p_run']) : first(C, L.run);
+    const L = crouch ? LOCO_C[d] : LOCO[d], wRun = crouch ? 0 : ss(RUNAT[d][0], RUNAT[d][1], v);
+    const walk = d === 'F' && pist && !crouch ? first(C, ['p_walk']) : first(C, L.walk);
+    const run = d === 'F' && pist && !crouch ? first(C, ['p_run']) : first(C, L.run);
     const spr = d === 'F' && L.spr ? first(C, L.spr) : null;
     const wr = d === 'F' && spr ? wRun * (1 - wSpr) : wRun;
     if (walk && 1 - wRun > 0.02) parts.push([walk, wd * (1 - wRun)]);
@@ -242,6 +244,8 @@ export function ssPose(md, C, S, inp, dt) {
   let mode = 'loco', full = null, fullT = 0;
   if (inp.dead >= 0 && C.s_die) { mode = 'dead'; full = 's_die'; fullT = Math.min(inp.dead, C.s_die.dur); }
   else if ((inp.st === 1 || inp.kneel) && C.s_kneel) { mode = 'kneel'; full = 's_kneel'; }
+  else if (inp.slide && C.slide) { mode = 'slide'; full = 'slide'; }
+  else if (inp.air && C.j_loop) { mode = 'air'; full = 'j_loop'; }
   else if (inp.emo && C[EMO_CLIP[inp.emo]]) { mode = 'emo:' + inp.emo; full = EMO_CLIP[inp.emo]; fullT = inp.emoT || 0; }
   if (mode !== S.mode) {
     if (S.mode) { S.qs.set(S.q); S.hs[0] = S.hp[0]; S.hs[1] = S.hp[1]; S.hs[2] = S.hp[2]; S.snapW = 1; }
@@ -250,14 +254,17 @@ export function ssPose(md, C, S, inp, dt) {
   S.modeT += dt;
   const q = S.q, hp = S.hp;
   if (full) {
-    const t = mode === 'kneel' ? S.modeT + 1.2 : fullT;
+    let t = mode === 'kneel' ? S.modeT + 1.2 : fullT;
+    if (mode === 'slide') t = Math.min(S.modeT + (C.slide.ph || 0.2), C.slide.dur * 0.7);
+    if (mode === 'air') { if (S.modeT < 0.3 && C.j_up) { full = 'j_up'; t = Math.min(C.j_up.dur, (C.j_up.ph || 0) + S.modeT * 1.4); } else t = S.modeT; }
     sampleK(md, C, full, t, q, hp);
   } else {
     S.it += dt;
-    const idle = pist && C.p_idle ? 'p_idle' : 's_idle';
+    const crouch = !!inp.crouch && !!C.c_idle;
+    const idle = crouch ? 'c_idle' : pist && C.p_idle ? 'p_idle' : 's_idle';
     sampleK(md, C, idle, S.it, S.qb, S.hb);
     const wMove = ss(0.12, 0.6, S.v);
-    if (wMove > 0.001 && locomotion(md, C, S, inp, dt)) {
+    if (wMove > 0.001 && locomotion(md, C, S, crouch ? { ...inp, crouch } : inp, dt)) {
       for (let i = 0; i < NB; i++) nlerp(q, i * 4, S.qb, i * 4, S.qa, i * 4, wMove);
       for (let k = 0; k < 3; k++) hp[k] = S.hb[k] + (S.ha[k] - S.hb[k]) * wMove;
     } else { q.set(S.qb); hp[0] = S.hb[0]; hp[1] = S.hb[1]; hp[2] = S.hb[2]; }
@@ -265,7 +272,7 @@ export function ssPose(md, C, S, inp, dt) {
     if (armed) {
       const wSpr = inp.sprint ? ss(4.4, 5.6, S.v) : 0;
       const runClip = pist ? 'p_run' : 's_run';
-      if (C[runClip] && wMove > 0.001) {
+      if (C[runClip] && wMove > 0.001 && !crouch) {
         const c = C[runClip];
         sampleK(md, C, runClip, (((S.ph + (c.ph || 0)) % 1) + 1) % 1 * c.dur, S.qu, S.hu);
         const fix = gunYaw(md, C, runClip, 0) * 0.5;

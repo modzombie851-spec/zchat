@@ -220,8 +220,9 @@ export function makeSim(o = {}) {
     S.kills++;
     const T = ZT[z.k];
     const p = by ? S.players.get(by) : null;
-    if (p) { p.kills++; p.pts += Math.round(T.pts * (head ? 1.5 : 1)); }
+    if (p) { p.kills++; p.pts += Math.round(T.pts * (head ? 1.5 : 1) * (z.boss ? 5 : 1)); }
     emit(['k', z.id, by || '', head ? 1 : 0, how || 'g']);
+    if (z.boss) emit(['bk', z.id, by || '']);
     if (T.boom) blast(z.x, z.z, 3.6, 120, null, 'b', z.lv | 0);
     return true;
   };
@@ -321,12 +322,19 @@ export function makeSim(o = {}) {
     const tbl = [['bloater', 4, 0.07], ['spitter', 6, 0.06], ['screamer', 4, 0.05], ['riot', 5, 0.08], ['runner', 3, 0.18], ['crawler', 2, 0.08], ['worker', 2, 0.2]];
     let acc = 0;
     for (const [kk, w0, pr] of tbl) { if (w < w0) continue; acc += pr * Math.min(1.4, 1 + (w - w0) * 0.04); if (r < acc) { k = kk; break; } }
-    if (S.bruteLeft > 0 && S.left <= S.bruteAt) { k = 'brute'; S.bruteLeft--; S.bruteAt = Math.floor(S.left * 0.5); }
+    let boss = false;
+    if (S.bossLeft > 0 && S.left <= S.bossAt) { k = 'brute'; boss = true; S.bossLeft--; }
+    else if (S.bruteLeft > 0 && S.left <= S.bruteAt) { k = 'brute'; S.bruteLeft--; S.bruteAt = Math.floor(S.left * 0.5); }
     const T = ZT[k];
     const jit = inside ? 0.5 : 6, zlv = inside ? pick[2] : 0;
     const c = collide(pick[0] + (R() - 0.5) * jit, pick[1] + (R() - 0.5) * jit, T.r, zlv);
     const hpK = 1 + Math.max(0, w - 5) * 0.06;
     const z = { id: S.nid++, k, x: c[0], z: c[1], lv: zlv, yaw: R() * 6.28, hp: T.hp * hpK, max: T.hp * hpK, r: T.r, cd: 0, tg: null, tgT: 0, st: 0, slow: 0, stun: 0, burn: 0, rage: 0, los: false, losT: 0, stuckT: 0, unstick: 0, side: 1, sp: T.spd * (0.88 + R() * 0.24) * (1 + Math.min(0.3, w * 0.012)) };
+    if (boss) {
+      const bk = 3 + Math.min(5, Math.max(0, al.length - 1));
+      z.boss = 1; z.r = 1.2; z.hp = z.max = T.hp * hpK * bk; z.sp = T.spd * 1.05;
+      emit(['bo', z.id]);
+    }
     S.zs.set(z.id, z);
     return true;
   };
@@ -338,6 +346,8 @@ export function makeSim(o = {}) {
     S.left = waveSize(S.wave, n);
     S.bruteLeft = S.wave % 5 === 0 ? Math.floor(S.wave / 5) + (n > 8 ? Math.floor(n / 8) : 0) : S.wave > 6 && R() < 0.3 ? 1 : 0;
     S.bruteAt = Math.floor(S.left * 0.6);
+    S.bossLeft = S.wave % 5 === 0 ? 1 : 0;
+    S.bossAt = Math.floor(S.left * 0.85);
     S.spawnT = 0.5;
     emit(['w', S.wave]);
   };
@@ -555,12 +565,17 @@ export function makeSim(o = {}) {
         continue;
       }
       if (T.spit && tg && dist < 7 && z.los) { dx = -dx; dz = -dz; }
-      const reach = T.r + 0.75;
+      const reach = (z.r || T.r) + 0.75;
       z.st = 0;
       if (tg && dist < reach + 0.15 && near(z, tg)) {
         z.st = 1;
         z.yaw = Math.atan2(tg.x - z.x, tg.z - z.z);
-        if (z.cd <= 0) { z.cd = T.cd * (z.rage > 0 ? 0.75 : 1); hurtP(tg, T.dmg * (z.rage > 0 ? 1.25 : 1)); emit(['zh', z.id, tg.id]); }
+        if (z.cd <= 0) {
+          z.cd = T.cd * (z.rage > 0 ? 0.75 : 1);
+          hurtP(tg, T.dmg * (z.rage > 0 ? 1.25 : 1) * (z.boss ? 1.4 : 1));
+          if (z.boss) for (const q of S.players.values()) if (q !== tg && q.st === 0 && Math.hypot(q.x - z.x, q.z - z.z) < 3.4 && near(q, z)) hurtP(q, T.dmg * 0.5);
+          emit(['zh', z.id, tg.id]);
+        }
         z.stuckT = 0;
         continue;
       }
@@ -639,12 +654,12 @@ export function makeSim(o = {}) {
     const z = [];
     for (const q of S.zs.values()) {
       if (vx != null && (Math.abs(q.x - vx) > rad || Math.abs(q.z - vz) > rad)) continue;
-      z.push(q.id, ZKEYS.indexOf(q.k), Math.round(q.x * 10), Math.round(q.z * 10), Math.round(q.yaw * 100), Math.max(1, Math.round((q.hp / q.max) * 100)), (q.st ? 1 : 0) | (q.slow > 0 ? 2 : 0) | (q.scr > 0 ? 4 : 0) | (q.stun > 0 ? 8 : 0) | (q.rage > 0 ? 16 : 0) | (q.lv ? 32 : 0));
+      z.push(q.id, ZKEYS.indexOf(q.k), Math.round(q.x * 10), Math.round(q.z * 10), Math.round(q.yaw * 100), Math.max(1, Math.round((q.hp / q.max) * 100)), (q.st ? 1 : 0) | (q.slow > 0 ? 2 : 0) | (q.scr > 0 ? 4 : 0) | (q.stun > 0 ? 8 : 0) | (q.rage > 0 ? 16 : 0) | (q.lv ? 32 : 0) | (q.boss ? 64 : 0));
     }
     const p = [];
     for (const q of S.players.values()) {
       const P = q.pet;
-      p.push([q.id, Math.round(q.x * 10), Math.round(q.z * 10), Math.round(q.yaw * 100), Math.round(q.aim * 100), q.w, Math.round(q.hp), q.st, Math.round(q.rev * 100), (q.fl & 63) | (q.mv ? 1 : 0) | (q.revT ? 4 : 0) | (q.lv ? 64 : 0), q.kills, q.pts, P ? Math.round(P.x * 10) : 0, P ? Math.round(P.z * 10) : 0, P ? Math.round(P.yaw * 100) : 0, P ? P.st : -1, P && P.lv ? 1 : 0]);
+      p.push([q.id, Math.round(q.x * 10), Math.round(q.z * 10), Math.round(q.yaw * 100), Math.round(q.aim * 100), q.w, Math.round(q.hp), q.st, Math.round(q.rev * 100), (q.fl & 959) | (q.mv ? 1 : 0) | (q.revT ? 4 : 0) | (q.lv ? 64 : 0), q.kills, q.pts, P ? Math.round(P.x * 10) : 0, P ? Math.round(P.z * 10) : 0, P ? Math.round(P.yaw * 100) : 0, P ? P.st : -1, P && P.lv ? 1 : 0]);
     }
     const ac = S.acid.length ? S.acid.map((a) => [Math.round(a.x * 10), Math.round(a.z * 10), Math.round(a.life * 10), a.lv | 0]) : undefined;
     return { w: S.wave, ph: PH[S.ph], tl: Math.ceil(Math.max(0, S.tl)), zl: S.left + S.zs.size, z, p, ac };
