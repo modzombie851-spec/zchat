@@ -115,6 +115,7 @@ export function ZLobby({ L }) {
           </button>
         )}
         {L.canInvite && <IconBtn u={u} label="Invite friends" onPress={L.onFriends}><Ico k="people" size={u(19)} color={CREAM} /></IconBtn>}
+        {L.onMaker && <IconBtn u={u} label="Map maker" onPress={L.onMaker}><Ico k="map" size={u(19)} color={CREAM} /></IconBtn>}
         <IconBtn u={u} label="Settings" onPress={L.onSettings}><Ico k="gear" size={u(19)} color={CREAM} /></IconBtn>
       </div>
 

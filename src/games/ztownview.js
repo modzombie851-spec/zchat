@@ -11,8 +11,8 @@ const ROCK_COL = [0.62, 0.62, 0.57, 0];
 const SMALL = new Set(['barrelB', 'barrelR', 'tyre', 'tires', 'crate', 'crates', 'pallets', 'bins', 'hay', 'corrug', 'barbed', 'rock2', 'rock5', 'rock9', 'grassA', 'grassB', 'plant', 'lamp']);
 
 const onPave = (x, z) => (z > -4.6 && z < 4.6) || inRect(x, z, TOWN.lot, 0);
-const surf = (x, z) => (onPave(x, z) ? floorH(x, z) : pondE(x, z) < 1.6 ? Math.max(meshH(x, z), floorH(x, z)) : meshH(x, z));
-function seat(m, x, z, yawDeg, s) {
+export const surf = (x, z) => (onPave(x, z) ? floorH(x, z) : pondE(x, z) < 1.6 ? Math.max(meshH(x, z), floorH(x, z)) : meshH(x, z));
+export function seat(m, x, z, yawDeg, s) {
   if (onPave(x, z)) return floorH(x, z);
   const a = yawDeg * Math.PI / 180, c = Math.cos(a), n = Math.sin(a);
   const hx = (m.max[0] - m.min[0]) * 0.3 * s, hz = (m.max[2] - m.min[2]) * 0.3 * s, cx = (m.max[0] + m.min[0]) * 0.5 * s, cz = (m.max[2] + m.min[2]) * 0.5 * s;
@@ -47,7 +47,7 @@ function fenceParts(M) {
   side(x0, z1 + o, x1, z1 + o, Math.PI / 2);
   return out;
 }
-function poseM(x, y, z, yawDeg, s) {
+export function poseM(x, y, z, yawDeg, s) {
   const a = yawDeg * Math.PI / 180, c = Math.cos(a), n = Math.sin(a);
   return new Float32Array([c * s, 0, -n * s, 0, 0, s, 0, 0, n * s, 0, c * s, 0, x, y, z, 1]);
 }
@@ -76,7 +76,13 @@ export function mergeStatic(parts) {
   return { verts: vb, idx: ib, ni, nv, groups: [{ arr: parts[0].M.groups[0].arr, start: 0, count: ni }] };
 }
 
-export async function loadTown(R, T, tierIdx, isDead, onP) {
+export const partY = (m, id, x, z, yaw, s) => seat(m, x, z, yaw, s) - (ROCKS.has(id) ? 0.12 : 0.02);
+export function partItem(m, mesh, arrs, id, x, y, z, yaw, s, far) {
+  const rad = Math.hypot(m.max[0] - m.min[0], m.max[1] - m.min[1], m.max[2] - m.min[2]) * 0.5 * s;
+  return { mesh, model: poseM(x, y, z, yaw, s), arrs, cast: true, bs: [x, y + (m.max[1] + m.min[1]) * 0.5 * s, z, rad], maxD: SMALL.has(id) ? far : 0, col: ROCKS.has(id) ? ROCK_COL : undefined };
+}
+
+export async function loadTown(R, T, tierIdx, isDead, onP, o = {}) {
   const step = (f) => { if (onP) onP(f); };
   const man = JSON.parse(await (await resBlob(`${TOWN_BASE}/town.json`)).text());
   const shrink = tierIdx === 0 ? 2 : tierIdx === 1 ? 1 : 0;
@@ -85,7 +91,8 @@ export async function loadTown(R, T, tierIdx, isDead, onP) {
   if (isDead()) return null;
   const arrs = Object.keys(man.arrays).map((k) => R.texArray(ta[k].layers, ta[k].size));
   for (const k of Object.keys(ta)) for (const l of ta[k].layers) if (l && l.close) l.close();
-  const need = [...new Set(PLACE.concat(PROPS2).map((p) => p[0]).concat(VEG, ['corrug', 'barbed']))].filter((id) => man.models[id]);
+  const place = o.place || PLACE.concat(PROPS2);
+  const need = [...new Set((o.all ? Object.keys(man.models) : place.map((p) => p[0])).concat(VEG, ['corrug', 'barbed']))].filter((id) => man.models[id]);
   const M = {};
   let got = 0;
   await Promise.all(need.map(async (id) => { M[id] = await loadStatic(TOWN_BASE, id); got++; step(0.7 + (got / need.length) * 0.25); }));
@@ -95,13 +102,12 @@ export async function loadTown(R, T, tierIdx, isDead, onP) {
   const meshOf = (id) => meshes[id] || (meshes[id] = R.tstat(M[id]));
   const far = tierIdx === 0 ? 34 : tierIdx === 1 ? 52 : 80;
   hitReset();
-  for (const [id, x, z, yaw, s = 1] of PLACE.concat(PROPS2)) {
+  for (const [id, x, z, yaw, s = 1, dy = 0] of place) {
     const m = M[id];
     if (!m) continue;
-    const y = seat(m, x, z, yaw, s) - (ROCKS.has(id) ? 0.12 : 0.02);
+    const y = partY(m, id, x, z, yaw, s) + dy;
     if (!VEG.includes(id)) hitAdd(m, x, y, z, yaw, s);
-    const rad = Math.hypot(m.max[0] - m.min[0], m.max[1] - m.min[1], m.max[2] - m.min[2]) * 0.5 * s;
-    items.push({ mesh: meshOf(id), model: poseM(x, y, z, yaw, s), arrs, cast: true, bs: [x, y + (m.max[1] + m.min[1]) * 0.5 * s, z, rad], maxD: SMALL.has(id) ? far : 0, col: ROCKS.has(id) ? ROCK_COL : undefined });
+    items.push(partItem(m, meshOf(id), arrs, id, x, y, z, yaw, s, far));
   }
   const chunks = new Map();
   const put = (id, x, z, yaw, s, sink) => {
@@ -153,5 +159,5 @@ export async function loadTown(R, T, tierIdx, isDead, onP) {
     items.push({ mesh: R.tstat(bed), model: null, arrs, cast: false, bs: bed.bs });
     ground = true;
   }
-  return { items, arrs, ground };
+  return { items, arrs, ground, M, meshOf, man, far };
 }

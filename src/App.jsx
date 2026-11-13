@@ -18596,7 +18596,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-export const APP_VERSION = '53.1V';
+export const APP_VERSION = '53.2V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -48389,7 +48389,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onInvite={(ps) => { const rm = racePick.rm; setRacePick(null); setShowGames(false); startRaceWith(ps, rm); }} />
       )}
       {zombieGame && me && (
-        <ZombieGamePage key={zombieGame.at} me={me} myId={session.user.id} join={zombieGame.join || null} friends={gameFriends} online={onlineIds} onInvite={(ps, room) => startZombieWith(ps, room)} onClose={() => { setZombieGame(null); setShowGames(true); }} />
+        <ZombieGamePage key={zombieGame.at} me={me} myId={session.user.id} isAdmin={isZAdmin} join={zombieGame.join || null} friends={gameFriends} online={onlineIds} onInvite={(ps, room) => startZombieWith(ps, room)} onClose={() => { setZombieGame(null); setShowGames(true); }} />
       )}
       {siegeGame && me && (
         <SiegeGamePage key={siegeGame.rm} solo={!!siegeGame.solo} room={siegeGame.solo ? null : siegeGame} me={me} myId={session.user.id} watch={!!siegeGame.watch}

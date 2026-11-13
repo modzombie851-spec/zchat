@@ -303,7 +303,7 @@ function breakTip(wave) {
   return TIPS[Math.floor(Date.now() / 6000) % TIPS.length];
 }
 
-export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], onInvite = null, online = null }) {
+export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], onInvite = null, online = null, isAdmin = false }) {
   injectKitCss();
   injectCss();
   const look = useCtlLook('zombie');
@@ -353,6 +353,8 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
   const [boot, setBoot] = useState({ st: 'check', got: 0, tot: 0, pct: 0 });
   const [bootTry, setBootTry] = useState(0);
   const [cvKey, setCvKey] = useState(0);
+  const [MakerC, setMakerC] = useState(null);
+  const [makerErr, setMakerErr] = useState(false);
   const [fix, setFix] = useState(0);
   const lostRef = useRef(null);
   const bootFails = useRef(0);
@@ -2040,6 +2042,19 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
   const friendRows = (canInvite ? friends : []).map((f) => ({ id: f.id, name: f.name || 'Friend', avatar: f.avatar, on: !!(online && online.has && online.has(f.id)), sent: invited.has(f.id), raw: f }))
     .sort((a, b) => (b.on ? 1 : 0) - (a.on ? 1 : 0)).slice(0, 4);
   const startLabel = { join: 'Join', rejoin: 'Rejoin', online: 'Start', friends: 'Start', offline: 'Start' }[modeNow] || 'Start';
+  const openMaker = () => {
+    kitTap();
+    const g = G.current;
+    if (g.V) { const R = g.V.R; try { g.V.dispose(); } catch {} try { R.lose(); } catch {} }
+    g.V = null; g.scn = null; g.menuRigs = null;
+    if (g.pets) g.pets.clear();
+    setSheet(null);
+    setLobbyTab(null);
+    setMakerErr(false);
+    setPhase('maker');
+    if (!MakerC) import('./zedit.jsx').then((m) => setMakerC(() => m.ZMaker)).catch(() => setMakerErr(true));
+  };
+  const closeMaker = () => { setPhase('load'); setCvKey((n) => n + 1); setBootTry((n) => n + 1); };
   const L = {
     GS, me, name: myFirst, best: G.current.best || 0, cloud: cloudOn(), canInvite,
     server: REGION_NAMES[regNow] || 'Server', ping: pings ? pings[regNow] : null,
@@ -2064,6 +2079,7 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
     pickGun: (w) => { kitTap(); setGun(w); if (!resItem(`g:${w}`).ready) resFront(`g:${w}`, true); },
     dogs: [...DOGS.map((d) => ({ k: d.key, n: d.name, img: portrait('dog', d.key), on: pet === d.key })), { k: 'none', n: 'None', img: '', on: pet === 'none' }],
     pickDog: (k0) => { kitTap(); setPet(k0); },
+    onMaker: isAdmin ? openMaker : null,
   };
   const menu = phase === 'menu' && <ZLobby L={L} />;
 
@@ -2373,6 +2389,7 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
           {phase === 'load' && <ZBoot GS={GS} boot={boot} onRetry={() => setBootTry((n) => n + 1)} onClose={onClose} />}
           {netErr === 'gl' && phase === 'menu' && <div style={{ position: 'absolute', left: 0, right: 0, top: '40%', textAlign: 'center', fontSize: 14, fontWeight: 800 }}>This phone could not start 3D graphics.</div>}
           {menu}
+          {phase === 'maker' && (MakerC ? <MakerC GS={GS} tier={tier} onClose={closeMaker} /> : <div role="status" style={{ position: 'absolute', inset: 0, zIndex: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0E0D0B', fontSize: 14, fontWeight: 800 }}>{makerErr ? <GPill text="Back" color="white" small onPress={closeMaker} /> : 'Opening the map maker'}</div>)}
           {play}
           {fix > 0 && phase === 'play' && (
             <div role="status" style={{ position: 'absolute', inset: 0, zIndex: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(10,9,8,0.82)', fontSize: 14, fontWeight: 800, color: '#EFE8D2' }}>Loading the town</div>
