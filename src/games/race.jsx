@@ -10,7 +10,8 @@ import { createRenderer, m4, MeshBuilder } from './race3d.js';
 import { buildTrack, buildWorld } from './racetrack.js';
 import { MAPS, MAP_KEYS, bottleSpots } from './racemaps.js';
 import { carMesh, wheelMesh, WHEELS, fxMeshes } from './racecars.js';
-import { SkillIcon, NitroIcon, SteerArrow, PedalArt, skillFace, skillGlow, MapSelect } from './raceui.jsx';
+import { SkillIcon, NitroIcon, SteerArrow, PedalArt, skillFace, raceGlyph, MapSelect } from './raceui.jsx';
+import { GSkill } from './gskill.jsx';
 import { CARS, CAR_KEYS, COLORS, BOT_NAMES, MAX_RACERS, LAPS, SKILLS, SKILL_KEYS, EN_MAX, BOTTLE_BACK, DRINKS, drinkUse, RACER_SKILLS, COP_SKILLS, BUST_R, BUST_V, cutOf, carAt, driveCar, ROCKET_V, SPIN_ROCKET, SPIN_OIL, SLOW_SHOCK, SHIELD_T, mkCar, stepCar, airStep, launchCar, groundSlope, collide, botInput, botSkill, rocketStep, standings, lapOf, fmtRace, clamp } from './raceengine.js';
 import { useTalking } from './talk.js';
 import { mkNet, netPush, netRead } from './netlerp.js';
@@ -117,34 +118,34 @@ function sirenSound() {
   } catch { return null; }
 }
 
+let carBuf = null, carJob = null;
+function loadCar(ac) {
+  if (carBuf) return Promise.resolve(carBuf);
+  if (carJob) return carJob;
+  carJob = fetch('/car-idle-v1.mp3').then((r) => r.arrayBuffer()).then((b) => new Promise((res, rej) => ac.decodeAudioData(b, res, rej))).then((b) => { carBuf = b; return b; }).catch(() => { carJob = null; return null; });
+  return carJob;
+}
+
 function engineSound() {
   const B = Sfx.bus();
   if (!B) return null;
   const { ac, out } = B;
   try {
     const g = ac.createGain(); g.gain.value = 0;
-    const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 900; lp.Q.value = 2;
-    const o1 = ac.createOscillator(); o1.type = 'sawtooth';
-    const o2 = ac.createOscillator(); o2.type = 'square';
-    const g2 = ac.createGain(); g2.gain.value = 0.45;
-    o1.connect(lp); o2.connect(g2); g2.connect(lp); lp.connect(g); g.connect(out);
-    const len = ac.sampleRate * 0.6, nb = ac.createBuffer(1, len, ac.sampleRate), d = nb.getChannelData(0);
-    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
-    const nz = ac.createBufferSource(); nz.buffer = nb; nz.loop = true;
-    const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1700; bp.Q.value = 1.3;
-    const ng = ac.createGain(); ng.gain.value = 0;
-    nz.connect(bp); bp.connect(ng); ng.connect(out);
-    o1.start(); o2.start(); nz.start();
+    const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1400;
+    lp.connect(g); g.connect(out);
+    let src = null, dead = false;
+    const start = () => { if (src || dead || !carBuf) return; src = ac.createBufferSource(); src.buffer = carBuf; src.loop = true; src.connect(lp); src.start(0, Math.random() * carBuf.duration); };
+    loadCar(ac).then(start);
     return {
       set(v, boost, drift, on) {
+        start();
         const t = ac.currentTime;
-        const f = 52 + v * 2.9 * (boost ? 1.18 : 1);
-        o1.frequency.setTargetAtTime(f, t, 0.06); o2.frequency.setTargetAtTime(f / 2, t, 0.06);
-        lp.frequency.setTargetAtTime(500 + v * 26 + (boost ? 600 : 0), t, 0.08);
-        g.gain.setTargetAtTime(on ? 0.035 + Math.min(1, v / 50) * 0.05 : 0, t, 0.1);
-        ng.gain.setTargetAtTime(on ? drift * 0.05 : 0, t, 0.05);
+        if (src) src.playbackRate.setTargetAtTime(0.72 + Math.min(1.7, v / 38) * (boost ? 1.12 : 1) + (drift ? 0.06 : 0), t, 0.08);
+        lp.frequency.setTargetAtTime(1000 + v * 28 + (boost ? 900 : 0), t, 0.1);
+        g.gain.setTargetAtTime(on ? 0.12 + Math.min(1, v / 50) * 0.16 : 0, t, 0.1);
       },
-      stop() { try { o1.stop(); o2.stop(); nz.stop(); g.disconnect(); ng.disconnect(); } catch {} },
+      stop() { dead = true; try { if (src) src.stop(); g.disconnect(); } catch {} },
     };
   } catch { return null; }
 }
@@ -305,7 +306,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
     const pref = gfxRef.current;
     g.budget.tier = pref === 'fast' || window.__zraceLow ? 2 : pref === 'best' ? 0 : weakDevice() ? 1 : 0;
     let R = null;
-    try { R = createRenderer(cv, { shadowSize: g.budget.tier === 0 ? 2048 : 1024 }); } catch { R = null; }
+    try { R = createRenderer(cv, { shadowSize: g.budget.tier === 0 ? 2048 : 1024, fx: '/dead/fx-v1.webp' }); } catch { R = null; }
     if (!R) { setFailed(true); return undefined; }
     let fxm = null;
     try { const F = fxMeshes(); fxm = { rocket: R.mesh(F.rocket), bottle: R.mesh(F.bottle), bottles: Object.fromEntries(Object.keys(F.bottles).map((k) => [k, R.mesh(F.bottles[k])])), shield: R.mesh(F.shield), oil: R.mesh(F.oil) }; } catch { fxm = null; }
@@ -1481,7 +1482,6 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
       {children}
     </div>
   );
-  const skillPress = (k) => (e) => { if (e && e.cancelable) e.preventDefault(); e.stopPropagation(); G.current.skillQ.push(k); };
 
   const playingNow = inRace() && (phase === 'race' || phase === 'count');
   const talkOn = !solo && !watch;
@@ -1511,7 +1511,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
   const toggleWatchR = () => { const v = !allowWatch; setAllowWatch(v); setWatchAllowed(v); kitTap(); };
   const lobbyUi = phase !== 'menu' ? null : (
     <GLobby GS={GS} title="Island Rally" onClose={finish} closeLabel={solo ? 'Leave' : 'Back to chat'} tint="rgba(8,12,24,0.6)"
-      sub={solo ? 'Race seven bots on four maps' : watch ? `Watching ${hostName} and friends` : 'Up to eight friends race in 3D'}
+      sub={watch ? `Watching ${hostName} and friends` : null}
       badge={bestLap ? <GChip style={{ height: 34, gap: 6 }}><GIcon k="flag" size={14} color="#FFD84E" />{`Best lap ${fmtRace(bestLap)}`}</GChip> : null}
       tools={(
         <>
@@ -1728,9 +1728,9 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
               )}
               {inRace() && phase !== 'done' && !hud.fin && (
                 <>
-                  {!tilt && zone('l', 'Steer left', { left: left(16), bottom: bottom(16), width: 88, height: 88, borderRadius: 26, background: pressed.l ? 'linear-gradient(180deg, #FFFFFF 0%, #D9DEE6 100%)' : 'linear-gradient(180deg, rgba(46,52,64,0.78) 0%, rgba(16,19,26,0.78) 100%)', boxShadow: pressed.l ? '0 0 0 3px rgba(255,255,255,0.5), 0 4px 10px rgba(0,0,0,0.3)' : 'inset 0 1.5px 0 rgba(255,255,255,0.22), inset 0 0 0 2px rgba(255,255,255,0.32), 0 8px 18px rgba(0,0,0,0.35)', transformOrigin: '0 100%' }, <SteerArrow dir="l" on={!!pressed.l} />)}
-                  {!tilt && zone('r', 'Steer right', { left: left(116), bottom: bottom(16), width: 88, height: 88, borderRadius: 26, background: pressed.r ? 'linear-gradient(180deg, #FFFFFF 0%, #D9DEE6 100%)' : 'linear-gradient(180deg, rgba(46,52,64,0.78) 0%, rgba(16,19,26,0.78) 100%)', boxShadow: pressed.r ? '0 0 0 3px rgba(255,255,255,0.5), 0 4px 10px rgba(0,0,0,0.3)' : 'inset 0 1.5px 0 rgba(255,255,255,0.22), inset 0 0 0 2px rgba(255,255,255,0.32), 0 8px 18px rgba(0,0,0,0.35)', transformOrigin: '0 100%' }, <SteerArrow dir="r" on={!!pressed.r} />)}
-                  {zone('d', 'Brake, hold while steering to drift', { right: right(122), bottom: bottom(14), width: 70, height: 104, borderRadius: 18, background: pressed.d ? 'linear-gradient(180deg, #3D434E 0%, #23272E 100%)' : 'linear-gradient(180deg, rgba(46,52,64,0.82) 0%, rgba(16,19,26,0.82) 100%)', boxShadow: `inset 0 0 0 2px ${hud.drift ? '#FFB020' : 'rgba(255,255,255,0.3)'}, ${hud.drift ? '0 0 18px rgba(255,170,40,0.55), ' : ''}0 8px 18px rgba(0,0,0,0.35)`, flexDirection: 'column', gap: 4, transformOrigin: '100% 100%' }, (
+                  {!tilt && zone('l', 'Steer left', { left: left(16), bottom: bottom(16), width: 88, height: 88, borderRadius: 26, background: pressed.l ? 'rgba(255,255,255,0.3)' : 'rgba(14,17,22,0.42)', boxShadow: 'inset 0 0 0 1.8px rgba(255,255,255,0.62)', transformOrigin: '0 100%' }, <SteerArrow dir="l" on={false} />)}
+                  {!tilt && zone('r', 'Steer right', { left: left(116), bottom: bottom(16), width: 88, height: 88, borderRadius: 26, background: pressed.r ? 'rgba(255,255,255,0.3)' : 'rgba(14,17,22,0.42)', boxShadow: 'inset 0 0 0 1.8px rgba(255,255,255,0.62)', transformOrigin: '0 100%' }, <SteerArrow dir="r" on={false} />)}
+                  {zone('d', 'Brake, hold while steering to drift', { right: right(122), bottom: bottom(14), width: 70, height: 104, borderRadius: 18, background: pressed.d ? 'rgba(255,255,255,0.3)' : hud.drift ? 'rgba(255,194,61,0.3)' : 'rgba(14,17,22,0.42)', boxShadow: `inset 0 0 0 1.8px ${hud.drift ? 'rgba(255,194,61,0.98)' : 'rgba(255,255,255,0.62)'}${hud.drift ? ', 0 0 14px rgba(255,194,61,0.6)' : ''}`, flexDirection: 'column', gap: 4, transformOrigin: '100% 100%' }, (
                     <>
                       <PedalArt drift={!!hud.drift} />
                       <span style={{ fontSize: 11.5, fontWeight: 900, color: hud.drift ? '#FFD84E' : '#FFFFFF', letterSpacing: '0.02em' }}>{hud.drift ? 'Drift' : 'Brake'}</span>
@@ -1738,11 +1738,10 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
                   ))}
                   {zone('b', 'Nitro', { right: right(16), bottom: bottom(14), width: 96, height: 96, borderRadius: '50%', transformOrigin: '100% 100%' }, (
                     <>
-                      <svg width="96" height="96" viewBox="0 0 96 96" style={{ position: 'absolute', inset: 0, transform: 'rotate(-90deg)' }} aria-hidden="true"><circle cx="48" cy="48" r="45" fill="rgba(10,13,20,0.62)" /><circle cx="48" cy="48" r="38" fill="none" stroke="rgba(255,255,255,0.14)" strokeWidth="6" /><circle ref={meterRef} cx="48" cy="48" r="34" fill="none" stroke="#FFB020" strokeWidth="6" strokeLinecap="round" strokeDasharray="0 400" /></svg>
-                      <span style={{ position: 'absolute', inset: 19, borderRadius: '50%', background: pressed.b ? 'radial-gradient(circle at 50% 30%, #6FC2FF 0%, #1D5FD6 85%)' : 'radial-gradient(circle at 50% 28%, #4A92F0 0%, #183C8C 85%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', boxShadow: '0 3px 12px rgba(30,110,255,0.45), inset 0 1.5px 0 rgba(255,255,255,0.4), inset 0 0 0 2px rgba(255,255,255,0.22)' }}>
-                        <NitroIcon size={34} lit={!!pressed.b} />
+                      <svg width="96" height="96" viewBox="0 0 96 96" style={{ position: 'absolute', inset: 0, transform: 'rotate(-90deg)' }} aria-hidden="true"><circle cx="48" cy="48" r="46.8" fill={pressed.b ? 'rgba(255,255,255,0.28)' : 'rgba(14,17,22,0.4)'} stroke="rgba(255,255,255,0.62)" strokeWidth="2.2" /><circle cx="48" cy="48" r="41" fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="4" /><circle ref={meterRef} cx="48" cy="48" r="41" fill="none" stroke="#FFC23D" strokeWidth="4" strokeLinecap="round" strokeDasharray="0 400" /></svg>
+                      <span style={{ position: 'absolute', inset: 19, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <NitroIcon size={44} />
                       </span>
-                      <span style={{ position: 'absolute', bottom: -4, left: '50%', transform: 'translateX(-50%)', padding: '1px 8px', borderRadius: 8, background: 'rgba(10,13,20,0.82)', fontSize: 10.5, fontWeight: 900, letterSpacing: '0.03em' }}>Nitro</span>
                     </>
                   ))}
                   {attackNow && (
@@ -1761,15 +1760,10 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
                           if (!S0) return null;
                           const cd = hud.cd[k] || 0;
                           const okEn = hud.en >= S0.cost;
-                          const ok = okEn && cd <= 0;
                           return (
-                            <button key={k} type="button" className="zgk-btn" aria-label={`${S0.name}, uses ${S0.cost} energy`} onPointerDown={skillPress(k)} onClick={(e) => e.stopPropagation()}
-                              style={{ position: 'relative', width: 62, height: 62, borderRadius: '50%', border: 'none', padding: 0, cursor: 'pointer', marginBottom: [0, 10, 16, 18][i] || 0, background: 'linear-gradient(180deg, #E8ECF2 0%, #8A94A5 55%, #4B5262 100%)', boxShadow: ok ? `0 0 16px ${skillGlow(k)}, 0 6px 14px rgba(0,0,0,0.4)` : '0 6px 14px rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                              <span style={{ position: 'absolute', inset: 3.5, borderRadius: '50%', background: skillFace(k, okEn), boxShadow: 'inset 0 2px 0 rgba(255,255,255,0.3), inset 0 -3px 6px rgba(0,0,0,0.35)' }} />
-                              <span style={{ position: 'relative', display: 'flex', filter: ok ? 'drop-shadow(0 2px 2px rgba(0,0,0,0.45))' : 'grayscale(0.9) brightness(0.8)', opacity: okEn ? 1 : 0.6 }}><SkillIcon k={k} size={36} /></span>
-                              {cd > 0 && <span style={{ position: 'absolute', inset: 3.5, borderRadius: '50%', background: `conic-gradient(rgba(5,8,14,0.7) ${(cd / S0.cd) * 360}deg, rgba(0,0,0,0) 0deg)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, fontWeight: 900, textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>{Math.ceil(cd)}</span>}
-                              <span style={{ position: 'absolute', right: -5, top: -4, minWidth: 24, height: 19, borderRadius: 10, padding: '0 5px', background: okEn ? 'linear-gradient(180deg, #3FE0A8, #13996E)' : '#4A4F5A', fontSize: 10.5, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, boxShadow: '0 0 0 1.5px rgba(10,14,26,0.85)' }}>{S0.cost}</span>
-                            </button>
+                            <div key={k} style={{ marginBottom: [0, 10, 16, 18][i] || 0 }}>
+                              <GSkill icon={raceGlyph(k)} label={`${S0.name}, uses ${S0.cost} energy`} size={62} cool={cd} coolMax={S0.cd} accent="#FFC23D" badge={S0.cost} disabled={!okEn} onPress={() => { G.current.skillQ.push(k); }} />
+                            </div>
                           );
                         })}
                       </div>
@@ -1850,7 +1844,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
 
           {ctl && (
             <div onPointerDown={(e) => e.stopPropagation()} style={{ position: 'absolute', inset: 0, zIndex: 45, background: 'rgba(10,8,24,0.55)', display: 'flex', padding: 12, overflowY: 'auto', touchAction: 'pan-x pan-y' }}>
-              <div style={{ margin: 'auto', width: '100%', display: 'flex', justifyContent: 'center' }}><GControlsPanel sideways wide={land} onClose={() => setCtl(false)} /></div>
+              <div style={{ margin: 'auto', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><GControlsPanel sideways onClose={() => setCtl(false)} /></div>
             </div>
           )}
           <GTalkers ids={talking} nameOf={nameOf} top={top(phase === 'count' ? 150 : 50)} />

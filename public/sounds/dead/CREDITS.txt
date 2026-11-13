@@ -1,32 +1,32 @@
 Dead Town sound credits
 
-All sounds below were trimmed, mixed to mono and level matched for the game.
+All sounds were trimmed, mixed to mono and level matched for the game.
 
-Guns, reloads and explosions (Creative Commons 0, public domain), collected in the GunLib mod by Deases (github.com/Deases/GunLib) from freesound.org:
-  g_rifle: AK47 Shot by LeMudCrab
-  g_smg: Machine gun and Rocket Assault by waxsocks
-  g_pistol: Desert Eagle Gunshot by elliotlp / Magnum Research Desert Eagle by areniporgen
-  g_sniper: Sniper Fire by qubodup
-  r_rifle: AK-47 Assault Rifle being unloaded and reloaded by serotonin deprived
-  r_cock: CLICK_47 by Jaszunio15 / AK-47 assault rifle being cocked by serotonin deprived
-  r_pistol: Desert Eagle Reload (Air Soft) by TheRichardGamer
-  r_sniper: awp reload sound by GFL7
-  boom: explosion2 by IdkMrGarcia
-  pin: grenade sound effect by MultiMax2121
+Gunshots, the sniper bolt, shotgun shell loading and the empty click
+  Snake's Authentic Gun Sounds, packs one and two, by Snake (F8 Studios), f8studios.itch.io
+  Free for commercial use. Credit is not required, but we are happy to give it.
 
-From the Simple Shooter mod by Stuart Jones (github.com/stujones11/shooter), sounds from freesound.org:
-  r_pump: winchester rifle cock reload by MentalSanityOff (CC0)
-  dry: trigger with hammer fall by Nanashi (CC0)
-  whoosh: woosh by ReadeOnly (CC0)
-  boom2: explosion10 by V-ktor (CC0)
-  g_shotgun: GUNSHOT by erkanozan (CC0). The mod also credits shot.wav by Sergenious (CC BY 3.0) and flobert1_20070728 by Nonoo (CC BY 3.0); credit is given here in case this file comes from either.
+Rifle, pistol and shotgun reloads
+  Supplied by the ZChat owner for the game.
 
-From VoxeLibre (formerly MineClone2), mobs_mc sounds:
-  z_growl: by Under7dude, freesound.org (CC0)
-  z_hurt, z_death: by haratman, freesound.org (CC0)
-  z_moan, z_war, z_die1, z_die2, z_pain1, z_pain2, z_pain3: 80 CC0 creature sfx by rubberduck, opengameart.org (CC0)
-  stinger: by bevibeldesign, freesound.org (CC0)
-  bone: by Cribbler, freesound.org (CC0)
-  d_bark1, d_bark2, d_bark3, d_growl, d_whine: dogblocks mod by Hybrid Dog (CC0)
+Zombie screams and groans
+  Free zombie sound effects pack by EditingCorp, editingcorp.com (royalty free)
 
-Footsteps, wind, hits, the heartbeat and the background drone are made in code.
+Footsteps, hits, glass, slime, fire, slashes, menu clicks and wave sounds
+  Kenney impact, interface, UI, RPG, digital and sci fi sound packs, kenney.nl (CC0)
+
+Explosions, the game over sound, wind, night crickets, water and the car engine
+  Mixkit sound effects, mixkit.co (Mixkit free license)
+
+Older sounds still in use (Creative Commons 0, public domain)
+  Grenade explosion: explosion2 by IdkMrGarcia, freesound.org, from the GunLib mod by Deases
+  Grenade pin: grenade sound effect by MultiMax2121, freesound.org, from the GunLib mod by Deases
+  Gun cock: CLICK 47 by Jaszunio15 and AK47 assault rifle being cocked by serotonin deprived, freesound.org, from the GunLib mod by Deases
+  Second explosion: explosion10 by V ktor, freesound.org, from the Simple Shooter mod by Stuart Jones
+  Throw whoosh: woosh by ReadeOnly, freesound.org, from the Simple Shooter mod by Stuart Jones
+  Zombie growl: by Under7dude, freesound.org, from VoxeLibre
+  Zombie hurt and death: by haratman, freesound.org, from VoxeLibre
+  Zombie moans, war cries, deaths and pain: 80 CC0 creature sfx by rubberduck, opengameart.org, from VoxeLibre
+  Wave stinger: by bevibeldesign, freesound.org, from VoxeLibre
+  Bone crack: by Cribbler, freesound.org, from VoxeLibre
+  Dog barks, growl and whine: dogblocks mod by Hybrid Dog

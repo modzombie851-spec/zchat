@@ -2,6 +2,7 @@ import { MeshBuilder, m4, hexRgb } from './race3d.js';
 import { gunMesh, magMesh, gripHand, handFrames, GUNS } from './zguns.js';
 import { MAT, tube, ball, withT, rot, sq } from './siegemesh.js';
 import { SURV_LOOK, survLook } from './zlooks.js';
+import { fpGLItems } from './zfpgl.js';
 
 const C = (h) => (typeof h === 'string' ? hexRgb(h) : h);
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -63,9 +64,13 @@ export function buildThrowFP(R, kind, sv, col) {
     tube(m, [0, -0.04, -0.06], [0.02, -0.3, -0.3], 0.03, 0.045, 10, glove || skin, MAT.matte, false);
     tube(m, [0.008, -0.1, -0.12], [0.02, -0.3, -0.3], 0.042, 0.05, 12, sleeve, MAT.matte, false);
   });
+  throwObj(m, kind);
+  return R.mesh(m.build());
+}
+
+function throwObj(m, kind) {
   if (kind === 'grenade') { sq(m, 0, 0.035, 0.0, 0.03, 0.038, 0.03, 0.9, 1, C('#3E4A32'), MAT.plastic, 12, 8); tube(m, [0, 0.07, 0], [0, 0.085, 0], 0.012, 0.012, 8, C('#5A5E66'), MAT.metal); tube(m, [0.012, 0.08, 0], [0.03, 0.06, 0.01], 0.003, 0.003, 5, C('#8A8E96'), MAT.metal); }
   else { tube(m, [0, 0.0, 0], [0, 0.11, 0], 0.03, 0.03, 12, C('#3A6A2A'), MAT.glass); tube(m, [0, 0.11, 0], [0, 0.16, 0], 0.03, 0.011, 12, C('#3A6A2A'), MAT.glass); tube(m, [0, 0.16, 0], [0, 0.2, 0.01], 0.011, 0.012, 8, C('#E8E0C8'), MAT.matte); ball(m, 0, 0.205, 0.012, 0.016, C('#FFB03A'), MAT.glow, 8); }
-  return R.mesh(m.build());
 }
 
 export function buildBatFP(R, sv, col) {
@@ -83,6 +88,13 @@ export function buildBatFP(R, sv, col) {
 }
 
 const camM = (pos, yaw, pitch) => m4.pose(pos[0], pos[1], pos[2], yaw, -pitch, 0);
+const PIVOT = [-0.12, -0.17, 0.36];
+
+export function buildThrowObj(R, kind) {
+  const m = new MeshBuilder();
+  throwObj(m, kind);
+  return R.mesh(m.build());
+}
 
 export function makeFPState() {
   return { ads: 0, rec: 0, recY: 0, recP: 0, swayX: 0, swayY: 0, lyaw: null, lpitch: 0, ph: 0, spr: 0, swap: 0, swapK: null, rel: -1, bolt: -1, thr: -1, thrHold: 0, mel: -1, flash: 0, flashRot: 0, land: 0 };
@@ -111,6 +123,27 @@ export function fpItems(out, V, F, s, cam) {
   let ox = lerp(v.hip[0], v.ads[0], a) + bx - F.swayX * 0.25, oy = lerp(v.hip[1], v.ads[1], a) + by + br - F.swayY * 0.2, oz = lerp(v.hip[2], v.ads[2], a);
   let rx = F.swayY * 0.8 * (1 - a * 0.6), ry = -F.swayX * 0.9 * (1 - a * 0.6), rz = -F.swayX * 1.2 + Math.sin(F.ph) * 0.02 * bobK;
   const rk = F.rec;
+  if (V.R && !s.oldFP) {
+    let gx = bx * 0.8 - F.swayX * 0.25, gy = by * 0.8 + br - F.swayY * 0.2, gz = -rk * v.back * 0.55;
+    let grx = F.swayY * 0.8 * (1 - a * 0.6) - rk * v.kick * 0.5 * (1 - a * 0.5), gry = -F.swayX * 0.9 * (1 - a * 0.6) + F.recY * rk, grz = -F.swayX * 1.2 + Math.sin(F.ph) * 0.02 * bobK + F.recY * rk * 0.6;
+    gx += F.spr * -0.02; gy -= F.spr * 0.05; gry += F.spr * 0.55; grz += F.spr * 0.3; grx += F.spr * 0.2;
+    const Cg = camM(cam.pos, cam.yaw, cam.pitch);
+    const P0 = PIVOT;
+    const Lg = m4.mul(Cg, m4.mul(m4.pose(P0[0] + gx, P0[1] + gy, P0[2] + gz, gry, grx, grz), m4.pose(-P0[0], -P0[1], -P0[2], 0, 0, 0)));
+    const r = fpGLItems(out, V.R, F, s, cam, Lg);
+    if (r) {
+      if (!r.hide && F.flash > 0 && r.muz && F.flashMesh) {
+        F.flashRot += 1.7;
+        out.push({ mesh: F.flashMesh, model: m4.mul(Lg, m4.pose(r.muz[0], r.muz[1], r.muz[2] + 0.01, 0, 0, F.flashRot, 0.8 + F.flash * 9)), blend: 2, alpha: 1 });
+      }
+      if (r.hand && !(F.thr >= 0 && F.thr > 0.1)) {
+        const mol = (s.throwK || 'grenade') === 'molotov';
+        const mesh = mol ? V.molObj : V.nadeObj;
+        if (mesh) out.push({ mesh, model: m4.mul(Lg, m4.pose(r.hand[0], r.hand[1] - (mol ? 0.05 : 0.0), r.hand[2] + 0.02, 0, 0, 0)) });
+      }
+      return { L: Lg, Cm: Cg, a };
+    }
+  }
   oz -= rk * v.back; rx -= rk * v.kick * (1 - a * 0.4); oy += rk * 0.008;
   ry += F.recY * rk; rz += F.recY * rk * 0.6;
   ox += F.spr * -0.03; oy -= F.spr * 0.06; ry += F.spr * 0.75; rz += F.spr * 0.35; rx += F.spr * 0.25;
@@ -186,6 +219,12 @@ export function fpItems(out, V, F, s, cam) {
 
 export function muzzleWorld(F, s, cam) {
   const v = VM[F.kind] || VM.rifle;
+  if (F.muzCam && F.gl) {
+    const Cm0 = camM(cam.pos, cam.yaw, cam.pitch);
+    const k0 = Math.tan((cam.vmFov || 0.85) / 2) / Math.tan((cam.fov || 0.85) / 2);
+    const q = m4.apply(Cm0, F.muzCam[0] * k0, F.muzCam[1] * k0, F.muzCam[2]);
+    return [q[0], q[1], q[2]];
+  }
   const a = F.ads;
   const ox = lerp(v.hip[0], v.ads[0], a), oy = lerp(v.hip[1], v.ads[1], a), oz = lerp(v.hip[2], v.ads[2], a);
   const Cm = camM(cam.pos, cam.yaw, cam.pitch);

@@ -1,4 +1,4 @@
-const MAP = {"bub1":[0.25,0.56],"bub2":[0.99,0.5535],"bub3":[1.7235,0.5464],"bub4":[2.45,0.537],"bubbles":[3.167,1.4449],"gulp1":[4.792,0.6289],"gulp2":[5.6009,0.9384],"gulp3":[6.7193,1.3722],"chomp":[8.2715,0.6785],"die":[9.1299,2.0248],"suck":[11.3347,1.857],"dash":[13.3717,0.9073],"evolve":[14.459,3.4266],"skill":[18.0655,1.8218],"alert":[20.0674,1.3265],"shield":[21.5739,1.6765],"shock":[23.4304,1.352],"pick":[24.9624,1.5175],"combo":[26.6599,1.0833],"pop":[27.9232,0.4278],"jump":[28.531,0.4537],"land":[29.1647,0.16],"stomp":[29.5047,0.7959],"coin":[30.4806,0.7437],"star":[31.4043,1.9977],"cp":[33.582,2.7234],"spring":[36.4854,0.9593],"ballpop":[37.6246,1.1758],"win":[38.9804,3.5299],"click":[42.6903,0.0987],"door":[42.969,1.8273],"break":[44.9764,1.0003],"key":[46.1567,1.1192],"bump":[47.4558,0.1],"swing":[47.7358,0.6857],"fireball":[48.6016,1.3131],"frost":[50.0946,1.5114],"hit":[51.7861,0.1789],"poof":[52.145,1.1558],"hurt":[53.4808,0.6893],"pdie":[54.3501,2.2019],"bat":[56.732,0.7609],"rattle":[57.6728,0.8589],"lever":[58.7117,0.6025],"amb":[59.4942,6.0],"nib1":[65.6742,0.5791],"nib2":[66.4333,0.6062],"munch1":[67.2195,1.0076],"munch2":[68.4071,1.0077],"munch3":[69.5948,1.0051],"bigchomp1":[70.7799,1.5243],"bigchomp2":[72.4842,1.5401],"slurp":[74.2043,1.3259],"burp":[75.7102,0.9851]};
+const MAP = {"bub1":[0.25,0.1149],"bub2":[0.5449,0.1882],"bub3":[0.913,0.1882],"bub4":[1.2812,0.2051],"bubbles":[1.6663,1.4],"gulp1":[3.2463,0.369],"gulp2":[3.7953,4.7098],"gulp3":[8.6851,0.6626],"chomp":[9.5277,0.2632],"die":[9.971,0.7118],"suck":[10.8627,0.7466],"dash":[11.7894,4.3479],"evolve":[16.3173,0.38],"skill":[16.8773,0.1584],"alert":[17.2156,0.1045],"shield":[17.5001,0.747],"shock":[18.4271,0.3825],"pick":[18.9896,0.2898],"combo":[19.4595,0.2077],"pop":[19.8472,0.0995],"jump":[20.1267,0.1151],"land":[20.4218,0.1804],"stomp":[20.7822,0.5138],"coin":[21.4759,0.725],"star":[22.3809,0.539],"cp":[23.0999,0.4904],"spring":[23.7703,0.3889],"ballpop":[24.3392,0.3512],"win":[24.8704,0.322],"click":[25.3724,0.0497],"door":[25.6021,0.9154],"break":[26.6975,0.3101],"key":[27.1876,0.3696],"bump":[27.7372,0.1323],"swing":[28.0495,0.3916],"fireball":[28.6211,5.0],"frost":[33.8011,0.1827],"hit":[34.1638,0.375],"poof":[34.7188,0.4651],"hurt":[35.3638,0.4338],"pdie":[35.9776,0.6696],"bat":[36.8272,0.5178],"rattle":[37.5249,0.1355],"lever":[37.8404,0.2286],"amb":[38.249,3.2],"nib1":[41.629,0.0882],"nib2":[41.8972,0.1239],"munch1":[42.2011,0.2802],"munch2":[42.6613,0.3764],"munch3":[43.2177,0.3358],"bigchomp1":[43.7335,0.3838],"bigchomp2":[44.2973,0.427],"slurp":[44.9043,3.623],"burp":[48.7073,0.8277]};
 const MUSIC = { sea: { url: '/music-sea-v1.mp3', len: 20.0 }, roll: { url: '/music-roll-v1.mp3', len: 15.48387 }, lobbyRace: { url: '/music-lobby-race-v1.mp3', len: 19.2 }, lobbyRoll: { url: '/music-lobby-roll-v1.mp3', len: 17.14286 }, lobbyDuo: { url: '/music-lobby-duo-v1.mp3', len: 21.81818 }, lobbyGulp: { url: '/music-lobby-gulp-v1.mp3', len: 22.85714 }, lobbySiege: { url: '/music-lobby-siege-v1.mp3', len: 18.46154 }, siege: { url: '/music-siege-v1.mp3', len: 15.2381 } };
 const LEAD = 0.2;
 
@@ -22,9 +22,13 @@ function setPref(key, on) {
   try { localStorage.setItem(key, on ? '1' : '0'); } catch {}
 }
 
+const vol = (k, d) => { try { const v = Number(localStorage.getItem(k)); return Number.isFinite(v) && localStorage.getItem(k) != null ? Math.max(0, Math.min(1, v)) : d; } catch { return d; } };
+
 export const Sfx = {
   sfxOn: pref('zchat-game-sfx', true),
   musicOn: pref('zchat-game-music', true),
+  sfxVol: vol('zchat-game-sfxvol', 1),
+  musicVol: vol('zchat-game-musvol', 1),
   init() {
     if (typeof window === 'undefined') return;
     if (!ac) {
@@ -36,8 +40,8 @@ export const Sfx = {
       const comp = ac.createDynamicsCompressor();
       comp.threshold.value = -10; comp.knee.value = 8; comp.ratio.value = 4; comp.attack.value = 0.004; comp.release.value = 0.18;
       master.connect(comp); comp.connect(ac.destination);
-      sfxBus = ac.createGain(); sfxBus.gain.value = this.sfxOn ? 1 : 0; sfxBus.connect(master);
-      musBus = ac.createGain(); musBus.gain.value = this.musicOn ? 0.55 : 0; musBus.connect(master);
+      sfxBus = ac.createGain(); sfxBus.gain.value = this.sfxOn ? this.sfxVol : 0; sfxBus.connect(master);
+      musBus = ac.createGain(); musBus.gain.value = this.musicOn ? 0.55 * this.musicVol : 0; musBus.connect(master);
       try { ac.addEventListener('statechange', () => { if (ac && ac.state !== 'running' && typeof document !== 'undefined' && document.visibilityState !== 'hidden') armWake(); }); } catch {}
     }
     if (ac.state !== 'running') { try { const r = ac.resume(); if (r && r.catch) r.catch(() => {}); } catch {} }
@@ -45,7 +49,7 @@ export const Sfx = {
   },
   load() {
     if (!ac || sprite || spriteJob) return spriteJob;
-    spriteJob = fetch('/games-sfx-v2.mp3').then((r) => r.arrayBuffer()).then((b) => new Promise((res, rej) => ac.decodeAudioData(b, res, rej))).then((buf) => { sprite = buf; return buf; }).catch(() => { spriteJob = null; return null; });
+    spriteJob = fetch('/games-sfx-v3.mp3').then((r) => r.arrayBuffer()).then((b) => new Promise((res, rej) => ac.decodeAudioData(b, res, rej))).then((buf) => { sprite = buf; return buf; }).catch(() => { spriteJob = null; return null; });
     return spriteJob;
   },
   ready() { return !!sprite; },
@@ -134,11 +138,21 @@ export const Sfx = {
   },
   setSfx(on) {
     this.sfxOn = !!on; setPref('zchat-game-sfx', this.sfxOn);
-    if (sfxBus) sfxBus.gain.setTargetAtTime(this.sfxOn ? 1 : 0, ac.currentTime, 0.05);
+    if (sfxBus) sfxBus.gain.setTargetAtTime(this.sfxOn ? this.sfxVol : 0, ac.currentTime, 0.05);
+  },
+  setSfxVol(v) {
+    this.sfxVol = Math.max(0, Math.min(1, Number(v) || 0));
+    try { localStorage.setItem('zchat-game-sfxvol', String(this.sfxVol)); } catch {}
+    if (sfxBus) sfxBus.gain.setTargetAtTime(this.sfxOn ? this.sfxVol : 0, ac.currentTime, 0.05);
+  },
+  setMusicVol(v) {
+    this.musicVol = Math.max(0, Math.min(1, Number(v) || 0));
+    try { localStorage.setItem('zchat-game-musvol', String(this.musicVol)); } catch {}
+    if (musBus) musBus.gain.setTargetAtTime(this.musicOn ? 0.55 * this.musicVol : 0, ac.currentTime, 0.1);
   },
   setMusic(on) {
     this.musicOn = !!on; setPref('zchat-game-music', this.musicOn);
-    if (musBus) musBus.gain.setTargetAtTime(this.musicOn ? 0.55 : 0, ac.currentTime, 0.1);
+    if (musBus) musBus.gain.setTargetAtTime(this.musicOn ? 0.55 * this.musicVol : 0, ac.currentTime, 0.1);
   },
   pause(hidden) {
     if (!ac) return;

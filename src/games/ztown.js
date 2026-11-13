@@ -1,3 +1,4 @@
+import { PLACE, SOLID_R, SOLID_C } from './ztowndata.js';
 const H32 = (n) => { let x = (n | 0) * 374761393; x = (x ^ (x >>> 13)) * 1274126177; return ((x ^ (x >>> 16)) >>> 0) / 4294967296; };
 export const hsh = (a, b, c = 0) => H32(a * 73856093 ^ b * 19349663 ^ c * 83492791);
 export const sat = (t) => (t < 0 ? 0 : t > 1 ? 1 : t);
@@ -11,8 +12,18 @@ export function vn(x, z, s = 0) {
 export function fbm(x, z, s = 0, o = 3) { let t = 0, a = 0.5, f = 1, n = 0; for (let i = 0; i < o; i++) { t += a * vn(x * f, z * f, s + i * 31); n += a; a *= 0.5; f *= 2.07; } return t / n; }
 export function rng(seed) { let a = (seed >>> 0) || 1; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 
-export const TOWN = { roadW: 4, sideX: 46, sideW: 3.5, lot: [-26, -48, 30, -4.6], store: [-15, -46, 15, -34], canopy: [-12, -24, 12, -10] };
-export const BOUNDS = [-56, -72, 76, 34];
+export const TOWN = { roadW: 4, sideX: 46, sideW: 3.5, lot: [-15, -45, 20, -4.6], store: [-7.2, -40, 7.9, -31], canopy: [-6.5, -31.4, 0.8, -22.6] };
+export const BOUNDS = [-56, -72, 76, 37];
+export const POND = { x: -42.2, z: -24, rx: 7.4, rz: 8.6, y: -0.2 };
+export const FALL = { x: -49.15, z: -24, top: 2.35, w: 1.4 };
+export const pondR = (a) => 1 + 0.06 * Math.sin(3 * a + 1.1) + 0.035 * Math.sin(5 * a + 2.3) + 0.02 * Math.sin(9 * a);
+export function pondE(x, z) {
+  const dx = (x - POND.x) / POND.rx, dz = (z - POND.z) / POND.rz;
+  if (Math.abs(dx) > 3 || Math.abs(dz) > 3) return 9;
+  return Math.hypot(dx, dz) / pondR(Math.atan2(dz, dx));
+}
+export function pondDepth(x, z) { const e = pondE(x, z); return e >= 1.1 ? 0 : -1.3 * (1 - ss(0.3, 1.1, e)); }
+export { PLACE };
 export const HOUSES = [
   { x: 64, z: -22, yaw: -Math.PI / 2, col: '#A9BCC8', roof: '#4A4642', trim: '#F2EFE6', seed: 1 },
   { x: 65, z: -50, yaw: -Math.PI / 2, col: '#D8C9A6', roof: '#5A3E32', trim: '#F4F0E4', seed: 2, boarded: true },
@@ -42,7 +53,7 @@ export function groundH(x, z) {
   const hills = ss(180, 460, d) * (34 + 80 * fbm(x / 260, z / 260, 9, 3));
   return u + hills;
 }
-export function floorH(x, z) { return z > -4.6 && z < 4.6 ? 0.1 : z < -4.6 && x > -26 && x < 30 && z > -48 ? 0.08 : groundH(x, z); }
+export function floorH(x, z) { return z > -4.6 && z < 4.6 ? 0.1 : z < -4.6 && x > -15 && x < 20 && z > -45 ? 0.08 : groundH(x, z) + pondDepth(x, z); }
 export function forestD(x, z) {
   if (roadDist(x, z) < 7 || inRect(x, z, [TOWN.lot[0] - 6, TOWN.lot[1] - 8, TOWN.lot[2] + 4, TOWN.lot[3]], 0) || nearHouse(x, z, 6)) return 0;
   const n = fbm(x / 55, z / 55, 41, 3);
@@ -54,7 +65,7 @@ export function forestD(x, z) {
   f = Math.max(f, ss(0.62, 0.78, n) * ss(30, 60, Math.abs(z)));
   return f * (0.55 + 0.6 * n);
 }
-export const OAKS = [[-30, 14, 10], [-46, 26, 12], [36, 20, 9], [12, 40, 11], [-12, 52, 10], [74, 6, 9], [-36, -54, 11], [36, -60, 10], [52, -8, 7], [80, -36, 9]];
+export const OAKS = [[-15, 14, 10], [-43, 27.5, 12], [36, 20, 9], [12, 40, 11], [-12, 52, 10], [74, 6, 9], [-36, -54, 11], [36, -60, 10], [52, -8, 7], [80, -36, 9]];
 export function forestList(keep = 1) {
   const R = rng(1234);
   const trees = [], bushes = [];
@@ -70,12 +81,15 @@ export function forestList(keep = 1) {
     n++;
     const inside = inRect(x, z, BOUNDS, 6);
     if (!inside && hsh(i, 99) > (far ? keep * keep : keep)) continue;
+    if (pondE(x, z) < 1.55 || inRect(x, z, [-55, -32, -46, -16], 0)) continue;
     trees.push({ x, z, s, far, pine, i });
   }
   for (let i = 0; i < 160; i++) {
     const x = (R() - 0.5) * 220, z = -6 + R() * 110 * (R() > 0.5 ? 1 : -0.6);
     if (roadDist(x, z) < 2.5 || inRect(x, z, TOWN.lot, 3) || nearHouse(x, z, 2)) continue;
-    bushes.push({ x, z, s: 0.7 + R() * 1.1, i });
+    const s = 0.7 + R() * 1.1;
+    if (pondE(x, z) < 1.3) continue;
+    bushes.push({ x, z, s, i });
   }
   return { trees, bushes };
 }
@@ -89,35 +103,16 @@ export const BARRIERS = [[-56, -6, -56, 6], [76, -6, 76, 6], [42, -72, 50, -72]]
 let solidCache = null;
 export function solids() {
   if (solidCache) return solidCache;
-  const rects = [], circles = [];
-  rects.push(TOWN.store);
-  for (const iz of [-14, -20]) { circles.push([0, iz, 0.5]); for (const px of [-4, 4]) circles.push([px, iz, 0.55]); }
-  for (const h of HOUSES) {
-    const c = Math.cos(h.yaw), sn = Math.sin(h.yaw);
-    const W = (lx, lz) => [h.x + lx * c + lz * sn, h.z - lx * sn + lz * c];
-    const box = (ax, az, bx, bz) => { const p = W(ax, az), q = W(bx, bz); rects.push([Math.min(p[0], q[0]), Math.min(p[1], q[1]), Math.max(p[0], q[0]), Math.max(p[1], q[1])]); };
-    box(-5.2, -4.4, 5.2, 6.2);
-    box(-9, 10.4, -1.2, 10.6);
-    box(1.2, 10.4, 9, 10.6);
-  }
-  for (const [k, , x, z, yaw] of CARS) {
-    const L = k === 'van' ? 1.45 : 1.25, r = k === 'van' ? 1.12 : 1.0;
-    const fx = Math.sin(yaw), fz = Math.cos(yaw);
-    circles.push([x + fx * L, z + fz * L, r], [x - fx * L, z - fz * L, r], [x, z, r]);
-  }
-  rects.push([-9, -28.1, -3, -27.1], [3, -28.1, 9, -27.1], [-10.7, -31.4, -9.7, -28.2], [9.9, -31.4, 10.9, -28.2]);
-  for (const [x, z] of [[-13, -26], [13.6, -27], [-18, -40]]) circles.push([x, z, 0.45]);
-  for (const [x, z] of [[16.5, -30], [17.4, -31], [-19, -9]]) circles.push([x, z, 0.5]);
-  rects.push([-31.6, 0.2, -28.4, 1.0], [32.4, -1.6, 35.6, -0.8], [23.6, -8.3, 26.4, -7.7], [18.6, -43.2, 21.4, -40.8]);
-  for (const [x0, x1, z] of FENCES) rects.push([x0, z - 0.2, x1, z + 0.2]);
-  rects.push([BARN.x - BARN.hw, BARN.z - BARN.hd, BARN.x + BARN.hw, BARN.z + BARN.hd]);
-  for (const [x, z] of BALES) circles.push([x, z, 0.85]);
-  for (const [x, z] of TENTS) circles.push([x, z, 1.5]);
-  for (const [x, z, , n] of CRATES) circles.push([x, z, n > 1 ? 1.15 : 0.8]);
-  for (const [x, z, s] of OAKS) if (inRect(x, z, BOUNDS, 2)) circles.push([x, z, Math.max(0.55, s * 0.055)]);
+  const rects = SOLID_R.map((r) => r.slice()), circles = SOLID_C.map((c) => c.slice());
+  for (const [x, z, s] of OAKS) if (inRect(x, z, BOUNDS, 2)) circles.push([x, z, 0.5 + s * 0.02]);
   for (const t of forestList(1).trees) if (inRect(t.x, t.z, BOUNDS, 2)) circles.push([t.x, t.z, 0.42 + t.s * 0.012]);
+  for (let k = 0; k < 16; k++) {
+    const q = (k / 16) * Math.PI * 2, w = pondR(q), c = Math.cos(q), n = Math.sin(q);
+    circles.push([POND.x + c * POND.rx * 0.6 * w, POND.z + n * POND.rz * 0.6 * w, 0.33 * w * Math.hypot(POND.rx * c, POND.rz * n)]);
+  }
+  circles.push([POND.x, POND.z, 3.8], [POND.x, POND.z - POND.rz * 0.33, 3.1], [POND.x, POND.z + POND.rz * 0.33, 3.1]);
   solidCache = { rects, circles };
   return solidCache;
 }
-export const SPAWNS = [[-50, -66], [-20, -68], [12, -68], [36, -68], [70, -66], [-52, -40], [-52, 24], [-20, 30], [6, 30], [44, 30], [72, 28], [72, -12], [72, -40], [-50, 0], [74, -4], [46, -70]];
-export const PSPAWN = [[-2.6, -25.5], [2.6, -25.5], [-6.2, -23.6], [6.2, -23.6], [-9.6, -25.2], [9.6, -25.2], [-1.5, -29.5], [3.5, -29.5]];
+export const SPAWNS = [[-50, -66], [-20, -68], [12, -68], [36, -68], [72, -62], [-52, -40], [-52, 26], [-14, 33], [-4, 33], [46, 31], [72, 28], [72, -12], [72, -40], [-46, 7.5], [74, -4], [46, -70]];
+export const PSPAWN = [[-4.6, -20.6], [-1.6, -20.4], [1.4, -20.6], [4.4, -20.8], [-3.2, -18.4], [0, -18.2], [3.2, -18.4], [6.4, -19.4]];

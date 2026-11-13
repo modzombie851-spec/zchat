@@ -45,8 +45,17 @@ export function bestRegion(p) {
 }
 export async function listRooms() {
   if (!cloudOn()) return null;
-  try { const r = await fetch(`${ZG_HTTP}/rooms`, { cache: 'no-store' }); if (!r.ok) return null; const j = await r.json(); return j && j.rooms ? j.rooms : null; } catch { return null; }
+  try { const r = await fetch(`${ZG_HTTP}/rooms`, { cache: 'no-store' }); if (!r.ok) return null; const j = await r.json(); if (!j || !j.rooms) return null; const out = { ...j.rooms }; out.open = Array.isArray(j.open) ? j.open : []; return out; } catch { return null; }
 }
+export async function mineRoom() {
+  if (!cloudOn()) return null;
+  const tk = await token();
+  if (!tk) return null;
+  try { const r = await fetch(`${ZG_HTTP}/mine?tk=${encodeURIComponent(tk)}`, { cache: 'no-store' }); if (!r.ok) return null; const j = await r.json(); return j && j.room && j.room.reg && j.room.r ? { reg: j.room.reg, r: String(j.room.r), left: j.left | 0 } : null; } catch { return null; }
+}
+const LIVE_KEY = 'zchat-zombie-live';
+export function saveLive(room) { try { if (room) localStorage.setItem(LIVE_KEY, JSON.stringify({ reg: room.reg, r: String(room.r), at: Date.now() })); else localStorage.removeItem(LIVE_KEY); } catch {} }
+export function readLive(maxAge = 32000) { try { const v = JSON.parse(localStorage.getItem(LIVE_KEY) || 'null'); if (v && v.reg && v.r && Date.now() - v.at < maxAge) return v; } catch {} return null; }
 
 export function openCloud({ g, r, reg, meta, onMsg, onState }) {
   let ws = null, dead = false, tries = 0, timer = null, pingT = null;

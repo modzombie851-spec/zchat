@@ -15,7 +15,7 @@ import {
 import { zLazy, zLazyPrefetch, zLazySetUi } from './lazy.jsx';
 import { GAME_KITS, GAME_KIT_BY, GameKitArt, kitUser, gameKitPull } from './games/kits.jsx';
 import { loadLiveFriends, castMe, liveKind, useJoinWait } from './games/live.js';
-import { cloudOn, pingRegions, bestRegion } from './games/zcloud.js';
+import { cloudOn, pingRegions, bestRegion, readLive } from './games/zcloud.js';
 import { ZLANGS, setZLang, useZLang, zlangWanted, zlangOnPick, zlangDirty, zlangClean, zlangStored } from './i18n/index.js';
 export const TrustedFriendsPage = zLazy(() => import('./areas/safety.jsx'), 'TrustedFriendsPage', 'safety');
 export const RecoveryHelpPage = zLazy(() => import('./areas/safety.jsx'), 'RecoveryHelpPage', 'safety');
@@ -18596,7 +18596,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-export const APP_VERSION = '49.0V';
+export const APP_VERSION = '50.0V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -36508,6 +36508,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [racePick, setRacePick] = useState(null);
   const [siegeGame, setSiegeGame] = useState(null);
   const [zombieGame, setZombieGame] = useState(null);
+  useEffect(() => {
+    if (!cloudOn()) return;
+    const v = readLive(30000);
+    if (v) setZombieGame({ at: Date.now(), join: { reg: v.reg, r: v.r } });
+  }, []);
   const [siegePick, setSiegePick] = useState(null);
   const [watchGame, setWatchGame] = useState(null);
   const [castWatch, setCastWatch] = useState(null);
@@ -59846,7 +59851,7 @@ function svgMarkup(node) {
   return `<${node.type}${attrs}>${svgMarkup(node.props.children)}</${node.type}>`;
 }
 const gameArtSrcs = new Map();
-const GAME_ART_FILES = { zombie: '/zombie-art.webp', duo: '/duo-art.webp', gulp: '/gulp-art.webp', gulpco: '/gulp-art.webp', roll: '/roll-art.webp', race: '/race-art.webp', siege: '/siege-art.webp' };
+const GAME_ART_FILES = { zombie: '/zombie-art2.webp', duo: '/duo-art.webp', gulp: '/gulp-art.webp', gulpco: '/gulp-art.webp', roll: '/roll-art.webp', race: '/race-art.webp', siege: '/siege-art.webp' };
 function gameArtSrc(kIn) {
   const key = String(kIn == null ? '' : kIn);
   if (GAME_ART_FILES[key]) return GAME_ART_FILES[key];

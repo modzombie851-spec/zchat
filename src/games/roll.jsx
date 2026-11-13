@@ -1,5 +1,6 @@
 import { backdropProps } from './tap.js';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { SkillFace } from './gskill.jsx';
 import { Avatar, Portal, useBackClose, hapticTap, FONT, Spinner } from '../App.jsx';
 import { useRoomLink } from './relay.jsx';
 import { EMOTES, Sheet, injectCss, useGameChat, ChatSheet } from './livekit.jsx';
@@ -547,7 +548,7 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
   const canPick = isHost && !watch;
   const lobby = phase !== 'menu' ? null : (
     <GLobby GS={GS} title="Roll Squad" onClose={finish} closeLabel={solo ? 'Leave' : 'Back to chat'}
-      sub={solo ? 'Roll, jump and bop your way to the portal' : watch ? `Watching ${hostName} and friends` : 'Up to four friends roll together'}
+      sub={watch ? `Watching ${hostName} and friends` : null}
       badge={<GChip style={{ gap: 5, height: 34 }}><GIcon k="star" size={15} color="#FFD23F" />{`${totalStars}/${LEVEL_N * 3}`}</GChip>}
       tools={(
         <>
@@ -692,8 +693,8 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
                   ))}
                   <div style={{ position: 'absolute', left: '50%', top: 14, bottom: 14, width: 1.5, marginLeft: -0.75, background: 'rgba(255,255,255,0.4)' }} />
                 </div>
-                <div aria-hidden="true" style={{ position: 'absolute', right: right(16), bottom: bottom(14), width: 80, height: 80, transform: `scale(${look.size}) ${jumpOn ? 'scale(0.93)' : ''}`, transformOrigin: '100% 100%', opacity: 1 - look.see, zIndex: 2, pointerEvents: 'none', borderRadius: '50%', background: jumpOn ? 'rgba(255,255,255,0.24)' : 'rgba(0,0,0,0.3)', boxShadow: 'inset 0 0 0 2px rgba(255,255,255,0.82)', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'transform 0.05s' }}>
-                  <GIcon k="up" size={34} color="#FFFFFF" line stroke={2.3} />
+                <div aria-hidden="true" style={{ position: 'absolute', right: right(16), bottom: bottom(14), width: 80, height: 80, transform: `scale(${look.size})`, transformOrigin: '100% 100%', opacity: 1 - look.see, zIndex: 2, pointerEvents: 'none' }}>
+                  <SkillFace size={80} icon="hop" pressed={!!jumpOn} main />
                 </div>
               </>
             )}
@@ -756,7 +757,7 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
 
         {ctl && (
           <div onPointerDown={(e) => e.stopPropagation()} style={{ position: 'absolute', inset: 0, zIndex: 45, background: 'rgba(10,8,24,0.55)', display: 'flex', padding: 12, overflowY: 'auto', touchAction: 'pan-y' }}>
-            <div style={{ margin: 'auto', width: '100%', display: 'flex', justifyContent: 'center' }}><GControlsPanel sideways wide={land} onClose={() => setCtl(false)} /></div>
+            <div style={{ margin: 'auto', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><GControlsPanel sideways onClose={() => setCtl(false)} /></div>
           </div>
         )}
         <GTalkers ids={talking} nameOf={nameOf} top={top(phase === 'play' && land ? 46 : 50)} />

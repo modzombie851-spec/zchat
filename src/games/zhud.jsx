@@ -1,4 +1,5 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
+import { SkillFace } from './gskill.jsx';
 
 const P = {
   fire: <><circle cx="12" cy="12" r="7.2" /><path d="M12 2.5v4.2M12 17.3v4.2M2.5 12h4.2M17.3 12h4.2" /><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none" /></>,
@@ -26,14 +27,18 @@ export function Ico({ k, size = 22, sw = 1.7, color = '#FFFFFF' }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ display: 'block', color }}>{P[k] || null}</svg>;
 }
 
-export function CBtn({ size = 54, icon, label, onDown, onUp, onMove, onTap, active, badge, ring, disabled, style, sub, big, tone, iconSize }) {
+const CB_ICON = { bullet: 'bullets', scope: 'crosshair', mag: 'magazine', knife: 'knife', grenade: 'grenade', bottle: 'molotov', heart: 'revive', torch: 'flashlight', swap: 'cycle' };
+
+export function CBtn({ size = 54, icon, label, onDown, onUp, onMove, onTap, active, badge, ring, disabled, style, sub, big, tone }) {
   const st = useRef({ id: null, x: 0, y: 0, moved: 0 });
-  const down = (e) => {
+  const [down, setDown] = useState(false);
+  const press = (e) => {
     if (disabled) return;
     e.stopPropagation();
     e.preventDefault();
     st.current = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: 0 };
     try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+    setDown(true);
     onDown && onDown(e);
   };
   const move = (e) => {
@@ -46,26 +51,15 @@ export function CBtn({ size = 54, icon, label, onDown, onUp, onMove, onTap, acti
   const up = (e) => {
     if (st.current.id !== e.pointerId) return;
     st.current.id = null;
+    setDown(false);
     onUp && onUp(e, st.current.moved);
     if (onTap && st.current.moved < 14) onTap(e);
   };
-  const R = size / 2;
-  const fillA = active ? 0.24 : big ? 0.16 : 0.32;
-  const bg = tone === 'red' ? `rgba(200,40,30,${active ? 0.5 : 0.32})` : tone === 'green' ? `rgba(40,150,80,${active ? 0.55 : 0.36})` : active ? `rgba(255,255,255,${fillA})` : `rgba(10,12,14,${fillA})`;
+  const gi = CB_ICON[icon];
   return (
-    <div role="button" aria-label={label} aria-disabled={disabled ? 'true' : undefined} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onLostPointerCapture={up} onContextMenu={(e) => e.preventDefault()}
-      style={{ position: 'absolute', width: size, height: size, borderRadius: '50%', touchAction: 'none', pointerEvents: 'auto', cursor: 'pointer', opacity: disabled ? 0.4 : 1, ...style }}>
-      <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: bg, boxShadow: `inset 0 0 0 ${big ? 2 : 1.5}px rgba(255,255,255,${active ? 0.95 : 0.6}), 0 1px 6px rgba(0,0,0,0.25)`, transform: active ? 'scale(0.94)' : 'none', transition: 'transform 0.06s, background 0.08s' }} />
-      {ring > 0 && ring < 1 && (
-        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ position: 'absolute', inset: 0, transform: 'rotate(-90deg)' }} aria-hidden="true">
-          <circle cx={R} cy={R} r={R - 2.5} fill="none" stroke="#FFFFFF" strokeWidth="3" strokeDasharray={`${(R - 2.5) * 2 * Math.PI * ring} 999`} strokeLinecap="round" />
-        </svg>
-      )}
-      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1, pointerEvents: 'none' }}>
-        <Ico k={icon} size={iconSize || Math.round(size * (big ? 0.46 : 0.46))} sw={big ? 1.8 : 1.7} />
-        {sub ? <span style={{ fontSize: Math.max(9, Math.round(size * 0.18)), fontWeight: 800, color: '#FFFFFF', lineHeight: 1, textShadow: '0 1px 2px rgba(0,0,0,0.7)', fontVariantNumeric: 'tabular-nums' }}>{sub}</span> : null}
-      </div>
-      {badge != null && <span style={{ position: 'absolute', right: -2, top: -2, minWidth: 18, height: 18, padding: '0 4px', boxSizing: 'border-box', borderRadius: 9, background: badge ? '#F2F2F2' : 'rgba(255,255,255,0.35)', color: '#14161A', fontSize: 11, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>{badge}</span>}
+    <div role="button" aria-label={label} aria-disabled={disabled ? 'true' : undefined} onPointerDown={press} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onLostPointerCapture={up} onContextMenu={(e) => e.preventDefault()}
+      style={{ position: 'absolute', width: size, height: size, borderRadius: '50%', touchAction: 'none', pointerEvents: 'auto', cursor: 'pointer', ...style }}>
+      <SkillFace size={size} icon={gi} glyph={gi ? null : <Ico k={icon} size={Math.round(size * 0.48)} sw={1.9} />} main={big} active={!!active} pressed={down} ring={ring} badge={badge} disabled={disabled} sub={sub} tint={tone === 'green' ? '#2E9A5A' : tone === 'red' ? '#C8281E' : null} accent={tone === 'green' ? '#7CF0A6' : '#FFC23D'} />
     </div>
   );
 }
@@ -73,7 +67,7 @@ export function CBtn({ size = 54, icon, label, onDown, onUp, onMove, onTap, acti
 export function TopBtn({ icon, label, onTap, style, badge }) {
   return (
     <button type="button" aria-label={label} onClick={(e) => { e.stopPropagation(); onTap(); }} onPointerDown={(e) => e.stopPropagation()}
-      style={{ width: 36, height: 36, borderRadius: 10, border: 'none', padding: 0, cursor: 'pointer', background: 'rgba(10,12,14,0.4)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'auto', position: 'relative', ...style }}>
+      style={{ width: 36, height: 36, borderRadius: '50%', border: 'none', padding: 0, cursor: 'pointer', background: 'rgba(14,17,22,0.44)', boxShadow: 'inset 0 0 0 1.6px rgba(255,255,255,0.62)', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'auto', position: 'relative', ...style }}>
       <Ico k={icon} size={19} />
       {badge ? <span style={{ position: 'absolute', right: -3, top: -3, width: 9, height: 9, borderRadius: 5, background: '#FF5A4A' }} /> : null}
     </button>
@@ -91,8 +85,12 @@ export function drawMinimap(cv, d) {
   ctx.beginPath(); ctx.arc(r, r, r - 1, 0, Math.PI * 2); ctx.clip();
   ctx.fillStyle = 'rgba(14,18,20,0.62)'; ctx.fillRect(0, 0, W, H);
   ctx.translate(r, r);
-  ctx.rotate(d.yaw - Math.PI);
+  ctx.rotate(d.yaw);
   const tx = (x, z) => [-(x - d.x) * sc, -(z - d.z) * sc];
+  if (d.water) {
+    ctx.fillStyle = 'rgba(52,104,128,0.85)';
+    for (const P of d.water) { ctx.beginPath(); P.forEach((q, i) => { const [a, b] = tx(q[0], q[1]); if (i) ctx.lineTo(a, b); else ctx.moveTo(a, b); }); ctx.closePath(); ctx.fill(); }
+  }
   ctx.fillStyle = 'rgba(70,74,78,0.9)';
   for (const R of d.roads || []) { const [a, b] = tx(R[0], R[1]), [c, e] = tx(R[2], R[3]); ctx.fillRect(Math.min(a, c), Math.min(b, e), Math.abs(c - a), Math.abs(e - b)); }
   ctx.fillStyle = 'rgba(150,140,120,0.55)';
@@ -101,7 +99,7 @@ export function drawMinimap(cv, d) {
   for (const a0 of d.acid || []) { const [a, b] = tx(a0[0], a0[1]); ctx.fillStyle = 'rgba(140,220,60,0.45)'; ctx.beginPath(); ctx.arc(a, b, 2.2 * sc, 0, Math.PI * 2); ctx.fill(); }
   for (const p of d.ps || []) {
     const [a, b] = tx(p[0], p[1]);
-    ctx.save(); ctx.translate(a, b); ctx.rotate(-(p[2]) + Math.PI);
+    ctx.save(); ctx.translate(a, b); ctx.rotate(-p[2]);
     ctx.fillStyle = p[3] === 1 ? '#FFB43A' : '#5CC8FF';
     ctx.beginPath(); ctx.moveTo(0, -5); ctx.lineTo(3.6, 3.6); ctx.lineTo(0, 1.6); ctx.lineTo(-3.6, 3.6); ctx.closePath(); ctx.fill();
     ctx.restore();
@@ -114,11 +112,11 @@ export function drawMinimap(cv, d) {
   ctx.restore();
   ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(r, r, r - 1, 0, Math.PI * 2); ctx.stroke();
   const n = d.yaw;
-  const nx = r + Math.sin(-n + Math.PI) * (r - 8) * -1, ny = r - Math.cos(-n + Math.PI) * (r - 8) * -1;
+  const nx = r - Math.sin(n) * (r - 8), ny = r + Math.cos(n) * (r - 8);
   ctx.fillStyle = '#FFFFFF'; ctx.font = '800 10px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillText('N', nx, ny);
 }
 
-export const EMOTE_LIST = [['wave', 'Wave'], ['cheer', 'Cheer'], ['point', 'This way'], ['thumbs', 'Nice'], ['salute', 'Salute'], ['dance', 'Dance'], ['laugh', 'Laugh'], ['come', 'Come here']];
+export const EMOTE_LIST = [['wave', 'Wave'], ['cheer', 'Cheer'], ['point', 'This way'], ['thumbs', 'Nice'], ['salute', 'Salute'], ['dance', 'Dance'], ['laugh', 'Laugh'], ['flip', 'Flip']];
 export const QUICK_EMOJI = ['😀', '😂', '😱', '😡', '👍', '🔥', '💀', '❤️'];
 export const QUICK_LINES = ['Behind you', 'Help me up', 'Reloading', 'Big one coming', 'Stay together', 'Nice shot'];

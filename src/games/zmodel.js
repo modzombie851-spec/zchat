@@ -26,7 +26,7 @@ export function parseAnims(buf) {
     let name = '';
     for (let i = 0; i < 12; i++) { const ch = dv.getUint8(o + i); if (ch) name += String.fromCharCode(ch); }
     const fps = dv.getUint16(o + 12, true), nf = dv.getUint16(o + 14, true), loop = (dv.getUint32(o + 16, true) & 1) === 1;
-    const srcH = dv.getFloat32(o + 20, true), speed = dv.getFloat32(o + 24, true);
+    const srcH = dv.getFloat32(o + 20, true), speed = dv.getFloat32(o + 24, true), ph = dv.getFloat32(o + 28, true);
     o += 32;
     const cst = new Uint8Array(buf.slice(o, o + nb));
     o += Math.ceil(nb / 4) * 4;
@@ -35,7 +35,7 @@ export function parseAnims(buf) {
     let cnt = 0;
     for (let i = 0; i < nb; i++) { off[i] = cnt; cnt += (cst[i] ? 1 : nf) * 4; }
     const q = new Int16Array(buf.slice(o, o + cnt * 2)); o += cnt * 2;
-    clips[name] = { name, fps, nf, loop, srcH, speed, hp, q, off, cst, dur: (nf - 1) / fps };
+    clips[name] = { name, fps, nf, loop, srcH, speed, ph, hp, q, off, cst, dur: (nf - 1) / fps };
   }
   return { nb, clips };
 }
@@ -144,12 +144,54 @@ async function fetchImg(url, half) {
   }
   return new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = URL.createObjectURL(b); });
 }
-export function loadZAnims(base) {
-  return once(`${base}/zanim`, async () => parseAnims(await fetchBuf(`${base}/zanim.bin`)));
+export function loadZAnims(base, file = 'zanim') {
+  return once(`${base}/${file}`, async () => parseAnims(await fetchBuf(`${base}/${file}.bin`)));
 }
 export function loadZModel(base, n, withNormals, half) {
   return once(`${base}/${n}:${withNormals ? 1 : 0}:${half ? 1 : 0}`, async () => {
     const [buf, img, nrm] = await Promise.all([fetchBuf(`${base}/${n}.bin`), fetchImg(`${base}/${n}_d.webp`, half), withNormals ? fetchImg(`${base}/${n}_n.webp`).catch(() => null) : null]);
     return { model: parseModel(buf), img, nrm };
+  });
+}
+export function parseStatic(buf) {
+  const dv = new DataView(buf);
+  const nv = dv.getUint32(8, true), ni = dv.getUint32(12, true), ng = dv.getUint16(16, true), ib = dv.getUint16(18, true);
+  const min = [dv.getFloat32(20, true), dv.getFloat32(24, true), dv.getFloat32(28, true)];
+  const max = [dv.getFloat32(32, true), dv.getFloat32(36, true), dv.getFloat32(40, true)];
+  const groups = [];
+  let o = 64;
+  for (let i = 0; i < ng; i++, o += 12) groups.push({ arr: dv.getUint16(o, true), start: dv.getUint32(o + 4, true), count: dv.getUint32(o + 8, true) });
+  const verts = new Uint8Array(buf, o, nv * 36);
+  o += nv * 36;
+  const idx = ib === 4 ? new Uint32Array(buf.slice(o, o + ni * 4)) : new Uint16Array(buf.slice(o, o + ni * 2));
+  return { verts, idx, ni, nv, groups, min, max };
+}
+export function loadStatic(base, id) {
+  return once(`${base}/st_${id}`, async () => parseStatic(await fetchBuf(`${base}/st_${id}.bin`)));
+}
+export function loadTexArrays(base, man, shrink) {
+  return once(`${base}/tarr:${shrink}`, async () => {
+    const out = {};
+    for (const [k, a] of Object.entries(man.arrays)) {
+      const size = Math.max(16, a.size >> shrink);
+      const strips = await Promise.all(a.files.map((f) => fetchImg(`${base}/${f}`)));
+      const layers = [];
+      for (let i = 0; i < a.layers; i++) {
+        const src = strips[Math.floor(i / a.per)], j = i % a.per;
+        let bm = null;
+        if (typeof createImageBitmap === 'function' && typeof ImageBitmap !== 'undefined' && src instanceof ImageBitmap) {
+          try { bm = await createImageBitmap(src, 0, j * a.size, a.size, a.size, { premultiplyAlpha: 'none', colorSpaceConversion: 'none', resizeWidth: size, resizeHeight: size, resizeQuality: 'high' }); } catch { bm = null; }
+        }
+        if (!bm) {
+          const c = Object.assign(document.createElement('canvas'), { width: size, height: size });
+          c.getContext('2d').drawImage(src, 0, j * a.size, a.size, a.size, 0, 0, size, size);
+          bm = c;
+        }
+        layers.push(bm);
+      }
+      for (const st of strips) if (st && st.close) st.close();
+      out[k] = { size, layers };
+    }
+    return out;
   });
 }

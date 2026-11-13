@@ -25,7 +25,7 @@ function roomName(u) {
   const reg = REGIONS[u.searchParams.get('reg')] ? u.searchParams.get('reg') : 'usa';
   if (!g || !CAP[g]) return null;
   if (g === 'zombie') {
-    if (/^f[a-z0-9]{6,12}$/.test(r)) return { name: `z:zombie:${reg}:${r}`, reg };
+    if (/^[fhox][a-z0-9]{6,12}$/.test(r)) return { name: `z:zombie:${reg}:${r}`, reg };
     const n = Math.max(1, Math.min(20, parseInt(r, 10) || 1));
     return { name: `z:zombie:${reg}:${n}`, reg };
   }
@@ -46,6 +46,13 @@ export default {
     if (u.pathname === '/rooms') {
       const stub = env.LOBBY.get(env.LOBBY.idFromName('lobby:zombie'));
       return stub.fetch('https://lobby/list');
+    }
+    if (u.pathname === '/mine') {
+      const uid = await whoIs(env, u.searchParams.get('tk'));
+      if (!uid) return json({ room: null });
+      const stub = env.LOBBY.get(env.LOBBY.idFromName('lobby:zombie'));
+      const r = await stub.fetch(`https://lobby/mine?u=${encodeURIComponent(uid)}`);
+      return json(await r.json().catch(() => ({ room: null })));
     }
     if (u.pathname === '/ws') {
       if (request.headers.get('Upgrade') !== 'websocket') return json({ error: 'websocket only' }, 426);
@@ -81,6 +88,7 @@ export class Room extends DurableObject {
       close: (ws, code, why) => ws.close(code, why),
       save: (c) => { try { c.ws.serializeAttachment({ id: c.id, m: c.m, room: this.roomName }); } catch {} },
       report: (r) => { if (!r.id.startsWith('z:')) return; try { const stub = this.env.LOBBY.get(this.env.LOBBY.idFromName('lobby:zombie')); this.ctx.waitUntil(stub.fetch('https://lobby/report', { method: 'POST', body: JSON.stringify(r) }).catch(() => {})); } catch {} },
+      away: (uid, room, on) => { if (!room || !room.startsWith('z:')) return; try { const stub = this.env.LOBBY.get(this.env.LOBBY.idFromName('lobby:zombie')); this.ctx.waitUntil(stub.fetch('https://lobby/away', { method: 'POST', body: JSON.stringify({ u: uid, room, on: !!on }) }).catch(() => {})); } catch {} },
     };
   }
   getCore(name) {
@@ -130,6 +138,7 @@ export class Lobby extends DurableObject {
   async load() {
     if (this.rooms) return;
     this.rooms = (await this.ctx.storage.get('rooms')) || {};
+    this.away = (await this.ctx.storage.get('away')) || {};
   }
   async fetch(request) {
     await this.load();
@@ -138,22 +147,40 @@ export class Lobby extends DurableObject {
     if (u.pathname === '/report' && request.method === 'POST') {
       const r = await request.json().catch(() => null);
       if (r && typeof r.id === 'string') {
-        if (r.n > 0) this.rooms[r.id] = { n: r.n | 0, w: r.w | 0, cap: r.cap | 0, at: now };
+        if (r.n > 0) this.rooms[r.id] = { n: r.n | 0, w: r.w | 0, cap: r.cap | 0, h: typeof r.h === 'string' ? r.h.slice(0, 16) : '', b: r.b === 0 ? 0 : 1, o: r.o ? 1 : 0, at: now };
         else delete this.rooms[r.id];
         await this.ctx.storage.put('rooms', this.rooms);
       }
       return new Response('ok');
     }
-    const out = { asia: [], usa: [], eu: [] };
+    if (u.pathname === '/away' && request.method === 'POST') {
+      const r = await request.json().catch(() => null);
+      if (r && typeof r.u === 'string' && typeof r.room === 'string') {
+        if (r.on) this.away[r.u] = { room: r.room, at: now };
+        else if (this.away[r.u] && this.away[r.u].room === r.room) delete this.away[r.u];
+        for (const [k, v] of Object.entries(this.away)) if (now - v.at > 60000) delete this.away[k];
+        await this.ctx.storage.put('away', this.away);
+      }
+      return new Response('ok');
+    }
+    if (u.pathname === '/mine') {
+      const a = this.away[u.searchParams.get('u') || ''];
+      if (!a || now - a.at > 32000) return json({ room: null });
+      const p = parseName(a.room);
+      const [reg, r] = p.rest.split(':');
+      return json({ room: { reg, r }, left: Math.max(0, Math.round((32000 - (now - a.at)) / 1000)) });
+    }
+    const out = { asia: [], usa: [], eu: [] }, open = [];
     for (const [id, r] of Object.entries(this.rooms)) {
       if (now - r.at > 90000) { delete this.rooms[id]; continue; }
       const p = parseName(id);
       const [reg, n] = p.rest.split(':');
-      if (!/^[0-9]+$/.test(n || '')) continue;
-      if (out[reg]) out[reg].push({ n: Number(n) || 1, p: r.n, w: r.w, cap: r.cap || 50 });
+      if (/^[0-9]+$/.test(n || '')) { if (out[reg]) out[reg].push({ n: Number(n) || 1, p: r.n, w: r.w, cap: r.cap || 50, h: r.h || '' }); continue; }
+      if (/^[ox][a-z0-9]{6,12}$/.test(n || '') && out[reg]) open.push({ reg, r: n, p: r.n, w: r.w, cap: r.cap || 50, h: r.h || '', b: r.b === 0 ? 0 : 1 });
     }
     for (const k of Object.keys(out)) out[k].sort((a, b) => a.n - b.n);
-    return json({ at: now, rooms: out });
+    open.sort((a, b) => b.p - a.p);
+    return json({ at: now, rooms: out, open: open.slice(0, 40) });
   }
 }
 

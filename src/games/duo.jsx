@@ -723,7 +723,7 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
   const torchArt = (k) => <TorchHero kind={k} size={42} dir={k === 'sun' ? 'right' : 'left'} />;
   const lobbyUi = phase !== 'pick' && phase !== 'lobby' ? null : (
     <GLobby GS={GS} title="Two Torches" onClose={finish} closeLabel={solo ? 'Leave' : 'Back to chat'}
-      sub={solo ? 'Practice alone. The other torch follows you.' : watch ? `Watching ${hostFirst} and ${peerFirst}` : waiting ? `Waiting for ${peerFirst} to open the game` : host ? `Pick where to go with ${peerFirst}` : `${peerFirst} picks where to go`}
+      sub={solo ? null : watch ? `Watching ${hostFirst} and ${peerFirst}` : waiting ? `Waiting for ${peerFirst} to open the game` : host ? `Pick where to go with ${peerFirst}` : `${peerFirst} picks where to go`}
       badge={<GChip style={{ gap: 5, height: 34 }}><GIcon k="star" size={15} color="#FFD23F" />{`${storyStars}/${STORY_N * 3}`}</GChip>}
       tools={(
         <>
@@ -734,7 +734,7 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
       )}
       side={solo ? (
         <GPanel style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {[['sun', '#FFB347', 'Orange torch', 'Walks through lava and fire, burns vines, throws fireballs.'], ['moon', '#8CC0FF', 'Blue torch', 'Wades through water, shows hidden stones, freezes enemies.']].map(([k, c, t1, t2]) => (
+          {[['sun', '#FFB347', 'Orange torch', 'Lava safe. Fireballs. Burns vines'], ['moon', '#8CC0FF', 'Blue torch', 'Water safe. Frost. Shows hidden stones']].map(([k, c, t1, t2]) => (
             <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <TorchHero kind={k} size={40} dir={k === 'sun' ? 'right' : 'left'} />
               <div style={{ flex: 1, minWidth: 0, lineHeight: 1.3 }}>
@@ -772,7 +772,7 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
               <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>{['sand', 'jungle', 'ice', 'forge', 'crystal', 'tomb', 'sky'].map((k) => <span key={k} title={THEMES[k].name} style={{ width: 8, height: 24, borderRadius: 3, background: THEMES[k].floor[0], boxShadow: `inset 0 -5px 0 ${THEMES[k].faceB}` }} />)}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 15.5, fontWeight: 900 }}>A new temple every time</div>
-                <div style={{ fontSize: 12, fontWeight: 800, color: 'rgba(255,255,255,0.7)' }}>{endlessBest > 0 ? `Your best is temple ${endlessBest}` : 'Each one is longer and harder'}</div>
+                <div style={{ fontSize: 12, fontWeight: 800, color: 'rgba(255,255,255,0.7)' }}>{endlessBest > 0 ? `Your best is temple ${endlessBest}` : ''}</div>
               </div>
             </div>
           ) : (
@@ -929,7 +929,7 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
         )}
         {ctl && (
           <div onPointerDown={(e) => e.stopPropagation()} style={{ position: 'absolute', inset: 0, zIndex: 45, background: 'rgba(8,6,14,0.6)', display: 'flex', padding: 12, overflowY: 'auto', touchAction: 'pan-x pan-y' }}>
-            <div style={{ margin: 'auto', width: '100%', display: 'flex', justifyContent: 'center' }}><GControlsPanel sideways wide={land} onClose={() => setCtl(false)} /></div>
+            <div style={{ margin: 'auto', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><GControlsPanel sideways onClose={() => setCtl(false)} /></div>
           </div>
         )}
         {voice.err && phase === 'play' && <div style={{ position: 'absolute', left: '50%', top: '22%', transform: 'translateX(-50%)', pointerEvents: 'none', zIndex: 4 }}><GChip style={{ background: 'rgba(217,75,75,0.95)' }}>{voice.err}</GChip></div>}

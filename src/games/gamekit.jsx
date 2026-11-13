@@ -1,4 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { CreditsTab } from './gcredits.jsx';
+import { GSkill, GGlyph } from './gskill.jsx';
 import { FONT, hapticTap } from '../App.jsx';
 import { Sfx } from './sfx.js';
 
@@ -59,6 +61,10 @@ export function injectKitCss() {
     '@keyframes zgk-in{from{transform:translateY(24px);opacity:0}to{transform:none;opacity:1}}',
     '@keyframes zgk-spin{to{transform:rotate(360deg)}}',
     '.zgk-btn{-webkit-tap-highlight-color:transparent;touch-action:none;user-select:none;-webkit-user-select:none;outline:none}',
+    '.zgk-range{-webkit-appearance:none;appearance:none;height:6px;border-radius:3px;outline:none;margin:0;cursor:pointer;touch-action:none}',
+    '.zgk-range::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:20px;height:20px;border-radius:10px;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.45)}',
+    '.zgk-range::-moz-range-thumb{width:20px;height:20px;border:none;border-radius:10px;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.45)}',
+    '.zgk-range:focus-visible{box-shadow:0 0 0 3px #2479E8}',
     '.zgk-btn:focus-visible{box-shadow:0 0 0 3px #fff,0 0 0 6px #2479E8!important}',
     '[data-side="1"] [style*="overflow-y: auto"]{overflow-x:auto!important;touch-action:pan-x pan-y!important}',
     '[style*="overflow-y: auto"] .zgk-btn{touch-action:pan-x pan-y}',
@@ -494,7 +500,7 @@ function GSteps({ label, value, opts, onPick }) {
   const near = opts.reduce((a, b) => (Math.abs(b[0] - value) < Math.abs(a[0] - value) ? b : a))[0];
   return (
     <div style={{ width: '100%' }}>
-      <div style={{ fontSize: 13.5, fontWeight: 800, color: 'rgba(255,255,255,0.9)', marginBottom: 6 }}>{label}</div>
+      {label && <div style={{ fontSize: 13.5, fontWeight: 800, color: 'rgba(255,255,255,0.9)', marginBottom: 6 }}>{label}</div>}
       <GSeg label={label} value={near} items={opts.map(([v, t]) => [v, t])} height={32} onPick={(v) => { kitTap(); onPick(v); }} />
     </div>
   );
@@ -545,55 +551,111 @@ export function GVoiceRow({ name, avatar, muted, vol = 1, onMute, onVol, me }) {
   );
 }
 
-export function GControlsPanel({ onClose, sideways, wide }) {
-  const g = useSkin().k;
-  const v = useCtlLook(g);
-  const [snd, setSnd] = useState(() => !!Sfx.sfxOn);
-  const [mus, setMus] = useState(() => !!Sfx.musicOn);
-  const samples = (
-    <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 14, height: wide ? 96 : 84 }}>
-      <div style={{ opacity: 1 - v.see, transform: `scale(${v.size})`, transformOrigin: 'bottom center', transition: 'transform .15s ease, opacity .15s ease' }}><GHudSkill icon="dash" main size={66} label="Sample button" onPress={() => {}} /></div>
-      <div style={{ opacity: 1 - v.see, transform: `scale(${v.size})`, transformOrigin: 'bottom center', transition: 'transform .15s ease, opacity .15s ease' }}><GHudSkill icon="suck" size={50} label="Sample button" onPress={() => {}} /></div>
+export function GSetRow({ label, sub, children, stack }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: stack ? 'column' : 'row', alignItems: stack ? 'stretch' : 'center', gap: stack ? 8 : 14, padding: '11px 0', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+      <div style={{ flex: stack ? 'none' : '1 1 40%', minWidth: 0 }}>
+        <div style={{ fontSize: 14, fontWeight: 800, color: '#FFFFFF' }}>{label}</div>
+        {sub && <div style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.55)', marginTop: 2, lineHeight: 1.35 }}>{sub}</div>}
+      </div>
+      <div style={{ flex: stack ? 'none' : '1 1 62%', minWidth: 0, maxWidth: stack ? 'none' : 400, marginLeft: 'auto', textAlign: 'right' }}>{children}</div>
     </div>
   );
-  const opts = (
+}
+
+export function GSetToggle({ on, onToggle, label }) {
+  return (
+    <button type="button" role="switch" aria-checked={!!on} aria-label={label} className="zgk-btn" {...pressProps(() => { kitTap(); onToggle(!on); })}
+      style={{ display: 'inline-block', verticalAlign: 'middle', width: 50, height: 30, borderRadius: 15, border: 'none', padding: 0, cursor: 'pointer', position: 'relative', background: on ? '#FFC23D' : 'rgba(255,255,255,0.18)', transition: 'background .15s ease', flexShrink: 0 }}>
+      <span aria-hidden="true" style={{ position: 'absolute', top: 3, left: on ? 23 : 3, width: 24, height: 24, borderRadius: 12, background: '#FFFFFF', boxShadow: '0 1px 3px rgba(0,0,0,0.35)', transition: 'left .15s ease' }} />
+    </button>
+  );
+}
+
+export function GSetSlider({ value, min = 0, max = 1, step = 0.05, onChange, label, fmt }) {
+  injectKitCss();
+  const f = (value - min) / (max - min || 1);
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%' }}>
+      <input type="range" className="zgk-range" aria-label={label} min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))}
+        onPointerDown={(e) => e.stopPropagation()}
+        style={{ flex: 1, minWidth: 0, background: `linear-gradient(90deg, #FFC23D 0%, #FFC23D ${f * 100}%, rgba(255,255,255,0.18) ${f * 100}%, rgba(255,255,255,0.18) 100%)` }} />
+      <span style={{ width: 42, textAlign: 'right', fontSize: 13, fontWeight: 800, color: '#FFFFFF', fontVariantNumeric: 'tabular-nums' }}>{fmt ? fmt(value) : `${Math.round(f * 100)}%`}</span>
+    </div>
+  );
+}
+
+function ctlTab(g, v, sideways, pv) {
+  return (
     <>
-      <GSteps label="Button size" value={v.size} opts={SIZES} onPick={(x) => setCtlLook({ size: x }, g)} />
-      <GSteps label="See through" value={v.see} opts={SEES} onPick={(x) => setCtlLook({ see: x }, g)} />
-      <div style={{ display: 'flex', gap: 14, width: '100%' }}>
-        <div style={{ flex: 1, minWidth: 0 }}><GSwitchRow label="Sound" on={snd} onToggle={() => { const n = !snd; setSnd(n); Sfx.init(); Sfx.setSfx(n); }} /></div>
-        <div style={{ flex: 1, minWidth: 0 }}><GSwitchRow label="Music" on={mus} onToggle={() => { const n = !mus; setMus(n); Sfx.init(); Sfx.setMusic(n); }} /></div>
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 16, height: 92, padding: '6px 0 10px', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+        <div style={{ opacity: 1 - v.see, transform: `scale(${v.size})`, transformOrigin: 'bottom center', transition: 'transform .15s ease, opacity .15s ease' }}><GHudSkill icon={pv[0]} main size={66} label="Sample button" onPress={() => {}} /></div>
+        <div style={{ opacity: 1 - v.see, transform: `scale(${v.size})`, transformOrigin: 'bottom center', transition: 'transform .15s ease, opacity .15s ease' }}><GHudSkill icon={pv[1]} size={50} label="Sample button" cool={3} coolMax={6} onPress={() => {}} /></div>
       </div>
-      {sideways && (
-        <div role="switch" aria-checked={v.side} tabIndex={0} {...pressProps(() => { setCtlLook({ side: !v.side }, g); kitTap(); })} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', cursor: 'pointer', fontSize: 14, fontWeight: 900, color: '#FFFFFF' }}>
-          <span style={{ flex: 1 }}>Play sideways<span style={{ display: 'block', fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.65)' }}>No need to turn your phone setting</span></span>
-          <span aria-hidden="true" style={{ width: 46, height: 28, borderRadius: 14, background: v.side ? '#F7C53A' : 'rgba(255,255,255,0.18)', position: 'relative', transition: 'background .15s ease', flexShrink: 0 }}><span style={{ position: 'absolute', top: 3, left: v.side ? 21 : 3, width: 22, height: 22, borderRadius: 11, background: '#FFFFFF', transition: 'left .15s ease' }} /></span>
-        </div>
-      )}
-      <div style={{ display: 'flex', gap: 10, width: '100%' }}>
-        <GPill text="Reset" color="white" small onPress={() => setCtlLook({ size: 1, see: 0 }, g)} style={{ flex: 1 }} wide />
-        <GPill text="Done" color="green" small onPress={onClose} style={{ flex: 1 }} wide />
-      </div>
+      <GSetRow label="Button size"><GSteps value={v.size} opts={SIZES} onPick={(x) => setCtlLook({ size: x }, g)} /></GSetRow>
+      <GSetRow label="See through" sub="How clear the buttons are"><GSteps value={v.see} opts={SEES} onPick={(x) => setCtlLook({ see: x }, g)} /></GSetRow>
+      {sideways && <GSetRow label="Play sideways" sub="Turns the game without your phone setting"><GSetToggle on={v.side} label="Play sideways" onToggle={(n) => setCtlLook({ side: n }, g)} /></GSetRow>}
+      <div style={{ paddingTop: 12 }}><GPill text="Reset buttons" color="white" small onPress={() => setCtlLook({ size: 1, see: 0 }, g)} /></div>
     </>
   );
-  if (wide) {
-    return (
-      <GPanel style={{ width: '100%', maxWidth: 640, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 18, animation: 'zgk-pop 0.25s ease-out', boxSizing: 'border-box' }}>
-        <div style={{ width: 170, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-          <GTitle text="Settings" size={28} />
-          {samples}
-        </div>
-        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 11 }}>{opts}</div>
-      </GPanel>
-    );
-  }
+}
+
+function AudioTab({ extra }) {
+  const [snd, setSnd] = useState(() => !!Sfx.sfxOn);
+  const [mus, setMus] = useState(() => !!Sfx.musicOn);
+  const [sv, setSv] = useState(() => Sfx.sfxVol == null ? 1 : Sfx.sfxVol);
+  const [mv, setMv] = useState(() => Sfx.musicVol == null ? 1 : Sfx.musicVol);
   return (
-    <GPanel style={{ width: '100%', maxWidth: 360, padding: '16px 16px 14px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 13, animation: 'zgk-pop 0.25s ease-out', boxSizing: 'border-box' }}>
-      <GTitle text="Settings" size={28} />
-      {samples}
-      {opts}
-    </GPanel>
+    <>
+      <GSetRow label="Sound effects"><GSetToggle on={snd} label="Sound effects" onToggle={(n) => { setSnd(n); Sfx.init(); Sfx.setSfx(n); }} /></GSetRow>
+      <GSetRow label="Effects volume"><GSetSlider value={sv} label="Effects volume" onChange={(x) => { setSv(x); Sfx.init(); if (Sfx.setSfxVol) Sfx.setSfxVol(x); }} /></GSetRow>
+      <GSetRow label="Music"><GSetToggle on={mus} label="Music" onToggle={(n) => { setMus(n); Sfx.init(); Sfx.setMusic(n); }} /></GSetRow>
+      <GSetRow label="Music volume"><GSetSlider value={mv} label="Music volume" onChange={(x) => { setMv(x); Sfx.init(); if (Sfx.setMusicVol) Sfx.setMusicVol(x); }} /></GSetRow>
+      {extra}
+    </>
   );
+}
+
+const SET_ICON = { graphics: 'eye', gameplay: 'play', controls: 'hand', hud: 'target', audio: 'sound', credits: 'heart' };
+
+export function GSettings({ onClose, sideways = true, tabs = [], audioExtra = null, controlsExtra = null, first, preview }) {
+  injectKitCss();
+  const g = useSkin().k;
+  const v = useCtlLook(g);
+  const all = [...tabs, { k: 'controls', label: 'Controls', body: <>{controlsExtra}{ctlTab(g, v, sideways, preview || ['dash', 'suck'])}</> }, { k: 'audio', label: 'Audio', body: <AudioTab extra={audioExtra} /> }, { k: 'credits', label: 'Credits', body: <CreditsTab /> }];
+  const [cur, setCur] = useState(first || all[0].k);
+  const tab = all.find((t) => t.k === cur) || all[0];
+  return (
+    <div role="dialog" aria-label="Settings" onPointerDown={(e) => e.stopPropagation()}
+      style={{ width: 'min(780px, 100%)', height: 'min(560px, 100%)', display: 'flex', flexDirection: 'column', borderRadius: 14, overflow: 'hidden', background: 'rgba(14,17,22,0.97)', boxShadow: '0 18px 50px rgba(0,0,0,0.55), inset 0 0 0 1px rgba(255,255,255,0.08)', color: '#FFFFFF', fontFamily: FONT, animation: 'zgk-pop 0.2s ease-out', boxSizing: 'border-box' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px 10px 16px', borderBottom: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
+        <span style={{ flex: 1, fontSize: 18, fontWeight: 900 }}>Settings</span>
+        <GHudBtn icon="close" size={36} label="Close settings" onPress={onClose} />
+      </div>
+      <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
+        <div role="tablist" aria-label="Settings sections" style={{ width: 'clamp(104px, 22%, 160px)', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 2, padding: '8px 6px', borderRight: '1px solid rgba(255,255,255,0.08)', overflowY: 'auto' }}>
+          {all.map((t) => {
+            const on = t.k === tab.k;
+            return (
+              <button key={t.k} type="button" role="tab" aria-selected={on} className="zgk-btn" {...pressProps(() => { kitTap(); setCur(t.k); })}
+                style={{ display: 'flex', alignItems: 'center', gap: 9, minHeight: 42, padding: '0 10px', border: 'none', borderRadius: 9, cursor: 'pointer', fontFamily: FONT, fontSize: 13.5, fontWeight: 800, textAlign: 'left', color: on ? '#FFFFFF' : 'rgba(255,255,255,0.6)', background: on ? 'rgba(255,255,255,0.09)' : 'transparent', boxShadow: on ? 'inset 3px 0 0 #FFC23D' : 'none' }}>
+                <GIcon k={t.icon || SET_ICON[t.k] || 'gear'} size={17} color={on ? '#FFC23D' : 'rgba(255,255,255,0.6)'} line halo={false} stroke={2.2} />
+                <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.label}</span>
+              </button>
+            );
+          })}
+        </div>
+        <div role="tabpanel" aria-label={tab.label} style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: '6px 18px 16px', touchAction: 'pan-y' }}>
+          <div style={{ fontSize: 15, fontWeight: 900, padding: '8px 0 4px', color: 'rgba(255,255,255,0.92)' }}>{tab.label}</div>
+          {tab.body}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function GControlsPanel({ onClose, sideways, tabs, first }) {
+  return <GSettings onClose={onClose} sideways={sideways} tabs={tabs || []} first={first} />;
 }
 
 export function useFitScale(ref, W, H, cap = 1) {
@@ -830,25 +892,14 @@ export function stagePoint(el, e, side) {
 
 export function GHudBtn({ icon, label, onPress, on = false, tone = '#7CF2A0', size = 36, badge, children }) {
   injectKitCss();
-  const S = useSkin();
   const [down, setDown] = useState(false);
-  const ic = Math.round(size * 0.5);
-  const lip = S.lip ? 3 : 0;
-  const bubble = S.shape === 'bubble';
-  const light = S.ico !== '#FFFFFF' && S.k === 'roll';
-  const face = on ? `linear-gradient(180deg, ${tone} 0%, ${hexA(tone, 0.72)} 100%)` : bubble ? `radial-gradient(circle at 34% 28%, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0.1) 26%, ${S.face[0]} 52%, ${S.face[1]} 100%)` : `linear-gradient(180deg, ${S.face[0]} 0%, ${S.face[1]} 100%)`;
-  const inset = S.k === 'duo' ? 'inset 0 0 0 3px rgba(0,0,0,0.22), inset 0 0 0 4px rgba(217,165,72,0.3)' : `inset 0 -2px 0 rgba(0,0,0,${light ? 0.08 : 0.18})`;
+  const ic = Math.round(size * 0.52);
   return (
     <button type="button" className="zgk-btn" aria-label={label} aria-pressed={on || undefined} {...pressProps(() => { kitTap('click'); if (onPress) onPress(); })}
       onPointerUp={() => setDown(false)} onPointerCancel={() => setDown(false)} onPointerLeave={() => setDown(false)} onPointerDownCapture={() => setDown(true)}
-      style={{ position: 'relative', width: size, height: size + lip, borderRadius: RAD[S.shape] || 0, border: 'none', padding: 0, flexShrink: 0, cursor: 'pointer', background: 'transparent', transform: bubble && down ? 'scale(0.92)' : undefined, transition: 'transform 0.06s ease-out' }}>
-      {lip > 0 && <SkinBox shape={S.shape} w={size} h={size} top={lip} bg={S.lip} edge={S.lipEdge || S.edge} ol={2} />}
-      <SkinBox shape={S.shape} w={size} h={size} top={down && lip ? lip - 1 : 0} bg={face} edge={S.edge} ol={bubble ? 1.5 : 2} inset={inset} shadow={bubble ? '0 3px 10px rgba(0,30,60,0.35)' : ''}>
-        {S.gloss > 0 && !bubble && <span style={{ position: 'absolute', left: '18%', right: '18%', top: '8%', height: '34%', borderRadius: '50%', background: `linear-gradient(180deg, rgba(255,255,255,${S.gloss}), rgba(255,255,255,0.03))` }} />}
-        {S.rivets && size >= 30 && <Rivets size={size} />}
-        <span style={{ position: 'relative', display: 'flex', filter: light ? 'none' : 'drop-shadow(0 1.5px 0 rgba(0,0,0,0.45))' }}>{children || <GIcon k={icon} size={ic} color={on ? INK : S.ico} line halo={false} stroke={2.4} />}</span>
-      </SkinBox>
-      {badge != null && <span aria-hidden="true" style={{ position: 'absolute', right: -3, top: -3, minWidth: 17, height: 17, padding: '0 4px', borderRadius: 9, background: '#E5484D', color: '#FFFFFF', fontFamily: FONT, fontWeight: 900, fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box', boxShadow: `0 0 0 2px ${INK}` }}>{badge}</span>}
+      style={{ position: 'relative', width: size, height: size, borderRadius: '50%', border: 'none', padding: 0, flexShrink: 0, cursor: 'pointer', background: down ? 'rgba(255,255,255,0.3)' : on ? hexA(tone, 0.36) : 'rgba(14,17,22,0.44)', boxShadow: `inset 0 0 0 1.6px ${on ? hexA(tone, 0.98) : 'rgba(255,255,255,0.62)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', transform: down ? 'scale(0.93)' : undefined, transition: 'transform 0.06s ease-out, background 0.08s' }}>
+      <span style={{ position: 'relative', display: 'flex', filter: 'drop-shadow(0 1px 1.5px rgba(0,0,0,0.55))' }}>{children || <GIcon k={icon} size={ic} color="#FFFFFF" line halo={false} stroke={2.2} />}</span>
+      {badge != null && <span aria-hidden="true" style={{ position: 'absolute', right: -4, top: -4, minWidth: 17, height: 17, padding: '0 4px', borderRadius: 9, background: '#E5484D', color: '#FFFFFF', fontFamily: FONT, fontWeight: 900, fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box', boxShadow: '0 0 0 1.5px rgba(14,17,22,0.85)' }}>{badge}</span>}
     </button>
   );
 }
@@ -996,55 +1047,15 @@ export function GHint({ text, life = 4 }) {
   return <div style={{ maxWidth: '100%', textAlign: 'center', fontFamily: FONT, fontSize: 12.5, fontWeight: 700, lineHeight: 1.4, color: 'rgba(255,255,255,0.9)', textShadow: '0 1px 3px rgba(0,0,0,0.85), 0 0 8px rgba(0,0,0,0.35)', pointerEvents: 'none', animation: `zgk-hint ${life}s ease-out forwards` }}>{text}</div>;
 }
 
-const SKILL_ART = {
-  dash: (g) => <><defs><linearGradient id={g} x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#8CF3FF" /><stop offset="1" stopColor="#1A93D4" /></linearGradient></defs><path d="M1.6 9.6h4.2M.8 12.4h4.6M1.8 15.2h3.8" stroke="#C8F8FF" strokeWidth="1.6" strokeLinecap="round" /><path d="M8.6 12.4c2.3-3.7 6.4-5.2 9.9-3.7 1.4.6 2.5 1.7 3.5 3.7-1 2-2.1 3.1-3.5 3.7-3.5 1.5-7.6 0-9.9-3.7z" fill={`url(#${g})`} /><path d="M9.2 12.4L5.9 8.8v7.2z" fill={`url(#${g})`} /><path d="M13.2 9.2c.9 1 1.3 2 1.3 3.2s-.4 2.2-1.3 3.2" stroke="#0E5E8C" strokeWidth="1" fill="none" strokeLinecap="round" opacity=".55" /><circle cx="18.4" cy="11.3" r="1.15" fill="#062A3E" /><circle cx="18.7" cy="11" r=".38" fill="#FFFFFF" /></>,
-  suck: (g) => <><defs><linearGradient id={g} x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#E2C6FF" /><stop offset="1" stopColor="#7B47E6" /></linearGradient></defs><path d="M10.8 12a1.2 1.2 0 0 1 2.4 0 2.4 2.4 0 0 1-4.8 0 3.6 3.6 0 0 1 7.2 0 4.8 4.8 0 0 1-9.6 0 6 6 0 0 1 12 0" fill="none" stroke={`url(#${g})`} strokeWidth="1.9" strokeLinecap="round" /><circle cx="20.6" cy="5.4" r="1.4" fill="#E9D8FF" /><circle cx="3.6" cy="18.8" r="1.2" fill="#E9D8FF" /><circle cx="20.8" cy="18.2" r=".9" fill="#E9D8FF" opacity=".8" /><circle cx="4" cy="5.8" r=".8" fill="#E9D8FF" opacity=".7" /></>,
-  shield: (g) => <><defs><linearGradient id={g} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#A8E2FF" /><stop offset="1" stopColor="#2771E0" /></linearGradient></defs><path d="M12 2.6l7.8 3.1v5.9c0 4.7-3.2 8.2-7.8 9.8-4.6-1.6-7.8-5.1-7.8-9.8V5.7z" fill={`url(#${g})`} /><path d="M12 4.6l6 2.4v4.6c0 3.7-2.5 6.5-6 7.8z" fill="#FFFFFF" opacity=".16" /><circle cx="9.4" cy="10" r="2.3" fill="none" stroke="#FFFFFF" strokeWidth="1.1" opacity=".9" /><circle cx="13.6" cy="14.2" r="1.4" fill="none" stroke="#FFFFFF" strokeWidth="1" opacity=".8" /><circle cx="14.6" cy="9" r=".9" fill="#FFFFFF" opacity=".85" /></>,
-  shock: (g) => <><defs><linearGradient id={g} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#FFF58A" /><stop offset="1" stopColor="#F59E0B" /></linearGradient></defs><circle cx="12" cy="12" r="9.6" fill="none" stroke="#FFE45A" strokeWidth="1.3" strokeDasharray="2.6 2.2" opacity=".9" /><path d="M13.6 3.4L6.6 13.4h4.8l-1.3 7.2 7.2-10.4h-4.9z" fill={`url(#${g})`} /><path d="M13.6 3.4L6.6 13.4h2.2l4.8-7.4z" fill="#FFFFFF" opacity=".35" /></>,
-  frenzy: (g) => <><defs><linearGradient id={g} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#FF9F6E" /><stop offset="1" stopColor="#E0303A" /></linearGradient></defs><path d="M2.6 12c2.6-5.4 16.2-5.4 18.8 0-2.6 5.4-16.2 5.4-18.8 0z" fill="#3B0B10" /><path d="M4.4 10.2l1.5 2.3 1.4-2.9 1.6 3.1 1.5-3.3 1.6 3.3 1.6-3.3 1.5 3.3 1.6-3.1 1.4 2.9 1.5-2.3" fill="#FFFFFF" /><path d="M4.6 13.9l1.5-1.8 1.4 2.4 1.6-2.6 1.5 2.8 1.4-2.8 1.5 2.8 1.6-2.6 1.4 2.4 1.5-1.8" fill="#FFFFFF" opacity=".92" /><path d="M2.6 12c2.6-5.4 16.2-5.4 18.8 0-2.6 5.4-16.2 5.4-18.8 0z" fill="none" stroke={`url(#${g})`} strokeWidth="2.4" strokeLinejoin="round" /><path d="M5 5.6l1.2 1.8M12 3.4v2.2M19 5.6l-1.2 1.8" stroke="#FFB27A" strokeWidth="1.4" strokeLinecap="round" /></>,
-};
-let skillSeq = 0;
 export function GSkillArt({ k, size = 28 }) {
-  const id = useRef(null);
-  if (!id.current) { skillSeq += 1; id.current = `zsk${skillSeq}`; }
-  const f = SKILL_ART[k];
-  if (!f) return null;
-  return <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" style={{ display: 'block', overflow: 'visible', filter: 'drop-shadow(0 1px 1.5px rgba(0,0,0,0.45))' }}>{f(id.current)}</svg>;
+  return <GGlyph k={SKILL_GI[k] || k} size={size} style={{ filter: 'drop-shadow(0 1px 1.5px rgba(0,0,0,0.45))' }} />;
 }
 
-const SKILL_TONE = { dash: ['#86EEFF', '#1D9BE0', '#0D4F80'], suck: ['#DDBFFF', '#8650EA', '#40208A'], shield: ['#A6E6FF', '#2E86E8', '#14438A'], shock: ['#FFF38A', '#F2A90C', '#8A5600'], frenzy: ['#FFA071', '#E8402F', '#85150F'] };
-function toneOf(hex) { return [shadeHex(hex, 0.45), hex, shadeHex(hex, -0.45)]; }
-function shadeHex(hex, k) {
-  const n = parseInt(String(hex).slice(1, 7), 16) || 0;
-  const f = (v) => Math.max(0, Math.min(255, Math.round(k < 0 ? v * (1 + k) : v + (255 - v) * k)));
-  return `rgb(${f((n >> 16) & 255)},${f((n >> 8) & 255)},${f(n & 255)})`;
-}
-export function GHudSkill({ icon, art, label, onPress, size = 52, cool = 0, coolMax = 0, main = false, sound = 'pop', tone }) {
-  injectKitCss();
-  const [down, setDown] = useState(false);
-  const busy = cool > 0;
-  const frac = coolMax > 0 ? Math.max(0, Math.min(1, cool / coolMax)) : 0;
-  const fire = () => { if (busy) return; kitTap(sound); if (onPress) onPress(); };
-  const c = (art && SKILL_TONE[art]) || (tone ? toneOf(tone) : SKILL_TONE[icon] || ['#7B82B0', '#454B78', '#20234A']);
-  const lip = Math.max(3, Math.round(size * 0.07));
-  const press = down && !busy;
-  return (
-    <button type="button" className="zgk-btn" aria-label={label}
-      onPointerDown={(e) => { e.stopPropagation(); if (e.cancelable) e.preventDefault(); setDown(true); fire(); }}
-      onPointerUp={(e) => { e.stopPropagation(); setDown(false); }}
-      onPointerCancel={() => setDown(false)}
-      onPointerLeave={() => setDown(false)}
-      onClick={(e) => e.stopPropagation()}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fire(); } }}
-      style={{ position: 'relative', width: size, height: size + lip, padding: 0, border: 'none', borderRadius: '50%', background: 'transparent', cursor: busy ? 'default' : 'pointer', flexShrink: 0 }}>
-      {main && !busy && <span aria-hidden="true" style={{ position: 'absolute', left: -5, top: -5, width: size + 10, height: size + 10, borderRadius: '50%', boxShadow: `0 0 0 3px ${c[0]}`, opacity: 0.55, animation: 'zgk-pulse 1.6s ease-in-out infinite' }} />}
-      <span aria-hidden="true" style={{ position: 'absolute', left: 0, top: lip, width: size, height: size, borderRadius: '50%', background: busy ? '#202336' : c[2], boxShadow: `0 0 0 ${main ? 3 : 2.5}px ${INK}, 0 ${lip}px 10px rgba(0,0,0,0.35)` }} />
-      <span aria-hidden="true" style={{ position: 'absolute', left: 0, top: press ? lip - 1 : 0, width: size, height: size, borderRadius: '50%', overflow: 'hidden', background: busy ? 'linear-gradient(180deg, #5A5F7E 0%, #383C58 100%)' : `radial-gradient(circle at 35% 28%, ${c[0]} 0%, ${c[1]} 58%, ${c[2]} 100%)`, boxShadow: `0 0 0 ${main ? 3 : 2.5}px ${INK}, inset 0 0 0 ${main ? 3 : 2}px rgba(255,255,255,0.28), inset 0 -${Math.round(size * 0.06)}px 0 rgba(0,0,0,0.18)`, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'top 0.05s ease-out' }}>
-        <span style={{ position: 'absolute', left: '17%', right: '17%', top: '6%', height: '34%', borderRadius: '50%', background: 'linear-gradient(180deg, rgba(255,255,255,0.55), rgba(255,255,255,0.04))' }} />
-        <span style={{ position: 'relative', display: 'flex', filter: `brightness(0) invert(1) drop-shadow(0 ${Math.max(1.5, size * 0.03)}px 0 rgba(0,0,0,0.4))`, opacity: busy ? 0.55 : 1 }}>{art ? <GSkillArt k={art} size={Math.round(size * 0.58)} /> : <GIcon k={icon} size={Math.round(size * 0.48)} color="#FFFFFF" line halo={false} stroke={main ? 2.8 : 2.5} />}</span>
-        {frac > 0 && <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: `conic-gradient(rgba(8,8,22,0.62) ${frac * 360}deg, rgba(0,0,0,0) 0deg)` }} />}
-        {busy && coolMax > 1.5 && <span style={{ position: 'absolute', left: 0, right: 0, top: '50%', transform: 'translateY(-50%)', textAlign: 'center', fontFamily: FONT, fontWeight: 900, fontSize: Math.round(size * 0.34), color: '#FFFFFF', textShadow: `0 2px 0 ${INK}, 0 0 6px rgba(0,0,0,0.6)` }}>{Math.ceil(cool)}</span>}
-      </span>
-    </button>
-  );
+const SKILL_GI = { dash: 'dash', suck: 'vortex', shield: 'shield', shock: 'lightning', frenzy: 'jaws', flame: 'fireball', snow: 'snowflake', hand: 'hand', swap: 'cycle', bolt: 'electric', rocket: 'rocket', bomb: 'bomb', heart: 'revive', hammer: 'hammer', bubble: 'shield', people: 'ghost' };
+const SKILL_ACC = { dash: '#5BC8FF', suck: '#B98CFF', shield: '#7FE6FF', shock: '#FFD54A', frenzy: '#FF7A55' };
+
+export function GHudSkill({ icon, art, label, onPress, size = 52, cool = 0, coolMax = 0, main = false, sound = 'pop', tone, badge, disabled }) {
+  const gi = SKILL_GI[art] || SKILL_GI[icon] || icon;
+  const acc = SKILL_ACC[art] || tone || '#FFC23D';
+  return <GSkill icon={gi} label={label} size={size} main={main} cool={cool} coolMax={coolMax} accent={acc} badge={badge} disabled={disabled} tap={() => kitTap(sound)} onPress={() => { if (onPress) onPress(); }} />;
 }

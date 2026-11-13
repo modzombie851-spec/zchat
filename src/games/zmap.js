@@ -836,6 +836,7 @@ export function townMeshes(o = {}) {
   const ctx = { K, grassAt: o.grassAt, grassN: o.grassN, treeKeep: o.treeKeep, clear: o.clear };
   buildTerrain(ctx);
   buildRoads(ctx);
+  if (o.real) return K.out();
   buildLot(ctx);
   buildStation(ctx);
   buildHouses(ctx);

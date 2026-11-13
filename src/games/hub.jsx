@@ -322,7 +322,7 @@ export function GamesPage({ onClose, onChallenge, onShareScore, initialGame, fri
               <div style={{ position: 'absolute', left: 14, right: 14, bottom: 12, display: 'flex', alignItems: 'flex-end', gap: 10 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span style={{ fontSize: 20, fontWeight: 900, color: '#FFFFFF' }}>Dead Town</span><span style={{ fontSize: 11, fontWeight: 800, color: '#1A1C12', background: '#F2A23A', borderRadius: 4, padding: '2px 6px' }}>New</span></div>
-                  <div style={{ fontSize: 12.5, fontWeight: 600, color: 'rgba(255,255,255,0.86)', lineHeight: 1.35 }}>{cloudOn() ? 'Up to 50 survivors on servers in Asia, USA and Europe hold a small town against waves of zombies.' : 'Hold a small town against waves of zombies with three bot friends.'}</div>
+                  <div style={{ fontSize: 12.5, fontWeight: 600, color: 'rgba(255,255,255,0.86)', lineHeight: 1.35 }}>{cloudOn() ? 'Up to 50 survivors on servers in Asia, USA and Europe hold a small town against waves of zombies.' : 'Hold a small town against waves of zombies, alone or with bot friends.'}</div>
                 </div>
                 <GameButton small color="gold" label="Play" onClick={() => { tap(); noteRecent('zombie'); onZombie(); }} />
               </div>

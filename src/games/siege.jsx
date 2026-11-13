@@ -1,10 +1,11 @@
 import { backdropProps } from './tap.js';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { GGlyph } from './gskill.jsx';
 import { Avatar, Portal, useBackClose, FONT, Spinner } from '../App.jsx';
 import { useRoomLink } from './relay.jsx';
 import { cloudOn } from './zcloud.js';
 import { EMOTES, Sheet, injectCss, useGameChat, ChatSheet } from './livekit.jsx';
-import { GBtn, GPill, GPanel, GChip, GTitle, GIcon, GHudBtn, GHudPanel, GNotices, useNotices, useWatchNotices, injectKitCss, kitTap, pressProps, maxDpr, weakPhone, INK, useCtlLook, useGameStage, GControlsPanel, GVolBars, GLobby, GSlot, GLobbySheet, GSeg, GTalkers, GJoy, useJoystick, stagePoint, TOUCHY, GWatchBar, GSkin, GChatFeed, useChatFeed, GJoinAsks } from './gamekit.jsx';
+import { GBtn, GPill, GPanel, GChip, GTitle, GIcon, GHudBtn, GHudPanel, GNotices, useNotices, useWatchNotices, injectKitCss, kitTap, pressProps, maxDpr, weakPhone, INK, useCtlLook, useGameStage, GControlsPanel, GVolBars, GLobby, GSlot, GLobbySheet, GSeg, GTalkers, GJoy, useJoystick, stagePoint, TOUCHY, GWatchBar, GSkin, GChatFeed, useChatFeed, GJoinAsks, GHudSkill } from './gamekit.jsx';
 import { mkNet, netPush, netRead } from './netlerp.js';
 import { Sfx } from './sfx.js';
 import { setWatchAllowed, useLiveBeacon, useGamePrivacy, useJoinAsks } from './live.js';
@@ -18,8 +19,9 @@ import { supabase } from '../supabaseClient.js';
 const DROP_TINT_HEX = { hp: '#6CFFD4', pw: '#FF7AD9', su: '#FFD24A', sh: '#7FE9FF', rf: '#FFB067', sp: '#7BF27B' };
 const DROP_TEXT = { hp: 'Health', pw: 'Power up', su: 'Super charged', sh: 'Shield', rf: 'Rapid fire', sp: 'Speed' };
 const DROP_COL = { hp: '#6BF26B', pw: '#FF7AD9', su: '#FFE15A', sh: '#9FE6FF', rf: '#FFB067', sp: '#9BF29B' };
-const ATK_ICON = { blaze: 'flame', pip: 'bolt', boom: 'bomb', mira: 'heart', rex: 'hammer', volt: 'bolt', kai: 'rocket', ivy: 'snow' };
-const GAD_ICON = { ring: 'flame', decoy: 'people', mine: 'bomb', bubble: 'bubble', charge: 'shield', over: 'bolt', jet: 'rocket', nova: 'snow' };
+const ATK_GI = { blaze: 'flame', pip: 'electric', boom: 'bomb', mira: 'heal', rex: 'hammer', volt: 'lightning', kai: 'rocket', ivy: 'snowflake' };
+const GAD_GI = { ring: 'firering', decoy: 'ghost', mine: 'mine', bubble: 'shield', charge: 'shield', over: 'lightning', jet: 'jetpack', nova: 'freeze' };
+const SUP_GI = { wave: 'sonic', beam: 'laser', mega: 'megabomb', bloom: 'heal', slam: 'stomp', turret: 'tesla', barrage: 'missiles', freeze: 'freeze' };
 const PREF = { hero: 'zchat-siege-hero', arena: 'zchat-siege-arena', lv: 'zchat-siege-level', bots: 'zchat-siege-bots', gfx: 'zchat-siege-gfx', end: 'zchat-siege-endless' };
 const BEST_KEY = (uid, a, lv) => `zchat-siege-best-${uid || 'me'}-${a}-${lv}`;
 const readPref = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : v; } catch { return d; } };
@@ -191,17 +193,6 @@ function HeroCard({ k, on, img, onPress, size = 64, label, lv, locked }) {
   );
 }
 
-function SuperArt({ k, size = 34 }) {
-  const c = '#2A1A00';
-  if (k === 'blaze') { const pts = Array.from({ length: 16 }, (_, i) => { const a = (i / 16) * Math.PI * 2 - Math.PI / 2, r = i % 2 ? 6.5 : 14; return `${(16 + Math.cos(a) * r).toFixed(1)},${(16 + Math.sin(a) * r).toFixed(1)}`; }).join(' '); return <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true"><polygon points={pts} fill="#FF8A2E" stroke={c} strokeWidth="2" strokeLinejoin="round" /><circle cx="16" cy="16" r="5" fill="#FFF3C4" /></svg>; }
-  if (k === 'pip') return <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true"><path d="M12 16 H30" stroke={c} strokeWidth="7" strokeLinecap="round" /><path d="M12 16 H30" stroke="#9BF0FF" strokeWidth="3.5" strokeLinecap="round" /><circle cx="10" cy="16" r="7.5" fill="#E8FDFF" stroke={c} strokeWidth="2.2" /><path d="M10 10 V22 M4 16 H16" stroke={c} strokeWidth="1.8" /></svg>;
-  if (k === 'boom') return <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true"><circle cx="15" cy="18" r="10" fill="#3A2F5C" stroke={c} strokeWidth="2" /><path d="M21 9 Q25 4 28 6" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" /><path d="M27 3 L28.5 6 L31 6.5 L28.5 7.5 L28 10 L27 7.5 L24.5 7 L27 6 Z" fill="#FFD24A" /><circle cx="11" cy="14" r="2.4" fill="#FFFFFF" opacity="0.7" /></svg>;
-  if (k === 'rex') return <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true"><ellipse cx="16" cy="25" rx="13" ry="4" fill="none" stroke="#FFB07A" strokeWidth="2" /><ellipse cx="16" cy="25" rx="7.5" ry="2.2" fill="none" stroke="#FFE0C2" strokeWidth="1.6" /><path d="M16 22 V8" stroke={c} strokeWidth="4.5" strokeLinecap="round" /><path d="M16 22 V8" stroke="#A0703C" strokeWidth="2.2" strokeLinecap="round" /><rect x="7" y="3" width="18" height="8" rx="2.5" fill="#6A737E" stroke={c} strokeWidth="2" /><rect x="10" y="3" width="3" height="8" fill="#E0533A" /><rect x="19" y="3" width="3" height="8" fill="#E0533A" /></svg>;
-  if (k === 'volt') return <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true"><path d="M10 29 H22 L19 25 H13 Z" fill="#3A3F46" stroke={c} strokeWidth="1.8" strokeLinejoin="round" /><path d="M16 25 V11" stroke={c} strokeWidth="4" /><path d="M16 25 V11" stroke="#9AA0A8" strokeWidth="2" />{[13, 17, 21].map((y) => <ellipse key={y} cx="16" cy={y} rx="5" ry="1.6" fill="#C87A3A" stroke={c} strokeWidth="1" />)}<circle cx="16" cy="7" r="4.5" fill="#8FE8FF" stroke={c} strokeWidth="1.8" /><path d="M21 6 L26 3 L24 8 L29 7" fill="none" stroke="#FFE36A" strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" /></svg>;
-  if (k === 'kai') return <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true">{[[9, 6], [18, 3], [24, 11]].map(([x, y], i) => <g key={i} transform={`rotate(35 ${x} ${y})`}><rect x={x - 2.4} y={y - 6} width="4.8" height="11" rx="2.4" fill="#E8E4DC" stroke={c} strokeWidth="1.5" /><path d={`M${x - 2.4} ${y - 3.5} Q${x} ${y - 9} ${x + 2.4} ${y - 3.5} Z`} fill="#D84A3A" stroke={c} strokeWidth="1.2" /><path d={`M${x - 1.6} ${y + 5} L${x} ${y + 9} L${x + 1.6} ${y + 5} Z`} fill="#FF9A3A" /></g>)}<ellipse cx="16" cy="27" rx="11" ry="3" fill="#FFB43A" opacity="0.6" /></svg>;
-  if (k === 'ivy') return <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true">{[0, 60, 120].map((r) => <g key={r} transform={`rotate(${r} 16 16)`}><path d="M16 3 V29" stroke={c} strokeWidth="4.2" strokeLinecap="round" /><path d="M16 3 V29" stroke="#BFF3FF" strokeWidth="2.2" strokeLinecap="round" /><path d="M13 6 L16 9 L19 6 M13 26 L16 23 L19 26" fill="none" stroke="#BFF3FF" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></g>)}<circle cx="16" cy="16" r="3.4" fill="#7FD7FF" stroke={c} strokeWidth="1.5" /></svg>;
-  return <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="12" fill="none" stroke="#BFFFEA" strokeWidth="2.5" strokeDasharray="4 3" /><path d="M16 8 V24 M8 16 H24" stroke={c} strokeWidth="6" strokeLinecap="round" /><path d="M16 8 V24 M8 16 H24" stroke="#6CFFD4" strokeWidth="3.4" strokeLinecap="round" /></svg>;
-}
 
 export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite, watch = false }) {
   injectCss(); injectKitCss();
@@ -391,7 +382,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
     const pref = gfxRef.current;
     g.budget.tier = pref === 'fast' || window.__zsiegeLow ? 2 : pref === 'best' ? 0 : weakPhone() ? 1 : 0;
     let R = null;
-    try { R = createRenderer(cv, { shadowSize: g.budget.tier === 0 ? 2048 : 1024 }); } catch { R = null; }
+    try { R = createRenderer(cv, { shadowSize: g.budget.tier === 0 ? 2048 : 1024, fx: '/dead/fx-v1.webp' }); } catch { R = null; }
     if (!R) { setFailed(true); return undefined; }
     let fx = null;
     try { const F = fxSiege(); fx = Object.fromEntries(Object.keys(F).map((k) => [k, R.mesh(F[k])])); } catch { fx = null; }
@@ -1513,8 +1504,8 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
       if (myH) {
         const arcs = ammoRef.current;
         const am = myH.mods ? myH.mods.ammo : 3;
-        for (let i = 0; i < am; i++) { const el = arcs[i]; if (el) { const f = clamp(myH.ammo - i, 0, 1); const L = Number(el.dataset.l) || 66; el.style.strokeDashoffset = String(L * (1 - f)); el.style.stroke = f >= 1 ? '#FFA726' : '#8A5A1A'; } }
-        if (supRing.current) supRing.current.style.strokeDashoffset = String(226 * (1 - clamp(myH.sup, 0, 1)));
+        for (let i = 0; i < am; i++) { const el = arcs[i]; if (el) { const f = clamp(myH.ammo - i, 0, 1); const L = Number(el.dataset.l) || 66; el.style.strokeDashoffset = String(L * (1 - f)); el.style.stroke = f >= 1 ? '#FFFFFF' : 'rgba(255,255,255,0.45)'; } }
+        if (supRing.current) supRing.current.style.strokeDashoffset = String(220 * (1 - clamp(myH.sup, 0, 1)));
       }
       if (now - g.hudAt > 125) {
         g.hudAt = now;
@@ -1564,7 +1555,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
 
   const lobbyUi = phase !== 'menu' ? null : (
     <GLobby GS={GS} title="Scrap Siege" onClose={finish} closeLabel={solo ? 'Leave' : 'Back to chat'} tint="rgba(8,10,22,0.62)"
-      sub={solo ? (botN ? `You and ${botN === 1 ? 'a bot friend' : `${botN} bot friends`} against robot waves` : 'You alone against robot waves') : watch ? `Watching ${hostName} and friends` : (E.SQUAD_MAX > 10 ? 'Up to 20 players against robot waves' : 'Up to ten friends against robot waves')}
+      sub={watch ? `Watching ${hostName} and friends` : null}
       badge={best ? <GChip style={{ height: 34, gap: 6 }}><GIcon k="crown" size={14} color="#FFD84E" />{`Best wave ${best}`}</GChip> : null}
       tools={(
         <>
@@ -1590,7 +1581,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
               </div>
               <button type="button" className="zgk-btn" aria-label={`${H0.name} details and upgrades`} {...pressProps(() => { kitTap(); setUpMsg(''); setHeroSheet(true); })}
                 style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 7px', border: 'none', borderRadius: 12, background: 'rgba(255,255,255,0.07)', cursor: 'pointer', color: '#FFFFFF', fontFamily: FONT, textAlign: 'left' }}>
-                <span style={{ width: 34, height: 34, borderRadius: 17, flexShrink: 0, background: 'radial-gradient(circle at 40% 30%, #FFE98A, #F2A81D)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 0 0 2px ${INK}` }}><SuperArt k={heroKey} size={24} /></span>
+                <span style={{ width: 34, height: 34, borderRadius: 17, flexShrink: 0, background: 'rgba(20,24,30,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: 'inset 0 0 0 1.5px rgba(255,194,61,0.9)' }}><GGlyph k={SUP_GI[E.HEROES[heroKey].sup.k] || 'sonic'} size={22} /></span>
                 <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
                   <span style={{ fontSize: 12.5, fontWeight: 900 }}>{prog ? `Level ${prog.levels[heroKey] || 1}` : H0.sup.name}</span>
                   <span style={{ fontSize: 11.5, fontWeight: 700, color: 'rgba(255,255,255,0.75)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{`Super ${H0.sup.name}, gadget ${H0.gad.name}`}</span>
@@ -1703,7 +1694,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
               <span style={{ fontSize: 14, fontWeight: 900, width: 82 }}>Waves</span>
               <div style={{ flex: 1 }}><GSeg value={endless ? 'end' : '15'} items={WAVE_ITEMS} onPick={pickWaves} disabled={!isHost || watch} label="How many waves" /></div>
             </div>
-            <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.7)', lineHeight: 1.4 }}>{endless ? 'Robots never stop coming. See how far your squad gets.' : `A boss shows up every 5 waves. Beat wave ${E.WIN_WAVE} to win.`}</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.7)', lineHeight: 1.4 }}>{endless ? 'Endless waves' : `Boss every 5 waves. Win at wave ${E.WIN_WAVE}`}</div>
             <GPill text="Done" color="gold" wide onPress={() => setArenaSheet(false)} />
           </div>
         </GLobbySheet>
@@ -1735,7 +1726,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
                   <StatRow label="Speed" f={H0.stats[3] / 5} text={SPEED_TXT[H0.stats[3]]} col="linear-gradient(90deg, #C08BFF, #8045E6)" />
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {[[<GIcon key="a" k={ATK_ICON[heroKey]} size={20} color="#FFFFFF" ink="rgba(0,0,0,0.3)" />, 'Attack', H0.text, 'radial-gradient(circle at 40% 30%, #FF8A7A, #C8321F 80%)'], [<SuperArt key="s" k={heroKey} size={24} />, `Super, ${H0.sup.name}`, H0.sup.text, 'radial-gradient(circle at 40% 30%, #FFE98A, #F2A81D)'], [<GIcon key="g" k={GAD_ICON[H0.gad.k]} size={20} color="#FFFFFF" ink="rgba(0,0,0,0.3)" />, `Gadget, ${H0.gad.name}`, `${H0.gad.text} ${E.GADGETS} uses each game.`, 'radial-gradient(circle at 40% 30%, #5EE6D2, #18B3A0 80%)']].map(([ic, t, d, bg]) => (
+                  {[[<GGlyph key="a" k={ATK_GI[heroKey]} size={20} />, 'Attack', H0.text, 'rgba(20,24,30,0.85)'], [<GGlyph key="s" k={SUP_GI[H0.sup.k] || 'sonic'} size={22} />, `Super, ${H0.sup.name}`, H0.sup.text, 'rgba(20,24,30,0.85)'], [<GGlyph key="g" k={GAD_GI[H0.gad.k]} size={20} />, `Gadget, ${H0.gad.name}`, `${H0.gad.text} ${E.GADGETS} uses each game.`, 'radial-gradient(circle at 40% 30%, #5EE6D2, #18B3A0 80%)']].map(([ic, t, d, bg]) => (
                     <div key={t} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 8px', borderRadius: 12, background: 'rgba(255,255,255,0.06)' }}>
                       <span style={{ width: 34, height: 34, borderRadius: 17, flexShrink: 0, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 0 0 2px ${INK}` }}>{ic}</span>
                       <span style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}><span style={{ fontSize: 13, fontWeight: 900 }}>{t}</span><span style={{ fontSize: 11.5, fontWeight: 700, color: 'rgba(255,255,255,0.75)', lineHeight: 1.3 }}>{d}</span></span>
@@ -1865,29 +1856,29 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
                   <div ref={supRef} role="button" aria-label={superOn ? `Super, ${E.HEROES[meHud.key].sup.name}. Ready` : 'Super, charging'} onPointerDown={aimDown('sup')} onPointerMove={aimMove} onPointerUp={aimUp} onPointerCancel={aimUp} onLostPointerCapture={aimUp} onContextMenu={(e) => e.preventDefault()}
                     style={{ position: 'absolute', right: right(136), bottom: bottom(58), width: 80, height: 80, borderRadius: '50%', touchAction: 'none', zIndex: 5, opacity: superOn ? 1 : 0.85 - look.see * 0.4, transform: `scale(${ctrlScale})`, transformOrigin: '100% 100%' }}>
                     <svg width="80" height="80" viewBox="0 0 80 80" style={{ position: 'absolute', inset: 0, transform: 'rotate(-90deg)' }} aria-hidden="true">
-                      <circle cx="40" cy="40" r="38" fill="rgba(10,12,22,0.55)" />
-                      <circle cx="40" cy="40" r="36" fill="none" stroke="rgba(255,255,255,0.14)" strokeWidth="5" />
-                      <circle ref={supRing} cx="40" cy="40" r="36" fill="none" stroke="#FFC93A" strokeWidth="5" strokeLinecap="round" strokeDasharray="226 226" strokeDashoffset="226" />
+                      <circle cx="40" cy="40" r="38.8" fill="rgba(14,17,22,0.42)" stroke={superOn ? 'rgba(255,194,61,0.98)' : 'rgba(255,255,255,0.6)'} strokeWidth="2" />
+                      <circle cx="40" cy="40" r="35" fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="3.4" />
+                      <circle ref={supRing} cx="40" cy="40" r="35" fill="none" stroke="#FFC23D" strokeWidth="3.4" strokeLinecap="round" strokeDasharray="220 220" strokeDashoffset="220" />
                     </svg>
-                    <span ref={supKnob} style={{ position: 'absolute', left: 13, top: 13, width: 54, height: 54, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: superOn ? 'radial-gradient(circle at 40% 30%, #FFF0A0, #F5A814 75%)' : 'radial-gradient(circle at 40% 30%, #8A8576, #4A463C 80%)', boxShadow: superOn ? `0 0 0 2.5px ${INK}, 0 0 18px rgba(255,200,60,0.85)` : `0 0 0 2.5px ${INK}`, animation: superOn ? 'zgk-pulse 1.4s ease-in-out infinite' : 'none' }}>
-                      <span style={{ filter: superOn ? 'none' : 'grayscale(1) brightness(0.8)', display: 'flex' }}><SuperArt k={meHud.key} size={32} /></span>
+                    <span ref={supKnob} style={{ position: 'absolute', left: 13, top: 13, width: 54, height: 54, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: superOn ? 'rgba(255,194,61,0.34)' : 'rgba(255,255,255,0.07)', boxShadow: superOn ? 'inset 0 0 0 1.6px rgba(255,214,120,0.95), 0 0 16px rgba(255,194,61,0.7)' : 'inset 0 0 0 1.4px rgba(255,255,255,0.4)', animation: superOn ? 'zgk-pulse 1.4s ease-in-out infinite' : 'none' }}>
+                      <span style={{ opacity: superOn ? 1 : 0.55, display: 'flex', filter: 'drop-shadow(0 1px 1.5px rgba(0,0,0,0.6))' }}><GGlyph k={SUP_GI[E.HEROES[meHud.key].sup.k] || 'sonic'} size={32} /></span>
                     </span>
                   </div>
                   <div ref={atkRef} role="button" aria-label="Attack. Tap to aim at the closest robot, or drag to aim" onPointerDown={aimDown('atk')} onPointerMove={aimMove} onPointerUp={aimUp} onPointerCancel={aimUp} onLostPointerCapture={aimUp} onContextMenu={(e) => e.preventDefault()}
                     style={{ position: 'absolute', right: right(22), bottom: bottom(20), width: 112, height: 112, borderRadius: '50%', touchAction: 'none', zIndex: 5, opacity: 1 - look.see * 0.5, transform: `scale(${ctrlScale})`, transformOrigin: '100% 100%' }}>
                     <svg width="112" height="112" viewBox="0 0 112 112" style={{ position: 'absolute', inset: 0 }} aria-hidden="true">
-                      <circle cx="56" cy="56" r="54" fill="rgba(10,12,22,0.5)" />
-                      {Array.from({ length: meHud.ammoMax || 3 }, (_, i) => { const n = meHud.ammoMax || 3; const span = (Math.PI * 2) / n; const a0 = -Math.PI / 2 + i * span + 0.09, a1 = a0 + span - 0.18; const r = 51; const p0 = [56 + Math.cos(a0) * r, 56 + Math.sin(a0) * r], p1 = [56 + Math.cos(a1) * r, 56 + Math.sin(a1) * r]; const L = Math.round(r * (a1 - a0)); const d = `M${p0[0]} ${p0[1]} A${r} ${r} 0 0 1 ${p1[0]} ${p1[1]}`; return <g key={`${n}-${i}`}><path d={d} fill="none" stroke="rgba(255,255,255,0.14)" strokeWidth="6" strokeLinecap="round" /><path ref={(el) => { ammoRef.current[i] = el; }} data-l={L} d={d} fill="none" stroke="#FFA726" strokeWidth="6" strokeLinecap="round" strokeDasharray={`${L} ${L}`} strokeDashoffset="0" /></g>; })}
+                      <circle cx="56" cy="56" r="54.6" fill="rgba(14,17,22,0.36)" stroke="rgba(255,255,255,0.5)" strokeWidth="1.8" />
+                      {Array.from({ length: meHud.ammoMax || 3 }, (_, i) => { const n = meHud.ammoMax || 3; const span = (Math.PI * 2) / n; const a0 = -Math.PI / 2 + i * span + 0.09, a1 = a0 + span - 0.18; const r = 51; const p0 = [56 + Math.cos(a0) * r, 56 + Math.sin(a0) * r], p1 = [56 + Math.cos(a1) * r, 56 + Math.sin(a1) * r]; const L = Math.round(r * (a1 - a0)); const d = `M${p0[0]} ${p0[1]} A${r} ${r} 0 0 1 ${p1[0]} ${p1[1]}`; return <g key={`${n}-${i}`}><path d={d} fill="none" stroke="rgba(255,255,255,0.16)" strokeWidth="5" strokeLinecap="round" /><path ref={(el) => { ammoRef.current[i] = el; }} data-l={L} d={d} fill="none" stroke="#FFFFFF" strokeWidth="5" strokeLinecap="round" strokeDasharray={`${L} ${L}`} strokeDashoffset="0" /></g>; })}
                     </svg>
-                    <span ref={atkKnob} style={{ position: 'absolute', left: 22, top: 22, width: 68, height: 68, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: aimUi === 'atk' ? 'radial-gradient(circle at 40% 30%, #FFB0A6, #E5483B 80%)' : 'radial-gradient(circle at 40% 30%, #FF8A7A, #C8321F 80%)', boxShadow: `0 0 0 2.5px ${INK}, 0 4px 10px rgba(0,0,0,0.35)` }}>
-                      <GIcon k={ATK_ICON[meHud.key] || 'flame'} size={30} color="#FFFFFF" ink="rgba(0,0,0,0.3)" />
+                    <span ref={atkKnob} style={{ position: 'absolute', left: 22, top: 22, width: 68, height: 68, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: aimUi === 'atk' ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.1)', boxShadow: 'inset 0 0 0 1.6px rgba(255,255,255,0.7), 0 2px 8px rgba(0,0,0,0.25)' }}>
+                      <span style={{ display: 'flex', filter: 'drop-shadow(0 1px 1.5px rgba(0,0,0,0.6))' }}><GGlyph k={ATK_GI[meHud.key] || 'flame'} size={34} /></span>
                     </span>
                   </div>
                   <div style={{ position: 'absolute', right: right(154), bottom: bottom(150), zIndex: 5, transform: `scale(${ctrlScale})`, transformOrigin: '100% 100%', opacity: 1 - look.see * 0.4 }}>
-                    <GBtn icon="dash" color="blue" size={56} cool={meHud.dashCD} coolMax={meHud.dashMax} label="Dash" sound="click" onPress={() => G.current.dashQ.push(null)} />
+                    <GHudSkill icon="sprint" tone="#5BC8FF" size={56} cool={meHud.dashCD} coolMax={meHud.dashMax} label="Dash" sound="click" onPress={() => G.current.dashQ.push(null)} />
                   </div>
                   <div style={{ position: 'absolute', right: right(40), bottom: bottom(150), zIndex: 5, transform: `scale(${ctrlScale})`, transformOrigin: '100% 100%', opacity: (meHud.gad > 0 ? 1 : 0.55) - look.see * 0.4 }}>
-                    <GBtn icon={GAD_ICON[E.HEROES[meHud.key].gad.k] || 'star'} color={meHud.gad > 0 ? 'teal' : 'dark'} size={56} cool={meHud.gad > 0 ? meHud.gadCD : 0} coolMax={E.GADGET_CD} badge={meHud.gad} disabled={meHud.gad <= 0} label={`Gadget, ${E.HEROES[meHud.key].gad.name}, ${meHud.gad} left`} sound="click" onPress={() => G.current.gadQ.push(null)} />
+                    <GHudSkill icon={GAD_GI[E.HEROES[meHud.key].gad.k] || 'shield'} tone="#5EE6D2" size={56} cool={meHud.gad > 0 ? meHud.gadCD : 0} coolMax={E.GADGET_CD} badge={meHud.gad} disabled={meHud.gad <= 0} label={`Gadget, ${E.HEROES[meHud.key].gad.name}, ${meHud.gad} left`} sound="click" onPress={() => G.current.gadQ.push(null)} />
                   </div>
                   {(meHud.sh || meHud.rf || meHud.sp || meHud.oc) && (
                     <div style={{ position: 'absolute', left: '50%', bottom: bottom(14), transform: 'translateX(-50%)', display: 'flex', gap: 6, zIndex: 4, pointerEvents: 'none' }}>
@@ -2025,7 +2016,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
 
           {ctl && (
             <div onPointerDown={(e) => e.stopPropagation()} style={{ position: 'absolute', inset: 0, zIndex: 45, background: 'rgba(10,8,24,0.55)', display: 'flex', padding: 12, overflowY: 'auto', touchAction: 'pan-x pan-y' }}>
-              <div style={{ margin: 'auto', width: '100%', display: 'flex', justifyContent: 'center' }}><GControlsPanel sideways wide={land} onClose={() => setCtl(false)} /></div>
+              <div style={{ margin: 'auto', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><GControlsPanel sideways onClose={() => setCtl(false)} /></div>
             </div>
           )}
           <GTalkers ids={talking} nameOf={nameOf} top={top(phase === 'play' ? (hud.boss ? 92 : 54) : 50)} />

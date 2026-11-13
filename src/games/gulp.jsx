@@ -989,7 +989,7 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
   const waitingPeer = phase === 'lobby' || !here;
   const lobbyUi = phase !== 'menu' && phase !== 'lobby' ? null : (
     <GLobby GS={GS} title="Gulp" onClose={finish} closeLabel={isSolo ? 'Leave' : 'Back to chat'} tint="rgba(2,14,32,0.62)"
-      sub={isWatch ? `Watching ${hostFirst} and ${peerFirst}` : isDuel ? (waitingPeer ? `Waiting for ${peerFirst} to open the game` : `Round ${score.x + score.o + 1} with ${peerFirst}`) : 'Eat smaller fish. Grow into a whale.'}
+      sub={isWatch ? `Watching ${hostFirst} and ${peerFirst}` : isDuel ? (waitingPeer ? `Waiting for ${peerFirst} to open the game` : `Round ${score.x + score.o + 1} with ${peerFirst}`) : null}
       badge={isSolo ? <GChip style={{ gap: 5, height: 34 }}><GIcon k="star" size={15} color="#FFD23F" />{`${totalStars}/${GULP_LEVELS.length * 3}`}</GChip> : !isWatch ? <GChip style={{ height: 34, gap: 6 }}>{`You ${mySc} : ${theirSc} ${peerFirst}`}</GChip> : <GChip style={{ height: 34 }}>{`${hostFirst} ${score.x} : ${score.o} ${peerFirst}`}</GChip>}
       tools={(
         <>
@@ -1354,7 +1354,7 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
 
           {ctl && (
             <div onPointerDown={(e) => e.stopPropagation()} style={{ position: 'absolute', inset: 0, zIndex: 45, background: 'rgba(2,10,22,0.6)', display: 'flex', padding: 12, overflowY: 'auto', touchAction: 'pan-y' }}>
-              <div style={{ margin: 'auto', width: '100%', display: 'flex', justifyContent: 'center' }}><GControlsPanel sideways wide={land} onClose={() => setCtl(false)} /></div>
+              <div style={{ margin: 'auto', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><GControlsPanel sideways onClose={() => setCtl(false)} /></div>
             </div>
           )}
 
