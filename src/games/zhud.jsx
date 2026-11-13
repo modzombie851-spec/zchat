@@ -34,15 +34,25 @@ const CB_ICON = { emote: 'hand', bullet: 'bullets', scope: 'crosshair', mag: 'ma
 export function CBtn({ size = 54, icon, label, onDown, onUp, onMove, onTap, active, badge, ring, disabled, style, sub, big, tone }) {
   const st = useRef({ id: null, x: 0, y: 0, moved: 0 });
   const [down, setDown] = useState(false);
+  const live = useRef(null);
   const press = (e) => {
     if (disabled) return;
     e.stopPropagation();
     e.preventDefault();
+    if (st.current.id != null && live.current) live.current();
     st.current = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: 0 };
-    try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+    const id = e.pointerId;
+    const mv = (ev) => { if (ev.pointerId === id) move(ev); };
+    const fin = (ev) => { if (ev.pointerId !== id) return; stop(); up(ev); };
+    const stop = () => { window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', fin); window.removeEventListener('pointercancel', fin); live.current = null; };
+    window.addEventListener('pointermove', mv, { passive: true });
+    window.addEventListener('pointerup', fin);
+    window.addEventListener('pointercancel', fin);
+    live.current = stop;
     setDown(true);
     onDown && onDown(e);
   };
+  useEffect(() => () => { if (live.current) live.current(); }, []);
   const move = (e) => {
     if (st.current.id !== e.pointerId) return;
     const dx = e.clientX - st.current.x, dy = e.clientY - st.current.y;
@@ -59,7 +69,7 @@ export function CBtn({ size = 54, icon, label, onDown, onUp, onMove, onTap, acti
   };
   const gi = CB_ICON[icon];
   return (
-    <div role="button" aria-label={label} aria-disabled={disabled ? 'true' : undefined} onPointerDown={press} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onLostPointerCapture={up} onContextMenu={(e) => e.preventDefault()}
+    <div role="button" aria-label={label} aria-disabled={disabled ? 'true' : undefined} onPointerDown={press} onContextMenu={(e) => e.preventDefault()}
       style={{ position: 'absolute', width: size, height: size, borderRadius: '50%', touchAction: 'none', pointerEvents: 'auto', cursor: 'pointer', ...style }}>
       <SkillFace size={size} icon={gi} glyph={gi ? null : <Ico k={icon} size={Math.round(size * 0.48)} sw={1.9} />} main={big} active={!!active} pressed={down} ring={ring} badge={badge} disabled={disabled} sub={sub} tint={tone === 'green' ? '#2E9A5A' : tone === 'red' ? '#C8281E' : null} accent={tone === 'green' ? '#7CF0A6' : '#FFC23D'} />
     </div>

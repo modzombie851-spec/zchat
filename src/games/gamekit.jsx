@@ -336,7 +336,7 @@ export function useJoystick(wrapRef, opts) {
     Sfx.init();
     joy.current = { x: 0, y: 0, id: e.pointerId, cx: x, cy: y, mag: 0 };
     setView({ x, y });
-    try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+    if (!o.noCapture) { try { e.currentTarget.setPointerCapture(e.pointerId); } catch {} }
   };
   const onMove = (e) => {
     const J = joy.current;

@@ -327,7 +327,7 @@ export function ssPose(md, C, S, inp, dt) {
     for (let i = 0; i < NB; i++) nlerp(q, i * 4, q, i * 4, S.qs, i * 4, w);
     for (let k = 0; k < 3; k++) hp[k] += (S.hs[k] - hp[k]) * w;
   }
-  S.hideGun = !inp.w || mode !== 'loco' || S.thrW > 0.5;
+  S.hideGun = !inp.w || (mode !== 'loco' && mode !== 'air') || S.thrW > 0.5;
   poseSkin(M, q, hp, 1, S.W, S.skin);
 }
 

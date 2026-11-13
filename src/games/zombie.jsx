@@ -29,7 +29,8 @@ import { cloudOn, openCloud, pingRegions, listRooms, bestRegion, mineRoom, saveL
 
 const PREF = { gfxo: 'zchat-zombie-gfxo', opt: 'zchat-zombie-opt', bots: 'zchat-zombie-bots', sv: 'zchat-zombie-sv', col: 'zchat-zombie-col', gun: 'zchat-zombie-gun', gfx: 'zchat-zombie-gfx', best: 'zchat-zombie-best', pet: 'zchat-zombie-pet', view: 'zchat-zombie-view', sens: 'zchat-zombie-sens', torch: 'zchat-zombie-torch' };
 const readJson = (k) => { try { return JSON.parse(localStorage.getItem(k) || '{}') || {}; } catch { return {}; } };
-const OPT0 = { adsK: 1, assist: 1, dmg: 1, vib: 1, bars: 1, xcol: 'white', fps: 60 };
+const OPT0 = { adsK: 1, assist: 1, dmg: 1, vib: 1, bars: 1, xcol: 'white', fps: 60, spr: 0, adsMode: 'tap' };
+const HUD_KEY = 'zchat-zombie-hud';
 const XCOL = { white: '#FFFFFF', green: '#7CFF6B', yellow: '#FFE14A', cyan: '#5FF2FF' };
 const getPref = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : v; } catch { return d; } };
 const setPref = (k, v) => { try { localStorage.setItem(k, String(v)); } catch {} };
@@ -318,6 +319,10 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
   const [view, setView] = useState(() => (getPref(PREF.view, 'fp') === 'tp' ? 'tp' : 'fp'));
   const [sens, setSens] = useState(() => clamp(Number(getPref(PREF.sens, 1)) || 1, 0.4, 2.2));
   const [torch, setTorch] = useState(() => getPref(PREF.torch, '1') !== '0');
+  const [hudL, setHudL] = useState(() => readJson(HUD_KEY) || {});
+  const [hudEdit, setHudEdit] = useState(null);
+  const [hudSel, setHudSel] = useState(null);
+  const [locked, setLocked] = useState(false);
   const [pings, setPings] = useState(null);
   const [rooms, setRooms] = useState(null);
   const [reg, setReg] = useState(null);
@@ -374,7 +379,7 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
   const G = useRef(null);
   if (!G.current) G.current = { V: null, keys: new Set(), lookP: new Map(), yaw: Math.PI, pitch: -0.04, fire: false, fireL: false, ads: false, revHold: false, snaps: [], dying: [], fires: [], fx: [], tr: [], dn: [], anim: new Map(), panim: new Map(), pets: new Map(), pemo: new Map(), roster: new Map(), me: null, sim: null, net: null, t: 0, sendT: 0, pend: [], pendSh: [], hm: 0, hmKill: 0, hurtT: 0, hurtDirs: [], menuT: 0, best: Number(getPref(PREF.best, 0)) || 0, lights: [], flashT: 0, recP: 0, bloom: 0, thr: null, emo: null, stepPh: 0, voiceT: 0, heartT: 0, seenBrute: new Set(), menuRigs: null, mapT: 0, lastAt: 0 };
   const myFirst = String((me && me.name) || 'You').split(' ')[0].slice(0, 16);
-  const J = useJoystick(wrapRef, { radius: () => (GS.land ? 56 : 50), rot: () => GS.side, zone: (x, y, b) => x < b.width * 0.42 && y > b.height * 0.3, enabled: () => phase === 'play' });
+  const J = useJoystick(wrapRef, { radius: () => (GS.land ? 56 : 50), rot: () => GS.side, zone: (x, y, b) => x < b.width * 0.42 && y > b.height * 0.3, enabled: () => phase === 'play', noCapture: true });
   const canInvite = cloudOn() && !!onInvite;
 
   useBackClose(true, () => { if (sheet) setSheet(null); else if (phase === 'play') quit(); else onClose(); });
@@ -993,6 +998,7 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
     ZA.reload(M.w, W.rel);
     ZA.call('reload', sexRef.current, { cd: 9, chance: 0.55, at: 0.15 });
   };
+  const swapRef = useRef(null);
   const swapGun = () => {
     const g = G.current, M = g.me;
     if (!M || M.st !== 0 || M.swapT > 0 || g.thr) return;
@@ -1003,6 +1009,8 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
     if (g.F) { g.F.rel = -1; g.F.swap = 0.001; }
     syncHud(true);
   };
+  swapRef.current = swapGun;
+
   const melee = () => {
     const g = G.current, M = g.me;
     if (!M || M.st !== 0 || M.mcd > 0 || g.thr) return;
@@ -1196,7 +1204,7 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
     const ml = Math.hypot(mx, my);
     if (ml > 1) { mx /= ml; my /= ml; }
     const Wc = WEAPONS[M.w];
-    const joyRun = J.joy.current.id != null && J.joy.current.mag > 0.97 && my < -0.82;
+    const joyRun = J.joy.current.id != null && (g.opt && g.opt.spr ? J.joy.current.mag > 0.62 && my < -0.5 : J.joy.current.mag > 0.97 && my < -0.82);
     M.sprint = M.st === 0 && (joyRun || (keys.has('ShiftLeft') && my < -0.5)) && !g.fire && !g.fireL && !g.ads && !g.thr && M.rel <= 0 && M.mcd <= 0 && !(M.sl > 0);
     if (M.st !== 0) { M.cr = 0; M.sl = 0; M.jy = 0; M.jv = 0; M.air = false; }
     if (g.crReq) {
@@ -1817,20 +1825,61 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
     const wid = GS.side ? el.clientHeight : el.clientWidth, hei = GS.side ? el.clientWidth : el.clientHeight;
     void wid; void hei;
     if (e.pointerType !== 'mouse' && p.x < GS.W * 0.42 && p.y > GS.H * 0.3) { J.handlers.onPointerDown(e); return; }
-    G.current.lookP.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (e.pointerType === 'mouse') { if (e.button === 0) G.current.fire = true; if (e.button === 2) { G.current.ads = true; syncHud(true); } }
     ZA.init();
-    try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+    if (e.pointerType === 'mouse') {
+      const el0 = wrapRef.current;
+      if (el0 && el0.requestPointerLock && !G.current.lockFail && document.pointerLockElement !== el0) { try { const pr = el0.requestPointerLock(); if (pr && pr.catch) pr.catch(() => { G.current.lockFail = true; }); } catch { G.current.lockFail = true; } return; }
+      const g = G.current;
+      if (e.button === 0) g.fire = true;
+      if (e.button === 2) { g.ads = g.opt && g.opt.adsMode === 'tap' ? !g.ads : true; syncHud(true); }
+      g.lookP.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      return;
+    }
+    G.current.lookP.set(e.pointerId, { x: e.clientX, y: e.clientY });
   };
   const lookMove = (e) => {
     J.handlers.onPointerMove(e);
     const g = G.current;
+    if (e.pointerType === 'mouse' && wrapRef.current && document.pointerLockElement === wrapRef.current) return;
     const L = g.lookP.get(e.pointerId);
     if (!L) return;
     lookBy(e.clientX - L.x, e.clientY - L.y, e.pointerType === 'mouse');
     L.x = e.clientX; L.y = e.clientY;
   };
-  const lookUp = (e) => { J.handlers.onPointerUp(e); const g = G.current; if (g.lookP.delete(e.pointerId) && e.pointerType === 'mouse') { if (e.button === 0) g.fire = false; if (e.button === 2) { g.ads = false; syncHud(true); } } };
+  const lookUp = (e) => { J.handlers.onPointerUp(e); const g = G.current; if (g.lookP.delete(e.pointerId) && e.pointerType === 'mouse') { if (e.button === 0) g.fire = false; if (e.button === 2 && !(g.opt && g.opt.adsMode === 'tap')) { g.ads = false; syncHud(true); } } };
+  const lookRef = useRef(null);
+  lookRef.current = { move: lookMove, up: lookUp, look: (dx, dy) => { if (phase === 'play') lookBy(dx, dy, true); } };
+  useEffect(() => {
+    const ch = () => setLocked(!!wrapRef.current && document.pointerLockElement === wrapRef.current);
+    const mm = (e) => { if (!wrapRef.current || document.pointerLockElement !== wrapRef.current) return; const dx = e.movementX || 0, dy = e.movementY || 0; if (Math.abs(dx) > 400 || Math.abs(dy) > 400) return; lookRef.current.look(dx, dy); };
+    document.addEventListener('mousemove', mm);
+    const bad = () => { G.current.lockFail = true; setLocked(false); };
+    document.addEventListener('pointerlockchange', ch);
+    document.addEventListener('pointerlockerror', bad);
+    return () => { document.removeEventListener('pointerlockchange', ch); document.removeEventListener('pointerlockerror', bad); document.removeEventListener('mousemove', mm); };
+  }, []);
+  useEffect(() => {
+    if (phase === 'play' && !sheet) return undefined;
+    try { if (document.pointerLockElement && document.exitPointerLock) document.exitPointerLock(); } catch {}
+    return undefined;
+  }, [phase, sheet]);
+  useEffect(() => {
+    if (phase !== 'play') return undefined;
+    const el = wrapRef.current;
+    if (!el) return undefined;
+    const wh = (e) => { if (document.pointerLockElement === el && Math.abs(e.deltaY) > 4) { e.preventDefault(); swapRef.current(); } };
+    el.addEventListener('wheel', wh, { passive: false });
+    return () => el.removeEventListener('wheel', wh);
+  }, [phase]);
+  useEffect(() => {
+    if (phase !== 'play') return undefined;
+    const mv = (e) => { if (e.pointerType !== 'mouse') lookRef.current.move(e); };
+    const up = (e) => { if (e.pointerType !== 'mouse') lookRef.current.up(e); };
+    window.addEventListener('pointermove', mv, { passive: true });
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+    return () => { window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up); };
+  }, [phase]);
 
   useEffect(() => {
     if (phase !== 'play') return undefined;
@@ -1898,6 +1947,34 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
   const see = 1 - look.see;
   const px = (v) => Math.round(v * s);
   const WN = (k) => (WEAPONS[k] ? WEAPONS[k].n : '');
+  const CTL = [
+    { id: 'fire', icon: 'bullet', big: true, size: px(88), st: { right: right(26), bottom: bottom(px(54)) }, label: 'Shoot' },
+    { id: 'ads', icon: 'scope', size: px(56), st: { right: right(px(132)), bottom: bottom(px(118)) }, label: 'Aim down sights' },
+    { id: 'rel', icon: 'mag', size: px(52), st: { right: right(px(34)), bottom: bottom(px(160)) }, label: 'Reload' },
+    { id: 'mel', icon: 'knife', size: px(48), st: { right: right(px(140)), bottom: bottom(px(34)) }, label: 'Melee' },
+    { id: 'nade', icon: 'grenade', size: px(50), st: { right: right(px(208)), bottom: bottom(px(64)) }, label: 'Throw a grenade' },
+    { id: 'molo', icon: 'bottle', size: px(50), st: { right: right(px(208)), bottom: bottom(px(130)) }, label: 'Throw a fire bottle' },
+    { id: 'jump', icon: 'jump', size: px(50), st: { right: right(px(30)), bottom: bottom(px(280)) }, label: 'Jump' },
+    { id: 'crouch', icon: 'crouch', size: px(50), st: { right: right(px(206)), bottom: bottom(px(196)) }, label: 'Crouch or slide' },
+    { id: 'emote', icon: 'emote', size: px(42), st: { right: right(px(118)), bottom: bottom(px(190)) }, label: 'Emotes' },
+    { id: 'fireL', icon: 'bullet', size: px(60), st: { left: left(px(150)), bottom: bottom(px(178)) }, label: 'Shoot with left hand' },
+  ];
+  const CD = Object.fromEntries(CTL.map((c) => [c.id, c]));
+  const hx = (id) => { const L = (hudEdit || hudL)[id]; if (!L) return null; return { transform: `translate(${Math.round(L.dx || 0)}px, ${Math.round(L.dy || 0)}px) scale(${L.s || 1})`, ...(L.o != null && L.o < 1 ? { opacity: L.o } : null) }; };
+  const hs = (id) => ({ ...CD[id].st, ...hx(id) });
+  const saveHud = (L) => { setHudL(L); try { localStorage.setItem(HUD_KEY, JSON.stringify(L)); } catch {} };
+  const hudDrag = (e, id) => {
+    e.stopPropagation(); e.preventDefault();
+    setHudSel(id);
+    const L0 = { dx: 0, dy: 0, s: 1, ...((hudEdit || {})[id] || {}) };
+    const x0 = e.clientX, y0 = e.clientY, pid = e.pointerId;
+    const mv = (ev) => { if (ev.pointerId !== pid) return; const ddx = ev.clientX - x0, ddy = ev.clientY - y0; const lx = GS.side ? ddy : ddx, ly = GS.side ? -ddx : ddy; setHudEdit((d) => ({ ...(d || {}), [id]: { ...L0, dx: L0.dx + lx, dy: L0.dy + ly } })); };
+    const end = (ev) => { if (ev.pointerId !== pid) return; window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', end); window.removeEventListener('pointercancel', end); };
+    window.addEventListener('pointermove', mv);
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
+  };
+  const hudSet = (id, k, v) => setHudEdit((d) => ({ ...(d || {}), [id]: { dx: 0, dy: 0, s: 1, ...((d || {})[id] || {}), [k]: v } }));
 
   const setOptK = (k, v) => setOpt((o) => { const n = { ...o, [k]: v }; try { localStorage.setItem(PREF.opt, JSON.stringify(n)); } catch {} return n; });
   const T0 = TIERS[tierWant != null ? tierWant : tier] || TIERS[1];
@@ -2080,7 +2157,7 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
       </div>
       {H.st === 0 && (
         <div style={{ position: 'absolute', inset: 0, opacity: see }}>
-          <div onPointerDown={(e) => { e.stopPropagation(); swapGun(); }} role="button" aria-label="Switch weapon" style={{ position: 'absolute', right: right(16), bottom: bottom(px(222)), pointerEvents: 'auto', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', padding: '6px 10px', borderRadius: 12, background: 'rgba(10,12,14,0.42)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.3)', textShadow: '0 1px 2px rgba(0,0,0,0.8)', minWidth: 112 }}>
+          <div onPointerDown={(e) => { e.stopPropagation(); swapGun(); }} role="button" aria-label="Switch weapon" style={{ position: 'absolute', right: right(16), bottom: bottom(px(222)), ...hx('wpn'), pointerEvents: 'auto', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', padding: '6px 10px', borderRadius: 12, background: 'rgba(10,12,14,0.42)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.3)', textShadow: '0 1px 2px rgba(0,0,0,0.8)', minWidth: 112 }}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
               <span style={{ fontSize: 12.5, fontWeight: 900, color: '#FFFFFF' }}>{WN(H.w)}</span>
               <span style={{ fontSize: 20, fontWeight: 900, color: H.mag === 0 ? '#FF6A5A' : '#FFFFFF', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{H.rel > 0 ? '...' : H.mag}<span style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)' }}> / {H.magMax}</span></span>
@@ -2090,26 +2167,71 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
               <span style={{ fontSize: 11, fontWeight: 800, color: 'rgba(255,255,255,0.7)' }}>{WN(H.slots ? H.slots[H.slot ? 0 : 1] : '')}</span>
             </div>
           </div>
-          <CBtn big size={px(88)} icon="bullet" label="Shoot" active={!!G.current.fire} style={{ right: right(26), bottom: bottom(px(54)) }}
+          {TOUCHY && !hudEdit && <>
+          <CBtn big size={CD.fire.size} icon="bullet" label="Shoot" active={!!G.current.fire} style={hs('fire')}
             onDown={() => { ZA.init(); G.current.fire = true; }} onMove={(dx, dy) => lookBy(dx, dy)} onUp={() => { G.current.fire = false; }} />
-          <CBtn size={px(56)} icon="scope" label={H.ads ? 'Stop aiming' : 'Aim down sights'} active={H.ads} style={{ right: right(px(132)), bottom: bottom(px(118)) }} onTap={() => { const g = G.current; g.ads = !g.ads; ZA.synth('tap', { f: 700, vol: 0.3 }); syncHud(true); }} />
-          <CBtn size={px(52)} icon="mag" label="Reload" ring={H.rel} style={{ right: right(px(34)), bottom: bottom(px(160)) }} onTap={() => startReload(G.current)} />
-          <CBtn size={px(48)} icon="knife" label="Melee" style={{ right: right(px(140)), bottom: bottom(px(34)) }} onTap={melee} />
-          <CBtn size={px(50)} icon="grenade" label="Throw a grenade" badge={H.nades} disabled={!H.nades} active={H.aiming && G.current.thr && G.current.thr.k === 'grenade'} style={{ right: right(px(208)), bottom: bottom(px(64)) }}
+          <CBtn size={CD.ads.size} icon="scope" label={H.ads ? 'Stop aiming' : 'Aim down sights'} active={H.ads} style={hs('ads')} onMove={(dx, dy) => lookBy(dx, dy)}
+            onDown={() => { if (opt.adsMode === 'hold') { const g = G.current; g.ads = true; ZA.synth('tap', { f: 700, vol: 0.3 }); syncHud(true); } }}
+            onUp={() => { if (opt.adsMode === 'hold') { G.current.ads = false; syncHud(true); } }}
+            onTap={() => { if (opt.adsMode === 'hold') return; const g = G.current; g.ads = !g.ads; ZA.synth('tap', { f: 700, vol: 0.3 }); syncHud(true); }} />
+          <CBtn size={CD.rel.size} icon="mag" label="Reload" ring={H.rel} style={hs('rel')} onTap={() => startReload(G.current)} />
+          <CBtn size={CD.mel.size} icon="knife" label="Melee" style={hs('mel')} onTap={melee} />
+          <CBtn size={CD.nade.size} icon="grenade" label="Throw a grenade" badge={H.nades} disabled={!H.nades} active={H.aiming && G.current.thr && G.current.thr.k === 'grenade'} style={hs('nade')}
             onDown={() => throwStart('grenade')} onMove={(dx, dy) => lookBy(dx, dy)} onUp={(e) => throwEnd(overCancel(e))} />
-          <CBtn size={px(50)} icon="bottle" label="Throw a fire bottle" badge={H.molos} disabled={!H.molos} active={H.aiming && G.current.thr && G.current.thr.k === 'molotov'} style={{ right: right(px(208)), bottom: bottom(px(130)) }}
+          <CBtn size={CD.molo.size} icon="bottle" label="Throw a fire bottle" badge={H.molos} disabled={!H.molos} active={H.aiming && G.current.thr && G.current.thr.k === 'molotov'} style={hs('molo')}
             onDown={() => throwStart('molotov')} onMove={(dx, dy) => lookBy(dx, dy)} onUp={(e) => throwEnd(overCancel(e))} />
-          <CBtn size={px(50)} icon="jump" label="Jump" style={{ right: right(px(30)), bottom: bottom(px(280)) }} onDown={() => { ZA.init(); G.current.jumpReq = true; }} />
-          <CBtn size={px(50)} icon="crouch" label={H.cr ? 'Stand up' : 'Crouch or slide'} active={!!H.cr} style={{ right: right(px(206)), bottom: bottom(px(196)) }} onDown={() => { ZA.init(); G.current.crReq = true; }} />
-          <CBtn size={px(42)} icon="emote" label="Emotes" style={{ right: right(px(118)), bottom: bottom(px(190)) }} onTap={() => setSheet('emote')} />
-          {TOUCHY && <CBtn size={px(60)} icon="bullet" label="Shoot with left hand" active={!!G.current.fireL} style={{ left: left(px(150)), bottom: bottom(px(178)) }}
-            onDown={() => { ZA.init(); G.current.fireL = true; }} onMove={(dx, dy) => lookBy(dx, dy)} onUp={() => { G.current.fireL = false; }} />}
+          <CBtn size={CD.jump.size} icon="jump" label="Jump" style={hs('jump')} onDown={() => { ZA.init(); G.current.jumpReq = true; }} />
+          <CBtn size={CD.crouch.size} icon="crouch" label={H.cr ? 'Stand up' : 'Crouch or slide'} active={!!H.cr} style={hs('crouch')} onDown={() => { ZA.init(); G.current.crReq = true; }} />
+          <CBtn size={CD.emote.size} icon="emote" label="Emotes" style={hs('emote')} onTap={() => setSheet('emote')} />
+          <CBtn size={CD.fireL.size} icon="bullet" label="Shoot with left hand" active={!!G.current.fireL} style={hs('fireL')}
+            onDown={() => { ZA.init(); G.current.fireL = true; }} onMove={(dx, dy) => lookBy(dx, dy)} onUp={() => { G.current.fireL = false; }} />
+          </>}
           {H.near && <CBtn size={px(66)} icon="heart" tone="green" label="Hold to help up your friend" style={{ right: right(px(280)), bottom: bottom(px(110)) }} onDown={() => { G.current.revHold = true; ZA.call('cover', sexRef.current, { cd: 12 }); }} onUp={() => { G.current.revHold = false; }} sub="Hold" />}
           {H.aiming && <div ref={cancelRef} style={{ position: 'absolute', right: right(px(290)), top: top(90), width: 56, height: 56, borderRadius: 28, background: 'rgba(160,20,20,0.45)', boxShadow: 'inset 0 0 0 1.5px rgba(255,255,255,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }}><Ico k="close" size={22} /><span style={{ fontSize: 9.5, fontWeight: 800, color: '#FFFFFF' }}>Cancel</span></div>}
           {H.sprint && <div style={{ position: 'absolute', left: left(px(70)), bottom: bottom(px(186)), display: 'flex', alignItems: 'center', gap: 4, padding: '3px 9px', borderRadius: 12, background: 'rgba(10,12,14,0.45)' }}><Ico k="run" size={16} /><span style={{ fontSize: 11, fontWeight: 800, color: '#FFFFFF' }}>Running</span></div>}
         </div>
       )}
-      {!TOUCHY && <div style={{ position: 'absolute', left: left(12), bottom: bottom(10), fontSize: 11.5, fontWeight: 700, color: 'rgba(255,255,255,0.7)', textShadow: '0 1px 2px rgba(0,0,0,0.8)' }}>WASD move, Shift run, drag to look, left click shoot, right click aim, R reload, Q switch, G grenade, F fire bottle, V melee, B emotes, E help up</div>}
+      {!TOUCHY && phase === 'play' && !locked && !G.current.lockFail && !sheet && H.st !== 2 && (
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '16px 20px', borderRadius: 16, background: 'rgba(8,10,14,0.72)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.12)' }}>
+            <span style={{ fontSize: 17, fontWeight: 900, color: '#FFFFFF' }}>Click to play</span>
+            <div style={{ display: 'grid', gridTemplateColumns: 'auto auto auto auto', columnGap: 12, rowGap: 6, alignItems: 'center' }}>
+              {[['W A S D', 'Move'], ['Mouse', 'Look'], ['Left click', 'Shoot'], ['Right click', 'Aim'], ['Shift', 'Run'], ['Space', 'Jump'], ['C', 'Crouch or slide'], ['R', 'Reload'], ['Q or wheel', 'Switch gun'], ['G', 'Grenade'], ['F', 'Fire bottle'], ['V', 'Knife'], ['E', 'Help up'], ['B', 'Emotes'], ['Esc', 'Free the mouse']].map(([k, v]) => (
+                <React.Fragment key={k}>
+                  <span style={{ justifySelf: 'end', padding: '2px 7px', borderRadius: 6, background: 'rgba(255,255,255,0.12)', boxShadow: 'inset 0 -1px 0 rgba(255,255,255,0.18)', fontSize: 11.5, fontWeight: 800, color: '#FFFFFF', whiteSpace: 'nowrap' }}>{k}</span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.78)', whiteSpace: 'nowrap' }}>{v}</span>
+                </React.Fragment>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+      {hudEdit && (
+        <div onPointerDown={(e) => { e.stopPropagation(); setHudSel(null); }} style={{ position: 'absolute', inset: 0, zIndex: 70, background: 'rgba(6,8,12,0.5)', touchAction: 'none', pointerEvents: 'auto' }}>
+          <div style={{ position: 'absolute', right: right(16), bottom: bottom(px(222)), ...hx('wpn'), width: px(132), height: px(46), borderRadius: 12, background: 'rgba(10,12,14,0.42)', boxShadow: hudSel === 'wpn' ? '0 0 0 2px #FFC23D' : 'inset 0 0 0 1px rgba(255,255,255,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', touchAction: 'none', cursor: 'grab', pointerEvents: 'auto' }} onPointerDown={(e) => hudDrag(e, 'wpn')}>
+            <span style={{ fontSize: 12.5, fontWeight: 900, color: '#FFFFFF' }}>Rifle 30 / 30</span>
+          </div>
+          {CTL.map((c) => (
+            <div key={c.id} onPointerDownCapture={(e) => hudDrag(e, c.id)} style={{ position: 'absolute', width: c.size, height: c.size, ...hs(c.id), borderRadius: '50%', boxShadow: hudSel === c.id ? '0 0 0 3px #FFC23D' : 'none', touchAction: 'none', cursor: 'grab', pointerEvents: 'auto' }}>
+              <CBtn size={c.size} big={c.big} icon={c.icon} label={c.label} style={{ position: 'relative', left: 0, top: 0, right: 'auto', bottom: 'auto', pointerEvents: 'none' }} />
+            </div>
+          ))}
+          <div onPointerDown={(e) => e.stopPropagation()} style={{ position: 'absolute', left: '50%', top: top(10), transform: 'translateX(-50%)', width: land ? 420 : 300, maxWidth: '92%', display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 12px', borderRadius: 14, background: 'rgba(14,16,20,0.94)', boxShadow: '0 6px 20px rgba(0,0,0,0.45), inset 0 0 0 1px rgba(255,255,255,0.1)', pointerEvents: 'auto' }}>
+            <span style={{ fontSize: 13, fontWeight: 800, color: '#FFFFFF', textAlign: 'center' }}>{hudSel ? 'Drag to move, or change the size below' : 'Drag any button to move it'}</span>
+            {hudSel && hudSel !== 'wpn' ? (
+              <>
+                <GSetRow label="Size"><GSetSlider value={((hudEdit[hudSel] || {}).s) || 1} min={0.6} max={1.6} step={0.05} label="Size" fmt={(x) => `${Math.round(x * 100)}%`} onChange={(x) => hudSet(hudSel, 's', x)} /></GSetRow>
+                <GSetRow label="See through"><GSetSlider value={(hudEdit[hudSel] || {}).o == null ? 1 : hudEdit[hudSel].o} min={0.3} max={1} step={0.05} label="See through" fmt={(x) => `${Math.round(x * 100)}%`} onChange={(x) => hudSet(hudSel, 'o', x)} /></GSetRow>
+              </>
+            ) : null}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="button" onClick={() => { setHudEdit({}); setHudSel(null); }} style={{ flex: 1, height: 36, border: 'none', borderRadius: 10, background: 'rgba(255,255,255,0.1)', color: '#FFFFFF', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>Reset</button>
+              <button type="button" onClick={() => { setHudEdit(null); setHudSel(null); }} style={{ flex: 1, height: 36, border: 'none', borderRadius: 10, background: 'rgba(255,255,255,0.1)', color: '#FFFFFF', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>Cancel</button>
+              <button type="button" onClick={() => { saveHud(hudEdit); setHudEdit(null); setHudSel(null); }} style={{ flex: 1, height: 36, border: 'none', borderRadius: 10, background: '#FFC23D', color: '#141414', fontSize: 13, fontWeight: 900, cursor: 'pointer' }}>Save</button>
+            </div>
+          </div>
+        </div>
+      )}
       {TOUCHY && H.st === 0 && <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', opacity: see * 0.9 }}><GJoy flat view={J.view} knobRef={J.knob} idle={{ x: land ? 110 : 96, y: GS.H - (land ? 100 : 124) }} R={J.R} /></div>}
     </div>
   );
@@ -2125,6 +2247,9 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
               <GSetRow label="Look speed"><GSetSlider value={sens} min={0.4} max={2.2} step={0.05} label="Look speed" fmt={(x) => x.toFixed(2)} onChange={(x) => { setSens(x); setPref(PREF.sens, x); }} /></GSetRow>
               <GSetRow label="Aim look speed" sub="While aiming down sights"><GSetSlider value={opt.adsK} min={0.4} max={1.4} step={0.05} label="Aim look speed" fmt={(x) => x.toFixed(2)} onChange={(x) => setOptK('adsK', x)} /></GSetRow>
               <GSetRow label="Aim assist" sub="Helps your first shot land"><GSetToggle on={!!opt.assist} label="Aim assist" onToggle={(n) => setOptK('assist', n ? 1 : 0)} /></GSetRow>
+              <GSetRow label="Aim button" sub="Tap to switch, or hold while you aim"><GSeg value={opt.adsMode} items={[['tap', 'Tap'], ['hold', 'Hold']]} onPick={(v) => setOptK('adsMode', v)} label="Aim button" /></GSetRow>
+              <GSetRow label="Always sprint" sub="Push the stick forward to run"><GSetToggle on={!!opt.spr} label="Always sprint" onToggle={(n) => setOptK('spr', n ? 1 : 0)} /></GSetRow>
+              {TOUCHY && <GSetRow label="Custom HUD" sub="Move and resize every button"><button type="button" onClick={() => { closeSettings(); setHudEdit({ ...hudL }); setHudSel(null); }} style={{ height: 32, padding: '0 14px', border: 'none', borderRadius: 9, background: '#FFC23D', color: '#141414', fontSize: 12.5, fontWeight: 900, cursor: 'pointer' }}>Edit</button></GSetRow>}
               <GSetRow label="Vibration"><GSetToggle on={!!opt.vib} label="Vibration" onToggle={(n) => setOptK('vib', n ? 1 : 0)} /></GSetRow>
             </>
           )} />
@@ -2243,7 +2368,7 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
   return (
     <Portal><GSkin k="zombie">
       <div ref={GS.rootRef} style={{ position: 'fixed', left: 0, right: 0, top: 'var(--zvp-top, 0px)', height: 'calc(var(--zvp-h, 100%) + var(--zgx, 0px))', zIndex: 90, background: '#101214', overflow: 'hidden', touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', fontFamily: FONT, color: '#EFE8D2' }}>
-        <div ref={wrapRef} style={GS.wrapStyle} onPointerDown={lookDown} onPointerMove={lookMove} onPointerUp={lookUp} onPointerCancel={lookUp} onLostPointerCapture={lookUp} onContextMenu={(e) => e.preventDefault()}>
+        <div ref={wrapRef} style={GS.wrapStyle} onPointerDown={lookDown} onPointerMove={(e) => { if (e.pointerType === 'mouse') lookMove(e); }} onPointerUp={(e) => { if (e.pointerType === 'mouse') lookUp(e); }} onPointerCancel={(e) => { if (e.pointerType === 'mouse') lookUp(e); }} onLostPointerCapture={(e) => { if (e.pointerType === 'mouse') lookUp(e); }} onContextMenu={(e) => e.preventDefault()}>
           <canvas key={cvKey} ref={cvRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block' }} />
           {phase === 'load' && <ZBoot GS={GS} boot={boot} onRetry={() => setBootTry((n) => n + 1)} onClose={onClose} />}
           {netErr === 'gl' && phase === 'menu' && <div style={{ position: 'absolute', left: 0, right: 0, top: '40%', textAlign: 'center', fontSize: 14, fontWeight: 800 }}>This phone could not start 3D graphics.</div>}
