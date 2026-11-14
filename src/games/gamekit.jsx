@@ -58,6 +58,7 @@ export function injectKitCss() {
     '@keyframes zgk-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}',
     '@keyframes zgk-shine{0%{transform:translateX(-120%) skewX(-20deg)}60%,100%{transform:translateX(220%) skewX(-20deg)}}',
     '@keyframes zgk-pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.07)}}',
+    '@keyframes zgk-knock{0%,100%{background-color:rgba(160,22,14,0.78)}50%{background-color:rgba(70,10,8,0.5)}}',
     '@keyframes zgk-in{from{transform:translateY(24px);opacity:0}to{transform:none;opacity:1}}',
     '@keyframes zgk-spin{to{transform:rotate(360deg)}}',
     '.zgk-btn{-webkit-tap-highlight-color:transparent;touch-action:none;user-select:none;-webkit-user-select:none;outline:none}',
@@ -82,8 +83,11 @@ export function injectKitCss() {
   document.head.appendChild(st);
 }
 
+let tapHook = null;
+export function setKitTap(fn) { tapHook = typeof fn === 'function' ? fn : null; }
 export function kitTap(kind) {
   try { hapticTap(); } catch {}
+  if (tapHook) { try { if (tapHook(kind)) return; } catch {} }
   Sfx.init();
   Sfx.play(kind || 'pop', { vol: 0.5, rate: 1.1 });
 }

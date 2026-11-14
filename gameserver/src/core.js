@@ -3,6 +3,7 @@ import { makeSim } from '../../src/games/zsim.js';
 export const CAP = { siege: 20, race: 12, roll: 8, gulp: 12, duo: 2, zombie: 5 };
 export const REGIONS = { asia: 'apac', usa: 'enam', eu: 'weur' };
 const TICK = 1 / 15;
+export const SIM_REV = 57;
 
 export function parseName(name) {
   const [kind, game, ...rest] = String(name || '').split(':');
@@ -44,7 +45,7 @@ export class RoomCore {
       this.idleAt = 0;
       this.sim.addPlayer(c.id, { n: c.m && c.m.n, sv: c.m && c.m.sv, col: c.m && c.m.col, w: c.m && c.m.w, pet: c.m && c.m.pet, cash: c.m && c.m.cash });
       if (this.io.away) this.io.away(c.id, this.name, false);
-      this.sendTo(c, { t: '$hi', me: c.id, at: Date.now(), room: this.name, cap: this.cap, roster: this.sim.roster(), s: this.sim.snap() });
+      this.sendTo(c, { t: '$hi', me: c.id, at: Date.now(), room: this.name, cap: this.cap, roster: this.sim.roster(), s: this.sim.snap(), v: SIM_REV });
       this.startLoop();
     } else {
       this.sendTo(c, { t: '$hi', me: c.id, at: Date.now(), room: this.name, cap: this.cap, peers: live.map((o) => [o.id, o.m || {}]) });

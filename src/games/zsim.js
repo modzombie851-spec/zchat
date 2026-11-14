@@ -2,6 +2,8 @@ import { BOUNDS, solids, PLAY_ZS as SPAWNS, PLAY_PS as PSPAWN, PLAY_BOSS, rng } 
 import { houseCollide, houseY, levelStep, rayHouse, HOUSE_SPAWNS, lvOk, inHouse } from './zhouse.js';
 import { makeNav } from './znav.js';
 
+const OUT_SPAWNS = (() => { const L = SPAWNS.filter((s) => !inHouse(s[0], s[1], 2.5)); return L.length ? L : SPAWNS; })();
+
 export const WEAPONS = {
   pistol: { n: 'Pistol', dmg: 70, rate: 3.4, mag: 10, rel: 1.2, rng: 64, spr: 0.018, pel: 1, auto: 0, bot: 0.62 },
   smg: { n: 'SMG', dmg: 27, rate: 11, mag: 45, rel: 1.7, rng: 48, spr: 0.05, pel: 1, auto: 1, bot: 0.5 },
@@ -18,6 +20,7 @@ export const WEAPONS = {
   awm: { n: 'AWM', cls: 'sniper', dmg: 350, rate: 0.8, mag: 5, rel: 2.8, rng: 180, spr: 0.002, pel: 1, auto: 0, pierce: 3, bot: 0.72 },
   mgl: { n: 'Bomb gun', cls: 'rifle', dmg: 0, rate: 1.4, mag: 6, rel: 3.2, rng: 70, spr: 0.01, pel: 1, auto: 0, boom: 1, bot: 0.6 },
 };
+export const LOOT_G = Object.keys(WEAPONS);
 export const wcls = (w) => (WEAPONS[w] && WEAPONS[w].cls) || w;
 export const BOOM = { dmg: 240, r: 4.6 };
 const SELF_HURT = { grenade: 70, c4: 90, mgl: 45 };
@@ -50,9 +53,12 @@ export const SELLER = { x: 0.9, z: -29.2, yaw: 0 };
 export const ARMOR_MAX = 150;
 export const DROP = { reach: 2.1, fall: 6.5, life: 86, guns: ['lmg', 'awm', 'xpr', 'mgl', 'ak47', 'spas'] };
 export const PLATE = 50;
-export const CASH_V = { walker: 20, worker: 30, runner: 25, bloater: 45, brute: 250, crawler: 25, screamer: 40, riot: 55, spitter: 40 };
-export const CASH_P = { walker: 0.18, worker: 0.22, runner: 0.2, crawler: 0.2, screamer: 0.35, spitter: 0.35, bloater: 0.6, riot: 0.6, brute: 1 };
+export const CASH_V = { walker: 32, worker: 48, runner: 40, bloater: 72, brute: 400, crawler: 40, screamer: 64, riot: 88, spitter: 64 };
+export const CASH_P = { walker: 0.26, worker: 0.3, runner: 0.28, crawler: 0.28, screamer: 0.5, spitter: 0.5, bloater: 0.8, riot: 0.8, brute: 1 };
 export const START_CASH = 300;
+export const LOOT = { reach: 1.6, life: 90, keep: 2.5, fly: 0.6 };
+export const LOOT_K = ['cash', 'gun', 'plate', 'band', 'med', 'nade', 'molo', 'c4', 'ammo'];
+export const LOOT_CAP = { plate: 5, band: 5, med: 3, nade: 6, molo: 4, c4: 4 };
 export const CASH_MAX = 999999;
 const bankCash = (v) => { const n = Math.floor(Number(v)); return Number.isFinite(n) && n > START_CASH ? Math.min(CASH_MAX, n) : START_CASH; };
 export const MELEE = {
@@ -173,7 +179,7 @@ export function makeSim(o = {}) {
   const R = rng(o.seed || (Date.now() & 0xffff) || 7);
   const S = {
     t: 0, wave: 0, ph: 'break', tl: o.firstBreak || 10, left: 0, spawnT: 0, nid: 1,
-    players: new Map(), zs: new Map(), ev: [], fires: [], nades: [], spits: [], acid: [], heals: [], nests: [], abox: [], drops: [], heli: null, heliT: 0, cash: new Map(),
+    players: new Map(), zs: new Map(), ev: [], fires: [], nades: [], spits: [], acid: [], heals: [], nests: [], abox: [], drops: [], loot: [], heli: null, heliT: 0, cash: new Map(),
     maxAlive: o.maxAlive || 70, botFill: o.botFill == null ? 4 : o.botFill, best: 0, kills: 0,
     flow: null, flowT: 0, botSeq: 0,
   };
@@ -249,6 +255,9 @@ export function makeSim(o = {}) {
     if (Array.isArray(s.bm) && s.bm[0] > (p.bmq || 0)) { p.bmq = s.bm[0]; S.boom(id, +s.bm[1], +s.bm[2], s.bm[3] | 0); }
     if (Number.isFinite(s.det) && s.det > (p.detq || 0)) { p.detq = s.det; for (const n of S.nades) if (n.k === 'c4' && n.by === id) n.t = Math.min(n.t, 0.05); }
     if (s.rd === 1 && S.wave === 0 && S.ph === 'break') p.rdy = 1;
+    if (Array.isArray(s.cn)) p.cn = { nade: Math.max(0, s.cn[0] | 0), molo: Math.max(0, s.cn[1] | 0), c4: Math.max(0, s.cn[2] | 0) };
+    if (Array.isArray(s.dr) && s.dr[0] > (p.drq || 0)) { p.drq = s.dr[0]; dropItem(p, String(s.dr[1]), s.dr[2]); }
+    if (Array.isArray(s.pk) && s.pk[0] > (p.pkq || 0)) { p.pkq = s.pk[0]; pickLoot(p, s.pk[1]); }
     if (p.st === 0 && Number.isFinite(s.x) && Number.isFinite(s.z)) {
       let dx = s.x - p.x, dz = s.z - p.z;
       const lim = 7.5 * dt + 1.2, d = Math.hypot(dx, dz);
@@ -277,6 +286,7 @@ export function makeSim(o = {}) {
     S.zs.delete(z.id);
     S.kills++;
     const cp = z.boss ? 1 : CASH_P[z.k] == null ? 0.2 : CASH_P[z.k];
+    if ((z.lv | 0) === 0 && S.abox.length < 9 && R() < (z.boss ? 1 : z.k === 'brute' ? 0.3 : 0.04)) { const bid = S.nid++; S.abox.push({ id: bid, x: z.x, z: z.z, t: 45, zd: 1 }); emit(['za', bid, Math.round(z.x * 10), Math.round(z.z * 10)]); }
     if (S.cash.size < 160 && R() < cp) { const cid = S.nid++; S.cash.set(cid, { id: cid, x: z.x, z: z.z, lv: z.lv | 0, v: Math.round((CASH_V[z.k] || 20) * (z.boss ? 5 : cp >= 1 ? 1 : cp >= 0.5 ? 2 : 3) * (1 + Math.min(1.5, S.wave * 0.04))), t: 30 }); }
     const T = ZT[z.k];
     const p = by ? S.players.get(by) : null;
@@ -405,7 +415,7 @@ export function makeSim(o = {}) {
     let fromNest = null;
     if (!pick && S.nests.length && R() < 0.6) { fromNest = S.nests[(R() * S.nests.length) | 0]; const an = R() * 6.283; pick = [fromNest.x + Math.sin(an) * 1.7, fromNest.z + Math.cos(an) * 1.7]; }
     for (let tries = 0; tries < 10 && !pick; tries++) {
-      const s = SPAWNS[(R() * SPAWNS.length) | 0];
+      const s = OUT_SPAWNS[(R() * OUT_SPAWNS.length) | 0];
       let nd = 1e9;
       for (const p of al) nd = Math.min(nd, Math.hypot(p.x - s[0], p.z - s[1]));
       if (nd > 24 || tries > 7) pick = s;
@@ -420,8 +430,9 @@ export function makeSim(o = {}) {
     if (S.bossLeft > 0 && S.left <= S.bossAt) { k = 'brute'; boss = true; S.bossLeft--; S.bossAt = Math.floor(S.left * 0.6); }
     else if (S.fatQ && S.fatQ.length && S.left <= S.fatQ[0]) { k = 'bloater'; boss = true; S.fatQ.shift(); }
     else if (S.bruteLeft > 0 && S.left <= S.bruteAt) { k = 'brute'; S.bruteLeft--; S.bruteAt = Math.floor(S.left * 0.5); }
-    if (boss && !inside) {
-      const cands = PLAY_BOSS ? [...SPAWNS, PLAY_BOSS] : SPAWNS;
+    if (boss) {
+      inside = false; fromNest = null;
+      const cands = PLAY_BOSS && !inHouse(PLAY_BOSS[0], PLAY_BOSS[1], 2.5) ? [...OUT_SPAWNS, PLAY_BOSS] : OUT_SPAWNS;
       let best = null, bs = 1e9;
       for (const c0 of cands) {
         let nd = 1e9;
@@ -509,6 +520,7 @@ export function makeSim(o = {}) {
       else if (p.st === 1) { p.st = 0; p.hp = 50; emit(['rv', p.id, '']); }
       else p.hp = Math.min(100, p.hp + 35);
       p.pts += 25 * S.wave;
+      if (!p.bot && p.st === 0) { const bonus = 100 + 40 * S.wave; p.cash = Math.min(CASH_MAX, (p.cash | 0) + bonus); emit(['wb', p.id, bonus]); }
     }
     emit(['wc', S.wave]);
   };
@@ -520,7 +532,7 @@ export function makeSim(o = {}) {
   };
   const reset = () => {
     S.dropLeft();
-    S.zs.clear(); S.cash.clear(); S.fires = []; S.nades = []; S.spits = []; S.acid = []; S.heals = []; S.nests = []; S.abox = []; S.drops = []; S.heli = null; S.heliT = 0; S.wave = 0; S.ph = 'break'; S.tl = 10;
+    S.zs.clear(); S.cash.clear(); S.fires = []; S.nades = []; S.spits = []; S.acid = []; S.heals = []; S.nests = []; S.abox = []; S.drops = []; S.loot = []; S.heli = null; S.heliT = 0; S.wave = 0; S.ph = 'break'; S.tl = 10;
     let i = 0;
     for (const p of S.players.values()) { const [x, z] = spawnAt(i++); Object.assign(p, { x, z, lv: 0, hp: 100, st: 0, bleed: 0, rev: 0, revBy: null, kills: 0, pts: 0, downs: 0, cash: p.bot ? START_CASH : Math.max(START_CASH, Math.min(CASH_MAX, p.cash | 0)), armor: 0, plates: 1, band: 1, med: 0, heal: 0, inv: p.bot ? [p.w] : ['pistol'], w: p.bot ? p.w : 'pistol' }); if (p.pet) Object.assign(p.pet, { x: x + 0.8, z, lv: 0 }); }
     emit(['rs', '*']);
@@ -674,6 +686,98 @@ export function makeSim(o = {}) {
     if (k === 'band' && p.band > 0) { p.band--; p.heal = Math.max(p.heal || 0, 35); emit(['us', p.id, k]); }
     else if (k === 'med' && p.med > 0) { p.med--; p.hp = Math.min(100, p.hp + 60); p.heal = Math.max(p.heal || 0, 20); emit(['us', p.id, k]); }
   };
+  const addLoot = (k, v, x, z, lv, by, how, ox, oz) => {
+    const id = S.nid++;
+    S.loot.push({ id, k, v, x, z, lv: lv | 0, t: how === 1 ? LOOT.fly : 0, life: LOOT.life, by: by || '' });
+    emit(['ld', id, LOOT_K.indexOf(k), Math.round(x * 10), Math.round(z * 10), by || '', how | 0, Math.round((ox == null ? x : ox) * 10), Math.round((oz == null ? z : oz) * 10)]);
+    return id;
+  };
+  const dropItem = (p, k, n) => {
+    if (p.st !== 0 || p.bot || S.loot.length > 140 || LOOT_K.indexOf(k) < 0) return;
+    let v = 0;
+    if (k === 'cash') { v = Math.min(Math.floor(p.cash || 0), Math.max(1, Math.floor(Number(n)) || 0)); if (!(v >= 1)) return; p.cash -= v; }
+    else if (k === 'gun') { const w = typeof n === 'string' && WEAPONS[n] ? n : p.w; const inv = p.inv || [p.w]; if (!WEAPONS[w] || !inv.includes(w) || inv.length < 2) return; p.inv = inv.filter((q) => q !== w); if (p.w === w || !p.inv.includes(p.w)) p.w = p.inv[0]; v = w; }
+    else if (k === 'plate') { v = Math.min(p.plates || 0, Math.max(1, n | 0)); if (v < 1) return; p.plates -= v; }
+    else if (k === 'band' || k === 'med') { v = Math.min(p[k] || 0, Math.max(1, n | 0)); if (v < 1) return; p[k] -= v; }
+    else if (k === 'nade' || k === 'molo' || k === 'c4') { v = Math.min(LOOT_CAP[k], Math.max(1, n | 0)); if (p.cn) p.cn[k] = Math.max(0, (p.cn[k] | 0) - v); }
+    else return;
+    const fx = Math.sin(p.yaw), fz = Math.cos(p.yaw), lv = p.lv | 0;
+    const jx = (R() - 0.5) * 0.9, jz = (R() - 0.5) * 0.9;
+    let tx = p.x + fx * 3 + jx, tz = p.z + fz * 3 + jz;
+    if (rayBlocked(p.x, p.z, tx, tz) || (lv && houseY(tx, tz, 1) == null)) { tx = p.x + fx * 0.7; tz = p.z + fz * 0.7; }
+    const c = collide(tx, tz, 0.3, lv);
+    addLoot(k, v, c[0], c[1], lv, p.id, 0, p.x, p.z);
+  };
+  const takeLoot = (p, L, manual) => {
+    if (L.k === 'cash') { p.cash = Math.min(CASH_MAX, (p.cash || 0) + L.v); return L.v; }
+    if (L.k === 'gun') {
+      const inv = p.inv || [p.w];
+      if (!WEAPONS[L.v] || inv.includes(L.v)) return 0;
+      if (inv.length < 3) { p.inv = inv.concat(L.v); return 1; }
+      if (!manual) return 0;
+      const cur = p.w, i = Math.max(0, inv.indexOf(cur));
+      p.inv = inv.map((q, j) => (j === i ? L.v : q));
+      p.w = L.v;
+      if (WEAPONS[cur]) addLoot('gun', cur, L.x, L.z, L.lv, p.id, 1, L.x, L.z);
+      return 1;
+    }
+    if (L.k === 'plate' || L.k === 'band' || L.k === 'med') {
+      const key = L.k === 'plate' ? 'plates' : L.k, n = Math.min(LOOT_CAP[L.k] - (p[key] || 0), L.v);
+      if (n <= 0) return 0;
+      p[key] = (p[key] || 0) + n;
+      return n;
+    }
+    if (L.k === 'nade' || L.k === 'molo' || L.k === 'c4') {
+      const have = p.cn ? p.cn[L.k] | 0 : 0, n = Math.min(LOOT_CAP[L.k] - have, L.v);
+      if (n <= 0) return 0;
+      if (p.cn) p.cn[L.k] = have + n;
+      return n;
+    }
+    if (L.k === 'ammo') return 1;
+    return 0;
+  };
+  const gotLoot = (p, L, i, n) => {
+    emit(['lp', p.id, L.id, LOOT_K.indexOf(L.k), L.k === 'gun' ? LOOT_G.indexOf(L.v) : n]);
+    if (L.k === 'gun' || L.k === 'cash' || L.k === 'ammo' || n >= L.v) S.loot.splice(i, 1); else L.v -= n;
+  };
+  const pickLoot = (p, id) => {
+    if (p.st !== 0 || p.bot) return;
+    const i = S.loot.findIndex((q) => q.id === id);
+    if (i < 0) return;
+    const L = S.loot[i];
+    if ((L.lv | 0) !== (p.lv | 0) || L.t < LOOT.fly || Math.hypot(p.x - L.x, p.z - L.z) > LOOT.reach + 1) return;
+    const n = takeLoot(p, L, true);
+    if (n > 0) gotLoot(p, L, i, n);
+  };
+  const stepLoot = (dt) => {
+    for (let i = S.loot.length - 1; i >= 0; i--) {
+      const L = S.loot[i];
+      L.t += dt; L.life -= dt;
+      if (L.life <= 0) { S.loot.splice(i, 1); emit(['lx', L.id]); continue; }
+      if (L.t < LOOT.fly) continue;
+      for (const p of S.players.values()) {
+        if (p.bot || p.st !== 0 || (p.lv | 0) !== L.lv || (p.id === L.by && L.t < LOOT.keep)) continue;
+        if (Math.abs(p.x - L.x) > LOOT.reach || Math.abs(p.z - L.z) > LOOT.reach || Math.hypot(p.x - L.x, p.z - L.z) > LOOT.reach) continue;
+        const n = takeLoot(p, L, false);
+        if (n > 0) { gotLoot(p, L, i, n); break; }
+      }
+    }
+  };
+  const spillCrate = (d, nh, op) => {
+    const items = [];
+    const pool = DROP.guns.slice();
+    for (let i = 0; i < Math.min(3, Math.max(1, nh)); i++) { const w = pool.splice((R() * pool.length) | 0, 1)[0]; if (w) items.push(['gun', w]); }
+    items.push(['plate', 2], ['plate', 1], ['med', 1], ['band', 2], ['nade', 2], ['molo', 1], ['ammo', 1], ['cash', 400 + 250 * Math.max(1, nh)]);
+    if (R() < 0.5) items.push(['c4', 1]);
+    const toward = op ? Math.atan2(op.x - d.x, op.z - d.z) : R() * Math.PI * 2;
+    items.forEach(([k, v], j) => {
+      const a = toward + Math.PI / 4 + ((j + 0.5) / items.length) * Math.PI * 1.5 + (R() - 0.5) * 0.2, r = 1.5 + R() * 1.1;
+      let tx = d.x + Math.sin(a) * r, tz = d.z + Math.cos(a) * r;
+      if (rayBlocked(d.x, d.z, tx, tz)) { tx = d.x + Math.sin(a) * 1.1; tz = d.z + Math.cos(a) * 1.1; }
+      const c = collide(tx, tz, 0.3, 0);
+      addLoot(k, v, c[0], c[1], 0, '', 2, d.x, d.z);
+    });
+  };
   const launchHeli = () => {
     const al = alivePlayers().filter((p) => !p.bot);
     const L = al.length ? al : alivePlayers();
@@ -710,23 +814,17 @@ export function makeSim(o = {}) {
     for (let i = S.drops.length - 1; i >= 0; i--) {
       const d = S.drops[i];
       d.t += dt; d.life -= dt;
+      if (d.life <= 0) { S.drops.splice(i, 1); emit(['dx', d.id]); continue; }
+      if (d.t < DROP.fall || d.open) continue;
       const humans = [...S.players.values()].filter((q) => !q.bot);
-      if (d.life <= 0 || (humans.length && humans.every((q) => d.taken.includes(q.id)))) { S.drops.splice(i, 1); continue; }
-      if (d.t < DROP.fall) continue;
-      for (const p of humans) {
-        if (p.st !== 0 || (p.lv | 0) || d.taken.includes(p.id) || Math.hypot(p.x - d.x, p.z - d.z) > DROP.reach) continue;
-        d.taken.push(p.id);
-        const inv = p.inv || [p.w];
-        const pool = DROP.guns.filter((w) => !inv.includes(w));
-        let gun = '';
-        if (inv.length < 3 && pool.length) { gun = pool[(R() * pool.length) | 0]; p.inv = inv.concat(gun); }
-        const pl = Math.min(2, SHOP.plate.max - (p.plates || 0));
-        p.plates = (p.plates || 0) + pl;
-        const cash = gun ? 400 : 900;
-        p.cash = (p.cash || 0) + cash;
-        emit(['dp', p.id, d.id, pl, gun, cash]);
-      }
+      const op = humans.find((p) => p.st === 0 && !(p.lv | 0) && Math.hypot(p.x - d.x, p.z - d.z) < DROP.reach);
+      if (!op) continue;
+      d.open = 1;
+      d.life = Math.min(d.life, 24);
+      emit(['do', d.id, op.id]);
+      spillCrate(d, humans.length, op);
     }
+    stepLoot(dt);
   };
   S.step = (dt) => {
     S.t += dt;
@@ -928,8 +1026,10 @@ export function makeSim(o = {}) {
     const ab = []; for (const b of S.abox) ab.push(b.id, Math.round(b.x * 10), Math.round(b.z * 10));
     const H = S.heli;
     const hl = H ? [H.id, Math.round(H.x0 * 10), Math.round(H.z0 * 10), Math.round(H.x1 * 10), Math.round(H.z1 * 10), Math.round(H.x2 * 10), Math.round(H.z2 * 10), Math.round(H.t * 10), Math.round(H.T1 * 10), Math.round(H.H * 10)] : undefined;
-    const dz = []; for (const d of S.drops) dz.push(d.id, Math.round(d.x * 10), Math.round(d.z * 10), Math.round(Math.min(d.t, 9.9) * 10));
-    return { w: S.wave, ph: PH[S.ph], tl: Math.ceil(Math.max(0, S.tl)), zl: S.left + S.zs.size, z, p, ac, cs: cs.length ? cs : undefined, hz, ns: ns.length ? ns : undefined, ab: ab.length ? ab : undefined, hl, dz: dz.length ? dz : undefined };
+    const dz = [], dzo = []; for (const d of S.drops) { dz.push(d.id, Math.round(d.x * 10), Math.round(d.z * 10), Math.round(Math.min(d.t, 9.9) * 10)); if (d.open) dzo.push(d.id); }
+    const lt = [];
+    for (const L of S.loot) if (vx == null || (Math.abs(L.x - vx) < rad && Math.abs(L.z - vz) < rad)) lt.push(L.id, LOOT_K.indexOf(L.k), Math.round(L.x * 10), Math.round(L.z * 10), L.lv | 0, Math.round(Math.min(L.t, 9.9) * 10), L.k === 'gun' ? LOOT_G.indexOf(L.v) : L.v);
+    return { w: S.wave, ph: PH[S.ph], tl: Math.ceil(Math.max(0, S.tl)), zl: S.left + S.zs.size, z, p, ac, cs: cs.length ? cs : undefined, hz, ns: ns.length ? ns : undefined, ab: ab.length ? ab : undefined, hl, dz: dz.length ? dz : undefined, dzo: dzo.length ? dzo : undefined, lt: lt.length ? lt : undefined };
   };
   S.navDir = (x, z, lv) => flowDir(x, z, lv);
   S.__nav = () => geometry().nav;

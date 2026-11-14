@@ -12,12 +12,14 @@ const clean = (id, p) => ({
   w: typeof p.w === 'string' ? p.w.slice(0, 12) : 'pistol',
   lead: !!p.lead,
   rdy: !!p.rdy,
+  ig: !!p.ig,
   at: Number(p.at) || 0,
 });
 
 export function useSquad({ room, myId, me, lead, on, onGo, onEmo, onKick }) {
   const [mates, setMates] = useState([]);
   const [full, setFull] = useState(false);
+  const [synced, setSynced] = useState(false);
   const chRef = useRef(null);
   const meRef = useRef(me);
   meRef.current = me;
@@ -29,10 +31,11 @@ export function useSquad({ room, myId, me, lead, on, onGo, onEmo, onKick }) {
   const card = () => ({ ...meRef.current, lead: !!lead, at: atRef.current });
 
   useEffect(() => {
-    if (!topic) { setMates([]); setFull(false); return undefined; }
+    if (!topic) { setMates([]); setFull(false); setSynced(false); return undefined; }
     atRef.current = Date.now();
     okRef.current = false;
-    let gone = false;
+    setSynced(false);
+    let gone = false, syncT = 0;
     const read = (ch) => {
       if (gone) return;
       let st = {};
@@ -48,6 +51,7 @@ export function useSquad({ room, myId, me, lead, on, onGo, onEmo, onKick }) {
       setFull(over);
       if (over && okRef.current) { okRef.current = false; try { ch.untrack(); } catch {} }
       setMates(over ? [] : L.slice(0, SQUAD_MAX - 1));
+      if (!syncT) syncT = setTimeout(() => { if (!gone) setSynced(true); }, 1500);
     };
     const keep = rtKeep(() => {
       const ch = supabase.channel(topic, { config: { broadcast: { self: false, ack: false }, presence: { key: myId } } });
@@ -68,6 +72,7 @@ export function useSquad({ room, myId, me, lead, on, onGo, onEmo, onKick }) {
     });
     return () => {
       gone = true;
+      if (syncT) clearTimeout(syncT);
       const ch = chRef.current;
       chRef.current = null;
       okRef.current = false;
@@ -75,10 +80,11 @@ export function useSquad({ room, myId, me, lead, on, onGo, onEmo, onKick }) {
       rtDrop(keep);
       setMates([]);
       setFull(false);
+      setSynced(false);
     };
   }, [topic, myId, lead]);
 
-  const sig = me ? `${me.n}|${me.sv}|${me.col}|${me.w}|${me.rdy ? 1 : 0}` : '';
+  const sig = me ? `${me.n}|${me.sv}|${me.col}|${me.w}|${me.rdy ? 1 : 0}|${me.ig ? 1 : 0}` : '';
   useEffect(() => {
     const ch = chRef.current;
     if (!ch || !okRef.current) return;
@@ -90,5 +96,5 @@ export function useSquad({ room, myId, me, lead, on, onGo, onEmo, onKick }) {
     if (!ch || !okRef.current) return false;
     try { ch.send({ type: 'broadcast', event, payload }); return true; } catch { return false; }
   };
-  return { mates, full, send, live: !!topic };
+  return { mates, full, synced, send, live: !!topic };
 }
