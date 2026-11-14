@@ -115,7 +115,7 @@ const ICON = {
   star: 'M12 2.8l2.7 5.6 6.1.8-4.5 4.2 1.1 6.1L12 16.6l-5.4 2.9 1.1-6.1-4.5-4.2 6.1-.8z',
   eye: 'M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z',
   people: 'M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2 20c0-3.6 3.1-6 7-6s7 2.4 7 6M16 4.5a3.3 3.3 0 0 1 0 6.4M18.5 14.3c2.1.7 3.5 2.5 3.5 5.7',
-  gear: 'M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zM12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1',
+  gear: 'M10.72 5.02L10.91 2.76L13.09 2.76L13.28 5.02A7.1 7.1 0 0 1 16.04 6.16L17.76 4.70L19.30 6.24L17.84 7.96A7.1 7.1 0 0 1 18.98 10.72L21.24 10.91L21.24 13.09L18.98 13.28A7.1 7.1 0 0 1 17.84 16.04L19.30 17.76L17.76 19.30L16.04 17.84A7.1 7.1 0 0 1 13.28 18.98L13.09 21.24L10.91 21.24L10.72 18.98A7.1 7.1 0 0 1 7.96 17.84L6.24 19.30L4.70 17.76L6.16 16.04A7.1 7.1 0 0 1 5.02 13.28L2.76 13.09L2.76 10.91L5.02 10.72A7.1 7.1 0 0 1 6.16 7.96L4.70 6.24L6.24 4.70L7.96 6.16A7.1 7.1 0 0 1 10.72 5.02ZM15 12a3 3 0 1 1-6 0a3 3 0 1 1 6 0Z',
   music: 'M9 18V5l11-2v13M9 18a3 3 0 1 1-3-3 3 3 0 0 1 3 3zM20 16a3 3 0 1 1-3-3 3 3 0 0 1 3 3z',
   sound: 'M4 9.5h3.5L12 5.5v13l-4.5-4H4zM15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11',
   mute: 'M4 9.5h3.5L12 5.5v13l-4.5-4H4zM16 9l5 6M21 9l-5 6',
@@ -703,12 +703,12 @@ function AudioTab({ extra }) {
 
 const SET_ICON = { graphics: 'eye', gameplay: 'play', controls: 'hand', hud: 'target', audio: 'sound', credits: 'heart' };
 
-export function GSettings({ onClose, sideways = true, tabs = [], audioExtra = null, controlsExtra = null, first, preview }) {
+export function GSettings({ onClose, sideways = true, tabs = [], audioExtra = null, controlsExtra = null, first, preview, buttons = true }) {
   injectKitCss();
   const g = useSkin().k;
   const v = useCtlLook(g);
   const tacOn = !!(SKINS[g] && SKINS[g].tac);
-  const all = [...tabs, { k: 'controls', label: 'Controls', body: <>{controlsExtra}{tacOn ? <GSetHead>Buttons</GSetHead> : null}{ctlTab(g, v, sideways, preview || ['dash', 'suck'])}</> }, { k: 'audio', label: 'Audio', body: <>{tacOn ? <GSetHead>Volume</GSetHead> : null}<AudioTab extra={audioExtra} /></> }, { k: 'credits', label: 'Credits', body: <CreditsTab /> }];
+  const all = [...tabs, { k: 'controls', label: 'Controls', body: <>{controlsExtra}{buttons && tacOn ? <GSetHead>Buttons</GSetHead> : null}{buttons ? ctlTab(g, v, sideways, preview || ['dash', 'suck']) : null}</> }, { k: 'audio', label: 'Audio', body: <>{tacOn ? <GSetHead>Volume</GSetHead> : null}<AudioTab extra={audioExtra} /></> }, { k: 'credits', label: 'Credits', body: <CreditsTab /> }];
   const [cur, setCur] = useState(first || all[0].k);
   const tab = all.find((t) => t.k === cur) || all[0];
   if (tacOn) {

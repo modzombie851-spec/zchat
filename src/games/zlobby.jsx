@@ -3,6 +3,7 @@ import { Avatar, FONT } from '../App.jsx';
 import { GBtn } from './gamekit.jsx';
 import { Ico } from './zhud.jsx';
 import { DlMark } from './zboot.jsx';
+import { ZBOOK, ZBOOK_MAX } from './zbookdata.js';
 
 export const CFONT = `'Roboto Condensed', 'sans-serif-condensed', 'Avenir Next Condensed', 'Arial Narrow', ${FONT}`;
 const AMBER = '#E0A85A';
@@ -130,6 +131,82 @@ function Panel({ u, title, onClose, children, w }) {
   );
 }
 
+function StatRow({ u, label, value, frac, tone }) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: `${u(64)}px 1fr ${u(78)}px`, alignItems: 'center', gap: u(8) }}>
+      <span style={{ fontSize: u(12), fontWeight: 800, color: MUTED }}>{label}</span>
+      <span style={{ height: u(7), background: 'rgba(239,232,210,0.1)', boxShadow: `inset 0 0 0 1px ${LINE}`, overflow: 'hidden' }}>
+        <span style={{ display: 'block', width: `${Math.round(Math.max(0.06, Math.min(1, frac)) * 100)}%`, height: '100%', background: tone || AMBER }} />
+      </span>
+      <span style={{ fontFamily: CFONT, fontSize: u(15), fontWeight: 800, color: CREAM, textAlign: 'right', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{value}</span>
+    </div>
+  );
+}
+
+function ZBook({ L, u }) {
+  const { GS } = L;
+  const { top, right, bottom, left } = GS.at;
+  const i = Math.max(0, Math.min(ZBOOK.length - 1, L.book | 0));
+  const P = ZBOOK[i];
+  const go = (d) => L.setBook((i + d + ZBOOK.length) % ZBOOK.length);
+  const sw = React.useRef(null);
+  const speed = P.spd >= 3 ? 'Fast' : P.spd >= 1.4 ? 'Medium' : 'Slow';
+  const tagCol = P.tag === 'Boss' ? '#E5574B' : P.tag === 'Special' || P.tag === 'Armored' || P.tag === 'Giant' ? AMBER : '#9FC78E';
+  return (
+    <div style={{ position: 'absolute', inset: 0, zIndex: 6, overflow: 'hidden', fontFamily: FONT, color: CREAM, touchAction: 'none' }}
+      onPointerDown={(e) => { if (L.spin) { L.spin(e, 0); try { e.currentTarget.setPointerCapture(e.pointerId); } catch {} } }}
+      onPointerMove={(e) => { if (L.spin) L.spin(e, 1); }}
+      onPointerUp={(e) => { if (L.spin) L.spin(e, 2); }}
+      onPointerCancel={(e) => { if (L.spin) L.spin(e, 2); }}>
+      <div aria-hidden="true" style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: 'linear-gradient(90deg, rgba(8,7,6,0.55) 0%, rgba(8,7,6,0) 26%, rgba(8,7,6,0) 46%, rgba(8,7,6,0.72) 60%, rgba(8,7,6,0.82) 100%)' }} />
+      <div style={{ position: 'absolute', top: top(8), left: left(12), display: 'flex', alignItems: 'center', gap: u(10) }} onPointerDown={(e) => e.stopPropagation()}>
+        <GBtn icon="chevl" color="white" size={u(36)} fast={false} label="Back to the lobby" onPress={() => L.setBook(null)} />
+        <span style={{ fontFamily: CFONT, fontSize: u(24), fontWeight: 800, color: AMBER, textShadow: '0 2px 0 rgba(0,0,0,0.45)' }}>Zombie book</span>
+      </div>
+      <div aria-hidden="true" style={{ position: 'absolute', left: left(12), bottom: bottom(12), display: 'flex', alignItems: 'center', gap: u(6), fontSize: u(12), fontWeight: 800, color: MUTED, textShadow: '0 1px 2px rgba(0,0,0,0.85)', pointerEvents: 'none' }}>
+        <svg width={u(26)} height={u(14)} viewBox="0 0 26 14" aria-hidden="true"><path d="M4 7h18M8 3L4 7l4 4M18 3l4 4-4 4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
+        Drag to turn
+      </div>
+      <div role="region" aria-label={`${P.n}, page ${i + 1} of ${ZBOOK.length}`} onPointerDown={(e) => { e.stopPropagation(); sw.current = { x: e.clientX, y: e.clientY, id: e.pointerId }; }}
+        onPointerUp={(e) => { const s0 = sw.current; sw.current = null; if (!s0 || s0.id !== e.pointerId) return; const dx = (GS.side ? e.clientY - s0.y : e.clientX - s0.x); if (Math.abs(dx) > 50) go(dx < 0 ? 1 : -1); }}
+        style={{ position: 'absolute', top: top(10), bottom: bottom(10), right: right(12), width: `min(46%, ${u(400)}px)`, display: 'flex', flexDirection: 'column', background: 'rgba(14,13,12,0.86)', clipPath: cut(u(14)), boxShadow: `inset 0 0 0 1px ${LINE}`, touchAction: 'pan-y' }}>
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: `${u(12)}px ${u(16)}px ${u(6)}px`, display: 'flex', flexDirection: 'column', gap: u(7), scrollbarWidth: 'none' }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: u(10) }}>
+            <span style={{ fontFamily: CFONT, fontSize: u(28), fontWeight: 800, lineHeight: 1 }}>{P.n}</span>
+            <span style={{ padding: `${u(2)}px ${u(8)}px`, fontSize: u(11), fontWeight: 900, color: '#141210', background: tagCol, clipPath: cut(u(4)) }}>{P.tag}</span>
+            <span style={{ flex: 1 }} />
+            <span style={{ fontSize: u(11.5), fontWeight: 800, color: MUTED, fontVariantNumeric: 'tabular-nums' }}>{`${i + 1} of ${ZBOOK.length}`}</span>
+          </div>
+          <p style={{ margin: 0, fontSize: u(12.5), fontWeight: 600, lineHeight: 1.35, color: 'rgba(239,232,210,0.88)' }}>{P.text}</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: u(5), padding: `${u(6)}px 0`, borderTop: `1px solid ${LINE}`, borderBottom: `1px solid ${LINE}` }}>
+            <StatRow u={u} label="Health" value={P.k === 'boss' ? `${P.hp.toLocaleString()}+` : P.hp.toLocaleString()} frac={P.k === 'boss' ? 1 : P.hp / ZBOOK_MAX.hp} tone="#D9573F" />
+            <StatRow u={u} label="Speed" value={speed} frac={P.spd / ZBOOK_MAX.spd} tone="#7FB7E8" />
+            <StatRow u={u} label="Damage" value={`${P.dmg} a hit`} frac={P.dmg / ZBOOK_MAX.dmg} tone={AMBER} />
+            <StatRow u={u} label="Points" value={`${P.pts} a kill`} frac={P.pts / 750} tone="#9FC78E" />
+          </div>
+          {P.ability ? (
+            <div>
+              <div style={{ fontFamily: CFONT, fontSize: u(14), fontWeight: 800, color: AMBER, marginBottom: u(1) }}>Ability</div>
+              <p style={{ margin: 0, fontSize: u(12), fontWeight: 600, lineHeight: 1.35, color: 'rgba(239,232,210,0.85)' }}>{P.ability}</p>
+            </div>
+          ) : null}
+          <div>
+            <div style={{ fontFamily: CFONT, fontSize: u(14), fontWeight: 800, color: AMBER, marginBottom: u(1) }}>How to beat it</div>
+            <p style={{ margin: 0, fontSize: u(12), fontWeight: 600, lineHeight: 1.35, color: 'rgba(239,232,210,0.85)' }}>{P.tip}</p>
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: u(8), padding: `${u(8)}px ${u(12)}px ${u(10)}px`, borderTop: `1px solid ${LINE}` }}>
+          <button type="button" className="zl-b" aria-label="Previous zombie" onClick={() => go(-1)} style={{ width: u(40), height: u(34), display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, background: 'rgba(239,232,210,0.08)', clipPath: cut(u(6)) }}><Ico k="left" size={u(18)} color={CREAM} sw={2.4} /></button>
+          <div style={{ flex: 1, display: 'flex', justifyContent: 'center', gap: u(5) }}>
+            {ZBOOK.map((q, k) => <button key={q.k} type="button" className="zl-b" aria-label={q.n} aria-current={k === i ? 'page' : undefined} onClick={() => L.setBook(k)} style={{ width: k === i ? u(16) : u(7), height: u(7), padding: 0, borderRadius: u(4), background: k === i ? AMBER : 'rgba(239,232,210,0.3)', transition: 'width .15s' }} />)}
+          </div>
+          <button type="button" className="zl-b" aria-label="Next zombie" onClick={() => go(1)} style={{ width: u(40), height: u(34), display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, background: 'rgba(239,232,210,0.08)', clipPath: cut(u(6)) }}><Ico k="right" size={u(18)} color={CREAM} sw={2.4} /></button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function ZLobby({ L }) {
   injectCss();
   const { GS } = L;
@@ -139,6 +216,7 @@ export function ZLobby({ L }) {
   const colW = u(206);
   const tab = L.tab;
   const plateGun = L.gunIcon(L.gun);
+  if (L.book != null) return <ZBook L={L} u={u} />;
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 5, overflow: 'hidden', fontFamily: FONT, color: CREAM, touchAction: 'none' }}
       onPointerDown={(e) => { if (tab) L.setTab(null); if (L.spin) { L.spin(e, 0); try { e.currentTarget.setPointerCapture(e.pointerId); } catch {} } }}
@@ -260,6 +338,13 @@ export function ZLobby({ L }) {
             </button>
           );
         })}
+        {L.setBook && (
+          <button type="button" className="zl-b" onClick={() => { L.setTab(null); L.setBook(0); }} aria-label="Zombie book"
+            style={{ width: u(88), height: u(52), display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: u(2), background: PANEL, clipPath: cut(u(8)), boxShadow: `inset 0 -2px 0 ${LINE}`, color: CREAM, padding: 0 }}>
+            <svg width={u(20)} height={u(20)} viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6.2C10 4.7 7.2 4.2 3.5 4.6v13.6c3.7-.4 6.5.1 8.5 1.6 2-1.5 4.8-2 8.5-1.6V4.6c-3.7-.4-6.5.1-8.5 1.6zM12 6.2v13.6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" /></svg>
+            <span style={{ fontFamily: CFONT, fontSize: u(14), fontWeight: 800 }}>Zombies</span>
+          </button>
+        )}
       </div>
 
       {L.mates && L.mates.length > 0 && (

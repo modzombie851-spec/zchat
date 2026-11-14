@@ -192,78 +192,87 @@ export function MIcon({ k, size = 22, color = '#FFFFFF' }) {
 }
 
 const ISC = { knife: 1.3, grenade: 1.14, bottle: 1.14, jump: 1.2, crouch: 1.2, slide: 1.16, bandage: 1.14, syringe: 1.1, shop: 1.06, c4: 1.04, mag: 1.04 };
-const TONES = {
-  base: ['#313741', '#171B21', '#08090C'],
-  green: ['#2F7A4E', '#163A27', '#081A10'],
-  gold: ['#7A5E22', '#3A2C10', '#160F05'],
-  red: ['#7A2A22', '#3A1410', '#160705'],
-};
+const RING_TONE = { green: '#7CF0A6', gold: '#FFC83A', red: '#FF6B5E' };
 const TICKS = Array.from({ length: 8 }, (_, i) => {
-  const a = (-90 + i * 45) * Math.PI / 180, h = 7 * Math.PI / 180, r = 44.6;
+  const a = (-90 + i * 45) * Math.PI / 180, h = 7 * Math.PI / 180, r = 44.8;
   return `M${(50 + r * Math.cos(a - h)).toFixed(2)} ${(50 + r * Math.sin(a - h)).toFixed(2)}A${r} ${r} 0 0 1 ${(50 + r * Math.cos(a + h)).toFixed(2)} ${(50 + r * Math.sin(a + h)).toFixed(2)}`;
 }).join('');
 let faceN = 0;
 
-export const MetalFace = memo(function MetalFace({ size, k, big = false, active = false, pressed = false, ring = null, disabled = false, tone = null, sub = null, accent = '#FFC83A', square = false }) {
+function useGradId() {
   const idRef = useRef(null);
   if (!idRef.current) idRef.current = `mf${(faceN += 1)}`;
-  const id = idRef.current;
-  const T = TONES[tone] || TONES.base;
-  const is = (big ? 54 : sub ? 50 : 58) * (ISC[k] || 1);
-  const arcL = 2 * Math.PI * 44.6;
+  return idRef.current;
+}
+
+function RingDefs({ id }) {
+  return (
+    <defs>
+      <linearGradient id={`${id}r`} x1="0.15" y1="0" x2="0.55" y2="1">
+        <stop offset="0" stopColor="#FFFFFF" />
+        <stop offset="0.3" stopColor="#AEB5BE" />
+        <stop offset="0.52" stopColor="#F2F4F6" />
+        <stop offset="0.78" stopColor="#737A84" />
+        <stop offset="1" stopColor="#D3D8DD" />
+      </linearGradient>
+      <linearGradient id={`${id}i`} x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stopColor="#FFFFFF" />
+        <stop offset="1" stopColor="#E3E7EC" />
+      </linearGradient>
+    </defs>
+  );
+}
+
+function RingShape({ id, square, active, pressed, color, ring, accent, ticks = true, bare = false }) {
   const shape = (r) => (square ? <rect x={50 - r} y={50 - r} width={r * 2} height={r * 2} rx={r * 0.34} /> : <circle cx="50" cy="50" r={r} />);
   const sh = (r, props) => React.cloneElement(shape(r), props);
+  const arcL = 2 * Math.PI * 44.8;
+  const rim = active ? accent : color || `url(#${id}r)`;
+  if (bare) return <>{(pressed || active) && <rect x="3" y="3" width="94" height="94" rx="6" fill={pressed ? 'rgba(255,255,255,0.2)' : 'rgba(255,200,58,0.22)'} />}</>;
   return (
-    <svg width={size} height={size} viewBox="0 0 100 100" aria-hidden="true" style={{ position: 'absolute', left: 0, top: 0, overflow: 'visible', pointerEvents: 'none', transform: pressed ? 'scale(0.93)' : 'none', transition: 'transform 0.06s ease-out', filter: active ? `drop-shadow(0 0 ${Math.max(3, size * 0.07)}px ${accent})` : 'none' }}>
-      <defs>
-        <linearGradient id={`${id}r`} x1="0.15" y1="0" x2="0.55" y2="1">
-          <stop offset="0" stopColor="#F8FAFC" />
-          <stop offset="0.3" stopColor="#A4ABB4" />
-          <stop offset="0.52" stopColor="#EDF0F3" />
-          <stop offset="0.78" stopColor="#626973" />
-          <stop offset="1" stopColor="#C8CDD3" />
-        </linearGradient>
-        <radialGradient id={`${id}f`} cx="50%" cy="34%" r="72%">
-          <stop offset="0" stopColor={pressed ? '#454C57' : T[0]} />
-          <stop offset="0.62" stopColor={T[1]} />
-          <stop offset="1" stopColor={T[2]} />
-        </radialGradient>
-        <pattern id={`${id}h`} width="8.66" height="15" patternUnits="userSpaceOnUse">
-          <path d="M4.33 0L8.66 2.5V7.5L4.33 10L0 7.5V2.5ZM4.33 10V15" fill="none" stroke="rgba(255,255,255,0.075)" strokeWidth="0.7" />
-        </pattern>
-        <linearGradient id={`${id}g`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="rgba(255,255,255,0.26)" />
-          <stop offset="1" stopColor="rgba(255,255,255,0)" />
-        </linearGradient>
-        <linearGradient id={`${id}i`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#FFFFFF" />
-          <stop offset="1" stopColor="#D2D8DF" />
-        </linearGradient>
-      </defs>
-      {sh(49.2, { fill: 'rgba(0,0,0,0.5)' })}
-      {sh(48, { fill: active ? accent : `url(#${id}r)` })}
-      {!square && <path d={TICKS} fill="none" stroke={active ? '#FFF6D8' : '#FFFFFF'} strokeWidth="3.2" opacity="0.92" />}
-      {sh(41.4, { fill: '#04060A' })}
-      {sh(40.2, { fill: `url(#${id}f)` })}
-      {sh(40.2, { fill: `url(#${id}h)` })}
-      {sh(40.2, { fill: 'none', stroke: 'rgba(0,0,0,0.55)', strokeWidth: 2.2 })}
-      <path d="M15.5 42A35 35 0 0 1 84.5 42C66 35.5 34 35.5 15.5 42Z" fill={`url(#${id}g)`} />
-      {ring != null && ring > 0 && ring < 1 && <circle cx="50" cy="50" r="44.6" fill="none" stroke={accent} strokeWidth="5" strokeLinecap="round" strokeDasharray={`${arcL * ring} ${arcL}`} transform="rotate(-90 50 50)" />}
-      {disabled && sh(48, { fill: 'rgba(8,10,14,0.45)' })}
-      <g opacity={disabled ? 0.38 : 1}>
-        <MIconG k={k} x={50 - is / 2} y={50 - is / 2 - (sub ? 7 : 0)} s={is} fill={`url(#${id}i)`} />
-      </g>
+    <>
+      {sh(44.8, { fill: pressed ? 'rgba(255,255,255,0.2)' : 'rgba(8,10,14,0.18)' })}
+      {sh(44.8, { fill: 'none', stroke: 'rgba(0,0,0,0.45)', strokeWidth: 8.8 })}
+      {sh(44.8, { fill: 'none', stroke: rim, strokeWidth: 6.2 })}
+      {ticks && !square && <path d={TICKS} fill="none" stroke={active ? '#FFF6D8' : '#FFFFFF'} strokeWidth="3" opacity="0.95" />}
+      {ring != null && ring > 0 && ring < 1 && <circle cx="50" cy="50" r="44.8" fill="none" stroke={accent} strokeWidth="6.2" strokeDasharray={`${arcL * ring} ${arcL}`} transform="rotate(-90 50 50)" />}
+    </>
+  );
+}
+
+export const MetalFace = memo(function MetalFace({ size, k, big = false, active = false, pressed = false, ring = null, disabled = false, tone = null, sub = null, accent = '#FFC83A', square = false, bare = false }) {
+  const id = useGradId();
+  const is = (big ? 54 : sub ? 50 : square || bare ? 62 : 58) * (ISC[k] || 1);
+  return (
+    <svg width={size} height={size} viewBox="0 0 100 100" aria-hidden="true" style={{ position: 'absolute', left: 0, top: 0, overflow: 'visible', pointerEvents: 'none', opacity: disabled ? 0.42 : 1, transform: pressed && !bare ? 'scale(0.93)' : 'none', transition: 'transform 0.06s ease-out', filter: active && !bare ? `drop-shadow(0 0 ${Math.max(3, size * 0.07)}px ${accent})` : 'none' }}>
+      <RingDefs id={id} />
+      <RingShape id={id} square={square} active={active} pressed={pressed} color={RING_TONE[tone] || null} ring={ring} accent={accent} bare={bare} />
+      <MIconG k={k} x={50 - is / 2} y={50 - is / 2 - (sub ? 7 : 0)} s={is} fill={`url(#${id}i)`} />
     </svg>
   );
 });
 
-export function TagPlate({ text, size }) {
-  const h = Math.max(13, Math.round(size * 0.27));
-  const fs = Math.max(9, Math.round(size * 0.17));
-  const cut = `polygon(${h * 0.45}px 0, calc(100% - ${h * 0.45}px) 0, 100% 50%, calc(100% - ${h * 0.45}px) 100%, ${h * 0.45}px 100%, 0 50%)`;
+export const MetalRing = memo(function MetalRing({ size, active = false, pressed = false, accent = '#FFC83A', color = null }) {
+  const id = useGradId();
   return (
-    <span aria-hidden="true" style={{ position: 'absolute', left: '50%', top: size - Math.round(h * 0.35), transform: 'translateX(-50%)', height: h, padding: 1, background: 'linear-gradient(180deg, #F2F4F7, #6B727C)', clipPath: cut, pointerEvents: 'none' }}>
-      <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', padding: `0 ${Math.round(h * 0.75)}px`, background: 'linear-gradient(180deg, #2A2F36, #0C0E11)', clipPath: cut, color: '#FFFFFF', fontSize: fs, fontWeight: 800, fontStyle: 'italic', letterSpacing: '0.02em', whiteSpace: 'nowrap', lineHeight: 1 }}>{text}</span>
-    </span>
+    <svg width={size} height={size} viewBox="0 0 100 100" aria-hidden="true" style={{ position: 'absolute', left: 0, top: 0, overflow: 'visible', pointerEvents: 'none', transform: pressed ? 'scale(0.93)' : 'none', transition: 'transform 0.06s ease-out' }}>
+      <RingDefs id={id} />
+      <RingShape id={id} active={active} pressed={pressed} color={color} accent={accent} ticks={false} />
+    </svg>
   );
-}
+});
+
+export const BoxFrame = memo(function BoxFrame({ w, h, split = 0 }) {
+  const id = useGradId();
+  const vw = 100, vh = (100 * h) / w;
+  return (
+    <svg width={w} height={h} viewBox={`0 0 ${vw} ${vh}`} aria-hidden="true" style={{ position: 'absolute', left: 0, top: 0, overflow: 'visible', pointerEvents: 'none' }}>
+      <RingDefs id={id} />
+      <rect x="3.1" y="3.1" width={vw - 6.2} height={vh - 6.2} rx="15" fill="rgba(8,10,14,0.18)" />
+      <rect x="3.1" y="3.1" width={vw - 6.2} height={vh - 6.2} rx="15" fill="none" stroke="rgba(0,0,0,0.45)" strokeWidth="8.8" />
+      <rect x="3.1" y="3.1" width={vw - 6.2} height={vh - 6.2} rx="15" fill="none" stroke={`url(#${id}r)`} strokeWidth="6.2" />
+      {split > 0 && <path d={`M12 ${vh * split}H${vw - 12}`} stroke="rgba(0,0,0,0.5)" strokeWidth="5" strokeLinecap="round" />}
+      {split > 0 && <path d={`M12 ${vh * split}H${vw - 12}`} stroke="#D3D8DD" strokeWidth="2.6" strokeLinecap="round" />}
+    </svg>
+  );
+});

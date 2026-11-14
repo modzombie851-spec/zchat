@@ -178,7 +178,8 @@ export function loadTexArrays(base, man, shrink, onP) {
     let got = 0;
     for (const [k, a] of Object.entries(man.arrays)) {
       const size = Math.max(16, a.size >> shrink);
-      const strips = await Promise.all(a.files.map((f) => fetchImg(`${base}/${f}`).then((im) => { got++; if (onP) onP(got / tot); return im; })));
+      const strips = [];
+      for (const f of a.files) { strips.push(await fetchImg(`${base}/${f}`)); got++; if (onP) onP(got / tot); }
       const layers = [];
       for (let i = 0; i < a.layers; i++) {
         const src = strips[Math.floor(i / a.per)], j = i % a.per;

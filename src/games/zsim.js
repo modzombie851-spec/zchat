@@ -20,6 +20,7 @@ export const WEAPONS = {
 };
 export const wcls = (w) => (WEAPONS[w] && WEAPONS[w].cls) || w;
 export const BOOM = { dmg: 240, r: 4.6 };
+const SELF_HURT = { grenade: 70, c4: 90, mgl: 45 };
 export const WKEYS = ['pistol', 'smg', 'rifle', 'shotgun', 'sniper'];
 export const SHOP = {
   pistol: { n: 'Pistol', c: 'gun', price: 300 },
@@ -312,6 +313,8 @@ export function makeSim(o = {}) {
     emit(['ex', Math.round(x * 10), Math.round(z * 10), Math.round(r * 10), kind || 'g', at.lv]);
     for (const q of [...S.zs.values()]) { const d = Math.hypot(q.x - x, q.z - z); if (d < r + q.r && near(q, at, 2.2)) { hurtZ(q, dmg * (1 - Math.min(0.6, d / r * 0.6)), by, false, 'x'); if (q.hp > 0) { const k = (r - d) / r * 1.6 / Math.max(0.3, d); const c = collide(q.x + (q.x - x) * k, q.z + (q.z - z) * k, q.r, q.lv); q.x = c[0]; q.z = c[1]; q.stun = Math.max(q.stun, 0.6); } } }
     if (kind === 'b') for (const p of S.players.values()) if (p.st === 0 && Math.hypot(p.x - x, p.z - z) < r && near(p, at, 2.2)) hurtP(p, 14, null);
+    const me = by ? S.players.get(by) : null;
+    if (me && !me.bot && me.st === 0 && near(me, at, 2.2)) { const d = Math.hypot(me.x - x, me.z - z), top = SELF_HURT[kind === 'c4' ? 'c4' : r < 5 ? 'mgl' : 'grenade']; if (d < r && top) hurtP(me, top * (1 - 0.75 * (d / r))); }
   };
   const hurtP = (p, dmg) => {
     if (p.st !== 0 || S.safeT > 0) return;
@@ -551,7 +554,7 @@ export function makeSim(o = {}) {
     b.revT = null;
     let tx = b.x, tz = b.z, sp = 0, tlv = null;
     if (downed && (!nearZ || nd > 4.5)) {
-      if (dd > 1.3) { tx = downed.x; tz = downed.z; sp = 4.6; tlv = downed.lv | 0; } else b.revT = downed.id;
+      if (dd > 1.3) { tx = downed.x; tz = downed.z; sp = 5.3; tlv = downed.lv | 0; } else b.revT = downed.id;
     } else if (nearZ && nd < 4.2) {
       const ax = b.x - nearZ.x, az = b.z - nearZ.z, al = Math.hypot(ax, az) || 1;
       tx = b.x + (ax / al) * 3; tz = b.z + (az / al) * 3; sp = 3.2;
@@ -560,8 +563,8 @@ export function makeSim(o = {}) {
       const rad = 2.6 + (b.slot % 2) * 1.1;
       const fx = lead.x + Math.sin(ang) * rad, fz = lead.z + Math.cos(ang) * rad;
       const gd = Math.hypot(fx - b.x, fz - b.z);
-      if (gd > 1.1) { tx = fx; tz = fz; sp = gd > 6 ? 5.0 : gd > 2.5 ? 3.4 : 1.8; tlv = lead.lv | 0; }
-      if ((lead.lv | 0) !== (b.lv | 0) || (inHouse(lead.x, lead.z) && rayBlocked(b.x, b.z, lead.x, lead.z, entY(b) + 1, entY(lead) + 1))) { tx = lead.x; tz = lead.z; sp = gd > 4 ? 5.0 : 3.4; tlv = lead.lv | 0; }
+      if (gd > 1.1) { tx = fx; tz = fz; sp = gd > 6 ? 5.9 : gd > 2.5 ? 4.0 : 1.8; tlv = lead.lv | 0; }
+      if ((lead.lv | 0) !== (b.lv | 0) || (inHouse(lead.x, lead.z) && rayBlocked(b.x, b.z, lead.x, lead.z, entY(b) + 1, entY(lead) + 1))) { tx = lead.x; tz = lead.z; sp = gd > 4 ? 5.9 : 4.0; tlv = lead.lv | 0; }
     } else if (nearZ && nd > W.rng * 0.7) { tx = nearZ.x; tz = nearZ.z; sp = 2.6; }
     if (lead && sp < 3.4) {
       const fx = Math.sin(lead.yaw), fz = Math.cos(lead.yaw), dx = b.x - lead.x, dz = b.z - lead.z, d = Math.hypot(dx, dz);

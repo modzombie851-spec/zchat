@@ -70,7 +70,21 @@ function sampleK(md, C, name, t, q, hp) {
   hp[0] *= k; hp[1] *= k; hp[2] *= k;
 }
 
-export function ssScale(M) { return M.hipsH > 1.5 || M.hipsH < 0.5 ? 0.97 / M.hipsH : 1; }
+const bindY = (M, i) => {
+  const b = M.ib, o = i * 12;
+  if (!b || b.length < o + 12) return 0;
+  const k = b[o] * b[o] + b[o + 4] * b[o + 4] + b[o + 8] * b[o + 8] || 1;
+  return -(b[o + 1] * b[o + 3] + b[o + 5] * b[o + 7] + b[o + 9] * b[o + 11]) / k;
+};
+const HEAD_Y = 1.554, SHOULDER_Y = 1.4365;
+export function ssScale(M) {
+  if (M.ssK) return M.ssK;
+  const hd = bindY(M, 5), sh = (bindY(M, 7) + bindY(M, 26)) / 2;
+  let s = hd > sh && sh > M.hipsH && M.hipsH > 0 ?Math.sqrt((HEAD_Y / hd) * (SHOULDER_Y / sh)) : 0;
+  if (!(s > 0.01 && s < 100)) s = M.hipsH > 1.5 || M.hipsH < 0.5 ? 0.97 / M.hipsH : 1;
+  M.ssK = s;
+  return s;
+}
 
 export function ssNew(md) {
   const f = () => new Float32Array(NB * 4);

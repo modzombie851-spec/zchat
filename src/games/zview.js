@@ -172,7 +172,7 @@ export function makeView(canvas, tierIdx, ov) {
   const addPropHits = () => { if (!propHit || !V.town.ready || V.propHitOn) return; V.propHitOn = true; for (const h of propHit) hitAdd(...h); };
   (async () => {
     const man = JSON.parse(await (await resBlob('/dead/props/props.json')).text());
-    const ta = await loadTexArrays('/dead/props', man, tierIdx === 0 ? 2 : tierIdx === 1 ? 1 : 0);
+    const ta = await loadTexArrays('/dead/props', man, (tierIdx === 0 ? 2 : tierIdx === 1 ? 1 : 0) + (T.lite ? 1 : 0));
     if (V.dead) return;
     const arrs = Object.keys(man.arrays).map((k) => R.texArray(ta[k].layers, ta[k].size));
     for (const k of Object.keys(ta)) for (const l of ta[k].layers) if (l && l.close) l.close();
@@ -198,7 +198,7 @@ export function makeView(canvas, tierIdx, ov) {
     propHit = own;
     addPropHits();
   })().catch(() => {});
-  loadRail(R, tierIdx, () => V.dead).then((res) => { if (!res || V.dead) return; for (const it of res.items) { if (!T.shadow) it.cast = false; statics.push(it); } V.rail = res; V.tick = res.tick; }).catch(() => {});
+  loadRail(R, tierIdx, () => V.dead, !!T.lite).then((res) => { if (!res || V.dead) return; for (const it of res.items) { if (!T.shadow) it.cast = false; statics.push(it); } V.rail = res; V.tick = res.tick; }).catch(() => {});
   V.readyFor = (k, guns) => {
     if (V.mainK !== k) { V.mainK = k; sm.upFail = false; pump(); }
     V.warm(k);

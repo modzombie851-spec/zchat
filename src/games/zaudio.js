@@ -2,7 +2,7 @@ import { Sfx } from './sfx.js';
 import { resBuf } from './zres.js';
 
 const FILES = {
-  cash: 0.75, heart: 0.9, nbounce: 0.6, g_ak47: 0.85, g_uzi: 1.7, g_qq9: 1.55, g_lmg: 1.0, g_deagle: 0.85, g_awm: 0.9, g_xpr: 0.9, g_mgl: 0.95, g_spas: 0.8, sv_what: 1, sv_lost: 1, sv_alive: 1, sv_salut: 1, sv_greet: 1, sv_time: 1, velcro: 0.9, gore: 1, heli: 0.9, em_laugh_m: 1, em_laugh_f: 1, em_cheer_m: 1, em_cheer_f: 1, em_hey: 1, em_dance: 0.8, em_samba: 0.8, em_hiphop: 0.8, em_clap: 0.9, g_rifle: 0.75, g_smg: 1.5, g_pistol: 0.8, g_sniper: 0.85, g_shotgun: 0.9,
+  cash: 0.75, heart: 0.9, nbounce: 0.6, g_ak47: 0.85, g_uzi: 1.7, g_qq9: 1.55, g_lmg: 1.0, g_deagle: 0.85, g_awm: 0.9, g_xpr: 0.9, g_mgl: 0.95, g_spas: 0.8, sv_what: 1, sv_lost: 1, sv_alive: 1, sv_salut: 1, sv_greet: 1, sv_time: 1, velcro: 0.9, gore: 1, heli: 0.9, em_laugh_m: 1, em_laugh_f: 1, em_cheer_m: 1, em_cheer_f: 1, em_hey: 1, em_dance: 0.9, em_samba: 0.95, em_hiphop: 0.85, em_clap: 0.9, g_rifle: 0.75, g_smg: 1.5, g_pistol: 0.8, g_sniper: 0.85, g_shotgun: 0.9,
   r_rifle: 0.55, r_pistol: 0.9, r_sniper: 0.6, r_pump: 0.65, r_cock: 0.75, dry: 0.6,
   boom: 0.95, boom2: 0.9, whoosh: 0.7, pin: 0.5,
   z_growl: 0.6, z_hurt: 0.6, z_death: 0.6, z_moan: 0.55, z_war: 0.6, z_die1: 0.6, z_die2: 0.6, z_pain1: 0.6, z_pain2: 0.55, z_pain3: 0.5,

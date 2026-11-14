@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { SkillFace } from './gskill.jsx';
-import { MetalFace, TagPlate, hasMIcon } from './zbtn.jsx';
+import { MetalFace, MetalRing, BoxFrame, hasMIcon } from './zbtn.jsx';
 
 const P = {
   fire: <><circle cx="12" cy="12" r="7.2" /><path d="M12 2.5v4.2M12 17.3v4.2M2.5 12h4.2M17.3 12h4.2" /><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none" /></>,
@@ -21,7 +21,7 @@ const P = {
   chat: <><path d="M4.5 5.5h15a1.5 1.5 0 0 1 1.5 1.5v8.4a1.5 1.5 0 0 1-1.5 1.5H11l-4.6 3.6v-3.6H4.5A1.5 1.5 0 0 1 3 15.4V7a1.5 1.5 0 0 1 1.5-1.5z" /></>,
   people: <><circle cx="9" cy="8.5" r="3.3" /><path d="M2.8 19.5c.6-3.4 3-5.3 6.2-5.3s5.6 1.9 6.2 5.3" /><path d="M15.5 5.6a3.1 3.1 0 0 1 0 5.9M17.4 14.6c2 .7 3.4 2.4 3.8 4.9" /></>,
   pause: <><path d="M8.5 5v14M15.5 5v14" /></>,
-  gear: <><circle cx="12" cy="12" r="3.2" /><path d="M12 2.8v2.6M12 18.6v2.6M2.8 12h2.6M18.6 12h2.6M5.5 5.5l1.9 1.9M16.6 16.6l1.9 1.9M5.5 18.5l1.9-1.9M16.6 7.4l1.9-1.9" /></>,
+  gear: <><path d="M10.72 5.02L10.91 2.76L13.09 2.76L13.28 5.02A7.1 7.1 0 0 1 16.04 6.16L17.76 4.70L19.30 6.24L17.84 7.96A7.1 7.1 0 0 1 18.98 10.72L21.24 10.91L21.24 13.09L18.98 13.28A7.1 7.1 0 0 1 17.84 16.04L19.30 17.76L17.76 19.30L16.04 17.84A7.1 7.1 0 0 1 13.28 18.98L13.09 21.24L10.91 21.24L10.72 18.98A7.1 7.1 0 0 1 7.96 17.84L6.24 19.30L4.70 17.76L6.16 16.04A7.1 7.1 0 0 1 5.02 13.28L2.76 13.09L2.76 10.91L5.02 10.72A7.1 7.1 0 0 1 6.16 7.96L4.70 6.24L6.24 4.70L7.96 6.16A7.1 7.1 0 0 1 10.72 5.02Z" /><circle cx="12" cy="12" r="3" /></>,
   paw: <><ellipse cx="12" cy="15.5" rx="4.4" ry="3.6" /><circle cx="6.4" cy="10.4" r="1.7" /><circle cx="9.6" cy="6.8" r="1.7" /><circle cx="14.4" cy="6.8" r="1.7" /><circle cx="17.6" cy="10.4" r="1.7" /></>,
   heart: <><path d="M12 20s-7.5-4.6-7.5-10.1A4.3 4.3 0 0 1 12 7.3a4.3 4.3 0 0 1 7.5 2.6C19.5 15.4 12 20 12 20z" /><path d="M12 10.3v5.2M9.4 12.9h5.2" /></>,
   run: <><circle cx="14.6" cy="4.4" r="1.9" /><path d="M9 21l2.6-5.4 3 2.4v3.6M8.2 9.6l3.6-2.4 3.2 2.6 3.4.6M11.8 7.2l-1.4 6.4 3.4 2.4M6.8 13.4l2.8-.6" /></>,
@@ -75,7 +75,7 @@ export function ZGlyph({ k, size = 22, color = '#FFFFFF' }) {
 }
 export const hasGlyph = (k) => !!ZG[k];
 
-export function CBtn({ size = 54, icon, label, onDown, onUp, onMove, onTap, active, badge, ring, disabled, style, sub, big, tone, tag }) {
+export function CBtn({ size = 54, icon, label, onDown, onUp, onMove, onTap, active, badge, ring, disabled, style, sub, big, tone, shape = 'round' }) {
   const st = useRef({ id: null, x: 0, y: 0, moved: 0 });
   const [down, setDown] = useState(false);
   const live = useRef(null);
@@ -118,13 +118,13 @@ export function CBtn({ size = 54, icon, label, onDown, onUp, onMove, onTap, acti
   const metal = hasMIcon(icon);
   return (
     <div role="button" aria-label={label} aria-disabled={disabled ? 'true' : undefined} onPointerDown={press} onContextMenu={(e) => e.preventDefault()}
-      style={{ position: 'absolute', width: size, height: size, borderRadius: '50%', touchAction: 'none', pointerEvents: 'auto', cursor: 'pointer', ...style }}>
+      style={{ position: 'absolute', width: size, height: size, borderRadius: shape === 'round' ? '50%' : Math.round(size * 0.16), touchAction: 'none', pointerEvents: 'auto', cursor: 'pointer', ...style }}>
       {metal ? (
         <>
-          <MetalFace size={size} k={icon} big={big} active={!!active} pressed={down} ring={ring} disabled={disabled} tone={tone} sub={sub} accent={tone === 'green' ? '#7CF0A6' : '#FFC83A'} />
+          <MetalFace size={size} k={icon} big={big} active={!!active} pressed={down} ring={ring} disabled={disabled} tone={tone} sub={sub} accent={tone === 'green' ? '#7CF0A6' : '#FFC83A'} square={shape === 'square'} bare={shape === 'bare'} />
           {sub != null && <span aria-hidden="true" style={{ position: 'absolute', left: 0, right: 0, bottom: Math.round(size * 0.15), textAlign: 'center', fontWeight: 800, fontSize: Math.max(9, Math.round(size * 0.16)), color: '#FFFFFF', textShadow: '0 1px 2px rgba(0,0,0,0.85)', lineHeight: 1, pointerEvents: 'none' }}>{sub}</span>}
-          {badge != null && <span aria-hidden="true" style={{ position: 'absolute', right: -2, top: -2, minWidth: 20, height: 20, padding: '0 5px', boxSizing: 'border-box', borderRadius: 10, background: 'radial-gradient(circle at 50% 35%, #3A4049, #0C0E12)', boxShadow: `0 0 0 1.6px ${disabled ? 'rgba(200,205,212,0.5)' : '#DDE2E8'}, 0 1px 3px rgba(0,0,0,0.6)`, color: '#FFFFFF', fontSize: 11.5, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', fontVariantNumeric: 'tabular-nums', pointerEvents: 'none' }}>{badge}</span>}
-          {tag && <TagPlate text={tag} size={size} />}
+          {badge != null && shape === 'bare' && <span aria-hidden="true" style={{ position: 'absolute', right: Math.round(size * 0.1), bottom: Math.round(size * 0.06), fontSize: Math.max(10, Math.round(size * 0.24)), fontWeight: 900, color: disabled ? 'rgba(255,255,255,0.55)' : '#FFFFFF', textShadow: '0 1px 2px rgba(0,0,0,0.95), 0 0 3px rgba(0,0,0,0.8)', fontVariantNumeric: 'tabular-nums', lineHeight: 1, pointerEvents: 'none' }}>{badge}</span>}
+          {badge != null && shape !== 'bare' && <span aria-hidden="true" style={{ position: 'absolute', right: size < 44 ? -6 : -2, top: size < 44 ? -6 : -2, minWidth: size < 44 ? 16 : 20, height: size < 44 ? 16 : 20, padding: size < 44 ? '0 4px' : '0 5px', boxSizing: 'border-box', borderRadius: 10, background: 'radial-gradient(circle at 50% 35%, #3A4049, #0C0E12)', boxShadow: `0 0 0 1.6px ${disabled ? 'rgba(200,205,212,0.5)' : '#DDE2E8'}, 0 1px 3px rgba(0,0,0,0.6)`, color: '#FFFFFF', fontSize: size < 44 ? 10 : 11.5, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', fontVariantNumeric: 'tabular-nums', pointerEvents: 'none' }}>{badge}</span>}
         </>
       ) : (
         <SkillFace size={size} icon={gi} glyph={gi ? null : zg ? <ZGlyph k={icon} size={Math.round(size * (big ? 0.46 : 0.5))} /> : <Ico k={icon} size={Math.round(size * 0.48)} sw={1.9} />} main={big} active={!!active} pressed={down} ring={ring} badge={badge} disabled={disabled} sub={sub} tint={tone === 'green' ? '#2E9A5A' : tone === 'red' ? '#C8281E' : null} accent={tone === 'green' ? '#7CF0A6' : '#FFC23D'} />
@@ -133,11 +133,23 @@ export function CBtn({ size = 54, icon, label, onDown, onUp, onMove, onTap, acti
   );
 }
 
-export function TopBtn({ icon, label, onTap, style, badge, on }) {
+export function ThrowBox({ size, style, nade, molo, nadeOn, moloOn, onNade, onMolo, onMove, preview }) {
   return (
-    <button type="button" aria-label={label} onClick={(e) => { e.stopPropagation(); onTap(); }} onPointerDown={(e) => e.stopPropagation()}
-      style={{ width: 36, height: 36, borderRadius: '50%', border: 'none', padding: 0, cursor: 'pointer', background: on ? 'rgba(46,170,96,0.82)' : 'rgba(14,17,22,0.44)', boxShadow: on ? 'inset 0 0 0 1.6px rgba(190,255,210,0.9)' : 'inset 0 0 0 1.6px rgba(255,255,255,0.62)', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'auto', position: 'relative', ...style }}>
-      {ZG[icon] ? <ZGlyph k={icon} size={19} /> : <Ico k={icon} size={19} />}
+    <div style={{ position: 'absolute', width: size, height: size * 2, pointerEvents: preview ? 'none' : 'auto', ...style }}>
+      <BoxFrame w={size} h={size * 2} split={0.5} />
+      <CBtn shape="bare" size={size} icon="grenade" label="Throw a grenade" badge={preview ? undefined : nade} disabled={!preview && !nade} active={!!nadeOn} style={{ left: 0, top: 0, pointerEvents: preview ? 'none' : 'auto' }} onDown={onNade} onMove={onMove} />
+      <CBtn shape="bare" size={size} icon="bottle" label="Throw a fire bottle" badge={preview ? undefined : molo} disabled={!preview && !molo} active={!!moloOn} style={{ left: 0, top: size, pointerEvents: preview ? 'none' : 'auto' }} onDown={onMolo} onMove={onMove} />
+    </div>
+  );
+}
+
+export function TopBtn({ icon, label, onTap, style, badge, on, size = 36, text }) {
+  const [down, setDown] = useState(false);
+  return (
+    <button type="button" aria-label={label} onClick={(e) => { e.stopPropagation(); onTap(); }} onPointerDown={(e) => { e.stopPropagation(); setDown(true); }} onPointerUp={() => setDown(false)} onPointerCancel={() => setDown(false)} onPointerLeave={() => setDown(false)}
+      style={{ position: 'relative', width: size, height: size, borderRadius: '50%', border: 'none', padding: 0, cursor: 'pointer', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'auto', touchAction: 'manipulation', flexShrink: 0, ...style }}>
+      <MetalRing size={size} pressed={down} color={on ? '#7CF0A6' : null} />
+      {text ? <span style={{ position: 'relative', fontSize: Math.round(size * 0.3), fontWeight: 900, fontStyle: 'italic', letterSpacing: '0.03em', color: '#FFFFFF', textShadow: '0 1px 2px rgba(0,0,0,0.9)', lineHeight: 1 }}>{text}</span> : <span style={{ position: 'relative', display: 'flex' }}>{ZG[icon] ? <ZGlyph k={icon} size={Math.round(size * 0.53)} /> : <Ico k={icon} size={Math.round(size * 0.53)} />}</span>}
       {badge ? <span style={{ position: 'absolute', right: -3, top: -3, width: 9, height: 9, borderRadius: 5, background: '#FF5A4A' }} /> : null}
     </button>
   );

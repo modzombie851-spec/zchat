@@ -88,7 +88,7 @@ export function partItem(m, mesh, arrs, id, x, y, z, yaw, s, far) {
 export async function loadTown(R, T, tierIdx, isDead, onP, o = {}) {
   const step = (f) => { if (onP) onP(f); };
   const man = JSON.parse(await (await resBlob(`${TOWN_BASE}/town.json`)).text());
-  const shrink = tierIdx === 0 ? 2 : tierIdx === 1 ? 1 : 0;
+  const shrink = (tierIdx === 0 ? 2 : tierIdx === 1 ? 1 : 0) + (T && T.lite ? 1 : 0);
   step(0.05);
   const ta = await loadTexArrays(TOWN_BASE, man, shrink, (f) => step(0.05 + f * 0.6));
   if (isDead()) return null;

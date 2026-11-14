@@ -53,9 +53,9 @@ function mat(x, y, z, yawDeg, out) {
   return m;
 }
 
-export async function loadRail(R, tierIdx, isDead) {
+export async function loadRail(R, tierIdx, isDead, lite) {
   const man = JSON.parse(await (await resBlob(`${RAIL_BASE}/rail.json`)).text());
-  const shrink = tierIdx === 0 ? 2 : tierIdx === 1 ? 1 : 0;
+  const shrink = (tierIdx === 0 ? 2 : tierIdx === 1 ? 1 : 0) + (lite ? 1 : 0);
   const ta = await loadTexArrays(RAIL_BASE, man, shrink);
   if (isDead()) return null;
   const arrs = Object.keys(man.arrays).map((k) => R.texArray(ta[k].layers, ta[k].size));

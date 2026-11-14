@@ -18596,7 +18596,8 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-export const APP_VERSION = '55.0V';
+export const APP_VERSION = '56.0V';
+const WN_REV = 55;
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -36884,7 +36885,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       if (!seen) { localStorage.setItem('zchat-seen-version', APP_VERSION); return; }
       if (seen !== APP_VERSION) {
         localStorage.setItem('zchat-seen-version', APP_VERSION);
-        if ((parseInt(APP_VERSION, 10) || 0) > (parseInt(seen, 10) || 0)) { setWnQueued(true); setTimeout(() => { setShowWhatsNew(true); setWnQueued(false); }, 1600); }
+        if ((parseInt(APP_VERSION, 10) || 0) > (parseInt(seen, 10) || 0) && (parseInt(seen, 10) || 0) < WN_REV) { setWnQueued(true); setTimeout(() => { setShowWhatsNew(true); setWnQueued(false); }, 1600); }
       }
     } catch {}
   }, []);
