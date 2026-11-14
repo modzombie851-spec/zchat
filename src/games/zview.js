@@ -7,7 +7,7 @@ import { buildThrowObj, buildFlash, fpState } from './zfp.js';
 import { getFPG, setFPGHalf, fpFiles, fpgFailed } from './zfpgl.js';
 import { floorH, PLAY } from './ztown.js';
 import { hitAdd } from './zhit.js';
-import { loadZAnims, loadZModel, dropImgs, fetchImg, loadStatic, loadTexArrays } from './zmodel.js';
+import { loadZAnims, loadZModel, dropImgs, fetchImg, loadStatic, loadTexArrays, IOS_DEV } from './zmodel.js';
 import { loadTown, poseM } from './ztownview.js';
 import { loadRail } from './zrail.js';
 import { resAll, resBlob, resReady } from './zres.js';
@@ -26,6 +26,7 @@ export const ZMODEL = {
   spitter: ['zpara'],
 };
 const ZORDER = ['zgirl', 'zmutant', 'zwar', 'zcop', 'zskel', 'zpara', 'zclown', 'zpump', 'zyaku', 'zpris', 'zsurv', 'zwarrok'];
+const ZORDER_LITE = ['zgirl', 'zmutant', 'zwar', 'zcop', 'zpara', 'zclown', 'zpump', 'zwarrok'];
 export const TIERS = [
   { name: 'Fast', dpr: 0.7, shadow: 0, grass: 0, trees: 0.25, zmax: 34, pmax: 12, post: false, near: 9, shadowN: 0 },
   { name: 'Balanced', dpr: 0.9, shadow: 1024, grass: 6500, trees: 0.5, zmax: 56, pmax: 20, post: false, near: 14, shadowN: 10 },
@@ -93,12 +94,15 @@ export function makeView(canvas, tierIdx, ov) {
   const onLost = (e) => { try { e.preventDefault(); } catch {} if (V.dead) return; V.lost = true; if (V.onLost) V.onLost(); };
   canvas.addEventListener('webglcontextlost', onLost);
   const V = { R, env, statics, dog, fp, tier: T, cache, zm: null, dead: false, lost: false, err: null, mainK: null, onLost: null, dispose: () => { V.dead = true; canvas.removeEventListener('webglcontextlost', onLost); try { R.dispose(); } catch {} } };
-  V.zst = { done: 0, tot: ZORDER.length };
-  Promise.all([loadZAnims('/dead'), loadZAnims('/dead', 'zanim2').catch(() => null)]).then(async ([anims, a2]) => {
+  const zorder = T.lite >= 2 ? ZORDER_LITE.filter((n) => n !== 'zpara' && n !== 'zpump' && n !== 'zclown') : IOS_DEV || T.lite ? ZORDER_LITE : ZORDER;
+  let townDone = null;
+  const afterTown = IOS_DEV ? new Promise((res) => { townDone = res; }) : Promise.resolve();
+  V.zst = { done: 0, tot: zorder.length };
+  afterTown.then(() => Promise.all([loadZAnims('/dead'), loadZAnims('/dead', 'zanim2').catch(() => null)])).then(async ([anims, a2]) => {
     if (V.dead) return;
     if (a2 && a2.clips) for (const [k, c] of Object.entries(a2.clips)) if (!anims.clips[k]) anims.clips[k] = c;
     const zm = { anims, n: 0 };
-    for (const name of ZORDER) {
+    for (const name of zorder) {
       try {
         const x = await loadZModel('/dead', name, tierIdx > 0, tierIdx < 2);
         if (V.dead) { dropImgs(x); return; }
@@ -149,7 +153,8 @@ export function makeView(canvas, tierIdx, ov) {
     V.town.ready = true;
     V.propHitOn = false;
     addPropHits();
-  }).catch(() => { V.town.fail++; if (!V.dead && V.town.fail < 3) setTimeout(getTown, 1200 * V.town.fail); else V.err = 'town'; });
+    if (townDone) townDone();
+  }).catch(() => { V.town.fail++; if (!V.dead && V.town.fail < 3) setTimeout(getTown, 1200 * V.town.fail); else { V.err = 'town'; if (townDone) townDone(); } });
   getTown();
   V.realDog = null;
   const getDog = (n) => Promise.all([loadZAnims('/dead', 'danim'), loadZModel('/dead', 'sdog', tierIdx > 0, tierIdx === 0)]).then(async ([an, x]) => {
@@ -159,9 +164,9 @@ export function makeView(canvas, tierIdx, ov) {
     V.realDog = { M: x.model, mesh: R.tskin(x.model), tex, nrm: x.nrm ? R.texture(x.nrm) : null, clips: an.clips };
     dropImgs(x);
   }).catch(() => { if (!V.dead && n < 4) setTimeout(() => getDog(n + 1), 1500 * (n + 1)); else V.realDogFail = true; });
-  getDog(0);
+  afterTown.then(() => getDog(0));
   V.seller = null;
-  Promise.all([loadZAnims('/dead', 'sellanim'), loadZModel('/dead', 'seller', tierIdx > 0, tierIdx === 0)]).then(([an, x]) => {
+  afterTown.then(() => Promise.all([loadZAnims('/dead', 'sellanim'), loadZModel('/dead', 'seller', tierIdx > 0, tierIdx === 0)])).then(([an, x]) => {
     if (V.dead) { dropImgs(x); return; }
     V.seller = { M: x.model, mesh: R.tskin(x.model), tex: R.texture(x.img), nrm: x.nrm ? R.texture(x.nrm) : null, clips: an.clips };
     dropImgs(x);
@@ -170,7 +175,7 @@ export function makeView(canvas, tierIdx, ov) {
   const PROP_PARTS = new Set(['gas2']);
   let propHit = null;
   const addPropHits = () => { if (!propHit || !V.town.ready || V.propHitOn) return; V.propHitOn = true; for (const h of propHit) hitAdd(...h); };
-  (async () => {
+  afterTown.then(async () => {
     const man = JSON.parse(await (await resBlob('/dead/props/props.json')).text());
     const ta = await loadTexArrays('/dead/props', man, (tierIdx === 0 ? 2 : tierIdx === 1 ? 1 : 0) + (T.lite ? 1 : 0));
     if (V.dead) return;
@@ -197,8 +202,8 @@ export function makeView(canvas, tierIdx, ov) {
     }
     propHit = own;
     addPropHits();
-  })().catch(() => {});
-  loadRail(R, tierIdx, () => V.dead, !!T.lite).then((res) => { if (!res || V.dead) return; for (const it of res.items) { if (!T.shadow) it.cast = false; statics.push(it); } V.rail = res; V.tick = res.tick; }).catch(() => {});
+  }).catch(() => {});
+  afterTown.then(() => (T.lite >= 2 ? null : loadRail(R, tierIdx, () => V.dead, !!T.lite))).then((res) => { if (!res || V.dead) return; for (const it of res.items) { if (!T.shadow) it.cast = false; statics.push(it); } V.rail = res; V.tick = res.tick; }).catch(() => {});
   V.readyFor = (k, guns) => {
     if (V.mainK !== k) { V.mainK = k; sm.upFail = false; pump(); }
     V.warm(k);
@@ -211,7 +216,7 @@ export function makeView(canvas, tierIdx, ov) {
   };
   V.prepHands = () => { if (!V.nadeObj) { V.nadeObj = buildThrowObj(R, 'grenade'); V.molObj = buildThrowObj(R, 'molotov'); } };
   V.thrM = {};
-  for (const k of ['nade', 'molo']) loadZModel('/dead', k, true, tierIdx === 0).then((x) => { if (V.dead) { dropImgs(x); return; } V.thrM[k] = { M: x.model, mesh: R.tskin(x.model), tex: R.texture(x.img), nrm: x.nrm ? R.texture(x.nrm) : null }; dropImgs(x); }).catch(() => {});
+  for (const k of ['nade', 'molo']) afterTown.then(() => loadZModel('/dead', k, true, tierIdx === 0)).then((x) => { if (V.dead) { dropImgs(x); return; } V.thrM[k] = { M: x.model, mesh: R.tskin(x.model), tex: R.texture(x.img), nrm: x.nrm ? R.texture(x.nrm) : null }; dropImgs(x); }).catch(() => {});
   V.prepHands();
   return V;
 }

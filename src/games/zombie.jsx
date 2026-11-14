@@ -46,9 +46,12 @@ const BOOT_KEY = 'zchat-zombie-boot';
 const LITE_KEY = 'zchat-zombie-lite';
 const IOS_SAFE = 'zchat-zombie-ios56';
 const LITE_OV = { zmax: 24, grass: 0, trees: 0.15, dpr: 0.6, lite: 1 };
+const LITE_OV2 = { zmax: 16, grass: 0, trees: 0, dpr: 0.5, lite: 2 };
+const IOS_OK = 'zchat-zombie-iosok';
 const IOS = (() => { try { return /iP(hone|ad|od)/.test(navigator.userAgent || '') || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); } catch { return false; } })();
-const bootMark = (t) => { try { if (t == null) localStorage.removeItem(BOOT_KEY); else localStorage.setItem(BOOT_KEY, JSON.stringify({ t, at: Date.now() })); } catch {} };
-const liteOn = () => { try { return localStorage.getItem(LITE_KEY) === '1'; } catch { return false; } };
+const liteLv = () => { try { return Number(localStorage.getItem(LITE_KEY)) || 0; } catch { return 0; } };
+const bootMark = (t) => { try { if (t == null) localStorage.removeItem(BOOT_KEY); else localStorage.setItem(BOOT_KEY, JSON.stringify({ t, at: Date.now(), lite: liteLv() })); } catch {} };
+const liteOv = () => { const l = liteLv(); return l >= 2 ? LITE_OV2 : l === 1 ? LITE_OV : null; };
 const XCOL = { white: '#FFFFFF', green: '#7CFF6B', yellow: '#FFE14A', cyan: '#5FF2FF' };
 const getPref = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : v; } catch { return d; } };
 const setPref = (k, v) => { try { localStorage.setItem(k, String(v)); } catch {} };
@@ -438,6 +441,18 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
   injectCss();
   const look = useCtlLook('zombie');
   const GS = useGameStage(look);
+  useEffect(() => {
+    if (!IOS || typeof document === 'undefined') return undefined;
+    const root = document.getElementById('root');
+    const vids = [];
+    try { for (const v of document.querySelectorAll('video')) if (!v.paused && root && root.contains(v)) { v.pause(); vids.push(v); } } catch {}
+    const was = root ? root.style.visibility : '';
+    if (root) root.style.visibility = 'hidden';
+    return () => {
+      if (root) root.style.visibility = was;
+      for (const v of vids) { try { const pr = v.play(); if (pr && pr.catch) pr.catch(() => {}); } catch {} }
+    };
+  }, []);
   const { top, right, bottom, left } = GS.at;
   const land = GS.land;
   const [phase, setPhase] = useState('load');
@@ -449,10 +464,12 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
     let v = Number(getPref(PREF.gfx, -1));
     try {
       if (IOS && !localStorage.getItem(IOS_SAFE)) { localStorage.setItem(IOS_SAFE, '1'); if (v > 0) { v = 0; setPref(PREF.gfx, 0); } }
+      if (IOS && !localStorage.getItem(IOS_OK) && !(Number(localStorage.getItem(LITE_KEY)) > 0)) localStorage.setItem(LITE_KEY, '1');
       const c = JSON.parse(localStorage.getItem(BOOT_KEY) || 'null');
       if (c && Date.now() - (c.at || 0) < 30 * 60 * 1000) {
         const was = Math.max(0, Math.min(2, c.t | 0));
-        if (was === 0) localStorage.setItem(LITE_KEY, '1');
+        if (was === 0) localStorage.setItem(LITE_KEY, String(Math.min(2, (c.lite | 0) + 1)));
+        if (was === 0 && IOS) localStorage.setItem(IOS_OK, '1');
         v = Math.max(0, was - 1);
         setPref(PREF.gfx, v);
       }
@@ -641,7 +658,7 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
         if (!alive) return;
         if (g.V) { g.V.dispose(); g.V = null; }
         bootMark(tier);
-        const V = makeView(cvRef.current, tier, { ...JSON.parse(gfxBuilt || '{}'), ...(liteOn() ? LITE_OV : null) });
+        const V = makeView(cvRef.current, tier, { ...JSON.parse(gfxBuilt || '{}'), ...liteOv() });
         if (!alive) { if (V) V.dispose(); return; }
         if (!V) { setNetErr('gl'); setPhase('menu'); return; }
         g.V = V;
@@ -664,7 +681,10 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
   useEffect(() => {
     if (phase !== 'menu' && phase !== 'play') return undefined;
     bootMark(tier);
-    const tm = setTimeout(() => bootMark(null), 45000);
+    const tm = setTimeout(() => {
+      bootMark(null);
+      try { if (IOS && !localStorage.getItem(IOS_OK)) { localStorage.setItem(IOS_OK, '1'); if (Number(localStorage.getItem(LITE_KEY)) === 1) localStorage.removeItem(LITE_KEY); } } catch {}
+    }, 45000);
     return () => clearTimeout(tm);
   }, [phase, tier]);
   useEffect(() => {
@@ -763,7 +783,7 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
     const t = setTimeout(() => {
       if (!alive || !cvRef.current) return;
       bootMark(tier);
-      const V = makeView(cvRef.current, tier, { ...JSON.parse(gfxBuilt || '{}'), ...(liteOn() ? LITE_OV : null) });
+      const V = makeView(cvRef.current, tier, { ...JSON.parse(gfxBuilt || '{}'), ...liteOv() });
       if (!V) { setFix(0); quit(); return; }
       V.onLost = () => lostRef.current && lostRef.current();
       const k = charOf(sv, col).k, guns = g.me && g.me.slots ? g.me.slots.slice() : [gun, secondOf(gun)];

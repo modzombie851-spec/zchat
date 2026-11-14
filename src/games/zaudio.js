@@ -41,6 +41,7 @@ const rnd = (a, b) => a + Math.random() * (b - a);
 const pick = (a) => a[(Math.random() * a.length) | 0];
 
 let ac = null, bus = null, mus = null, duck = null, rev = null, revIn = null, loadJob = null;
+const IOS_AUDIO = (() => { try { return /iP(hone|ad|od)/.test(navigator.userAgent || '') || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); } catch { return false; } })();
 const bufs = {}, offs = {};
 const L = { x: 0, y: 1.6, z: 0, yaw: 0 };
 const voices = [];
@@ -214,13 +215,24 @@ export const ZA = {
   },
   load() {
     if (!ac || loadJob) return loadJob;
-    loadJob = Promise.all(Object.keys(FILES).map((n) => resBuf(`/sounds/dead/${n}.mp3`).then((ab) => (ab ? new Promise((res) => ac.decodeAudioData(ab, res, () => res(null))) : null)).then((buf) => {
-      if (!buf) return;
-      bufs[n] = buf;
-      const d = buf.getChannelData(0);
-      let i = 0; while (i < d.length && Math.abs(d[i]) < 0.006) i++;
-      offs[n] = Math.max(0, i / buf.sampleRate - 0.002);
-    }).catch(() => {})));
+    const names = Object.keys(FILES);
+    let at = 0;
+    const lane = async () => {
+      while (at < names.length) {
+        const n = names[at++];
+        try {
+          const ab = await resBuf(`/sounds/dead/${n}.mp3`);
+          if (!ab || !ac) continue;
+          const buf = await new Promise((res) => ac.decodeAudioData(ab, res, () => res(null)));
+          if (!buf) continue;
+          bufs[n] = buf;
+          const d = buf.getChannelData(0);
+          let i = 0; while (i < d.length && Math.abs(d[i]) < 0.006) i++;
+          offs[n] = Math.max(0, i / buf.sampleRate - 0.002);
+        } catch {}
+      }
+    };
+    loadJob = Promise.all(Array.from({ length: IOS_AUDIO ? 2 : 6 }, lane));
     return loadJob;
   },
   listen(x, y, z, yaw) {

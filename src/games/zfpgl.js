@@ -3,6 +3,7 @@ import { parseFPM, fpmLocals, fpmBlend, fpmWorld, fpmSkin } from './zfpm.js';
 import { GUNS } from './zguns.js';
 import { resBlob, resReady } from './zres.js';
 import { gunzip } from './zinflate.js';
+import { decodeSlot } from './zmodel.js';
 
 const BASE = '/dead/fp';
 const RATE = 30;
@@ -44,6 +45,10 @@ async function fetchFPZ(url) {
 const halfOn = new WeakSet();
 export function setFPGHalf(R, on) { if (on) halfOn.add(R); else halfOn.delete(R); }
 async function fetchImg(url, half) {
+  const free = await decodeSlot();
+  try { return await fetchImgNow(url, half); } finally { free(); }
+}
+async function fetchImgNow(url, half) {
   const b = await resBlob(url);
   let bm = null;
   try { bm = await createImageBitmap(b, { premultiplyAlpha: 'none', colorSpaceConversion: 'none' }); } catch { bm = null; }

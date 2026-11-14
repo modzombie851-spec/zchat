@@ -132,7 +132,21 @@ function once(key, fn) {
   return cache.get(key);
 }
 async function fetchBuf(url) { return (await resBlob(url)).arrayBuffer(); }
+export const IOS_DEV = (() => { try { return /iP(hone|ad|od)/.test(navigator.userAgent || '') || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); } catch { return false; } })();
+const decQ = [];
+let decN = 0;
+const DEC_MAX = IOS_DEV ? 1 : 6;
+export function decodeSlot() {
+  return new Promise((res) => {
+    const go = () => { decN++; let done = false; res(() => { if (done) return; done = true; decN--; const nx = decQ.shift(); if (nx) nx(); }); };
+    if (decN < DEC_MAX) go(); else decQ.push(go);
+  });
+}
 export async function fetchImg(url, half) {
+  const free = await decodeSlot();
+  try { return await fetchImgNow(url, half); } finally { free(); }
+}
+async function fetchImgNow(url, half) {
   const b = await resBlob(url);
   if (typeof createImageBitmap === 'function') {
     try {
@@ -184,7 +198,7 @@ export function loadTexArrays(base, man, shrink, onP) {
       for (let i = 0; i < a.layers; i++) {
         const src = strips[Math.floor(i / a.per)], j = i % a.per;
         let bm = null;
-        if (typeof createImageBitmap === 'function' && typeof ImageBitmap !== 'undefined' && src instanceof ImageBitmap) {
+        if (!IOS_DEV && typeof createImageBitmap === 'function' && typeof ImageBitmap !== 'undefined' && src instanceof ImageBitmap) {
           try { bm = await createImageBitmap(src, 0, j * a.size, a.size, a.size, { premultiplyAlpha: 'none', colorSpaceConversion: 'none', resizeWidth: size, resizeHeight: size, resizeQuality: 'high' }); } catch { bm = null; }
         }
         if (!bm) {
