@@ -65,6 +65,12 @@ From game icons, CC BY 3.0
 - Zombie sound effects, by EditingCorp (Royalty free): https://www.editingcorp.com/zombie-sound-effects-pack-free-download/
 - Explosions, cars, water, wind and night sounds, by Mixkit (Mixkit license): https://mixkit.co/free-sound-effects/
 - Grenade, dog and older zombie sounds, by freesound.org and OpenGameArt creators (CC0): https://getzchat.com/sounds/dead/CREDITS.txt
+- Bolt War sound effects and announcer, by Kenney (CC0): https://kenney.nl/assets/sci-fi-sounds
+
+## Music
+
+- Bolt War fight music, Dance Dance by The Mountain on Pixabay (Pixabay license): https://pixabay.com/music/
+- Bolt War lobby music, Urban Hip Hop Beat by vaitsez on Pixabay (Pixabay license): https://pixabay.com/music/
 
 ## Textures and effects
 

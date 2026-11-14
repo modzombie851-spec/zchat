@@ -97,40 +97,30 @@ const DROP_TINT = Object.fromEntries(Object.entries(DROP_TINT_HEX).map(([k, v]) 
 const mul = m4.mul;
 function scl(M, sx, sy, sz) { const o = new Float32Array(M); for (let i = 0; i < 3; i++) { o[i] *= sx; o[4 + i] *= sy; o[8 + i] *= sz; } return o; }
 
-let NOISE = null;
-const sndAt = {};
-function zap(kind, vol = 1) {
+const BOLT = {"pellet":[0.1,0.55],"bolt":[0.79,0.5995],"beam":[1.5295,0.6852],"eshot":[2.3547,0.2444],"tshot":[2.7391,0.2518],"orb":[3.131,0.4173],"lob":[3.6883,0.4528],"swing":[4.2811,0.4439],"boom":[4.8651,0.7775],"bigboom":[5.7825,1.6],"stomp":[7.5225,0.9966],"crunch":[8.6591,1.1],"clank":[9.8991,0.1405],"hit":[10.1797,0.248],"hurt":[10.5677,0.2843],"heal":[10.992,0.1897],"pick":[11.3216,0.2485],"super":[11.7102,0.7591],"shield":[12.6093,0.7623],"laser":[13.5115,1.7],"spawn":[15.3515,0.5229],"fuse":[16.0144,0.1166],"wind":[16.271,0.4],"dash":[16.811,0.42],"jump":[17.371,0.6],"fireball":[18.111,0.7],"frost":[18.951,0.429],"shock":[19.52,0.6],"skill":[20.26,0.3927],"poof":[20.7928,0.7],"pdie":[21.6327,0.4123],"alert":[22.185,0.8696],"star":[23.1946,0.4966],"coin":[23.8312,0.6954],"pop":[24.6666,0.0928],"cp":[24.8994,0.5279],"combo":[25.5673,0.4847],"win":[26.192,1.0824],"lose":[27.4144,1.6147]};
+const BS = { buf: null, job: null, at: {} };
+function boltLoad() {
+  const ac = Sfx.ctx();
+  if (!ac || BS.buf || BS.job) return;
+  BS.job = fetch('/sounds/bolt/sfx-v1.mp3').then((r) => (r.ok ? r.arrayBuffer() : null)).then((b) => (b ? new Promise((res, rej) => ac.decodeAudioData(b, res, rej)) : null)).then((buf) => { BS.buf = buf; if (!buf) BS.job = null; }).catch(() => { BS.job = null; });
+}
+function zap(kind, vol = 1, rate = 1) {
   const B = Sfx.bus();
-  if (!B || vol <= 0.02) return;
+  const seg = BOLT[kind];
+  if (!B || !seg || vol <= 0.02) return;
+  if (!BS.buf) { boltLoad(); return; }
   const { ac, out } = B;
   const t = ac.currentTime;
-  if ((sndAt[kind] || -1) > t - 0.05) return;
-  sndAt[kind] = t;
+  if ((BS.at[kind] || -1) > t - 0.05) return;
+  BS.at[kind] = t;
   try {
-    if (!NOISE || NOISE.sampleRate !== ac.sampleRate) { const len = ac.sampleRate; NOISE = ac.createBuffer(1, len, ac.sampleRate); const d = NOISE.getChannelData(0); for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1; }
-    const g = ac.createGain(); g.connect(out);
-    const env = (a, d, peak) => { g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak * vol), t + a); g.gain.exponentialRampToValueAtTime(0.0001, t + a + d); };
-    const nz = (f0, f1, q, type, dur) => { const s = ac.createBufferSource(); s.buffer = NOISE; const f = ac.createBiquadFilter(); f.type = type; f.frequency.setValueAtTime(f0, t); f.frequency.exponentialRampToValueAtTime(f1, t + dur); f.Q.value = q; s.connect(f); f.connect(g); s.start(t, Math.random() * 0.5); s.stop(t + dur + 0.05); };
-    const osc = (type, f0, f1, dur, gg) => { const o = ac.createOscillator(); o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + dur); const og = ac.createGain(); og.gain.value = gg; o.connect(og); og.connect(g); o.start(t); o.stop(t + dur + 0.05); };
-    if (kind === 'pellet') { env(0.004, 0.17, 0.42); nz(2600, 500, 0.8, 'bandpass', 0.18); osc('triangle', 190, 55, 0.13, 0.9); }
-    else if (kind === 'bolt') { env(0.003, 0.34, 0.38); osc('sawtooth', 1900, 210, 0.3, 0.3); osc('sine', 2700, 900, 0.18, 0.4); nz(5200, 2200, 1.2, 'highpass', 0.1); }
-    else if (kind === 'lob') { env(0.02, 0.3, 0.3); nz(420, 1900, 1.4, 'bandpass', 0.32); osc('sine', 300, 520, 0.2, 0.3); }
-    else if (kind === 'orb') { env(0.006, 0.45, 0.28); osc('sine', 880, 1320, 0.4, 0.5); osc('sine', 1320, 1760, 0.3, 0.3); }
-    else if (kind === 'eshot') { env(0.003, 0.2, 0.24); osc('square', 960, 300, 0.18, 0.22); }
-    else if (kind === 'tshot') { env(0.003, 0.25, 0.32); osc('square', 430, 140, 0.22, 0.26); nz(1300, 400, 1, 'bandpass', 0.15); }
-    else if (kind === 'boom') { env(0.005, 0.7, 0.8); nz(950, 70, 0.7, 'lowpass', 0.7); osc('sine', 92, 34, 0.6, 1); }
-    else if (kind === 'bigboom') { env(0.005, 1.25, 0.95); nz(750, 45, 0.7, 'lowpass', 1.2); osc('sine', 72, 26, 1.1, 1); }
-    else if (kind === 'crunch') { env(0.003, 0.32, 0.42); nz(1900, 280, 0.9, 'bandpass', 0.3); osc('square', 210, 48, 0.26, 0.28); }
-    else if (kind === 'hurt') { env(0.003, 0.2, 0.4); osc('square', 330, 110, 0.17, 0.32); nz(950, 300, 1, 'bandpass', 0.12); }
-    else if (kind === 'heal') { env(0.01, 0.5, 0.26); osc('sine', 660, 990, 0.45, 0.5); osc('triangle', 990, 1320, 0.35, 0.22); }
-    else if (kind === 'super') { env(0.01, 0.8, 0.45); osc('sawtooth', 220, 880, 0.6, 0.26); nz(400, 4200, 0.8, 'bandpass', 0.7); }
-    else if (kind === 'beam') { env(0.01, 0.6, 0.42); osc('sawtooth', 300, 1300, 0.5, 0.36); osc('square', 150, 640, 0.5, 0.16); }
-    else if (kind === 'laser') { env(0.06, 1.6, 0.3); osc('sawtooth', 160, 118, 1.6, 0.5); osc('square', 322, 248, 1.6, 0.18); }
-    else if (kind === 'stomp') { env(0.005, 0.8, 0.85); nz(320, 40, 0.8, 'lowpass', 0.8); osc('sine', 62, 24, 0.7, 1); }
-    else if (kind === 'spawn') { env(0.02, 0.4, 0.2); osc('sawtooth', 120, 540, 0.36, 0.28); nz(3000, 6200, 2, 'bandpass', 0.3); }
-    else if (kind === 'fuse') { env(0.002, 0.08, 0.26); osc('square', 1550, 1500, 0.06, 0.3); }
-    else if (kind === 'wind') { env(0.02, 0.22, 0.16); osc('sawtooth', 140, 260, 0.2, 0.3); }
-    else if (kind === 'clank') { env(0.002, 0.16, 0.3); osc('square', 760, 520, 0.12, 0.25); nz(4000, 2500, 3, 'bandpass', 0.1); }
+    const src = ac.createBufferSource();
+    src.buffer = BS.buf;
+    src.playbackRate.value = rate;
+    const g = ac.createGain();
+    g.gain.value = Math.min(1.2, vol);
+    src.connect(g); g.connect(out);
+    src.start(t, Math.max(0, seg[0] - 0.004), seg[1] + 0.01);
   } catch {}
 }
 
@@ -342,6 +332,13 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
     if (g.nums.length > 40) g.nums.shift();
     g.nums.push({ x: x + R0(-0.3, 0.3), z, y, text, col, t: 0, life: big ? 1.1 : 0.85, big });
   };
+  const popSum = (key, x, z, val, col, big, pre = '') => {
+    const g = G.current;
+    const o = g.nums.find((n) => n.key === key && n.t < 0.34);
+    if (o) { o.val += val; o.text = `${pre}${o.val}`; o.col = typeof col === 'function' ? col(o.val) : col; o.big = o.big || (typeof big === 'function' ? big(o.val) : big); o.t = Math.min(o.t, 0.05); o.x = x; o.z = z; return; }
+    if (g.nums.length > 40) g.nums.shift();
+    g.nums.push({ x: x + R0(-0.3, 0.3), z, y: 2.1, text: `${pre}${val}`, col: typeof col === 'function' ? col(val) : col, t: 0, life: 0.95, big: typeof big === 'function' ? big(val) : big, key, val });
+  };
   const camFoc = () => { const g = G.current; return g.cam ? g.cam.at : [0, 0, 0]; };
   const volAt = (x, z) => { const c = camFoc(); return clamp(1.1 - Math.hypot(x - c[0], z - c[2]) / 26, 0.12, 1); };
 
@@ -419,7 +416,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
         if (data.ok) {
           const nd = { scrap: Math.max(0, Number(data.scrap) || 0), levels: { ...P0.levels, [k]: clamp(Number(data.level) || lv + 1, 1, E.MAX_LEVEL) } };
           PROG.data = nd; PROG.at = Date.now(); setProg(nd);
-          Sfx.play('coin', { vol: 0.75 });
+          zap('coin', 0.75);
         } else setUpMsg(data.reason === 'max' ? 'This hero is at the top level' : 'Not enough scrap yet');
       }, () => { setUpBusy(false); setUpMsg('Could not upgrade right now. Try again'); });
     } catch { setUpBusy(false); }
@@ -528,8 +525,8 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
       } catch {}
     }
     setTimeout(() => { if (G.current.over) setPhase('done'); }, res.won ? 1400 : g.kill && performance.now() - g.kill.at < 2400 ? 2600 : 1300);
-    if (res.won) { Sfx.play('win', { vol: 0.85 }); try { window.dispatchEvent(new CustomEvent('zchat-screen-fx', { detail: 'confetti' })); } catch {} }
-    else Sfx.play('die', { vol: 0.6 });
+    if (res.won) { zap('win', 0.85); try { window.dispatchEvent(new CustomEvent('zchat-screen-fx', { detail: 'confetti' })); } catch {} }
+    else zap('lose', 0.75);
   };
   const pickCard = (k) => {
     const g = G.current, W = g.W;
@@ -537,7 +534,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
     cardsRef.current = null; setCards(null);
     if (!W || !c || !E.CARDS[k]) return;
     const h = W.heroes[kindOf()];
-    if (h && E.applyCard(h, k)) { kitTap(); Sfx.play('coin', { vol: 0.6 }); pushNote(`${E.CARDS[k].name}: ${E.CARDS[k].text.toLowerCase()}`, 'join'); }
+    if (h && E.applyCard(h, k)) { kitTap(); zap('coin', 0.6); pushNote(`${E.CARDS[k].name}: ${E.CARDS[k].text.toLowerCase()}`, 'join'); }
   };
   const killerName = (by) => {
     const W = G.current.W;
@@ -738,7 +735,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
         if (isHost || !m || m.r !== g.rid) return;
         finishUp({ won: !!m.w, wave: m.n | 0, score: m.sc | 0, list: Array.isArray(m.l) ? m.l.slice(0, E.SQUAD_MAX) : [] });
       }),
-      relay.on('emo', (m) => { const e = String(m.e || ''); if (!EMOTES.includes(e)) return; setBubbles((p) => ({ ...p, [m.from]: { e, at: Date.now() } })); Sfx.play('pop', { vol: 0.45 }); }),
+      relay.on('emo', (m) => { const e = String(m.e || ''); if (!EMOTES.includes(e)) return; setBubbles((p) => ({ ...p, [m.from]: { e, at: Date.now() } })); zap('pop', 0.45); }),
       relay.on('bye', (m) => { const n = namesRef.current[m.from] || 'A friend'; if (rosterRef.current.includes(m.from) && !rosterSeen.current.bye.has(m.from)) { rosterSeen.current.bye.add(m.from); pushNote(`${n} left the game`, 'leave'); } }),
     ];
     return () => offs.forEach((f) => f && f());
@@ -811,7 +808,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
     if (!ch.length) return;
     const c = { n: 'streak', list: ch, until: performance.now() + 60000 };
     cardsRef.current = c; setCards(c);
-    Sfx.play('star', { vol: 0.6 });
+    zap('star', 0.6);
   };
   const pickCol = (c) => { kitTap(); setHeroCol(c); savePref('zchat-siege-hcol', c); if (!solo) relay.send('hero', { k: heroKey, c }); };
   const pickArena = (k) => { if (!isHost || !E.ARENAS[k]) return; kitTap(); setArena(k); savePref(PREF.arena, k); };
@@ -937,29 +934,29 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
         const ux = Math.sin(e.a), uz = Math.cos(e.a), mine = e.id === myK;
         P3({ x: e.x + ux * 1.7, y: 0.1, z: e.z + uz * 1.7, max: 0.4, s0: 1, s1: 3.6, a0: 0.75, type: 13, flat: 1 });
         for (let i = 0; i < 9; i++) { const a = e.a + R0(-0.8, 0.8), d = R0(1, e.r); P3({ x: e.x + Math.sin(a) * d, y: 0.2, z: e.z + Math.cos(a) * d, vx: Math.sin(a) * R0(1, 3), vy: R0(1.5, 3.5), vz: Math.cos(a) * R0(1, 3), g: 12, max: R0(0.4, 0.7), s0: R0(0.3, 0.55), s1: 1.1, a0: 0.6, type: 2 }); }
-        Sfx.play('swing', { vol: (mine ? 0.7 : volAt(e.x, e.z) * 0.5) }); zap('stomp', (mine ? 0.55 : volAt(e.x, e.z) * 0.4));
+        zap('swing', (mine ? 0.7 : volAt(e.x, e.z) * 0.5)); zap('stomp', (mine ? 0.55 : volAt(e.x, e.z) * 0.4));
         if (mine) g.shake = Math.max(g.shake, 0.22);
       } else if (k === 'slam' || k === 'freeze' || k === 'ring' || k === 'nova') {
         const ice = k === 'freeze' || k === 'nova', fire = k === 'ring';
         P3({ x: e.x, y: 0.12, z: e.z, max: 0.55, s0: 1, s1: e.r * 2.2, a0: 0.85, type: ice ? 14 : 13, flat: 1 });
         for (let i = 0; i < (k === 'slam' || k === 'freeze' ? 26 : 18); i++) { const a = R0(0, 6.283), d = R0(0.4, e.r); P3({ x: e.x + Math.cos(a) * d, y: R0(0.1, 0.6), z: e.z + Math.sin(a) * d, vx: Math.cos(a) * R0(0.5, 2.5), vy: R0(1, 3.2), vz: Math.sin(a) * R0(0.5, 2.5), g: ice ? 4 : 8, max: R0(0.5, 0.9), s0: R0(0.3, 0.6), s1: fire ? 1.2 : 0.1, a0: 0.9, type: ice ? 6 : fire ? 12 : 2 }); }
         if (k === 'slam') { zap('stomp', volAt(e.x, e.z)); g.shake = Math.max(g.shake, 0.55 * volAt(e.x, e.z)); }
-        else if (fire) Sfx.play('fireball', { vol: volAt(e.x, e.z) * 0.8 });
-        else Sfx.play('frost', { vol: volAt(e.x, e.z) * 0.8 });
+        else if (fire) zap('fireball', volAt(e.x, e.z) * 0.8);
+        else zap('frost', volAt(e.x, e.z) * 0.8);
       } else if (k === 'zap') {
         const pts = e.pts || [];
         for (let i = 1; i < pts.length; i++) { const p0 = pts[i - 1], p1 = pts[i]; let px = p0[0], pz = p0[1], py = i === 1 ? 0.95 : 0.9; for (let j = 1; j <= 5; j++) { const u = j / 5; const qx = p0[0] + (p1[0] - p0[0]) * u + (j < 5 ? R0(-0.35, 0.35) : 0), qz = p0[1] + (p1[1] - p0[1]) * u + (j < 5 ? R0(-0.35, 0.35) : 0), qy = 0.9 + (j < 5 ? R0(-0.2, 0.3) : 0); const L = Math.hypot(qx - px, qy - py, qz - pz) * 0.5 + 0.05; P3({ x: (px + qx) / 2, y: (py + qy) / 2, z: (pz + qz) / 2, max: 0.16, s0: 0.16, s1: 0.1, a0: 1, type: 15, d: [qx - px, qy - py, qz - pz], L }); px = qx; py = qy; pz = qz; } sparks(p1[0], 0.9, p1[1], 3, 6, 5); }
-        Sfx.play('shock', { vol: (e.id === myK ? 0.45 : volAt(pts[0] ? pts[0][0] : 0, pts[0] ? pts[0][1] : 0) * 0.35), rate: 1.2 });
+        zap('shock', (e.id === myK ? 0.45 : volAt(pts[0] ? pts[0][0] : 0, pts[0] ? pts[0][1] : 0) * 0.35), 1.2);
       } else if (k === 'tzap') {
         let px = e.x, pz = e.z, py = 1.7;
         for (let j = 1; j <= 5; j++) { const u = j / 5; const qx = e.x + (e.tx - e.x) * u + (j < 5 ? R0(-0.3, 0.3) : 0), qz = e.z + (e.tz - e.z) * u + (j < 5 ? R0(-0.3, 0.3) : 0), qy = 1.7 + (0.9 - 1.7) * u + (j < 5 ? R0(-0.2, 0.2) : 0); const L = Math.hypot(qx - px, qy - py, qz - pz) * 0.5 + 0.05; P3({ x: (px + qx) / 2, y: (py + qy) / 2, z: (pz + qz) / 2, max: 0.14, s0: 0.14, s1: 0.08, a0: 1, type: 15, d: [qx - px, qy - py, qz - pz], L }); px = qx; py = qy; pz = qz; }
         if (volAt(e.x, e.z) > 0.3) zap('clank', volAt(e.x, e.z) * 0.25);
-      } else if (k === 'turret') { bolts(e.x, 0.5, e.z, 1.4, 4); P3({ x: e.x, y: 0.08, z: e.z, max: 0.5, s0: 0.5, s1: 3, a0: 0.9, type: 14, flat: 1 }); Sfx.play('skill', { vol: volAt(e.x, e.z) * 0.7 }); }
-      else if (k === 'turretEnd' || k === 'decoyEnd') { for (let i = 0; i < 8; i++) P3({ x: e.x + R0(-0.4, 0.4), y: R0(0.3, 1.2), z: e.z + R0(-0.4, 0.4), vy: R0(0.5, 1.5), max: R0(0.5, 0.9), s0: 0.5, s1: 1.3, a0: 0.5, type: 11 }); Sfx.play('poof', { vol: volAt(e.x, e.z) * 0.5 }); }
-      else if (k === 'gadget') { if (e.g === 'decoy' || e.g === 'mine' || e.g === 'over') Sfx.play('skill', { vol: e.id === myK ? 0.6 : volAt(e.x, e.z) * 0.4 }); if (e.g === 'jet') Sfx.play('jump', { vol: e.id === myK ? 0.7 : volAt(e.x, e.z) * 0.5 }); if (e.g === 'over') bolts(e.x, 1, e.z, 1.2, 3); }
-      else if (k === 'bubble') { P3({ x: e.x, y: 1, z: e.z, max: 0.5, s0: 1, s1: e.r * 1.6, a0: 0.5, type: 14 }); Sfx.play('shield', { vol: volAt(e.x, e.z) * 0.6 }); }
-      else if (k === 'charge') { const ux = Math.sin(e.a), uz = Math.cos(e.a); for (let d = 0; d < e.len; d += 0.6) P3({ x: e.x + ux * d, y: 0.25, z: e.z + uz * d, vy: R0(0.4, 1.2), max: R0(0.4, 0.7), s0: 0.5, s1: 1.3, a0: 0.55, type: 2 }); Sfx.play('dash', { vol: e.id === myK ? 0.7 : volAt(e.x, e.z) * 0.5 }); }
-      else if (k === 'dash') { const ux = Math.sin(e.a), uz = Math.cos(e.a); for (let i = 0; i < 6; i++) P3({ x: e.x + ux * i * 0.5, y: R0(0.2, 0.8), z: e.z + uz * i * 0.5, vy: R0(0.2, 0.8), max: R0(0.3, 0.5), s0: 0.45, s1: 0.9, a0: 0.45, type: i % 2 ? 9 : 2 }); Sfx.play('dash', { vol: e.id === myK ? 0.55 : volAt(e.x, e.z) * 0.35, rate: 1.15 }); }
+      } else if (k === 'turret') { bolts(e.x, 0.5, e.z, 1.4, 4); P3({ x: e.x, y: 0.08, z: e.z, max: 0.5, s0: 0.5, s1: 3, a0: 0.9, type: 14, flat: 1 }); zap('skill', volAt(e.x, e.z) * 0.7); }
+      else if (k === 'turretEnd' || k === 'decoyEnd') { for (let i = 0; i < 8; i++) P3({ x: e.x + R0(-0.4, 0.4), y: R0(0.3, 1.2), z: e.z + R0(-0.4, 0.4), vy: R0(0.5, 1.5), max: R0(0.5, 0.9), s0: 0.5, s1: 1.3, a0: 0.5, type: 11 }); zap('poof', volAt(e.x, e.z) * 0.5); }
+      else if (k === 'gadget') { if (e.g === 'decoy' || e.g === 'mine' || e.g === 'over') zap('skill', e.id === myK ? 0.6 : volAt(e.x, e.z) * 0.4); if (e.g === 'jet') zap('jump', e.id === myK ? 0.7 : volAt(e.x, e.z) * 0.5); if (e.g === 'over') bolts(e.x, 1, e.z, 1.2, 3); }
+      else if (k === 'bubble') { P3({ x: e.x, y: 1, z: e.z, max: 0.5, s0: 1, s1: e.r * 1.6, a0: 0.5, type: 14 }); zap('shield', volAt(e.x, e.z) * 0.6); }
+      else if (k === 'charge') { const ux = Math.sin(e.a), uz = Math.cos(e.a); for (let d = 0; d < e.len; d += 0.6) P3({ x: e.x + ux * d, y: 0.25, z: e.z + uz * d, vy: R0(0.4, 1.2), max: R0(0.4, 0.7), s0: 0.5, s1: 1.3, a0: 0.55, type: 2 }); zap('dash', e.id === myK ? 0.7 : volAt(e.x, e.z) * 0.5); }
+      else if (k === 'dash') { const ux = Math.sin(e.a), uz = Math.cos(e.a); for (let i = 0; i < 6; i++) P3({ x: e.x + ux * i * 0.5, y: R0(0.2, 0.8), z: e.z + uz * i * 0.5, vy: R0(0.2, 0.8), max: R0(0.3, 0.5), s0: 0.45, s1: 0.9, a0: 0.45, type: i % 2 ? 9 : 2 }); zap('dash', e.id === myK ? 0.55 : volAt(e.x, e.z) * 0.35, 1.15); }
       else if (k === 'dodge') { if (e.id === myK) popNum(e.x, e.z, 'Dodged', '#CFEFFF'); }
       else if (k === 'shieldHit') { sparks(e.x, 1, e.z, 3, 6, 4); if (e.id === myK) popNum(e.x, e.z, `${e.d}`, '#9FE6FF'); }
       else if (k === 'bloom') {
@@ -974,13 +971,13 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
         const mine = e.by === myK;
         sparks(e.x, 0.9, e.z, e.block ? 5 : 3, e.block ? 6 : 4, 6);
         P3({ x: e.x, y: 0.95, z: e.z, max: 0.1, s0: 0.5, s1: 1.1, a0: 0.8, type: e.block ? 6 : 7 });
-        if (mine) { popNum(e.x, e.z, String(e.d), e.block ? '#B8C4D6' : e.d >= 1000 ? '#FFE15A' : '#FFFFFF', e.d >= 1000); if (e.block) zap('clank', 0.6); else Sfx.play('hit', { vol: 0.32 }); }
+        if (mine) { popSum(`r${e.id}${e.block ? 'b' : ''}`, e.x, e.z, e.d, e.block ? '#B8C4D6' : (v) => (v >= 1000 ? '#FFE15A' : '#FFFFFF'), (v) => v >= 1000); if (e.block) zap('clank', 0.6); else zap('hit', 0.32); }
       } else if (k === 'kill') {
         if (e.by === myK && W.heroes[myK]) {
           const hh = W.heroes[myK];
           if (hh.mods && hh.mods.rush) hh.rushT = 1.6 + hh.mods.rush;
           g.myKills = (g.myKills || 0) + 1;
-          if (g.myKills % STREAK === 0 && !g.over) { g.tokens = (g.tokens || 0) + 1; pushNote(`${g.myKills} takedowns. A new power is ready`, 'join'); Sfx.play('star', { vol: 0.6 }); }
+          if (g.myKills % STREAK === 0 && !g.over) { g.tokens = (g.tokens || 0) + 1; pushNote(`${g.myKills} takedowns. A new power is ready`, 'join'); zap('star', 0.6); }
         }
         const big = e.type === 'tank' || e.type === 'boss' || e.type === 'bomber';
         blast(e.x, 0.6, e.z, big, e.type === 'boss' ? 2 : e.type === 'tank' ? 1.2 : e.type === 'bomber' ? 1 : 0.65);
@@ -998,13 +995,13 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
       } else if (k === 'hurtH') {
         const mine = e.id === myK;
         sparks(e.x, 0.9, e.z, 3, 8, 5);
-        if (mine) { popNum(e.x, e.z, `${e.d}`, '#FF5A4E', e.d >= 900); zap('hurt', 0.8); g.shake = Math.max(g.shake, 0.18); g.hurtT = 0.4; }
+        if (mine) { popSum('me', e.x, e.z, e.d, '#FF5A4E', (v) => v >= 900); zap('hurt', 0.8); g.shake = Math.max(g.shake, 0.18); g.hurtT = 0.4; }
       } else if (k === 'heal') {
         for (let i = 0; i < 6; i++) P3({ x: e.x + R0(-0.4, 0.4), y: R0(0.4, 1.4), z: e.z + R0(-0.4, 0.4), vy: R0(0.8, 1.8), max: R0(0.5, 0.9), s0: 0.3, s1: 0.06, a0: 0.9, type: 3 });
-        if (e.id === myK || e.by === myK) { popNum(e.x, e.z, `+${e.n}`, '#6BF26B'); if (e.id === myK) zap('heal', 0.5); }
+        if (e.id === myK || e.by === myK) { popSum(`h${e.id}`, e.x, e.z, e.n, '#6BF26B', false, '+'); if (e.id === myK) zap('heal', 0.5); }
       } else if (k === 'down') {
         if (e.id === myK) {
-          Sfx.play('pdie', { vol: 0.7 });
+          zap('pdie', 0.7);
           const kb = typeof e.by === 'number' ? W.robots.find((r) => r.id === e.by) : e.by === 'laser' || e.by === 'stomp' || e.by === 'mis' ? W.robots.find((r) => r.type === 'boss') : null;
           g.kill = { at: performance.now(), by: kb ? kb.id : null, x: kb ? kb.x : e.x, z: kb ? kb.z : e.z };
           setKill({ name: killerName(e.by), at: Date.now() });
@@ -1013,7 +1010,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
         sparks(e.x, 0.8, e.z, 8, 9, 5);
       } else if (k === 'revive') {
         for (let i = 0; i < 14; i++) { const a = R0(0, 6.283); P3({ x: e.x + Math.cos(a) * 0.8, y: R0(0.2, 1.6), z: e.z + Math.sin(a) * 0.8, vy: R0(1, 2.2), max: R0(0.5, 0.9), s0: 0.3, s1: 0.05, a0: 1, type: 9 }); }
-        Sfx.play('star', { vol: e.id === myK ? 0.7 : 0.35 });
+        zap('star', e.id === myK ? 0.7 : 0.35);
         if (e.id === myK) showBanner('Back in the fight', null, 'green', 1.6);
         if (W.local.has(e.id) && Array.isArray(e.by) && e.by.length) {
           if (isHost) for (const b of e.by) { const h = W.heroes[b]; if (h) h.stats.rev += 1; }
@@ -1031,9 +1028,9 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
         if (e.z === 'stomp') { P3({ x: e.x, y: 0.12, z: e.z2, max: 0.6, s0: 1, s1: e.r * 2.2, a0: 0.75, type: 13, flat: 1 }); for (let i = 0; i < 16; i++) { const a = R0(0, 6.283), d = R0(0.5, e.r); P3({ x: e.x + Math.cos(a) * d, y: 0.3, z: e.z2 + Math.sin(a) * d, vy: R0(1, 3), max: R0(0.5, 0.9), s0: 0.6, s1: 1.6, a0: 0.5, type: 2 }); } zap('stomp', volAt(e.x, e.z2)); g.shake = Math.max(g.shake, 0.55); }
         else { blast(e.x, 0.5, e.z2, e.r > 2.5, e.r / 2.4); zap('boom', volAt(e.x, e.z2)); g.shake = Math.max(g.shake, 0.3 * volAt(e.x, e.z2)); }
       } else if (k === 'laserOn') zap('laser', volAt(e.x, e.z));
-      else if (k === 'bossMis' || k === 'bossCall') { Sfx.play('alert', { vol: 0.4 }); }
+      else if (k === 'bossMis' || k === 'bossCall') { zap('alert', 0.4); }
       else if (k === 'pick') {
-        if (e.id === myK) { Sfx.play(e.kind === 'hp' ? 'pick' : e.kind === 'sh' ? 'shield' : 'coin', { vol: 0.7 }); popNum(e.x, e.z, DROP_TEXT[e.kind] || 'Power up', DROP_COL[e.kind] || '#FFE15A', true); }
+        if (e.id === myK) { zap(e.kind === 'hp' ? 'pick' : e.kind === 'sh' ? 'shield' : 'coin', 0.7); popNum(e.x, e.z, DROP_TEXT[e.kind] || 'Power up', DROP_COL[e.kind] || '#FFE15A', true); }
         for (let i = 0; i < 10; i++) P3({ x: e.x + R0(-0.5, 0.5), y: R0(0.3, 1.2), z: e.z + R0(-0.5, 0.5), vy: R0(1, 2.5), max: R0(0.4, 0.8), s0: 0.3, s1: 0.05, a0: 1, type: e.kind === 'pw' ? 10 : e.kind === 'su' ? 7 : 3 });
       } else if (k === 'wallHit') { P3({ x: e.x, y: 0.9, z: e.z, max: 0.35, s0: 0.3, s1: 0.8, a0: 0.5, type: 2 }); sparks(e.x, 0.9, e.z, 2, e.side === 'r' ? 8 : 4, 4); }
       else if (k === 'fizz') P3({ x: e.x, y: 0.9, z: e.z, max: 0.25, s0: 0.25, s1: 0.5, a0: 0.4, type: 0 });
@@ -1126,8 +1123,8 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
         if (W.wave.n > g.waveSeen) {
           g.waveSeen = W.wave.n;
           const spec = E.waveSpec(W.wave.n, 1, W.lv, 1);
-          if (spec.boss) { showBanner('Boss wave', `${E.ROBOTS.boss.name} is coming`, 'red', 2.8); Sfx.play('alert', { vol: 0.6 }); }
-          else { showBanner(`Wave ${W.wave.n}`, W.wave.n === 1 ? 'Robots incoming' : W.endless || W.wave.n < E.WIN_WAVE ? null : 'Last wave', 'gold', 2); Sfx.play('cp', { vol: 0.6 }); }
+          if (spec.boss) { showBanner('Boss wave', `${E.ROBOTS.boss.name} is coming`, 'red', 2.8); zap('alert', 0.6); }
+          else { showBanner(`Wave ${W.wave.n}`, W.wave.n === 1 ? 'Robots incoming' : W.endless || W.wave.n < E.WIN_WAVE ? null : 'Last wave', 'gold', 2); zap('cp', 0.6); }
           for (const id of W.local) { const h = W.heroes[id]; if (h && h.st === 2) { const p = E.heroSpawn(W.A, W.order.indexOf(id)); h.x = p.x; h.z = p.z; h.st = 0; h.hp = h.max; h.ammo = 3; h.downT = 0; W.ev.push({ k: 'revive', id, x: h.x, z: h.z }); } }
         }
         if (W.wave.st === 'break' && (g.tokens || 0) > 0 && !cardsRef.current && !g.over && !(E.cardWave(W.wave.n) && g.cardDone !== W.wave.n)) openStreak();
@@ -1135,10 +1132,10 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
           g.cardDone = W.wave.n;
           if (isHost) for (const id of g.bots) { const h = W.heroes[id]; if (h) { const ch = E.cardChoices(h, Math.random); if (ch.length) E.applyCard(h, ch[Math.floor(Math.random() * ch.length)]); } }
           const meH0 = W.heroes[myK];
-          if (meH0 && W.local.has(myK)) { const ch = E.cardChoices(meH0, Math.random); if (ch.length) { setCards({ n: W.wave.n, list: ch, until: now + Math.max(2500, W.wave.t * 1000 - 400) }); Sfx.play('star', { vol: 0.6 }); } }
+          if (meH0 && W.local.has(myK)) { const ch = E.cardChoices(meH0, Math.random); if (ch.length) { setCards({ n: W.wave.n, list: ch, until: now + Math.max(2500, W.wave.t * 1000 - 400) }); zap('star', 0.6); } }
         }
         if (W.wave.st !== g.stSeen) {
-          if (W.wave.st === 'break' && g.stSeen === 'fight') { showBanner(`Wave ${W.wave.n} cleared`, E.cardWave(W.wave.n) ? 'Pick an upgrade' : 'Catch your breath', 'green', 2.2); Sfx.play('combo', { vol: 0.6 }); }
+          if (W.wave.st === 'break' && g.stSeen === 'fight') { showBanner(`Wave ${W.wave.n} cleared`, E.cardWave(W.wave.n) ? 'Pick an upgrade' : 'Catch your breath', 'green', 2.2); zap('combo', 0.6); }
           if (W.wave.st === 'fight' && cardsRef.current) pickCard(cardsRef.current.list[0]);
           g.stSeen = W.wave.st;
         }
@@ -1522,13 +1519,13 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
   const finish = () => { Sfx.stopAll(); onClose(); };
   const leave = () => { if (phase === 'play' && !solo && !watch) { setLeaveAsk(true); return; } finish(); };
   useBackClose(true, () => { if (chatOpen) setChatOpen(false); else if (ctl) setCtl(false); else if (optSheet) setOptSheet(false); else if (arenaSheet) setArenaSheet(false); else if (people) setPeople(false); else if (quick) setQuick(false); else if (leaveAsk) setLeaveAsk(false); else if (paused) setPaused(false); else if (phase === 'play' && solo) setPaused(true); else leave(); });
-  const sendEmote = (e) => { setBubbles((p) => ({ ...p, [kindOf()]: { e, at: Date.now() } })); if (!solo) relay.send('emo', { e }); setQuick(false); Sfx.play('pop', { vol: 0.5 }); };
+  const sendEmote = (e) => { setBubbles((p) => ({ ...p, [kindOf()]: { e, at: Date.now() } })); if (!solo) relay.send('emo', { e }); setQuick(false); zap('pop', 0.5); };
   useEffect(() => {
     if (!Object.keys(bubbles).length) return undefined;
     const t = setTimeout(() => setBubbles((p) => { const n = {}; for (const k of Object.keys(p)) if (Date.now() - p[k].at < 2200) n[k] = p[k]; return n; }), 2300);
     return () => clearTimeout(t);
   }, [bubbles]);
-  useEffect(() => { if (phase === 'menu') { Sfx.init(); Sfx.music('lobbySiege', true); } else if (phase === 'play') Sfx.music('siege', true); else Sfx.music(null, false); }, [phase]);
+  useEffect(() => { if (phase === 'menu') { Sfx.init(); boltLoad(); Sfx.music('lobbySiege', true); } else if (phase === 'play') Sfx.music('siege', true); else Sfx.music(null, false); }, [phase]);
   useEffect(() => () => Sfx.music(null, false), []);
   useEffect(() => { if (paused || phase !== 'play') { J.reset(); G.current.aim = { on: false }; setAimUi(null); } }, [paused, phase]);
 

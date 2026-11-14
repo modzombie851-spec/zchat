@@ -111,6 +111,7 @@ const GROUPS = [
     items: [
       ['Lobby, break and wave fight music', 'mrlockjaw, emmraan and Pixabay artists', 'https://pixabay.com/music/', 'Pixabay license'],
       ['Hip hop emote beat', 'vaitsez on Pixabay', 'https://pixabay.com/music/', 'Pixabay license'],
+      ['Bolt War fight and lobby music', 'The Mountain and vaitsez on Pixabay', 'https://pixabay.com/music/', 'Pixabay license'],
       ['Announcer and survivor voices', 'Kenney', 'https://kenney.nl/assets/voiceover-pack', 'CC0'],
       ['Seller voice lines', 'VoiceBosch on Pixabay', 'https://pixabay.com/sound-effects/', 'Pixabay license'],
     ],

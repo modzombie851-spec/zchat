@@ -1323,7 +1323,7 @@ export function createRenderer(canvas, opts = {}) {
     gl.uniform1f(K.u.uExposure, env.exposure || 1);
     gl.uniform1f(K.u.uTime, env.time || 0);
     gl.uniform1f(K.u.uSkyOn, skyTex && env.skyTex !== false ? 1 : 0);
-    if (skyTex) { gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, skyTex); gl.uniform1i(K.u.uSkyTex, 0); }
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, skyTex); gl.uniform1i(K.u.uSkyTex, 0);
     gl.bindVertexArray(skyVao);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.enable(gl.DEPTH_TEST);
@@ -1474,11 +1474,12 @@ export function createRenderer(canvas, opts = {}) {
       gl.uniform3fv(Q.u.uFogCol, env.fogCol);
       gl.uniform1f(Q.u.uFogDen, env.fogDen);
       gl.uniform1f(Q.u.uFxOn, fxTex ? 1 : 0);
-      if (fxTex) { gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, fxTex); gl.uniform1i(Q.u.uFx, 3); gl.activeTexture(gl.TEXTURE0); }
+      gl.uniform1i(Q.u.uFx, 3); gl.uniform1i(Q.u.uFx2, 4); gl.uniform1i(Q.u.uBoom, 5);
+      if (fxTex) { gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, fxTex); gl.activeTexture(gl.TEXTURE0); }
       gl.uniform1f(Q.u.uFx2On, fx2Tex ? 1 : 0);
       gl.uniform1f(Q.u.uBoomOn, boomTex ? 1 : 0);
-      if (fx2Tex) { gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_2D, fx2Tex); gl.uniform1i(Q.u.uFx2, 4); }
-      if (boomTex) { gl.activeTexture(gl.TEXTURE5); gl.bindTexture(gl.TEXTURE_2D, boomTex); gl.uniform1i(Q.u.uBoom, 5); }
+      if (fx2Tex) { gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_2D, fx2Tex); }
+      if (boomTex) { gl.activeTexture(gl.TEXTURE5); gl.bindTexture(gl.TEXTURE_2D, boomTex); }
       gl.activeTexture(gl.TEXTURE0);
       gl.bindVertexArray(partVao);
       gl.bindBuffer(gl.ARRAY_BUFFER, partBuf);
