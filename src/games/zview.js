@@ -1,4 +1,4 @@
-import { createRenderer } from './race3d.js';
+import { createRenderer, m4 } from './race3d.js';
 import { pondItems } from './zpond.js';
 import { townMeshes, townEnv } from './zmap.js';
 import { buildDog } from './zbody.js';
@@ -12,6 +12,7 @@ import { loadTown, poseM } from './ztownview.js';
 import { loadRail } from './zrail.js';
 import { resAll, resBlob, resReady } from './zres.js';
 import { SCHAR } from './zsurv.js';
+import { SELLER } from './zsim.js';
 
 export const ZMODEL = {
   walker: ['zgirl', 'zwar', 'zyaku', 'zpris', 'zsurv', 'zclown'],
@@ -34,6 +35,13 @@ export const TIERS = [
 export const GUN_KEYS = ['rifle', 'smg', 'pistol', 'shotgun', 'sniper', 'deagle', 'uzi', 'qq9', 'ak47', 'xpr', 'lmg', 'spas', 'awm', 'mgl'];
 export const survFiles = (k) => [`dead/s${k}.bin`, `dead/s${k}_d.webp`, `dead/s${k}_n.webp`];
 export const gunFiles = (g) => fpFiles(g);
+const STALL = [
+  ['crate', 0, 0, 1.12, 0, 0, 0.85],
+  ['pallet', -0.6, 0.51, -2.22, 0, 1, 1], ['pallet', 0.6, 0.51, -2.22, 0, 1, 1], ['pallet', -0.6, 1.53, -2.22, 0, 1, 1], ['pallet', 0.6, 1.53, -2.22, 0, 1, 1],
+  ['wg_sn', -0.6, 1.66, -2.07, 1, 0, 1.1], ['wg_r', 0.62, 1.66, -2.07, 1, 0, 1.1], ['wg_sh', -0.6, 1.17, -2.07, 1, 0, 1.1], ['wg_smg', 0.4, 1.17, -2.07, 1, 0, 1.1], ['wg_p', 1.02, 1.22, -2.07, 1, 0, 1.1],
+  ['ammo', -0.62, 0.83, 0.98, 2.16, 0, 1], ['ammo', -0.62, 0.997, 1.0, 2.08, 0, 1], ['ammo', -0.2, 0.83, 1.1, 1.88, 0, 1], ['plate', 0.38, 0.857, 1.6, 0.05, -1, 1],
+  ['wg_mag', 0.86, 0.842, 0.95, 0.3, 0, 1, 1], ['wg_mag', 1.02, 0.842, 1.2, -0.25, 0, 1, 1], ['wg_mag', 0.7, 0.842, 1.28, 0.1, 0, 1, 1],
+];
 const KIT_CORE = new Set(PLAY.map((q) => q[0]).filter((id) => /^k[A-Z]/.test(id)).map((id) => `dead/kit/st_${id}.bin`));
 export function coreFiles(k, guns) {
   const base = resAll((p) => p.startsWith('dead/town/') || p === 'dead/kit/kit.json' || p.startsWith('dead/kit/tex_') || KIT_CORE.has(p) || /^dead\/z[^/]*$/.test(p) || p === 'dead/sanim.bin' || p === 'dead/fx-v1.webp' || p.startsWith('dead/nade') || p.startsWith('dead/molo') || p === 'dead/fx2-v1.webp' || p === 'dead/boom-v1.webp' || p.startsWith('dead/emo/') || p.startsWith('dead/ui/') || p.startsWith('dead/sky/') || p.startsWith('dead/rail/') || p.startsWith('dead/sdog') || p.startsWith('dead/sell') || p.startsWith('dead/props/') || p === 'dead/danim.bin' || p.startsWith('sounds/dead/'));
@@ -144,13 +152,14 @@ export function makeView(canvas, tierIdx, ov) {
   }).catch(() => { V.town.fail++; if (!V.dead && V.town.fail < 3) setTimeout(getTown, 1200 * V.town.fail); else V.err = 'town'; });
   getTown();
   V.realDog = null;
-  Promise.all([loadZAnims('/dead', 'danim'), loadZModel('/dead', 'sdog', tierIdx > 0, tierIdx === 0)]).then(async ([an, x]) => {
+  const getDog = (n) => Promise.all([loadZAnims('/dead', 'danim'), loadZModel('/dead', 'sdog', tierIdx > 0, tierIdx === 0)]).then(async ([an, x]) => {
     if (V.dead) { dropImgs(x); return; }
     const tex = { rex: R.texture(x.img) };
-    for (const k of ['luna', 'bear', 'goldie']) { try { const im = await fetchImg(`/dead/sdog_${k}_d.webp`, tierIdx === 0); if (V.dead) return; tex[k] = R.texture(im); if (im.close) im.close(); } catch {} }
+    for (const k of ['luna', 'bear', 'goldie']) { for (let a = 0; a < 3 && !tex[k]; a++) { try { const im = await fetchImg(`/dead/sdog_${k}_d.webp`, tierIdx === 0); if (V.dead) return; tex[k] = R.texture(im); if (im.close) im.close(); } catch {} } }
     V.realDog = { M: x.model, mesh: R.tskin(x.model), tex, nrm: x.nrm ? R.texture(x.nrm) : null, clips: an.clips };
     dropImgs(x);
-  }).catch(() => { V.realDogFail = true; });
+  }).catch(() => { if (!V.dead && n < 4) setTimeout(() => getDog(n + 1), 1500 * (n + 1)); else V.realDogFail = true; });
+  getDog(0);
   V.seller = null;
   Promise.all([loadZAnims('/dead', 'sellanim'), loadZModel('/dead', 'seller', tierIdx > 0, tierIdx === 0)]).then(([an, x]) => {
     if (V.dead) { dropImgs(x); return; }
@@ -171,6 +180,13 @@ export function makeView(canvas, tierIdx, ov) {
     for (const id of Object.keys(man.models)) { try { const M0 = await loadStatic('/dead/props', id); P[id] = { mesh: R.tstat(M0), max: man.models[id].max, off: man.models[id].off || [0, 0, 0], M0: PROP_PARTS.has(id) ? M0 : null }; } catch {} }
     if (V.dead) return;
     V.props = P;
+    const sy0 = floorH(SELLER.x, SELLER.z), H90 = Math.PI / 2;
+    for (const [id, dx, dy, dz, yaw, pitch, s, roll = 0] of STALL) {
+      const M = P[id];
+      if (!M) continue;
+      const x = SELLER.x + dx, y = sy0 + dy, z = SELLER.z + dz, mx = M.max;
+      statics.push({ mesh: M.mesh, model: m4.pose(x, y, z, yaw * H90, pitch * H90, roll * H90, s), arrs: P.arrs, cast: !!T.shadow, bs: [x, y + mx[1] * s * 0.5, z, Math.hypot(mx[0], mx[1], mx[2]) * s + 0.3] });
+    }
     const own = [];
     for (const [id, x, z, yaw = 0, s = 1, dy = 0] of PLAY) {
       if (!PROP_PARTS.has(id) || !P[id] || !P[id].M0) continue;

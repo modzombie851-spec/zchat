@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { SkillFace } from './gskill.jsx';
+import { MetalFace, TagPlate, hasMIcon } from './zbtn.jsx';
 
 const P = {
   fire: <><circle cx="12" cy="12" r="7.2" /><path d="M12 2.5v4.2M12 17.3v4.2M2.5 12h4.2M17.3 12h4.2" /><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none" /></>,
@@ -28,7 +29,7 @@ const P = {
   close: <><path d="M6 6l12 12M18 6L6 18" /></>,
   bandage: <><path d="M5.2 14.6l9.4-9.4a3 3 0 0 1 4.2 4.2l-9.4 9.4a3 3 0 0 1-4.2-4.2z" /><path d="M10 10l4 4" /><circle cx="11.2" cy="12.8" r=".3" /><circle cx="12.8" cy="11.2" r=".3" /></>,
   syringe: <><path d="M14.5 4.5l5 5M17 7l-8.8 8.8-2.9.6.6-2.9L14.7 4.7" /><path d="M10.6 8.2l1.6 1.6M8.6 10.2l1.6 1.6M5.4 18.6L3.8 20.2" /></>,
-  shop: <><path d="M4 9.5h16l-1.2 10H5.2z" /><path d="M8.5 9.5V7a3.5 3.5 0 0 1 7 0v2.5" /></>,
+  shop: <><path d="M2.5 4.5h3l2.6 11.4h10.4" /><path d="M6.6 7h13.4l-1.6 6.1H7.9" /><circle cx="9.6" cy="19.6" r="1.5" /><circle cx="17" cy="19.6" r="1.5" /></>,
   cam: <><circle cx="12" cy="9" r="2.8" /><path d="M7 19.5c.7-3 2.6-4.6 5-4.6s4.3 1.6 5 4.6" /><path d="M4.2 13.5A8.2 8.2 0 0 1 7 4.6M19.8 13.5A8.2 8.2 0 0 0 17 4.6" /><path d="M5.8 3.8L7 4.6l-.4 1.4M18.2 3.8L17 4.6l.4 1.4" /></>,
   map: <><path d="M3.5 6.2l5.5-2.2 6 2.2 5.5-2.2v13.6l-5.5 2.2-6-2.2-5.5 2.2z" /><path d="M9 4v13.6M15 6.2v13.6" /></>,
   down: <><path d="M6 9l6 6 6-6" /></>,
@@ -46,7 +47,35 @@ export function Ico({ k, size = 22, sw = 1.7, color = '#FFFFFF' }) {
 
 const CB_ICON = { emote: 'hand', bullet: 'bullets', scope: 'crosshair', mag: 'magazine', knife: 'knife', grenade: 'grenade', bottle: 'molotov', heart: 'revive', torch: 'flashlight', swap: 'cycle' };
 
-export function CBtn({ size = 54, icon, label, onDown, onUp, onMove, onTap, active, badge, ring, disabled, style, sub, big, tone }) {
+const ZG = {
+  bullet: '<path d="M24 4.5c4.3 3.6 6.4 8.4 6.4 14.2V22H17.6v-3.3c0-5.8 2.1-10.6 6.4-14.2z"/><rect x="17.6" y="24" width="12.8" height="14.5" rx="1"/><rect x="16" y="40.2" width="16" height="3.6" rx="1"/>',
+  scope: '<circle cx="24" cy="24" r="12.5" fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="3.4"/><path d="M24 3.5v11M24 33.5v11M3.5 24h11M33.5 24h11" fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="3.4"/><circle cx="24" cy="24" r="3"/>',
+  mag: '<path d="M19.4 5c.3-1.8 1.6-2.7 3.2-2.7s2.9.9 3.2 2.7z"/><path d="M17 5.6h13c.4 12 2 24.4 5.4 35.4L23.3 43.4C20.4 31.9 18.2 18.6 17 5.6z"/><path d="M19.6 15.5h11.3M20.6 22.5h11.3M21.8 29.5h11.2" stroke="rgba(0,0,0,0.45)" stroke-width="1.7" fill="none"/>',
+  knife: '<path d="M40.8 5.2c.9 4.9-1.2 9.8-6.1 14.7L21.2 33.4l-6.6-6.6L28.1 13.3c4.9-4.9 8-7.4 12.7-8.1z"/><path d="M12.6 25.4l10 10-2.5 2.5-10-10z"/><path d="M12 33.3l2.7 2.7-6 6a1.9 1.9 0 0 1-2.7-2.7z"/>',
+  grenade: '<path d="M24 16.5c7.4 0 12.6 5.3 12.6 12.7 0 7.5-5.6 14.3-12.6 14.3s-12.6-6.8-12.6-14.3c0-7.4 5.2-12.7 12.6-12.7z"/><rect x="19.6" y="10" width="8.8" height="6.2" rx="1"/><path d="M28.2 11.2l8.6-4.6 1.7 3.1-8.7 4.7z"/><circle cx="16.3" cy="9.6" r="3.3" fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.3"/><path d="M14.4 28.6h19.2M24 19.4v21" stroke="rgba(0,0,0,0.35)" stroke-width="1.8" fill="none"/>',
+  bottle: '<path d="M21.2 14.6h5.6v5.2l3.6 4.9v17.1a2.4 2.4 0 0 1-2.4 2.4h-8a2.4 2.4 0 0 1-2.4-2.4V24.7l3.6-4.9z"/><path d="M24.3 2.6c3.9 3.1 5 6.3 3 9.6-.7-1.5-1.9-2.5-3.5-3 .5 1.6.1 2.9-1.2 3.7-1.7-2.7-.8-6.3 1.7-10.3z"/><path d="M17.6 30.5h12.8" stroke="rgba(0,0,0,0.4)" stroke-width="2" fill="none"/>',
+  plate: '<path d="M12.5 8l6-4h11l6 4v24.2c0 4.6-4.8 8.6-11.5 11.6-6.7-3-11.5-7-11.5-11.6z"/><path d="M17 13.5h14" stroke="rgba(0,0,0,0.4)" stroke-width="2" fill="none"/>',
+  c4: '<rect x="5" y="17" width="38" height="22" rx="2"/><path d="M17.7 17v22M30.3 17v22" stroke="rgba(0,0,0,0.45)" stroke-width="2" fill="none"/><rect x="18.5" y="8.5" width="11" height="8" rx="1.2"/><rect x="20.2" y="10.3" width="7.6" height="4.4" rx="0.6" fill="rgba(0,0,0,0.6)"/><path d="M29.5 12.5c4.2 0 7.4 1.6 9.3 4.5" fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2"/>',
+  det: '<rect x="14" y="16" width="20" height="28" rx="3"/><circle cx="24" cy="25" r="5.2" fill="rgba(0,0,0,0.55)"/><circle cx="24" cy="25" r="3" fill="#ff4a3d"/><path d="M29 16V5" fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="3"/><circle cx="29" cy="4.5" r="2.2"/><rect x="18" y="35" width="12" height="3" rx="1" fill="rgba(0,0,0,0.45)"/>',
+  jump: '<path d="M24 7.5l13.5 13.4-3.6 3.6L24 14.7l-9.9 9.8-3.6-3.6z"/><path d="M24 21.5l13.5 13.4-3.6 3.6L24 28.7l-9.9 9.8-3.6-3.6z"/>',
+  crouch: '<circle cx="28.5" cy="8.8" r="4.7"/><path d="M25.5 16.5l-5 10.5 9.5 4.5v11M20.5 27l-6 8.5 4.5 7" fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="5"/><path d="M25.2 18.6l8.2 4.2" fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.4"/>',
+  slide: '<circle cx="34" cy="13" r="4.6"/><path d="M31 19.5l-9 7.5 12 5.5M22 27l-12 9" fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="5"/><path d="M6 42.5h30" fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="3"/><path d="M4 34h7M2 28h6" fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.4" opacity="0.7"/>',
+  emote: '<circle cx="24" cy="24" r="16.5" fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="3.4"/><circle cx="18" cy="20" r="2.8"/><circle cx="30" cy="20" r="2.8"/><path d="M16.4 28.2c2 3.6 4.7 5.4 7.6 5.4s5.6-1.8 7.6-5.4" fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="3.4"/>',
+  mic: '<rect x="18" y="5" width="12" height="22" rx="6"/><path d="M12 22c0 6.8 5.4 12 12 12s12-5.2 12-12M24 34v8M17 42h14" fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="3.2"/>',
+  micoff: '<rect x="18" y="5" width="12" height="22" rx="6"/><path d="M12 22c0 6.8 5.4 12 12 12s12-5.2 12-12M24 34v8M17 42h14" fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="3.2"/><path d="M9 7l30 34" stroke="rgba(0,0,0,0.6)" stroke-width="6.5" stroke-linecap="round"/><path d="M9 7l30 34" fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="3.4"/>',
+  chat: '<path d="M8 10h32a3 3 0 0 1 3 3v17a3 3 0 0 1-3 3H21l-9 7v-7H8a3 3 0 0 1-3-3V13a3 3 0 0 1 3-3z"/>',
+  invite: '<circle cx="19" cy="15" r="7"/><path d="M5 40c1-8.4 6.6-13.4 14-13.4S32 31.6 33 40z"/><path d="M38 12v14M31 19h14" fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="3.4"/>',
+  people: '<circle cx="17" cy="15" r="6.4"/><path d="M4 39c.9-7.6 6-12.2 13-12.2S29.1 31.4 30 39z"/><circle cx="32" cy="14" r="5.6"/><path d="M33 25.4c6 .2 10.2 4.6 11 11.6H32.4c-.4-4.6-2.2-8.4-5.2-11 1.8-.4 3.8-.6 5.8-.6z"/>',
+  pause: '<rect x="13" y="9" width="7.5" height="30" rx="2"/><rect x="27.5" y="9" width="7.5" height="30" rx="2"/>',
+  cam: '<path d="M9 14h7l3-5h10l3 5h7a3 3 0 0 1 3 3v19a3 3 0 0 1-3 3H9a3 3 0 0 1-3-3V17a3 3 0 0 1 3-3z"/><circle cx="24" cy="26" r="7" fill="rgba(0,0,0,0.55)"/><circle cx="24" cy="26" r="4.2"/>',
+  shop: '<path d="M3.5 8.5h6.4l5.6 25.2h23.2" fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="3.6"/><path d="M12.2 13.5h30.6a1.8 1.8 0 0 1 1.7 2.3l-3.4 11.4a2.6 2.6 0 0 1-2.5 1.9H15.4z"/><circle cx="19" cy="40.2" r="3.6"/><circle cx="35.4" cy="40.2" r="3.6"/>',
+};
+export function ZGlyph({ k, size = 22, color = '#FFFFFF' }) {
+  return <svg width={size} height={size} viewBox="0 0 48 48" fill={color} aria-hidden="true" style={{ display: 'block', filter: 'drop-shadow(0 1px 1.5px rgba(0,0,0,0.55))' }} dangerouslySetInnerHTML={{ __html: ZG[k] }} />;
+}
+export const hasGlyph = (k) => !!ZG[k];
+
+export function CBtn({ size = 54, icon, label, onDown, onUp, onMove, onTap, active, badge, ring, disabled, style, sub, big, tone, tag }) {
   const st = useRef({ id: null, x: 0, y: 0, moved: 0 });
   const [down, setDown] = useState(false);
   const live = useRef(null);
@@ -84,11 +113,22 @@ export function CBtn({ size = 54, icon, label, onDown, onUp, onMove, onTap, acti
     onUp && onUp(e, st.current.moved);
     if (onTap && st.current.moved < 14) onTap(e);
   };
-  const gi = CB_ICON[icon];
+  const zg = !!ZG[icon];
+  const gi = zg ? null : CB_ICON[icon];
+  const metal = hasMIcon(icon);
   return (
     <div role="button" aria-label={label} aria-disabled={disabled ? 'true' : undefined} onPointerDown={press} onContextMenu={(e) => e.preventDefault()}
       style={{ position: 'absolute', width: size, height: size, borderRadius: '50%', touchAction: 'none', pointerEvents: 'auto', cursor: 'pointer', ...style }}>
-      <SkillFace size={size} icon={gi} glyph={gi ? null : <Ico k={icon} size={Math.round(size * 0.48)} sw={1.9} />} main={big} active={!!active} pressed={down} ring={ring} badge={badge} disabled={disabled} sub={sub} tint={tone === 'green' ? '#2E9A5A' : tone === 'red' ? '#C8281E' : null} accent={tone === 'green' ? '#7CF0A6' : '#FFC23D'} />
+      {metal ? (
+        <>
+          <MetalFace size={size} k={icon} big={big} active={!!active} pressed={down} ring={ring} disabled={disabled} tone={tone} sub={sub} accent={tone === 'green' ? '#7CF0A6' : '#FFC83A'} />
+          {sub != null && <span aria-hidden="true" style={{ position: 'absolute', left: 0, right: 0, bottom: Math.round(size * 0.15), textAlign: 'center', fontWeight: 800, fontSize: Math.max(9, Math.round(size * 0.16)), color: '#FFFFFF', textShadow: '0 1px 2px rgba(0,0,0,0.85)', lineHeight: 1, pointerEvents: 'none' }}>{sub}</span>}
+          {badge != null && <span aria-hidden="true" style={{ position: 'absolute', right: -2, top: -2, minWidth: 20, height: 20, padding: '0 5px', boxSizing: 'border-box', borderRadius: 10, background: 'radial-gradient(circle at 50% 35%, #3A4049, #0C0E12)', boxShadow: `0 0 0 1.6px ${disabled ? 'rgba(200,205,212,0.5)' : '#DDE2E8'}, 0 1px 3px rgba(0,0,0,0.6)`, color: '#FFFFFF', fontSize: 11.5, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', fontVariantNumeric: 'tabular-nums', pointerEvents: 'none' }}>{badge}</span>}
+          {tag && <TagPlate text={tag} size={size} />}
+        </>
+      ) : (
+        <SkillFace size={size} icon={gi} glyph={gi ? null : zg ? <ZGlyph k={icon} size={Math.round(size * (big ? 0.46 : 0.5))} /> : <Ico k={icon} size={Math.round(size * 0.48)} sw={1.9} />} main={big} active={!!active} pressed={down} ring={ring} badge={badge} disabled={disabled} sub={sub} tint={tone === 'green' ? '#2E9A5A' : tone === 'red' ? '#C8281E' : null} accent={tone === 'green' ? '#7CF0A6' : '#FFC23D'} />
+      )}
     </div>
   );
 }
@@ -97,7 +137,7 @@ export function TopBtn({ icon, label, onTap, style, badge, on }) {
   return (
     <button type="button" aria-label={label} onClick={(e) => { e.stopPropagation(); onTap(); }} onPointerDown={(e) => e.stopPropagation()}
       style={{ width: 36, height: 36, borderRadius: '50%', border: 'none', padding: 0, cursor: 'pointer', background: on ? 'rgba(46,170,96,0.82)' : 'rgba(14,17,22,0.44)', boxShadow: on ? 'inset 0 0 0 1.6px rgba(190,255,210,0.9)' : 'inset 0 0 0 1.6px rgba(255,255,255,0.62)', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'auto', position: 'relative', ...style }}>
-      <Ico k={icon} size={19} />
+      {ZG[icon] ? <ZGlyph k={icon} size={19} /> : <Ico k={icon} size={19} />}
       {badge ? <span style={{ position: 'absolute', right: -3, top: -3, width: 9, height: 9, borderRadius: 5, background: '#FF5A4A' }} /> : null}
     </button>
   );

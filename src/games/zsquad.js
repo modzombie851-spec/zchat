@@ -15,14 +15,14 @@ const clean = (id, p) => ({
   at: Number(p.at) || 0,
 });
 
-export function useSquad({ room, myId, me, lead, on, onGo, onEmo }) {
+export function useSquad({ room, myId, me, lead, on, onGo, onEmo, onKick }) {
   const [mates, setMates] = useState([]);
   const [full, setFull] = useState(false);
   const chRef = useRef(null);
   const meRef = useRef(me);
   meRef.current = me;
   const cbRef = useRef(null);
-  cbRef.current = { onGo, onEmo };
+  cbRef.current = { onGo, onEmo, onKick };
   const atRef = useRef(0);
   const okRef = useRef(false);
   const topic = on && room && room.r && myId ? `dsq-${room.reg}-${room.r}` : null;
@@ -55,7 +55,8 @@ export function useSquad({ room, myId, me, lead, on, onGo, onEmo }) {
       return ch
         .on('presence', { event: 'sync' }, () => read(ch))
         .on('broadcast', { event: 'go' }, (msg) => { const p = msg && msg.payload; if (p && cbRef.current.onGo) cbRef.current.onGo(p); })
-        .on('broadcast', { event: 'emo' }, (msg) => { const p = msg && msg.payload; if (p && cbRef.current.onEmo) cbRef.current.onEmo(p); });
+        .on('broadcast', { event: 'emo' }, (msg) => { const p = msg && msg.payload; if (p && cbRef.current.onEmo) cbRef.current.onEmo(p); })
+        .on('broadcast', { event: 'kick' }, (msg) => { const p = msg && msg.payload; if (p && cbRef.current.onKick) cbRef.current.onKick(p); });
     }, {
       topic,
       onStatus: (st, err, ch) => {

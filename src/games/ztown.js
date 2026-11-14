@@ -1,5 +1,6 @@
 import { PLACE } from './ztowndata.js';
 import { MAP } from './zmapdata.js';
+import { CLIMB, CLIMB_CELL } from './zclimbdata.js';
 const H32 = (n) => { let x = (n | 0) * 374761393; x = (x ^ (x >>> 13)) * 1274126177; return ((x ^ (x >>> 16)) >>> 0) / 4294967296; };
 export const hsh = (a, b, c = 0) => H32(a * 73856093 ^ b * 19349663 ^ c * 83492791);
 export const sat = (t) => (t < 0 ? 0 : t > 1 ? 1 : t);
@@ -104,7 +105,8 @@ export const BARRIERS = [[-92.35, -5.6, -92.35, 5.6], [108.35, -5.6, 108.35, 5.6
 export const GATES = [[-93, -6, -91, 6], [107, -6, 109, 6], [40.6, -101, 51.4, -99]];
 
 let solidCache = null;
-const EXTRA_R = [[60.7, -55.2, 68, -47.4], [-50.9, 62.1, -39.9, 67.1], [-37.4, 62.4, -16.4, 65.8]];
+const PART_FIT = new Set(['truck', 'sedan', 'burnt', 'hatch', 'policeA', 'policeB', 'crates', 'pallets', 'hay', 'kSand']);
+const EXTRA_R = [[60.7, -55.2, 68, -47.4], [-50.9, 62.1, -39.9, 67.1], [-37.4, 62.4, -16.4, 65.8], [-0.35, -28.8, 2.15, -27.4], [-0.32, -31.45, 2.12, -31.24]];
 export const PROPS2 = [
   ['tent', -76, 36, 0], ['tent', -66.5, 41.5, 90], ['crates', -70.5, 33.2, 0], ['crate', -74.8, 43.6, 25], ['barrelR', -63.6, 38.4, 0], ['barrelB', -62.8, 37.6, 0], ['pallets', -79.6, 43.4, 90],
   ['houseB', 90, 50, 180], ['shed', 77.6, 58, 90], ['hay', 84, 36, 10], ['hay', 86.4, 37.2, 80], ['barrelR', 96.8, 44, 0],
@@ -122,6 +124,19 @@ export function solids() {
   const rects = MAP.r.map((r) => r.slice()), circles = MAP.c.filter((c) => inRect(c[0], c[1], BOUNDS, 2)).map((c) => c.slice());
   rects.push(...EXTRA_R);
   circles.push(...EXTRA_C);
+  for (const [id, x, z, yaw = 0, s = 1] of MAP.parts) {
+    const d = PART_FIT.has(id) ? CLIMB[id] : null;
+    if (!d || !inRect(x, z, BOUNDS, 2)) continue;
+    const w = d[2] * CLIMB_CELL * s, l = d[3] * CLIMB_CELL * s, cx0 = (d[0] + d[2] * CLIMB_CELL / 2) * s, cz0 = (d[1] + d[3] * CLIMB_CELL / 2) * s;
+    const a = (yaw * Math.PI) / 180, c = Math.cos(a), n = Math.sin(a);
+    const long = l >= w, L = long ? l : w, r = (long ? w : l) * 0.46;
+    const k = Math.max(1, Math.ceil((L - 2 * r) / r) + 1);
+    for (let i = 0; i < k; i++) {
+      const u = k === 1 ? 0 : -L / 2 + r + ((L - 2 * r) * i) / (k - 1);
+      const lx = cx0 + (long ? 0 : u), lz = cz0 + (long ? u : 0);
+      circles.push([x + c * lx + n * lz, z - n * lx + c * lz, r]);
+    }
+  }
   if (MAP.forest !== 2) {
     for (const [x, z, s] of OAKS) if (inRect(x, z, BOUNDS, 2)) circles.push([x, z, 0.5 + s * 0.02]);
     for (const t of forestList(1).trees) if (inRect(t.x, t.z, BOUNDS, 2)) circles.push([t.x, t.z, 0.42 + t.s * 0.012]);

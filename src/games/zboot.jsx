@@ -38,7 +38,7 @@ export function ZBoot({ GS, boot, onRetry, onClose }) {
         <GBtn icon="close" color="white" size={42} fast={false} label="Leave" onPress={onClose} />
       </div>
       <div style={{ position: 'absolute', left: left(22), right: right(22), bottom: bottom(16), display: 'flex', flexDirection: 'column', gap: 9 }}>
-        <GTitle text="Dead Town" size={36} color="#E0A85A" />
+        <GTitle text="Zombie Junction" size={36} color="#E0A85A" />
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }} role="status" aria-live="polite">
           <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 800 }}>{msg}</span>
           {side && !err && <span style={{ fontSize: 13, fontWeight: 800, color: 'rgba(239,232,210,0.78)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{side}</span>}

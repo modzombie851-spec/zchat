@@ -96,7 +96,7 @@ export const LEVELS = [
     gems: [[9, 12, 'sun'], [3, 6, 'sun'], [2, 12, 'moon'], [13, 8, 'moon']],
   },
   {
-    name: 'Two Torches',
+    name: 'Torchbound',
     goal: 'Levers, plates, code and fires in one climb',
     theme: 'forge', par: 42.8,
     map: [

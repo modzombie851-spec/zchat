@@ -2,11 +2,11 @@ import { Sfx } from './sfx.js';
 import { resBuf } from './zres.js';
 
 const FILES = {
-  cash: 0.75, heart: 0.9, nbounce: 0.6, g_ak47: 0.85, g_uzi: 1.7, g_qq9: 1.55, g_lmg: 1.0, g_deagle: 0.85, g_awm: 0.9, g_xpr: 0.9, g_mgl: 0.95, g_spas: 0.8, sv_what: 1, sv_lost: 1, sv_alive: 1, sv_salut: 1, sv_greet: 1, sv_time: 1, velcro: 0.9, gore: 1, heli: 0.9, em_laugh_m: 1, em_laugh_f: 1, em_cheer_m: 1, em_cheer_f: 1, em_hey: 1, em_dance: 0.8, g_rifle: 0.75, g_smg: 1.5, g_pistol: 0.8, g_sniper: 0.85, g_shotgun: 0.9,
+  cash: 0.75, heart: 0.9, nbounce: 0.6, g_ak47: 0.85, g_uzi: 1.7, g_qq9: 1.55, g_lmg: 1.0, g_deagle: 0.85, g_awm: 0.9, g_xpr: 0.9, g_mgl: 0.95, g_spas: 0.8, sv_what: 1, sv_lost: 1, sv_alive: 1, sv_salut: 1, sv_greet: 1, sv_time: 1, velcro: 0.9, gore: 1, heli: 0.9, em_laugh_m: 1, em_laugh_f: 1, em_cheer_m: 1, em_cheer_f: 1, em_hey: 1, em_dance: 0.8, em_samba: 0.8, em_hiphop: 0.8, em_clap: 0.9, g_rifle: 0.75, g_smg: 1.5, g_pistol: 0.8, g_sniper: 0.85, g_shotgun: 0.9,
   r_rifle: 0.55, r_pistol: 0.9, r_sniper: 0.6, r_pump: 0.65, r_cock: 0.75, dry: 0.6,
   boom: 0.95, boom2: 0.9, whoosh: 0.7, pin: 0.5,
   z_growl: 0.6, z_hurt: 0.6, z_death: 0.6, z_moan: 0.55, z_war: 0.6, z_die1: 0.6, z_die2: 0.6, z_pain1: 0.6, z_pain2: 0.55, z_pain3: 0.5,
-  z_pain4: 0.6, z_die3: 0.7, z_call1: 0.6, z_call2: 0.6, z_call3: 0.6, z_horde: 0.7, zt_brains1: 0.8, zt_brains2: 0.8, zt_come: 0.8, zt_kill: 0.8, zt_gib: 0.75,
+  z_pain4: 0.6, z_die3: 0.7, z_call1: 0.6, z_call2: 0.6, z_call3: 0.6, z_horde: 0.7, zt_brains1: 0.8, zt_brains2: 0.8, zt_come: 0.8, zt_kill: 0.8, zt_gib: 0.75, z_boss: 1,
   stinger: 0.7, bone: 0.55, d_bark1: 0.75, d_bark2: 0.75, d_bark3: 0.75, d_bark4: 0.75, d_angry: 0.7, d_growl: 0.5, d_whine: 0.5,
   d_step0: 0.35, d_step1: 0.35, d_step2: 0.35, d_step3: 0.35, hit0: 0.5, hit1: 0.5, hit2: 0.5, hithead: 0.6,
   glass0: 0.65, glass1: 0.65, slime0: 0.55, slime1: 0.55, fire: 0.5, slash0: 0.55, slash1: 0.55, chop: 0.65, ui_click: 0.35, ui_tap: 0.3,
@@ -136,7 +136,7 @@ export const ZA = {
       const g = ac.createGain(); g.gain.value = 0;
       src.connect(g); g.connect(mus);
       src.start(0, m.a);
-      g.gain.setTargetAtTime(MUSV * w.vol, ac.currentTime + 0.05, 0.7);
+      g.gain.setTargetAtTime(MUSV * w.vol, ac.currentTime + 0.05, o.rise || 0.7);
       this.musCur = { name, src, g };
     });
   },
@@ -229,6 +229,7 @@ export const ZA = {
     if (ac && loops.length) { lt++; if (lt % 4 === 0) for (const h of loops) place(h.c, { ...h.o, pos: h.pos }, (h.o.vol || 1) * (Sfx.sfxOn ? 1 : 0)); }
     if (ac && movers.length) for (const h of movers) place(h.c, { ...h.o, pos: h.pos }, h.vol * (Sfx.sfxOn ? 1 : 0));
   },
+  has(name) { return !!bufs[name]; },
   play(name, o = {}) {
     if (!ac || !Sfx.sfxOn || !this.sync() || ac.state !== 'running') return null;
     const buf = bufs[name];

@@ -24,6 +24,7 @@ function injectCss() {
     '.zl-b:focus-visible{box-shadow:0 0 0 2px #fff,0 0 0 4px #2479E8}',
     '@keyframes zl-up{from{opacity:0;transform:translate(-50%,12px)}to{opacity:1;transform:translate(-50%,0)}}',
     '.zl-up{animation:zl-up .18s ease-out}',
+    '.zl-col::-webkit-scrollbar{display:none}',
     '@media (prefers-reduced-motion: reduce){.zl-up{animation:none}.zl-b{transition:none}}',
   ].join('\n');
   document.head.appendChild(st);
@@ -46,6 +47,52 @@ function IconBtn({ u, label, onPress, children, badge }) {
       {children}
       {badge ? <span style={{ position: 'absolute', top: u(3), right: u(4), width: u(7), height: u(7), borderRadius: '50%', background: '#D9573F' }} /> : null}
     </button>
+  );
+}
+
+function Squad({ u, S }) {
+  return (
+    <div role="group" aria-label="Squad" style={{ background: PANEL, clipPath: cut(u(10)), padding: `${u(7)}px ${u(8)}px ${u(5)}px` }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: u(6), marginBottom: u(3) }}>
+        <span style={{ fontFamily: CFONT, fontSize: u(16), fontWeight: 800 }}>Squad</span>
+        <span style={{ flex: 1, fontSize: u(11), fontWeight: 700, color: MUTED }}>{`${S.n} of 5`}</span>
+        {S.voice && (
+          <button type="button" className="zl-b" aria-pressed={S.mic} aria-label={S.mic ? 'Turn your mic off' : 'Turn your mic on'} onClick={S.onMic}
+            style={{ height: u(26), display: 'flex', alignItems: 'center', gap: u(5), padding: `0 ${u(9)}px`, background: S.mic ? 'rgba(124,196,107,0.2)' : 'rgba(239,232,210,0.08)', boxShadow: `inset 0 0 0 1.5px ${S.mic ? '#7CC46B' : LINE}`, clipPath: cut(u(5)), color: S.mic ? '#8FD07E' : CREAM, fontFamily: CFONT, fontSize: u(13), fontWeight: 800 }}>
+            <Ico k={S.mic ? 'mic' : 'micoff'} size={u(15)} color={S.mic ? '#8FD07E' : CREAM} />{S.mic ? 'Mic on' : 'Mic off'}
+          </button>
+        )}
+      </div>
+      {S.rows.map((r) => {
+        const st = r.lead ? 'Leader' : r.rdy ? 'Ready' : 'Not ready';
+        const ask = S.kickAsk === r.id;
+        return (
+          <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: u(7), minHeight: u(32), padding: `${u(2)}px 0`, borderTop: `1px solid ${LINE}` }}>
+            <span aria-hidden="true" style={{ width: u(7), height: u(7), flexShrink: 0, borderRadius: '50%', background: r.talk ? '#7CF29A' : r.you ? AMBER : 'rgba(239,232,210,0.28)', boxShadow: r.talk ? '0 0 0 3px rgba(124,242,154,0.25)' : 'none' }} />
+            <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+              <span style={{ fontSize: u(12.5), fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.you ? `${r.n} (you)` : r.n}</span>
+              <span style={{ fontSize: u(10.5), fontWeight: 700, color: r.lead ? AMBER : r.rdy ? '#8FD07E' : MUTED }}>{st}</span>
+            </span>
+            {!r.you && S.voice && (
+              <button type="button" className="zl-b" aria-pressed={!!r.muted} aria-label={r.muted ? `Unmute ${r.n}` : `Mute ${r.n}`} onClick={() => S.onMute(r.id)}
+                style={{ width: u(28), height: u(28), display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, background: r.muted ? 'rgba(217,87,63,0.2)' : 'rgba(239,232,210,0.08)', boxShadow: `inset 0 0 0 1.5px ${r.muted ? '#D9573F' : LINE}`, clipPath: cut(u(5)) }}>
+                <Ico k={r.muted ? 'spkoff' : 'spk'} size={u(15)} color={r.muted ? '#FF8A74' : CREAM} />
+              </button>
+            )}
+            {!r.you && S.lead && (
+              <button type="button" className="zl-b" aria-label={ask ? `Tap again to remove ${r.n}` : `Remove ${r.n} from the squad`} onClick={() => S.onKick(r.id)}
+                style={{ height: u(28), minWidth: u(28), display: 'flex', alignItems: 'center', justifyContent: 'center', gap: u(4), padding: ask ? `0 ${u(8)}px` : 0, background: ask ? '#C9483A' : 'rgba(239,232,210,0.08)', boxShadow: `inset 0 0 0 1.5px ${ask ? '#C9483A' : LINE}`, clipPath: cut(u(5)), color: '#FFFFFF', fontFamily: CFONT, fontSize: u(13), fontWeight: 800 }}>
+                {ask ? 'Remove' : <svg width={u(13)} height={u(13)} viewBox="0 0 14 14" aria-hidden="true"><path d="M2.5 2.5l9 9M11.5 2.5l-9 9" stroke={CREAM} strokeWidth="2" strokeLinecap="round" /></svg>}
+              </button>
+            )}
+            {r.you && !S.lead && (
+              <button type="button" className="zl-b" aria-label="Leave the squad" onClick={S.onLeave}
+                style={{ height: u(26), padding: `0 ${u(10)}px`, background: 'rgba(239,232,210,0.08)', boxShadow: `inset 0 0 0 1.5px ${LINE}`, clipPath: cut(u(5)), color: CREAM, fontFamily: CFONT, fontSize: u(13), fontWeight: 800 }}>Leave</button>
+            )}
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -128,7 +175,7 @@ export function ZLobby({ L }) {
       </div>
 
       <div style={{ position: 'absolute', top: `calc(${top(8)} + ${u(46)}px)`, left: left(12), width: colW, display: 'flex', flexDirection: 'column', gap: u(6) }} onPointerDown={(e) => e.stopPropagation()}>
-        <div style={{ fontFamily: CFONT, fontSize: u(30), fontWeight: 800, color: AMBER, lineHeight: 1, letterSpacing: '0.005em', textShadow: '0 2px 0 rgba(0,0,0,0.45), 0 0 18px rgba(200,68,46,0.35)', marginBottom: u(4) }}>Dead Town</div>
+        <div style={{ fontFamily: CFONT, fontSize: u(24), fontWeight: 800, color: AMBER, lineHeight: 1.05, letterSpacing: '0.005em', whiteSpace: 'nowrap', textShadow: '0 2px 0 rgba(0,0,0,0.45), 0 0 18px rgba(200,68,46,0.35)', marginBottom: u(4) }}>Zombie Junction</div>
         {L.modes.map((m) => <Mode key={m.k} u={u} on={L.mode === m.k} title={m.t} sub={m.s} tone={m.tone} onPress={() => L.setMode(m.k)} />)}
         {L.rooms.length > 0 && L.mode === 'online' && (
           <div style={{ marginTop: u(4), background: PANEL, clipPath: cut(u(9)), padding: `${u(6)}px ${u(8)}px`, display: 'flex', flexDirection: 'column', gap: u(3) }}>
@@ -145,7 +192,8 @@ export function ZLobby({ L }) {
         )}
       </div>
 
-      <div style={{ position: 'absolute', top: `calc(${top(8)} + ${u(46)}px)`, right: right(12), width: colW, display: 'flex', flexDirection: 'column', gap: u(6) }} onPointerDown={(e) => e.stopPropagation()}>
+      <div className="zl-col" style={{ position: 'absolute', top: `calc(${top(8)} + ${u(46)}px)`, bottom: `calc(${bottom(10)} + ${u(L.startNote ? 86 : 68)}px)`, right: right(12), width: colW, display: 'grid', alignContent: 'start', gap: u(6), overflowY: 'auto', overscrollBehavior: 'contain', scrollbarWidth: 'none' }} onPointerDown={(e) => e.stopPropagation()}>
+        {L.squad && <Squad u={u} S={L.squad} />}
         {L.friendRows.length > 0 && (
           <div style={{ background: PANEL, clipPath: cut(u(10)), padding: `${u(7)}px ${u(8)}px ${u(5)}px` }}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: u(6), marginBottom: u(4) }}>
@@ -224,6 +272,10 @@ export function ZLobby({ L }) {
           ))}
         </div>
       )}
+
+      {L.toast ? (
+        <div key={L.toast.at} role="status" aria-live="polite" className="zl-up" style={{ position: 'absolute', left: '50%', top: `calc(${top(8)} + ${u(50)}px)`, padding: `${u(7)}px ${u(16)}px`, background: 'rgba(14,13,12,0.86)', clipPath: cut(u(7)), boxShadow: `inset 0 0 0 1px ${LINE}`, fontFamily: CFONT, fontSize: u(15), fontWeight: 800, color: CREAM, whiteSpace: 'nowrap', pointerEvents: 'none', transform: 'translateX(-50%)' }}>{L.toast.t}</div>
+      ) : null}
 
       {L.startNote ? (
         <div role="status" style={{ position: 'absolute', right: right(12), bottom: `calc(${bottom(10)} + ${u(62)}px)`, width: colW, textAlign: 'center', fontSize: u(12), fontWeight: 800, color: CREAM, textShadow: '0 1px 3px rgba(0,0,0,0.85)', pointerEvents: 'none' }}>{L.startNote}</div>

@@ -1554,7 +1554,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
   const ids0 = phase === 'menu' ? [] : g0.ids;
 
   const lobbyUi = phase !== 'menu' ? null : (
-    <GLobby GS={GS} title="Scrap Siege" onClose={finish} closeLabel={solo ? 'Leave' : 'Back to chat'} tint="rgba(8,10,22,0.62)"
+    <GLobby GS={GS} title="Bolt War" onClose={finish} closeLabel={solo ? 'Leave' : 'Back to chat'} tint="rgba(8,10,22,0.62)"
       sub={watch ? `Watching ${hostName} and friends` : null}
       badge={best ? <GChip style={{ height: 34, gap: 6 }}><GIcon k="crown" size={14} color="#FFD84E" />{`Best wave ${best}`}</GChip> : null}
       tools={(
@@ -1774,7 +1774,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
     <Portal><GSkin k="siege">
       <div ref={GS.rootRef} style={{ position: 'fixed', left: 0, right: 0, top: 'var(--zvp-top, 0px)', height: 'calc(var(--zvp-h, 100%) + var(--zgx, 0px))', zIndex: 90, background: '#2A2620', overflow: 'hidden', touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', fontFamily: FONT, color: '#FFFFFF' }}>
         <div ref={wrapRef} data-side={GS.side ? '1' : '0'} style={GS.wrapStyle} onPointerDown={wrapDown} onPointerMove={wrapMove} onPointerUp={J.handlers.onPointerUp} onPointerCancel={J.handlers.onPointerCancel} onLostPointerCapture={J.handlers.onLostPointerCapture} onPointerLeave={(e) => { if (e.pointerType === 'mouse') G.current.mouse = null; }} onContextMenu={(e) => e.preventDefault()}>
-          <canvas ref={cvRef} aria-label="Scrap Siege" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block' }} />
+          <canvas ref={cvRef} aria-label="Bolt War" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block' }} />
           <canvas ref={ovRef} aria-hidden="true" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block', pointerEvents: 'none', zIndex: 1 }} />
           <div ref={hurtRef} aria-hidden="true" style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 2, opacity: 0, background: 'radial-gradient(ellipse at center, rgba(255,0,0,0) 55%, rgba(220,20,20,0.55) 100%)' }} />
 

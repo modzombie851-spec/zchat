@@ -1,4 +1,4 @@
-Dead Town sound credits
+Zombie Junction sound credits
 
 All sounds were trimmed, mixed to mono and level matched for the game.
 
@@ -33,6 +33,13 @@ Older sounds still in use (Creative Commons 0, public domain)
 
 Music
   Horror Game Intro and Zombie Game by Eric Matyas, soundimage.org (free to use with credit)
+  Wave fight music made for Zombie Junction, with impacts from Mixkit (Mixkit free license)
+  and Kenney impact sounds (CC0)
+  Hip hop emote beat made for Zombie Junction
+
+Boss roar
+  Made for Zombie Junction from bear roars by YleArkisto and bear growls by tbsounddesigns,
+  freesound.org (CC BY 3.0), from VoxeLibre, mixed with the zombie growl and scream listed above
 
 Announcer and survivor voices
   Voiceover Pack and Voiceover Pack: Fighter by Kenney, kenney.nl (CC0)
@@ -70,4 +77,5 @@ Helicopter, armor plates and gore
 
 Emote voices and dance music
   The man laughs madly by sakkesode, Sound effect woman giggling and laughing by scottishperson, Oh yeah by saboteurcomics,
-  Woman cute silly ya 3 by floraphonic, Hey by digitalstore07 and Dance dance music by The Mountain, pixabay.com (Pixabay content license)
+  Woman cute silly ya 3 by floraphonic, Hey by digitalstore07, Claps by freesound community, Dance dance music by The Mountain
+  and Samba jazz cocktail bar by Alex Morgan, pixabay.com (Pixabay content license)

@@ -662,7 +662,7 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
   const toPick = () => { setPhase('pick'); if (!solo) relay.send('pick', {}); WR.current = null; };
 
   const W = WR.current;
-  const title = phase === 'play' || phase === 'won' || phase === 'out' ? levelTitle(li, rs) : 'Two Torches';
+  const title = phase === 'play' || phase === 'won' || phase === 'out' ? levelTitle(li, rs) : 'Torchbound';
   const partnerLine = watch ? `Watching ${hostFirst} and ${peerFirst}` : solo ? (active === 'sun' ? 'Practice, orange torch' : 'Practice, blue torch') : here ? (phase === 'play' ? `With ${peerFirst}` : `${peerFirst} is here`) : here === false ? `${peerFirst} is away` : 'Connecting';
   const endlessBest = best.endless || 0;
   const actKind = active;
@@ -722,7 +722,7 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
   const waiting = phase === 'lobby';
   const torchArt = (k) => <TorchHero kind={k} size={42} dir={k === 'sun' ? 'right' : 'left'} />;
   const lobbyUi = phase !== 'pick' && phase !== 'lobby' ? null : (
-    <GLobby GS={GS} title="Two Torches" onClose={finish} closeLabel={solo ? 'Leave' : 'Back to chat'}
+    <GLobby GS={GS} title="Torchbound" onClose={finish} closeLabel={solo ? 'Leave' : 'Back to chat'}
       sub={solo ? null : watch ? `Watching ${hostFirst} and ${peerFirst}` : waiting ? `Waiting for ${peerFirst} to open the game` : host ? `Pick where to go with ${peerFirst}` : `${peerFirst} picks where to go`}
       badge={<GChip style={{ gap: 5, height: 34 }}><GIcon k="star" size={15} color="#FFD23F" />{`${storyStars}/${STORY_N * 3}`}</GChip>}
       tools={(

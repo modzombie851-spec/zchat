@@ -5252,12 +5252,12 @@ function DmClosedBar({ name }) {
 }
 
 const HOME_FEATS = [
-  { k: 'zombie', label: 'Dead Town', game: 'zombie', live: true },
-  { k: 'siege', label: 'Scrap Siege', game: 'siege', live: true },
+  { k: 'zombie', label: 'Zombie Junction', game: 'zombie', live: true },
+  { k: 'siege', label: 'Bolt War', game: 'siege', live: true },
   { k: 'race', label: 'Island Rally', game: 'race', live: true },
   { k: 'roll', label: 'Roll Squad', game: 'roll', live: true },
   { k: 'gulp', label: 'Gulp', game: 'gulp', live: true },
-  { k: 'duo', label: 'Two Torches', game: 'duo', live: true },
+  { k: 'duo', label: 'Torchbound', game: 'duo', live: true },
   { k: 'draw', label: 'Draw together' },
   { k: 'booth', label: 'Photo booth' },
   { k: 'watch', label: 'Watch together' },
@@ -18596,7 +18596,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-export const APP_VERSION = '54.0V';
+export const APP_VERSION = '55.0V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -49430,7 +49430,7 @@ function WnChatsJoinArt({ tall = false }) {
       <rect x="-6" y="-6" width="260" height="112" rx="16" fill={ART_C.card} {...ak} strokeWidth="2.6" />
       {row(4, 'Ana', 'Playing Roll Squad now', 'Join', '#22A55B', '#F6C9A8')}
       <rect x="10" y="51" width="228" height="1" fill="rgba(0,0,0,0.08)" />
-      {row(54, 'Leo', 'Playing Two Torches now', 'Watch', '#1D7BF0', '#C9DFFF')}
+      {row(54, 'Leo', 'Playing Torchbound now', 'Watch', '#1D7BF0', '#C9DFFF')}
     </g>
   );
 }
@@ -59851,7 +59851,7 @@ function svgMarkup(node) {
   return `<${node.type}${attrs}>${svgMarkup(node.props.children)}</${node.type}>`;
 }
 const gameArtSrcs = new Map();
-const GAME_ART_FILES = { zombie: '/zombie-art2.webp', duo: '/duo-art.webp', gulp: '/gulp-art.webp', gulpco: '/gulp-art.webp', roll: '/roll-art.webp', race: '/race-art.webp', siege: '/siege-art.webp' };
+const GAME_ART_FILES = { zombie: '/zombie-art2.webp', duo: '/duo-art.webp', gulp: '/gulp-art.webp', gulpco: '/gulp-art.webp', roll: '/roll-art.webp', race: '/race-art.webp', siege: '/bolt-art.webp' };
 function gameArtSrc(kIn) {
   const key = String(kIn == null ? '' : kIn);
   if (GAME_ART_FILES[key]) return GAME_ART_FILES[key];
@@ -59876,7 +59876,7 @@ export function GameArt({ k: kIn, width = 160, height = 100, radius = 14, style 
 }
 
 export const LIVE_GAME_KEYS = ['siege', 'race', 'roll', 'gulpco', 'duo', 'gulp', 'tug', 'qrace', 'rrace', 'zombie'];
-Object.assign(GAME_TITLES, { zombie: 'Dead Town', siege: 'Scrap Siege', race: 'Island Rally', roll: 'Roll Squad', gulpco: 'Gulp room', duo: 'Two Torches', gulp: 'Gulp', tug: 'Tug of war', qrace: 'Quiz race', rrace: 'Reaction race' });
+Object.assign(GAME_TITLES, { zombie: 'Zombie Junction', siege: 'Bolt War', race: 'Island Rally', roll: 'Roll Squad', gulpco: 'Gulp room', duo: 'Torchbound', gulp: 'Gulp', tug: 'Tug of war', qrace: 'Quiz race', rrace: 'Reaction race' });
 Object.assign(FRIEND_GAME_SUBS, { zombie: 'Live, fight zombies together on a server', siege: `Live, up to ${cloudOn() ? '20 players' : 'ten friends'} against robot waves`, race: 'Live, up to eight friends, four maps', roll: 'Live, up to four friends roll together', gulpco: 'Live, up to ten friends, join any time', duo: 'Live, endless temples together', gulp: 'Live, eat smaller fish and grow', tug: 'Live, tap faster than them', qrace: 'Live, fastest right answer', rrace: 'Live, first to tap on green' });
 Object.assign(GAME_ART_BG, { zombie: ['#8A8F5A', '#1E2216'], siege: ['#D9A54A', '#3A2E22'], race: ['#7FB4E0', '#3A4B63'], roll: ['#6EC6FF', '#4FA83A'], duo: ['#3B2A48', '#120C1C'], gulp: ['#1C6FA8', '#082A4C'], gulpco: ['#1C6FA8', '#082A4C'], tug: ['#F97316', '#E11D48'], qrace: ['#7C3AED', '#2563EB'], rrace: ['#10B981', '#0EA5E9'] });
 Object.assign(GAME_RULES, {
