@@ -71,6 +71,7 @@ const GROUPS = [
       ['Spas 12 apocalypse', 'minhnguyen2k', 'https://sketchfab.com/minhnguyen2k', 'CC BY 4.0'],
       ['C4 bomb low poly', 'Abel099', 'c4-bomb-low-poly-1a75fffa279d48e88a6f86d644fb227c'],
       ['Armor plates', 'BarnusModels', 'armor-plates-75e70ae8d7a44f81bc9ff20e4eb7a9e7', 'Sketchfab standard license'],
+      ['Bolt War blasters', 'Kenney', 'https://kenney.nl/assets/blaster-kit', 'CC0'],
     ],
   },
   {
@@ -78,6 +79,9 @@ const GROUPS = [
     items: [
       ['Survivors, zombies and their animations', 'Mixamo by Adobe', 'https://www.mixamo.com', 'Mixamo license'],
       ['German Shepherd dog', 'RetroStyle Games', 'https://retrostylegames.artstation.com/store/5Y6zX/german-shepherd-3d-model', 'ArtStation standard license'],
+      ['Bolt War heroes and their animations, KayKit Adventurers', 'Kay Lousberg', 'https://kaylousberg.com', 'CC0'],
+      ['Bolt War robot', 'Tomás Laulhé of Quaternius, changes by Don McCurdy', 'https://quaternius.com', 'CC0'],
+      ['Bolt War mechs, Animated Mech Pack', 'Quaternius', 'https://quaternius.com', 'CC0'],
     ],
   },
   {

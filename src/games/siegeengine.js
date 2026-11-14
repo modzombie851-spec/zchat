@@ -45,7 +45,7 @@ export const HEROES = {
     gad: { k: 'bubble', rad: 5.5, shield: 1100, t: 4, name: 'Bubble shield', text: 'Shields her and friends near her.' },
   },
   rex: {
-    name: 'Rex', role: 'Brawler', text: 'Smashes robots up close with a heavy hammer.', hp: 5600, spd: 5.2, col: '#E0533A', want: 2.3, stats: [5, 5, 1, 3],
+    name: 'Rex', role: 'Brawler', text: 'Smashes robots up close with a heavy axe.', hp: 5600, spd: 5.2, col: '#E0533A', want: 2.3, stats: [5, 5, 1, 3],
     atk: { k: 'smash', rng: 3.1, arc: 1.7, dmg: 1250, kb: 5, reload: 1.25, cd: 0.45 },
     sup: { k: 'slam', rad: 4.6, dmg: 1600, stun: 1.6, kb: 4, need: 3200, name: 'Ground slam', text: 'Stuns every robot around him.' },
     gad: { k: 'charge', len: 6.2, t: 0.32, dmg: 650, kb: 9, name: 'Charge', text: 'Rushes forward and knocks robots aside.' },
@@ -90,7 +90,7 @@ export const CARDS = {
   pip: { hero: 'pip', name: 'Piercing shot', text: 'Shots go through robots', icon: 'bolt', go: (m) => { m.pierce += 1; }, max: 2 },
   boom: { hero: 'boom', name: 'Big bombs', text: 'Bigger blasts', icon: 'bomb', go: (m) => { m.rad *= 1.22; }, max: 2 },
   mira: { hero: 'mira', name: 'Warm heart', text: 'Heals friends more', icon: 'heart', go: (m) => { m.heal *= 1.35; } },
-  rex: { hero: 'rex', name: 'Heavy hammer', text: 'Longer stuns', icon: 'hammer', go: (m) => { m.stun *= 1.4; }, max: 2 },
+  rex: { hero: 'rex', name: 'Heavy axe', text: 'Longer stuns', icon: 'hammer', go: (m) => { m.stun *= 1.4; }, max: 2 },
   volt: { hero: 'volt', name: 'Long arc', text: 'Zaps hit one more robot', icon: 'bolt', go: (m) => { m.extra += 1; }, max: 3 },
   kai: { hero: 'kai', name: 'Cluster rockets', text: 'Rockets blast a bigger area', icon: 'rocket', go: (m) => { m.rad *= 1.25; }, max: 2 },
   ivy: { hero: 'ivy', name: 'Deep chill', text: 'Slows last longer', icon: 'snow', go: (m) => { m.slow *= 1.4; }, max: 2 },
