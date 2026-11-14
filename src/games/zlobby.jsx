@@ -143,6 +143,7 @@ function StatRow({ u, label, value, frac, tone }) {
   );
 }
 
+const LVL = { None: 0.04, Low: 0.25, Light: 0.33, Medium: 0.55, Heavy: 0.85, Strong: 0.75, Extreme: 1 };
 function ZBook({ L, u }) {
   const { GS } = L;
   const { top, right, bottom, left } = GS.at;
@@ -165,7 +166,6 @@ function ZBook({ L, u }) {
       </div>
       <div aria-hidden="true" style={{ position: 'absolute', left: left(12), bottom: bottom(12), display: 'flex', alignItems: 'center', gap: u(6), fontSize: u(12), fontWeight: 800, color: MUTED, textShadow: '0 1px 2px rgba(0,0,0,0.85)', pointerEvents: 'none' }}>
         <svg width={u(26)} height={u(14)} viewBox="0 0 26 14" aria-hidden="true"><path d="M4 7h18M8 3L4 7l4 4M18 3l4 4-4 4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
-        Drag to turn
       </div>
       <div role="region" aria-label={`${P.n}, page ${i + 1} of ${ZBOOK.length}`} onPointerDown={(e) => { e.stopPropagation(); sw.current = { x: e.clientX, y: e.clientY, id: e.pointerId }; }}
         onPointerUp={(e) => { const s0 = sw.current; sw.current = null; if (!s0 || s0.id !== e.pointerId) return; const dx = (GS.side ? e.clientY - s0.y : e.clientX - s0.x); if (Math.abs(dx) > 50) go(dx < 0 ? 1 : -1); }}
@@ -177,22 +177,16 @@ function ZBook({ L, u }) {
             <span style={{ flex: 1 }} />
             <span style={{ fontSize: u(11.5), fontWeight: 800, color: MUTED, fontVariantNumeric: 'tabular-nums' }}>{`${i + 1} of ${ZBOOK.length}`}</span>
           </div>
-          <p style={{ margin: 0, fontSize: u(12.5), fontWeight: 600, lineHeight: 1.35, color: 'rgba(239,232,210,0.88)' }}>{P.text}</p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: u(5), padding: `${u(6)}px 0`, borderTop: `1px solid ${LINE}`, borderBottom: `1px solid ${LINE}` }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: u(6), padding: `${u(8)}px 0`, borderTop: `1px solid ${LINE}`, borderBottom: `1px solid ${LINE}` }}>
             <StatRow u={u} label="Health" value={P.k === 'boss' ? `${P.hp.toLocaleString()}+` : P.hp.toLocaleString()} frac={P.k === 'boss' ? 1 : P.hp / ZBOOK_MAX.hp} tone="#D9573F" />
+            <StatRow u={u} label="Damage" value={String(P.dmg)} frac={P.dmg / ZBOOK_MAX.dmg} tone={AMBER} />
             <StatRow u={u} label="Speed" value={speed} frac={P.spd / ZBOOK_MAX.spd} tone="#7FB7E8" />
-            <StatRow u={u} label="Damage" value={`${P.dmg} a hit`} frac={P.dmg / ZBOOK_MAX.dmg} tone={AMBER} />
-            <StatRow u={u} label="Points" value={`${P.pts} a kill`} frac={P.pts / 750} tone="#9FC78E" />
+            <StatRow u={u} label="Armor" value={P.armor} frac={LVL[P.armor] || 0} tone="#B9C2CC" />
+            <StatRow u={u} label="Strength" value={P.str} frac={LVL[P.str] || 0} tone="#C98A5A" />
+            <StatRow u={u} label="Points" value={String(P.pts)} frac={P.pts / 750} tone="#9FC78E" />
           </div>
-          {P.ability ? (
-            <div>
-              <div style={{ fontFamily: CFONT, fontSize: u(14), fontWeight: 800, color: AMBER, marginBottom: u(1) }}>Ability</div>
-              <p style={{ margin: 0, fontSize: u(12), fontWeight: 600, lineHeight: 1.35, color: 'rgba(239,232,210,0.85)' }}>{P.ability}</p>
-            </div>
-          ) : null}
-          <div>
-            <div style={{ fontFamily: CFONT, fontSize: u(14), fontWeight: 800, color: AMBER, marginBottom: u(1) }}>How to beat it</div>
-            <p style={{ margin: 0, fontSize: u(12), fontWeight: 600, lineHeight: 1.35, color: 'rgba(239,232,210,0.85)' }}>{P.tip}</p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: u(6) }}>
+            {(P.traits || []).map((t) => <span key={t} style={{ padding: `${u(4)}px ${u(9)}px`, fontSize: u(12), fontWeight: 800, color: CREAM, background: 'rgba(239,232,210,0.08)', boxShadow: `inset 0 0 0 1px ${LINE}`, clipPath: cut(u(4)) }}>{t}</span>)}
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: u(8), padding: `${u(8)}px ${u(12)}px ${u(10)}px`, borderTop: `1px solid ${LINE}` }}>
@@ -278,6 +272,7 @@ export function ZLobby({ L }) {
               <span style={{ fontFamily: CFONT, fontSize: u(16), fontWeight: 800 }}>Friends</span>
               <span style={{ fontSize: u(11), fontWeight: 700, color: MUTED }}>{L.onlineN > 0 ? `${L.onlineN} online` : 'No one online'}</span>
             </div>
+            <div className="zl-col" style={{ maxHeight: u(214), overflowY: 'auto', overscrollBehavior: 'contain', touchAction: 'pan-y', scrollbarWidth: 'none' }}>
             {L.friendRows.map((f) => (
               <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: u(8), padding: `${u(3)}px 0`, borderTop: `1px solid ${LINE}` }}>
                 <Avatar emoji={f.avatar} name={f.name} size={u(28)} />
@@ -294,6 +289,7 @@ export function ZLobby({ L }) {
                 </button>
               </div>
             ))}
+            </div>
           </div>
         )}
         {L.showBots && (

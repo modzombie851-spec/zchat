@@ -137,6 +137,13 @@ export function solids() {
       circles.push([x + c * lx + n * lz, z - n * lx + c * lz, r]);
     }
   }
+  const SOLID_R = { barrelB: 0.31, barrelR: 0.31, kHydrant: 0.24, kMail: 0.3, kTrashC: 0.3, kCross: 0.32, crate: 0.42 };
+  for (const [id, x, z, yaw = 0, s = 1] of MAP.parts) {
+    if (!inRect(x, z, BOUNDS, 2)) continue;
+    if (SOLID_R[id]) circles.push([x, z, SOLID_R[id] * s]);
+    else if (id === 'kUbar') { const a = (yaw * Math.PI) / 180, c = Math.cos(a), n = Math.sin(a); for (const u of [-0.42, 0.42]) circles.push([x + c * u * s, z - n * u * s, 0.28 * s]); }
+    else if (id === 'shed' && Math.abs(x + 40) < 0.5 && Math.abs(z + 52) < 0.5) rects.push([x - 3.44 * s / 1.1, z - 2.56 * s / 1.1, x + 3.44 * s / 1.1, z + 2.56 * s / 1.1]);
+  }
   if (MAP.forest !== 2) {
     for (const [x, z, s] of OAKS) if (inRect(x, z, BOUNDS, 2)) circles.push([x, z, 0.5 + s * 0.02]);
     for (const t of forestList(1).trees) if (inRect(t.x, t.z, BOUNDS, 2)) circles.push([t.x, t.z, 0.42 + t.s * 0.012]);
@@ -153,3 +160,39 @@ export const SPAWNS = [[-50, -66], [-20, -68], [12, -68], [36, -68], [72, -62], 
 export const PSPAWN = [[-4.6, -20.6], [-1.6, -20.4], [1.4, -20.6], [4.4, -20.8], [-3.2, -18.4], [0, -18.2], [3.2, -18.4], [6.4, -19.4]];
 export const PLAY_ZS = MAP.zs.length ? MAP.zs : SPAWNS;
 export const PLAY_PS = MAP.ps.length ? MAP.ps : PSPAWN;
+
+let climbHash = null;
+export function climbTop(x, z) {
+  if (!climbHash) {
+    climbHash = new Map();
+    for (const [id, px, pz, yaw = 0, sc = 1, dy = 0] of PLAY) {
+      const d = CLIMB[id];
+      if (!d) continue;
+      if (!d.h) {
+        const bin = typeof atob === 'function' ? atob(d[4]) : '';
+        const h = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) h[i] = bin.charCodeAt(i);
+        d.h = h;
+      }
+      const x0 = d[0], z0 = d[1], x1 = x0 + d[2] * CLIMB_CELL, z1 = z0 + d[3] * CLIMB_CELL;
+      const a = (yaw * Math.PI) / 180;
+      const P = { d, x: px, z: pz, s: sc, c: Math.cos(a), n: Math.sin(a), y: floorH(px, pz) + dy, r: Math.hypot(Math.max(-x0, x1), Math.max(-z0, z1)) * sc };
+      const i0 = Math.floor((px - P.r) / 8), i1 = Math.floor((px + P.r) / 8), j0 = Math.floor((pz - P.r) / 8), j1 = Math.floor((pz + P.r) / 8);
+      for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) { const k = i * 4099 + j; let L = climbHash.get(k); if (!L) climbHash.set(k, (L = [])); L.push(P); }
+    }
+  }
+  const L = climbHash.get(Math.floor(x / 8) * 4099 + Math.floor(z / 8));
+  if (!L) return null;
+  let best = null;
+  for (const P of L) {
+    const dx = x - P.x, dz = z - P.z;
+    if (dx * dx + dz * dz > P.r * P.r || !P.d.h.length) continue;
+    const lx = (P.c * dx - P.n * dz) / P.s, lz = (P.n * dx + P.c * dz) / P.s, d = P.d;
+    const i = Math.floor((lx - d[0]) / CLIMB_CELL), j = Math.floor((lz - d[1]) / CLIMB_CELL);
+    if (i < 0 || j < 0 || i >= d[2] || j >= d[3]) continue;
+    const h = d.h[j * d[2] + i] * 0.02 * P.s;
+    if (h < 0.3) continue;
+    if (best == null || P.y + h > best) best = P.y + h;
+  }
+  return best;
+}

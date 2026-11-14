@@ -1574,7 +1574,21 @@ export function createRenderer(canvas, opts = {}) {
     if (usePost) runPost(env);
     return VP;
   }
-  return { gl, mesh, skin, tskin, tstat, wmesh, texture, texArray, setSky, fxOk: () => !!fx2Tex, maxTex: () => gl.getParameter(gl.MAX_TEXTURE_SIZE), drop, render, dispose, lose, drawn: () => lastDrawn };
+  const probeBuf = new Uint8Array(4);
+  const probe = () => {
+    if (gl.isContextLost()) return -1;
+    const W = canvas.width, H = canvas.height;
+    let mx = 0;
+    try {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      for (let j = 1; j <= 3; j++) for (let i = 1; i <= 3; i++) {
+        gl.readPixels(Math.floor((W * i) / 4), Math.floor((H * j) / 4), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, probeBuf);
+        mx = Math.max(mx, probeBuf[0], probeBuf[1], probeBuf[2]);
+      }
+    } catch { return -1; }
+    return mx;
+  };
+  return { gl, mesh, skin, tskin, tstat, wmesh, texture, texArray, setSky, fxOk: () => !!fx2Tex, maxTex: () => gl.getParameter(gl.MAX_TEXTURE_SIZE), drop, render, dispose, lose, probe, drawn: () => lastDrawn };
 }
 const IDENT = m4.ident();
 const DEFCOL = new Float32Array([1, 1, 1, 0]);

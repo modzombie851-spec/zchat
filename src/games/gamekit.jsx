@@ -537,13 +537,13 @@ function GSteps({ label, value, opts, onPick }) {
   return (
     <div style={{ width: '100%' }}>
       {label && <div style={{ fontSize: 13.5, fontWeight: 800, color: 'rgba(255,255,255,0.9)', marginBottom: 6 }}>{label}</div>}
-      <GSeg label={label} value={near} items={opts.map(([v, t]) => [v, t])} height={32} onPick={(v) => { kitTap(); onPick(v); }} />
+      <GSeg label={label} value={near} items={opts.map(([v, t]) => [v, t])} height={32} onPick={(v) => { kitTap('toggle'); onPick(v); }} />
     </div>
   );
 }
 export function GSwitchRow({ label, sub, on, onToggle }) {
   return (
-    <div role="switch" aria-checked={!!on} aria-label={label} tabIndex={0} {...pressProps(() => { onToggle(); kitTap(); })} style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', cursor: 'pointer', fontSize: 14.5, fontWeight: 900 }}>
+    <div role="switch" aria-checked={!!on} aria-label={label} tabIndex={0} {...pressProps(() => { onToggle(); kitTap('toggle'); })} style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', cursor: 'pointer', fontSize: 14.5, fontWeight: 900 }}>
       <span style={{ flex: 1 }}>{label}{sub && <span style={{ display: 'block', fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.65)' }}>{sub}</span>}</span>
       <span aria-hidden="true" style={{ width: 46, height: 28, borderRadius: 14, background: on ? '#F7C53A' : 'rgba(255,255,255,0.18)', position: 'relative', flexShrink: 0 }}>
         <span style={{ position: 'absolute', top: 3, left: on ? 21 : 3, width: 22, height: 22, borderRadius: 11, background: '#FFFFFF', transition: 'left .15s' }} />
@@ -617,7 +617,7 @@ export function GSetToggle({ on, onToggle, label }) {
         {[[true, 'On'], [false, 'Off']].map(([v, t], i) => {
           const sel = !!on === v;
           return (
-            <button key={t} type="button" role="radio" aria-checked={sel} className="zgk-btn" {...pressProps(() => { if (sel) return; kitTap(); onToggle(v); })}
+            <button key={t} type="button" role="radio" aria-checked={sel} className="zgk-btn" {...pressProps(() => { if (sel) return; kitTap('toggle'); onToggle(v); })}
               style={{ width: 76, height: 30, border: 'none', borderLeft: i ? `1px solid ${BS.edge}` : 'none', borderRadius: 0, background: sel ? BS.on : BS.off, color: sel ? BS.onTxt : BS.offTxt, fontFamily: BS.font, fontSize: 13, fontWeight: 700, cursor: sel ? 'default' : 'pointer' }}>
               {t}
             </button>
@@ -627,7 +627,7 @@ export function GSetToggle({ on, onToggle, label }) {
     );
   }
   return (
-    <button type="button" role="switch" aria-checked={!!on} aria-label={label} className="zgk-btn" {...pressProps(() => { kitTap(); onToggle(!on); })}
+    <button type="button" role="switch" aria-checked={!!on} aria-label={label} className="zgk-btn" {...pressProps(() => { kitTap('toggle'); onToggle(!on); })}
       style={{ display: 'inline-block', verticalAlign: 'middle', width: 50, height: 30, borderRadius: 15, border: 'none', padding: 0, cursor: 'pointer', position: 'relative', background: on ? '#FFC23D' : 'rgba(255,255,255,0.18)', transition: 'background .15s ease', flexShrink: 0 }}>
       <span aria-hidden="true" style={{ position: 'absolute', top: 3, left: on ? 23 : 3, width: 24, height: 24, borderRadius: 12, background: '#FFFFFF', boxShadow: '0 1px 3px rgba(0,0,0,0.35)', transition: 'left .15s ease' }} />
     </button>
@@ -640,7 +640,7 @@ export function GSetSlider({ value, min = 0, max = 1, step = 0.05, onChange, lab
   const f = (value - min) / (max - min || 1);
   if (tac) {
     const dec = (String(step).split('.')[1] || '').length;
-    const put = (x) => { kitTap(); onChange(Number(Math.min(max, Math.max(min, x)).toFixed(dec))); };
+    const put = (x) => { kitTap('toggle'); onChange(Number(Math.min(max, Math.max(min, x)).toFixed(dec))); };
     const sq = { width: 26, height: 26, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, border: 'none', borderRadius: 0, background: '#E9ECF3', cursor: 'pointer' };
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, width: '100%', fontFamily: BS.font }}>

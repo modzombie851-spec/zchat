@@ -3,7 +3,7 @@ import { makeSim } from '../../src/games/zsim.js';
 export const CAP = { siege: 20, race: 12, roll: 8, gulp: 12, duo: 2, zombie: 5 };
 export const REGIONS = { asia: 'apac', usa: 'enam', eu: 'weur' };
 const TICK = 1 / 15;
-export const SIM_REV = 57;
+export const SIM_REV = 58;
 
 export function parseName(name) {
   const [kind, game, ...rest] = String(name || '').split(':');

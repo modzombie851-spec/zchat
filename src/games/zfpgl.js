@@ -13,20 +13,21 @@ const ss = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t
 
 export const FPG = {
   pistol: { tex: { material: 'arms', Mat_0: 'pistol' }, root: 57, grip: [0, -1.55, -0.08], muz: [0, 7.4, 29], hip: [8.5, 25, -22], ads: [0, 9.45, -30], adsP: 0, c: { fire: [0, 8], relA: [9, 64], relB: [65, 130], hol: [131, 142], draw: [142, 177], idle: [179, 204], mel: [205, 224] } },
-  rifle: { tex: { carbine: 'rifle', lens: 'rifle_lens', arms: 'arms' }, root: 5, grip: [0, -2.7, 0.98], muz: [0, 10, 68], hip: [14, 24.5, -30], ads: [0, 16.82, -17], adsP: 0, c: { fire: [0, 8], relA: [8, 66], relB: [66, 132], hol: [132, 144], draw: [144, 176], idle: [176, 204], mel: [204, 222] } },
-  shotgun: { tex: { material: 'arms', shotgun: 'shotgun' }, root: 57, grip: [0, -2.07, 0.66], muz: [0, 8.5, 82], hip: [14, 23, -28], ads: [0, 14.9, -4], adsP: -0.0187, c: { fire: [0, 12], pump: [0, 36], rel: [36, 87], ins: [45, 60], hol: [87, 102], draw: [102, 129], idle: [129, 159], mel: [159, 180] } },
-  smg: { tex: { arms: 'arms', smg45: 'smg' }, root: 57, grip: [0, -2.81, 0.6], muz: [0, 8, 41], hip: [13, 24.5, -22], ads: [0, 15.67, -36], adsP: 0.0085, c: { fire: [0, 9], relA: [9, 80], relB: [82, 128], hol: [130, 140], draw: [140, 175], idle: [175, 215], mel: [215, 234] } },
-  sniper: { tex: { arms: 'arms', sniper: 'sniper', lens: 'glass' }, root: 57, grip: [0, -1.16, 1.83], muz: [0, 7.6, 107], hip: [14, 22.5, -32], ads: [0, 14.08, -6], adsP: 0, c: { fire: [0, 48], fsp: 1.4, bolt: [9, 48], rel: [48, 96], hol: [96, 108], draw: [108, 147], idle: [147, 180], mel: [180, 200] } },
-  qq9: { tex: { arms: 'arms', qq9: 'qq9' }, root: 57, grip: [0, -2.81, 0.6], muz: [0, 8, 50.6], hip: [13, 24.5, -22], ads: [0.78, 16.64, -36], adsP: -0.0052, c: { fire: [0, 9], relA: [9, 80], relB: [82, 128], hol: [130, 140], draw: [140, 175], idle: [175, 215], mel: [215, 234] } },
-  uzi: { tex: { arms: 'arms', uzi0: 'uzi0', uzi1: 'uzi1', uzi2: 'uzi2', uzi3: 'uzi3', uzi4: 'uzi4' }, root: 57, grip: [0, -2.81, 0.6], muz: [0, 8, 43.0], hip: [13, 24.5, -22], ads: [0.5, 18.9, -34], adsP: -0.0465, c: { fire: [0, 9], relA: [9, 80], relB: [82, 128], hol: [130, 140], draw: [140, 175], idle: [175, 215], mel: [215, 234] } },
-  ak47: { tex: { arms: 'arms', ak47: 'ak47' }, root: 5, grip: [0, -2.7, 0.98], muz: [0, 10, 70.2], hip: [14, 24.5, -30], ads: [-0.45, 16.45, -20], adsP: -0.0312, c: { fire: [0, 8], relA: [8, 66], relB: [66, 132], hol: [132, 144], draw: [144, 176], idle: [176, 204], mel: [204, 222] } },
-  xpr: { tex: { arms: 'arms', xpr0: 'xpr0', xpr1: 'xpr1', xpr2: 'xpr2', xpr3: 'xpr3', xpr4: 'xpr4', xpr5: 'xpr5' }, root: 5, grip: [0, -2.7, 0.98], muz: [0, 10, 75.3], hip: [14, 24.5, -30], ads: [0, 16.82, -17], adsP: 0, c: { fire: [0, 8], relA: [8, 66], relB: [66, 132], hol: [132, 144], draw: [144, 176], idle: [176, 204], mel: [204, 222] } },
-  lmg: { tex: { arms: 'arms', lmg0: 'lmg0', lmg1: 'lmg1' }, root: 5, grip: [0, -2.7, 0.98], muz: [0, 10, 77.8], hip: [14, 24.5, -30], ads: [-0.5, 18.3, -26], adsP: 0, c: { fire: [0, 8], relA: [8, 66], relB: [66, 132], hol: [132, 144], draw: [144, 176], idle: [176, 204], mel: [204, 222] } },
-  mgl: { tex: { arms: 'arms', mgl0: 'mgl2', mgl1: 'mgl2' }, root: 5, grip: [0, -2.7, 0.98], muz: [0, 10, 65.2], hip: [14, 24.5, -30], ads: [0, 16.82, -17], adsP: 0, c: { fire: [0, 8], relA: [8, 66], relB: [66, 132], hol: [132, 144], draw: [144, 176], idle: [176, 204], mel: [204, 222] } },
+  rifle: { tex: { carbine: 'rifle', lens: 'rifle_lens', arms: 'arms' }, root: 5, grip: [0, -2.7, 0.98], lw: [5.37, 3.57, 26.75], muz: [0, 10, 68], hip: [14, 24.5, -30], ads: [0, 16.82, -17], adsP: 0, c: { fire: [0, 8], relA: [8, 66], relB: [66, 132], hol: [132, 144], draw: [144, 176], idle: [176, 204], mel: [204, 222] } },
+  shotgun: { tex: { material: 'arms', shotgun: 'shotgun' }, root: 57, grip: [0, -2.07, 0.66], lw: [4.96, 0.35, 36.7], muz: [0, 8.5, 82], hip: [14, 23, -28], ads: [0, 14.9, -4], adsP: -0.0187, c: { fire: [0, 12], pump: [0, 36], rel: [36, 87], ins: [45, 60], hol: [87, 102], draw: [102, 129], idle: [129, 159], mel: [159, 180] } },
+  smg: { tex: { arms: 'arms', smg45: 'smg' }, root: 57, grip: [0, -2.81, 0.6], lw: [5.28, -3.4, 22.24], muz: [0, 8, 41], hip: [13, 24.5, -22], ads: [0, 15.67, -36], adsP: 0.0085, c: { fire: [0, 9], relA: [9, 80], relB: [82, 128], hol: [130, 140], draw: [140, 175], idle: [175, 215], mel: [215, 234] } },
+  sniper: { tex: { arms: 'arms', sniper: 'sniper', lens: 'glass' }, root: 57, grip: [0, -1.16, 1.83], lw: [4.95, 0.08, 30.96], muz: [0, 7.6, 107], hip: [14, 22.5, -32], ads: [0, 14.08, -6], adsP: 0, c: { fire: [0, 48], fsp: 1.4, bolt: [9, 48], rel: [48, 96], hol: [96, 108], draw: [108, 147], idle: [147, 180], mel: [180, 200] } },
+  qq9: { tex: { arms: 'arms', smg9: 'smg9', lens2: 'smg9_lens' }, root: 57, grip: [0, -2.89, 1.18], lw: [4.65, -2.32, 20.56], muz: [0, 8.25, 39.5], hip: [13, 24.5, -22], ads: [0, 13.74, -32], adsP: 0, c: { fire: [0, 6], relA: [78, 131], relB: [6, 77], hol: [131, 143], draw: [143, 177], idle: [177, 205], mel: [205, 221] } },
+  uzi: { tex: { arms: 'arms', uzi0: 'uzi0', uzi1: 'uzi1', uzi2: 'uzi2', uzi3: 'uzi3', uzi4: 'uzi4' }, root: 57, grip: [0, -2.81, 0.6], lw: [5.28, -3.4, 22.24], muz: [0, 8, 43.0], hip: [13, 24.5, -22], ads: [0.5, 18.9, -34], adsP: -0.0465, c: { fire: [0, 9], relA: [9, 80], relB: [82, 128], hol: [130, 140], draw: [140, 175], idle: [175, 215], mel: [215, 234] } },
+  ak47: { tex: { arms: 'arms', ak74: 'ak74' }, root: 57, grip: [0, -2.41, 0.65], lw: [5.04, 2.78, 28.33], muz: [0, 8.2, 77], hip: [14, 24.5, -30], ads: [0, 13.7, -20], adsP: 0.0075, c: { fire: [0, 8], relA: [98, 152], relB: [8, 97], hol: [152, 163], draw: [163, 198], idle: [198, 222], mel: [222, 243] } },
+  xpr: { tex: { arms: 'arms', xpr0: 'xpr0', xpr1: 'xpr1', xpr2: 'xpr2', xpr3: 'xpr3', xpr4: 'xpr4', xpr5: 'xpr5' }, root: 5, grip: [0, -2.7, 0.98], lw: [5.37, 3.57, 26.75], muz: [0, 10, 75.3], hip: [14, 24.5, -30], ads: [0, 16.82, -17], adsP: 0, c: { fire: [0, 8], relA: [8, 66], relB: [66, 132], hol: [132, 144], draw: [144, 176], idle: [176, 204], mel: [204, 222] } },
+  lmg: { tex: { arms: 'arms', material: 'm249' }, root: 57, grip: [0, -7.72, -11.25], lw: [4.43, -8.98, 18.17], muz: [-0.79, 4.0, 61.5], hip: [14, 24, -32], ads: [-0.79, 12.65, -40], adsP: 0.0113, c: { fire: [0, 10], relA: [11, 183], relB: [276, 447], hol: [183, 195], draw: [195, 218], idle: [218, 251], mel: [251, 275] } },
+  mgl: { tex: { arms: 'arms', glauncher: 'gl', lens: 'rifle_lens' }, root: 57, grip: [0, -3.7, 0.55], lw: [5.92, -3.72, 33.06], muz: [0, 7.0, 57.5], hip: [14, 23.5, -30], ads: [0, 17.0, -10], adsP: 0, c: { fire: [0, 14], relA: [14, 213], relB: [14, 213], hol: [213, 227], draw: [227, 265], idle: [265, 286], mel: [286, 302] } },
   deagle: { tex: { material: 'arms', deagle0: 'deagle0', deagle1: 'deagle1', deagle2: 'deagle2', deagle3: 'deagle3', deagle4: 'deagle4', deagle5: 'deagle5', deagle6: 'deagle6' }, root: 57, grip: [0, -1.55, -0.08], muz: [0, 7.4, 42.2], hip: [8.5, 25, -22], ads: [0, 9.45, -30], adsP: 0, c: { fire: [0, 8], relA: [9, 64], relB: [65, 130], hol: [131, 142], draw: [142, 177], idle: [179, 204], mel: [205, 224] } },
-  awm: { tex: { arms: 'arms', awm: 'awm' }, root: 57, grip: [0, -1.16, 1.83], muz: [0, 7.6, 107.9], hip: [14, 22.5, -32], ads: [0, 14.08, -6], adsP: 0, c: { fire: [0, 48], fsp: 1.4, bolt: [9, 48], rel: [48, 96], hol: [96, 108], draw: [108, 147], idle: [147, 180], mel: [180, 200] } },
-  spas: { tex: { material: 'arms', spas0: 'spas0', spas1: 'spas1', spas2: 'spas2', spas3: 'spas3' }, root: 57, grip: [0, -2.07, 0.66], muz: [0, 8.5, 83.9], hip: [14, 23, -28], ads: [0, 14.9, -4], adsP: -0.0187, c: { fire: [0, 12], pump: [0, 36], rel: [36, 87], ins: [45, 60], hol: [87, 102], draw: [102, 129], idle: [129, 159], mel: [159, 180] } },
+  awm: { tex: { arms: 'arms', awm: 'awm' }, root: 57, grip: [0, -1.16, 1.83], lw: [4.95, 0.08, 30.96], muz: [0, 7.6, 107.9], hip: [14, 22.5, -32], ads: [0, 14.08, -6], adsP: 0, c: { fire: [0, 48], fsp: 1.4, bolt: [9, 48], rel: [48, 96], hol: [96, 108], draw: [108, 147], idle: [147, 180], mel: [180, 200] } },
+  spas: { tex: { material: 'arms', spas0: 'spas0', spas1: 'spas1', spas2: 'spas2', spas3: 'spas3' }, root: 57, grip: [0, -2.07, 0.66], lw: [4.96, 0.35, 36.7], muz: [0, 8.5, 83.9], hip: [14, 23, -28], ads: [0, 14.9, -4], adsP: -0.0187, c: { fire: [0, 12], pump: [0, 36], rel: [36, 87], ins: [45, 60], hol: [87, 102], draw: [102, 129], idle: [129, 159], mel: [159, 180] } },
   throw: { tex: { arms: 'throw' }, hand: [40, 44, 49, 52], hip: [0, 20, -30], c: { all: [0, 30] } },
+  syringe: { tex: { TEXTURA: 'syr_arms', MatSyringe: 'syr_pen' }, hip: [0, 0, 0], c: { all: [12, 166] } },
 };
 
 const stores = new WeakMap();
@@ -111,7 +112,7 @@ export function getFPG(R, kind) {
         const mesh = R.tskin({ verts: M.verts, idx: M.idx, ni: M.ni, nb: M.nu });
         const gl = M.groups.filter((g) => C.tex[g.key]);
         const txs = await Promise.all(gl.map((g) => texOf(R, C.tex[g.key])));
-        const groups = gl.map((g, i) => { const name = C.tex[g.key]; return { off: g.start, cnt: g.count, tex: txs[i].d, nrm: txs[i].n, arms: name === 'arms' || name === 'throw', lens: /lens/.test(name) }; });
+        const groups = gl.map((g, i) => { const name = C.tex[g.key]; return { off: g.start, cnt: g.count, tex: txs[i].d, nrm: txs[i].n, arms: name === 'arms' || name === 'throw' || name === 'syr_arms', lens: /lens/.test(name) }; });
         const LQ = new Float32Array(M.nb * 4), LT = new Float32Array(M.nb * 3), W = new Float32Array(M.nb * 12);
         let Gi = null, tp = null;
         if (C.root != null) {
@@ -123,8 +124,8 @@ export function getFPG(R, kind) {
           fpmSkin(M, W, skin, null);
           const go = (GUNS[kind] && GUNS[kind].grip.o) || [0, 0, 0], gp = C.grip || [0, 0, 0];
           const Mtp = m4.mul(new Float32Array([0.01, 0, 0, 0, 0, 0.01, 0, 0, 0, 0, 0.01, 0, go[0] - gp[0] * 0.01, go[1] - gp[1] * 0.01, go[2] - gp[2] * 0.01, 1]), Gi);
-          const mz = C.muz;
-          tp = { skin, M: Mtp, groups: groups.filter((g) => !g.arms), muz: [go[0] + (mz[0] - gp[0]) * 0.01, go[1] + (mz[1] - gp[1]) * 0.01, go[2] + (mz[2] - gp[2]) * 0.01] };
+          const mz = C.muz, lw = C.lw;
+          tp = { skin, M: Mtp, groups: groups.filter((g) => !g.arms), muz: [go[0] + (mz[0] - gp[0]) * 0.01, go[1] + (mz[1] - gp[1]) * 0.01, go[2] + (mz[2] - gp[2]) * 0.01], lh: lw ? [go[0] + (lw[0] - gp[0]) * 0.01, go[1] + (lw[1] - gp[1]) * 0.01, go[2] + (lw[2] - gp[2]) * 0.01] : null };
         }
         Object.assign(e, { M, mesh, groups, Gi, tp, ready: true });
       }).catch(() => { e.fail++; if (e.fail < 3) setTimeout(go, 2500 * e.fail); });
@@ -209,10 +210,12 @@ function pick(F, C, s, st) {
 }
 
 export function fpGLItems(out, R, F, s, cam, camM) {
-  const throwing = F.thr >= 0 || F.thrHold > 0;
-  const kind = throwing ? 'throw' : F.kind;
+  const using = F.use >= 0;
+  const throwing = !using && (F.thr >= 0 || F.thrHold > 0);
+  const kind = using ? 'syringe' : throwing ? 'throw' : F.kind;
   const e = getFPG(R, kind);
   if (!throwing) getFPG(R, 'throw');
+  if (!using) getFPG(R, 'syringe');
   if (!e) return null;
   const C = FPG[kind];
   const st = stateOf(F, e);
@@ -221,7 +224,10 @@ export function fpGLItems(out, R, F, s, cam, camM) {
   if (F.shotT != null) F.shotT += dt;
   if (F.drawT != null) F.drawT += dt;
   let mode, fr;
-  if (throwing) {
+  if (using) {
+    mode = 'use';
+    fr = lerp(C.c.all[0], C.c.all[1], Math.min(1, Math.max(0, F.use)));
+  } else if (throwing) {
     mode = 'thr';
     if (F.thrHold > 0) fr = lerp(0, 6, ss(0, 0.25, F.thrHold));
     else fr = lerp(6, 30, F.thr);
@@ -237,7 +243,7 @@ export function fpGLItems(out, R, F, s, cam, camM) {
   if (st.bw < 1) { st.LQ.set(st.FQ); st.LT.set(st.FT); fpmBlend(M.nb, st.LQ, st.LT, st.Q2, st.T2, ss(0, 1, st.bw)); }
   else { st.LQ.set(st.Q2); st.LT.set(st.T2); }
   fpmWorld(M, st.LQ, st.LT, st.W);
-  const a = throwing ? 0 : F.ads;
+  const a = throwing || using ? 0 : F.ads;
   rigToCam(C, e, a, st.A);
   fpmSkin(M, st.W, st.skin, st.A);
   const L = camM;
@@ -266,10 +272,14 @@ const GUNC = new Float32Array([1, 1, 1, 0]);
 const LENS = new Float32Array([0.35, 0.4, 0.45, 0.3]);
 
 const TP_ORDER = ['rifle', 'smg', 'pistol', 'shotgun', 'sniper'];
+let holdLast = null;
+export const tpHold = () => holdLast;
 export function tpGunItems(out, R, kind, Gm, cast) {
+  holdLast = null;
   let e = FPG[kind] && FPG[kind].root != null ? getFPG(R, kind) : null;
   if (!e || !e.tp) { e = null; for (const k of TP_ORDER) { const f = fpgReady(R, k); if (f && f.tp) { e = f; break; } } }
   if (!e) return null;
+  holdLast = e.tp.lh;
   const model = m4.mul(Gm, e.tp.M);
   for (const g of e.tp.groups) out.push({ mesh: e.mesh, off: g.off, cnt: g.cnt, tex: g.tex, nrm: g.nrm, skin: e.tp.skin, model, gloss: !g.lens, col: g.lens ? LENS : GUNC, cast });
   return e.tp.muz;

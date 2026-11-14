@@ -15,9 +15,6 @@ Zombie screams and groans
 Footsteps, hits, glass, slime, fire, slashes, menu clicks and wave sounds
   Kenney impact, interface, UI, RPG, digital and sci fi sound packs, kenney.nl (CC0)
 
-Menu taps, shop buys, item pickups, drops, the supply crate and the vanish shimmer
-  Made for Zombie Junction
-
 Explosions, the game over sound, wind, night crickets, water and the car engine
   Mixkit sound effects, mixkit.co (Mixkit free license)
 
@@ -35,10 +32,17 @@ Older sounds still in use (Creative Commons 0, public domain)
   Dog growl and whine: dogblocks mod by Hybrid Dog
 
 Music
-  Horror Game Intro and Zombie Game by Eric Matyas, soundimage.org (free to use with credit)
-  Wave fight music made for Zombie Junction, with impacts from Mixkit (Mixkit free license)
-  and Kenney impact sounds (CC0)
-  Hip hop emote beat made for Zombie Junction
+  Lobby: Horror Main Menu by u_p5wfvlgzy6, Pixabay (Pixabay license)
+  Between waves: Six Horrors 4 Main Menu Theme by mrlockjaw, Pixabay (Pixabay license)
+  Wave fight: Rise of the Zombies by emmraan, Pixabay (Pixabay license)
+  Hip hop emote: Urban Hip Hop Beat by vaitsez, Pixabay (Pixabay license)
+
+Gunshots
+  The Free Firearm Sound Library by Ben Jaszczak, Brian Nelson, Kevin Heras and Matthew Nanney,
+  opengameart.org/content/the-free-firearm-sound-library (CC0)
+
+Menu, shop and pickup sounds
+  Kenney UI Audio, Interface Sounds and RPG Audio, kenney.nl (CC0)
 
 Boss roar
   Made for Zombie Junction from bear roars by YleArkisto and bear growls by tbsounddesigns,
@@ -69,8 +73,8 @@ Trains
 Money, heartbeat and grenade bounce
   Coins clinking sound by dihumichi, Heartbeat 01 by brvhrtz, Metal cup drop by freesound community, pixabay.com (Pixabay content license)
 
-New gun shots
-  AK 47, Uzi burst (072778 Fully Automatic Pistol), Submachine Gun, Desert Eagle, Sniper Rifle Firing Shot 1 and Grenade Launcher by freesound community, Machine Gun SFX and Cinematic Shotgun with Reload by DRAGON STUDIO, 50 Caliber rifle shot with shell ping by ajhartman42295, pixabay.com (Pixabay content license)
+Uzi and bomb gun shots
+  Uzi burst (072778 Fully Automatic Pistol) and Grenade Launcher by freesound community, pixabay.com (Pixabay content license)
 
 Seller voice
   NPC Faras encounter phrases by VoiceBosch, pixabay.com (Pixabay content license)

@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Avatar, Portal, useBackClose, FONT } from '../App.jsx';
+import { Avatar, Portal, useBackClose, FONT, rtKeep, rtDrop } from '../App.jsx';
 import { m4, MeshBuilder, hexRgb } from './race3d.js';
 import { Sfx } from './sfx.js';
 import { Sheet, injectCss } from './livekit.jsx';
-import { GSetHead, GPill, GPanel, GNotices, useNotices, useJoystick, GJoy, injectKitCss, kitTap, setKitTap, useCtlLook, useGameStage, GLobbySheet, GSeg, GFeed, GSkin, GChatFeed, useChatFeed, TOUCHY, weakPhone, GSettings, GSetRow, setCtlLook, GSetSlider, GSetToggle } from './gamekit.jsx';
+import { GSetHead, GPill, GPanel, useNotices, useJoystick, GJoy, injectKitCss, kitTap, setKitTap, useCtlLook, useGameStage, GLobbySheet, GSeg, GFeed, GSkin, GChatFeed, useChatFeed, TOUCHY, weakPhone, GSettings, GSetRow, setCtlLook, GSetSlider, GSetToggle } from './gamekit.jsx';
 import { makeSim, collide, rayBlocked, DROP, WEAPONS, WKEYS, MELEE, SHOP, SELLER, ARMOR_MAX, PLATE, START_CASH, CASH_MAX, wcls, THROW, NEST, ZT, ZKEYS, SURV, SURV_GUN, hitDamage, PETS, ACID, waveSize, LOOT, LOOT_K, LOOT_G } from './zsim.js';
-import { makeView, TIERS, ZMODEL, coreFiles, packList } from './zview.js';
-import { resIndex, resFetch, resLock, resQueue, resFront, resItem, resOn, resSize, resHas, resUrl, resWipe } from './zres.js';
+import { makeView, TIERS, ZMODEL, coreFiles, allFiles, packList } from './zview.js';
+import { resIndex, resFetch, resLock, resQueue, resFront, resItem, resOn, resSize, resHas, resUrl, resWipe, resCanKeep } from './zres.js';
 import { ZBoot } from './zboot.jsx';
 import { ZLobby, CFONT as WFONT } from './zlobby.jsx';
 import { sampleClip, blendInto, blendMask, poseSkin } from './zmodel.js';
@@ -15,15 +15,15 @@ import { stepSurf } from './zsurf.js';
 import { hitRay } from './zhit.js';
 import { makeRig } from './zrig.js';
 import { GUNS } from './zguns.js';
-import { SCHAR, GUN_SV, charOf, charCol, emoDur, ssNew, ssPose, ssMatrix, ssGun } from './zsurv.js';
+import { SCHAR, GUN_SV, charOf, charCol, emoDur, ssNew, ssPose, ssMatrix, ssGun, ssHold } from './zsurv.js';
 import { fpItems, muzzleWorld, ID_SKIN } from './zfp.js';
 import { DOGS } from './zlooks.js';
-import { floorH, TOWN, solids, FALL, POND, pondR, RAIL } from './ztown.js';
+import { floorH, TOWN, solids, FALL, POND, pondR, RAIL, BOUNDS } from './ztown.js';
 import { pondParts } from './zpond.js';
-import { tpGunItems, fpgReady } from './zfpgl.js';
+import { tpGunItems, tpHold, fpgReady, FPG } from './zfpgl.js';
 import { houseY, levelStep, inHouse, houseBlocked, houseRects, HOUSE } from './zhouse.js';
 import { ZA } from './zaudio.js';
-import { CBtn, TopBtn, ThrowBox, Ico, drawMinimap, EMOTE_LIST, QUICK_LINES, EmoteWheel } from './zhud.jsx';
+import { CBtn, TopBtn, ThrowBox, Ico, drawMinimap, drawBigMap, EMOTE_LIST, EmoteWheel } from './zhud.jsx';
 import { MetalFace, MetalRing, MIcon } from './zbtn.jsx';
 import { ZBOOK } from './zbookdata.js';
 import { useMeshRoom } from './relay.jsx';
@@ -32,7 +32,8 @@ import { cloudOn, openCloud, pingRegions, listRooms, bestRegion, mineRoom, saveL
 import { supabase } from '../supabaseClient.js';
 import { useSquad } from './zsquad.js';
 import { ShopScreen } from './zshop.jsx';
-import { topAt, ledgeAhead } from './zclimb.js';
+import { BagScreen } from './zbag.jsx';
+import { topAt, obstAt, ledgeAhead, vaultAhead } from './zclimb.js';
 import { chuteMesh } from './zchute.js';
 
 const PREF = { gfxo: 'zchat-zombie-gfxo', opt: 'zchat-zombie-opt', bots: 'zchat-zombie-bots', sv: 'zchat-zombie-sv', col: 'zchat-zombie-col', gun: 'zchat-zombie-gun', gfx: 'zchat-zombie-gfx', best: 'zchat-zombie-best', pet: 'zchat-zombie-pet', view: 'zchat-zombie-view', sens: 'zchat-zombie-sens', torch: 'zchat-zombie-torch' };
@@ -74,6 +75,8 @@ const ADS_FOV = { rifle: 0.6, smg: 0.68, shotgun: 0.74, pistol: 0.7, sniper: 0.2
 const BASE_FOV = 0.94;
 const ROADS = [[-200, -4, 200, 4], [TOWN.sideX - TOWN.sideW, -200, TOWN.sideX + TOWN.sideW, -4]];
 const BLOCKS = solids().rects.filter((r) => (r[2] - r[0]) * (r[3] - r[1]) > 1.5).concat(houseRects());
+const MAP_LABELS = [[-34, 22, 'Farmhouse'], [0.5, -36, 'Gas station'], [10, 24, 'Barn'], [-40, 65.5, 'Train station'], [24, -37, 'Containers'], [46, -71, 'Water towers'], [-18, -70, 'Camp'], [-71, 35, 'Camp'], [64, -37, 'Houses'], [POND.x, POND.z, 'Pond'], [41.5, -52, 'Bus']];
+const BIG_B = [BOUNDS[0] - 4, BOUNDS[1] - 4, BOUNDS[2] + 4, BOUNDS[3] + 4];
 const WATER = [Array.from({ length: 40 }, (_, i) => { const a = (i / 40) * Math.PI * 2, r = 0.92 * pondR(a); return [POND.x + Math.cos(a) * POND.rx * r, POND.z + Math.sin(a) * POND.rz * r]; })];
 
 const CORPSES = [[-8, 1.6, 0.4, 'walker', 101, 0], [12, -2.2, 2.2, 'worker', 102, 1], [24.5, 2.6, -1.2, 'walker', 103, 0], [-30, -12, 1.4, 'runner', 104, 1], [40, -30, 0.2, 'walker', 105, 0], [48, -6.5, 2.8, 'riot', 106, 1], [13, -33, -0.6, 'walker', 107, 0], [-18, 16, 1.1, 'worker', 108, 1], [58, -20, -2.2, 'walker', 109, 0], [16, 12, 0.7, 'screamer', 110, 1], [-4, -12, 2.6, 'walker', 111, 0], [-21, -30, 0.9, 'runner', 112, 1]];
@@ -126,6 +129,45 @@ function medMesh(R) {
 }
 const LOOT_WG = { pistol: 'wg_p', deagle: 'wg_p', smg: 'wg_smg', uzi: 'wg_smg', qq9: 'wg_smg', rifle: 'wg_r', ak47: 'wg_r', lmg: 'wg_r', mgl: 'wg_sh', shotgun: 'wg_sh', spas: 'wg_sh', sniper: 'wg_sn', awm: 'wg_sn', xpr: 'wg_sn' };
 const LOOT_GLOW = { gun: 4, cash: 4, ammo: 4, plate: 6, band: 3, med: 3, nade: 9, molo: 7, c4: 9 };
+const ITEM_SND = (k) => (SHOP[k] && SHOP[k].c === 'gun' ? ['r_cock', 1.05] : k === 'gun' ? ['r_cock', 1.05] : k === 'ammo' ? ['r_shell', 1] : k === 'plate' || k === 'armor' ? ['velcro', 1] : k === 'band' ? ['velcro', 0.85] : k === 'med' ? ['dry', 1.35] : k === 'nade' || k === 'molo' || k === 'c4' ? ['pin', 1.1] : k === 'cash' ? ['cash', 1] : ['r_shell', 1.2]);
+function camClip(hx, hz, hy, cx, cz, cy, lv) {
+  const dx = cx - hx, dz = cz - hz, dy = cy - hy, L = Math.hypot(dx, dz);
+  const n = Math.max(2, Math.ceil(L / 0.15));
+  for (let i = 1; i <= n; i++) {
+    const t = i / n, x = hx + dx * t, z = hz + dz * t, y = hy + dy * t;
+    const c = collide(x, z, 0.24, lv);
+    if (Math.abs(c[0] - x) + Math.abs(c[1] - z) > 0.01) {
+      let top = obstAt(x, z);
+      for (const [ox, oz] of [[0.35, 0], [-0.35, 0], [0, 0.35], [0, -0.35]]) { const t2 = obstAt(x + ox, z + oz); if (t2 != null && (top == null || t2 > top)) top = t2; }
+      if (top == null || y < top + 0.3) return Math.max(0.1, (i - 1) / n - 0.05);
+    }
+  }
+  return 1;
+}
+const itemImg = (k) => (k === 'cash' ? '' : k === 'armor' ? '/dead/p_shop_plate.webp' : SHOP[k] || k === 'ammo' ? `/dead/p_shop_${k}.webp` : '');
+function ZNotes({ items, style }) {
+  if (!items || !items.length) return null;
+  return (
+    <div aria-live="polite" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, pointerEvents: 'none', ...style }}>
+      {items.map((it) => (
+        <div key={it.id} style={{ maxWidth: '100%', padding: '4px 46px', background: 'linear-gradient(90deg, rgba(0,0,0,0), rgba(0,0,0,0.55) 22%, rgba(0,0,0,0.55) 78%, rgba(0,0,0,0))', fontSize: 14, fontWeight: 800, letterSpacing: '0.02em', color: it.kind === 'leave' ? '#FFB2A6' : '#FFFFFF', textShadow: '0 1px 2px rgba(0,0,0,0.9)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', animation: 'zgk-in 0.18s ease-out' }}>{it.text}</div>
+      ))}
+    </div>
+  );
+}
+function ZPicks({ items, style }) {
+  if (!items || !items.length) return null;
+  return (
+    <div aria-live="polite" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, pointerEvents: 'none', ...style }}>
+      {items.map((it) => (
+        <div key={it.id} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '2px 4px 2px 18px', background: 'linear-gradient(90deg, rgba(0,0,0,0), rgba(0,0,0,0.42))', animation: 'zgk-in 0.16s ease-out' }}>
+          <span style={{ fontSize: 13, fontWeight: 800, color: it.tone === 'cash' ? '#8EF0A0' : '#FFFFFF', textShadow: '0 1px 2px rgba(0,0,0,0.95)', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{it.txt}</span>
+          {it.img ? <img src={it.img} alt="" draggable={false} style={{ width: 28, height: 22, objectFit: 'contain', filter: 'drop-shadow(0 1px 1.5px rgba(0,0,0,0.8))' }} /> : <span style={{ width: 28, textAlign: 'center', fontSize: 16, fontWeight: 900, color: '#8EF0A0', textShadow: '0 1px 2px rgba(0,0,0,0.95)' }}>$</span>}
+        </div>
+      ))}
+    </div>
+  );
+}
 const lootLabel = (k, v) => (k === 'cash' ? `$${(v | 0).toLocaleString()}` : k === 'gun' ? (WEAPONS[v] ? WEAPONS[v].n : 'Gun') : k === 'ammo' ? 'Ammo box' : `${v > 1 ? `${v} ` : ''}${SHOP[k] ? SHOP[k].n : 'Item'}${v > 1 ? 's' : ''}`);
 function drawScenery(g, V, items, parts, lights, at, t, inView) {
   const S = scenery(g, V);
@@ -460,7 +502,7 @@ const SQ_SLOTS = [[-1.0, 0.4], [1.0, 0.4], [-2.0, 0.85], [2.0, 0.85]];
 const SQ_CAM = [[4.3, 6.2], [5.0, 7.2], [5.6, 8.0], [6.2, 8.8], [6.6, 9.4]];
 const LOBBY = { x: 1.2, z: -21.8, a: -0.19 };
 
-export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], onInvite = null, online = null, isAdmin = false }) {
+export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], onInvite = null, online = null, isAdmin = false, onSearch = null, onKick = null }) {
   injectKitCss();
   injectCss();
   const look = useCtlLook('zombie');
@@ -483,7 +525,7 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
   const [sv, setSv] = useState(() => { const v = getPref(PREF.sv, 'jay'); return SURV.includes(v) ? v : 'jay'; });
   const [col, setCol] = useState(() => { const v = Number(getPref(PREF.col, 0)) | 0; if (v >= 100 && v < 100 + SCHAR.length) return v; const s0 = getPref(PREF.sv, 'jay'); return charCol(charOf(SURV.includes(s0) ? s0 : 'jay', v).k); });
   const [gun, setGun] = useState(() => { const v = getPref(PREF.gun, ''); return WEAPONS[v] ? v : SURV_GUN[sv] || 'rifle'; });
-  const [pet, setPet] = useState(() => { const v = getPref(PREF.pet, 'rex'); return PETS.includes(v) || v === 'none' ? v : 'rex'; });
+  const [pet, setPet] = useState(() => { const v = getPref(PREF.pet, 'rex'); return PETS.includes(v) ? v : 'rex'; });
   const [tier, setTier] = useState(() => {
     let v = Number(getPref(PREF.gfx, -1));
     try {
@@ -575,6 +617,43 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
   const [chatFeed, pushChat] = useChatFeed();
   const [chatLog, setChatLog] = useState([]);
   const [chatText, setChatText] = useState('');
+  const [picks, setPicks] = useState([]);
+  const pickSeq = useRef(0);
+  const pushPick = (txt, img, tone) => {
+    const id = ++pickSeq.current;
+    setPicks((L) => [...L.slice(-3), { id, txt, img, tone }]);
+    setTimeout(() => setPicks((L) => L.filter((q) => q.id !== id)), 2400);
+  };
+  const [invQ, setInvQ] = useState('');
+  const [invFound, setInvFound] = useState(null);
+  const kickRef = useRef(onKick);
+  kickRef.current = onKick;
+  useEffect(() => {
+    if (!myId || !cloudOn()) return undefined;
+    const sid = Math.random().toString(36).slice(2, 10), t0 = Date.now(), topic = `zgses-${myId}`;
+    let gone = false;
+    const keep = rtKeep(() => supabase.channel(topic, { config: { broadcast: { self: false, ack: false } } }).on('broadcast', { event: 'claim' }, (msg) => {
+      const p0 = msg && msg.payload;
+      if (gone || !p0 || p0.sid === sid || Date.now() - t0 < 2500) return;
+      gone = true;
+      try { if (kickRef.current) kickRef.current(); } catch {}
+    }), {
+      topic,
+      onStatus: (st, err, ch) => {
+        if (st !== 'SUBSCRIBED' || gone) return;
+        const send = () => { try { const r = ch.send({ type: 'broadcast', event: 'claim', payload: { sid } }); if (r && r.catch) r.catch(() => {}); } catch {} };
+        send(); setTimeout(() => { if (!gone) send(); }, 1500);
+      },
+    });
+    return () => { gone = true; rtDrop(keep); };
+  }, [myId]);
+  useEffect(() => {
+    const q = invQ.trim();
+    if (q.length < 2 || !onSearch) { setInvFound(null); return undefined; }
+    let live = true;
+    const t = setTimeout(() => { Promise.resolve(onSearch(q)).then((L) => { if (live) setInvFound(Array.isArray(L) ? L.slice(0, 20) : []); }, () => { if (live) setInvFound([]); }); }, 350);
+    return () => { live = false; clearTimeout(t); };
+  }, [invQ, onSearch]);
   const [boot, setBoot] = useState({ st: 'check', got: 0, tot: 0, pct: 0 });
   const [bootTry, setBootTry] = useState(0);
   const [cvKey, setCvKey] = useState(0);
@@ -665,7 +744,7 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
     let alive = true;
     let iv = 0;
     const g = G.current;
-    const k = charOf(sv, col).k, guns = ['pistol'];
+    const k = charOf(sv, col).k, guns = [...new Set(['pistol', WEAPONS[gun] && FPG[gun] && FPG[gun].root != null ? gun : 'pistol'])];
     const t = setTimeout(async () => {
       try {
         setPhase('load');
@@ -676,7 +755,7 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
         const mu = 'sounds/dead/mu_lobby.mp3';
         if (!resHas(mu)) { try { await resFetch([mu]); } catch {} }
         if (alive && ZA.start()) ZA.music('mu_lobby', { vol: 1 });
-        const core = coreFiles(k, guns);
+        const core = (await resCanKeep()) ? allFiles() : coreFiles(k, guns);
         const tot = resSize(core.filter((p) => !resHas(p)));
         if (tot > 0) {
           let last = 0;
@@ -693,6 +772,7 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
         if (!alive) { if (V) V.dispose(); return; }
         if (!V) { setNetErr('gl'); setPhase('menu'); return; }
         g.V = V;
+        g.blk = { n: 0, bad: 0, done: false };
         V.onLost = () => lostRef.current && lostRef.current();
         g.menuRigs = null;
         Promise.all(EMOTE_LIST.map(([e]) => resUrl(`/dead/emo/${e}.webp`).catch(() => ''))).then((u) => { if (alive) setEmoIcons(u); });
@@ -795,6 +875,13 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
 
   const phaseRef = useRef(phase);
   phaseRef.current = phase;
+  const blackRef = useRef(null);
+  blackRef.current = () => {
+    if (tier > 0) { setPref(PREF.gfx, 0); setTier(0); return; }
+    const l = liteLv();
+    if (l < 2) { try { localStorage.setItem(LITE_KEY, String(l + 1)); } catch {} setBootTry((n) => n + 1); return; }
+    setNetErr('gl');
+  };
   lostRef.current = () => {
     const g = G.current;
     if (g.V) { try { g.V.dispose(); } catch {} }
@@ -873,6 +960,7 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
     g.cashL = []; g.buyQ = null; g.useQ = null; g.boomQ = null; g.rdy = false; g.nests = []; g.abox = []; g.pendN = [];
     g.sqN = m.squad ? Math.min(5, (g.sqMates ? g.sqMates.length : 0) + 1) : 0; g.sqAt = Date.now(); g.revHold = false;
     g.simRev = m.solo ? 57 : 0;
+    g.playStart = Date.now(); g.killedBy = ''; g.downBy = '';
     g.me = { x: 0, z: -24, lv: 0, w: 'pistol', slots: ['pistol'], slot: 0, mag: { pistol: WEAPONS.pistol.mag }, res: { pistol: WEAPONS.pistol.mag * 3 }, cash: 0, armor: 0, band: 0, med: 0, rel: 0, relMax: 1, fcd: 0, nades: 2, molos: 1, ph: 0, hp: 100, st: 0, rev: 0, kills: 0, pts: 0, mv: 0, speed: 0, mcd: 0, swapT: 0, sprint: false, bolt: 0 };
     g.V.prepHands();
     g.F = g.V.fp(g.me.w);
@@ -1020,7 +1108,7 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
     const Z = s.z || [];
     for (let i = 0; i + 6 < Z.length; i += 7) zs.set(Z[i], { id: Z[i], k: ZKEYS[Z[i + 1]] || 'walker', x: Z[i + 2] / 10, z: Z[i + 3] / 10, yaw: Z[i + 4] / 100, hp: Z[i + 5], fl: Z[i + 6], lv: Z[i + 6] & 32 ? 1 : 0 });
     const ps = new Map();
-    for (const p of s.p || []) ps.set(p[0], { id: p[0], x: p[1] / 10, z: p[2] / 10, yaw: p[3] / 100, aim: p[4] / 100, w: p[5], hp: p[6], st: p[7], rev: p[8] / 100, fl: p[9], kills: p[10], pts: p[11], px: (p[12] || 0) / 10, pz: (p[13] || 0) / 10, pyaw: (p[14] || 0) / 100, pst: p[15] == null ? -1 : p[15], lv: p[9] & 64 ? 1 : 0, plv: p[16] | 0, cash: p[17] | 0, armor: p[18] | 0, band: p[19] | 0, med: p[20] | 0, inv: typeof p[21] === 'string' ? p[21] : null, rdy: p[22] | 0, plates: p[23] | 0, ey: (p[24] | 0) / 100 });
+    for (const p of s.p || []) ps.set(p[0], { id: p[0], x: p[1] / 10, z: p[2] / 10, yaw: p[3] / 100, aim: p[4] / 100, w: p[5], hp: p[6], st: p[7], rev: p[8] / 100, fl: p[9], kills: p[10], pts: p[11], px: (p[12] || 0) / 10, pz: (p[13] || 0) / 10, pyaw: (p[14] || 0) / 100, pst: p[15] == null ? -1 : p[15], lv: p[9] & 64 ? 1 : 0, plv: p[16] | 0, cash: p[17] | 0, armor: p[18] | 0, band: p[19] | 0, med: p[20] | 0, inv: typeof p[21] === 'string' ? p[21] : null, rdy: p[22] | 0, plates: p[23] | 0, ey: (p[24] | 0) / 100, hs: p[25] | 0, revs: p[26] | 0, downs: p[27] | 0 });
     const nsL = [], abL = [];
     if (Array.isArray(s.ns)) for (let i = 0; i + 3 < s.ns.length; i += 4) nsL.push({ id: s.ns[i], x: s.ns[i + 1] / 10, z: s.ns[i + 2] / 10, hp: s.ns[i + 3] });
     if (Array.isArray(s.ab)) for (let i = 0; i + 2 < s.ab.length; i += 3) abL.push({ id: s.ab[i], x: s.ab[i + 1] / 10, z: s.ab[i + 2] / 10 });
@@ -1080,6 +1168,22 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
           for (const q of ps.values()) if (q.st === 0) up++;
           if (up === 1) { g.suddenW = s.w; ZA.say('vo_sudden'); }
         }
+      }
+    }
+    if (phaseRef.current === 'play') {
+      const ph = g.peerV || (g.peerV = new Map());
+      for (const q of ps.values()) {
+        if (q.id === myId || q.st === 2) continue;
+        const rq = g.roster.get(q.id);
+        const sx = rq && charOf(rq.sv || 'jay', rq.col | 0).v === 'f' ? 'f' : 'm';
+        const pv = ph.get(q.id) || { st: q.st, rl: false };
+        const pos = [q.x, fy(q.x, q.z, q.lv | 0) + (q.st === 1 ? 0.5 : 1.6), q.z];
+        if (q.st === 1 && pv.st !== 1) ZA.call('help', sx, { key: q.id, cd: 9, at: 0.5, pos });
+        else if (q.st === 1) ZA.call(Math.random() < 0.5 ? 'help' : 'medic', sx, { key: q.id, cd: 9 + Math.random() * 4, pos, chance: 0.08 });
+        const rl = !!(q.fl & 16);
+        if (rl && !pv.rl && q.st === 0) ZA.call('reload', sx, { key: q.id, cd: 14, chance: 0.45, pos, vol: 0.85 });
+        pv.st = q.st; pv.rl = rl;
+        ph.set(q.id, pv);
       }
     }
     for (const z of zs.values()) if (z.k === 'brute' && !g.seenBrute.has(z.id)) { g.seenBrute.add(z.id); ZA.play('stinger', { vol: 0.9 }); ZA.call('look', sex, { cd: 20, at: 0.9 }); pushFeed('A brute is here', '#FF8A7A'); }
@@ -1262,13 +1366,14 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
     } else if (k === 'ap') {
       const b = (g.abox || []).find((q) => q.id === e[2]);
       const bx = b ? b.x : g.me ? g.me.x : 0, bz = b ? b.z : g.me ? g.me.z : 0;
-      ZA.play('r_rifle', { pos: [bx, fy(bx, bz, 0) + 0.5, bz], vol: 0.8 });
+      if (e[1] !== myId) ZA.play('k_latch', { pos: [bx, fy(bx, bz, 0) + 0.5, bz], vol: 0.8 });
       if (e[1] === myId && g.me) {
         const M = g.me;
+        ZA.play('k_cloth', { vol: 0.8 }); ZA.play('k_latch', { vol: 1, at: 0.08 }); ZA.play('r_shell', { vol: 0.7, at: 0.2 });
         for (const w of M.slots) if (WEAPONS[w]) M.res[w] = Math.min(WEAPONS[w].mag * 9, (M.res[w] || 0) + WEAPONS[w].mag * 2);
         M.nades = Math.min(4, (M.nades || 0) + 1);
         if (e[3]) M.plates = (M.plates || 0) + 1;
-        pushNote(e[3] ? '+ Ammo   + Armor plate' : '+ Ammo', 'join', 2);
+        pushPick('Ammo', itemImg('ammo')); if (e[3]) pushPick('Armor plate', itemImg('plate'));
         syncHud(true);
       }
       g.abox = (g.abox || []).filter((q) => q.id !== e[2]);
@@ -1287,7 +1392,9 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
       if (e[1] === myId) {
         const it = SHOP[e[2]], M = g.me;
         if (e[3] && it) {
-          ZA.play('ui_buy', { vol: 0.95 });
+          ZA.play('k_buy', { vol: 0.7 });
+          ZA.play('cash', { vol: 0.75, at: 0.05 });
+          { const [sn, sr] = ITEM_SND(e[2]); ZA.play(sn, { vol: 0.8, rate: sr, at: 0.12, dur: sn === 'r_cock' ? 0.55 : undefined }); }
           if (it.c === 'gun') {
             const k0 = e[2];
             M.mag[k0] = WEAPONS[k0].mag; M.res[k0] = WEAPONS[k0].mag * 3;
@@ -1301,13 +1408,15 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
           else if (e[2] === 'molo') M.molos = (M.molos || 0) + 1;
           else if (e[2] === 'c4') M.c4s = (M.c4s || 0) + 1;
           else if (e[2] === 'plate') M.plates = (M.plates || 0) + 1;
-          pushNote(`+ ${it.n}`, 'join', 2);
+          pushPick(it.n, itemImg(e[2]));
           if (g.sell) g.sell.talk = Math.max(g.sell.talk, 1.6);
-        } else { ZA.play('ui_err', { vol: 0.9 }); pushNote(it && (M.cash || 0) < it.price ? 'Not enough cash' : 'Can\'t buy that now', 'leave', 2.4); }
+        } else { ZA.play('k_err', { vol: 0.9 }); pushNote(it && (M.cash || 0) < it.price ? 'Not enough cash' : 'Can\'t buy that now', 'leave', 2.4); }
         syncHud(true);
       }
     } else if (k === 'us') {
-      if (e[1] === myId) { if (e[2] !== 'plate') ZA.synth('calm', { vol: 0.5 }); syncHud(true); }
+      if (e[1] === myId) { if (e[2] === 'band') { ZA.play('velcro', { vol: 0.75, rate: 0.85 }); ZA.play('velcro', { vol: 0.55, rate: 0.95, at: 0.45 }); } else if (e[2] === 'med') { ZA.play('dry', { vol: 0.8, rate: 1.35 }); ZA.play('pin', { vol: 0.45, rate: 1.4, at: 0.12 }); } syncHud(true); }
+    } else if (k === 'bu') {
+      if (e[1] === myId) { ZA.synth('sizzle', { vol: 0.8 }); g.hurtT = Math.max(g.hurtT || 0, 0.3); }
     } else if (k === 'hl') {
       pushNote('Airdrop incoming', 'join', 3.5);
     } else if (k === 'ld') {
@@ -1317,7 +1426,7 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
       const oy = how === 2 ? fy(ox, oz, 0) + 0.95 : P1 ? fy(P1.x, P1.z, P1.lv | 0) + 1.25 : fy(ox, oz, 0) + 0.3;
       (g.lootA || (g.lootA = new Map())).set(id, { f: how === 1 ? LOOT.fly : 0, ox: sx, oz: sz, oy, how, sp: Math.random() * 6.28 });
       if (g.lootA.size > 260) { const k0 = g.lootA.keys().next().value; g.lootA.delete(k0); }
-      if (how === 0) ZA.play('ui_drop', { pos: by === myId ? null : [sx, oy, sz], vol: by === myId ? 0.85 : 0.6, ref: 6, roll: 0.8, max: 50 });
+      if (how === 0) ZA.play('whoosh', { pos: by === myId ? null : [sx, oy, sz], vol: by === myId ? 0.7 : 0.5, rate: 1.15, ref: 6, roll: 0.8, max: 50 });
     } else if (k === 'lp') {
       const it = (g.loot || []).find((q) => q.id === e[2]);
       const kk = LOOT_K[e[3]];
@@ -1332,34 +1441,34 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
         else if (kk === 'c4') { M.c4s = (M.c4s || 0) + n; t0 = `+ ${lootLabel('c4', n)}`; }
         else if (kk === 'ammo') { for (const w of M.slots) if (WEAPONS[w]) M.res[w] = Math.max(M.res[w] || 0, WEAPONS[w].mag * 4); t0 = '+ Full ammo'; }
         else if (kk) t0 = `+ ${lootLabel(kk, n)}`;
-        ZA.play('ui_pick', { vol: 0.95 });
-        if (t0) pushNote(t0, 'join', 2);
+        { const [sn, sr] = ITEM_SND(kk === 'gun' ? 'gun' : kk); ZA.play(sn, { vol: 0.9, rate: sr, dur: sn === 'r_cock' ? 0.55 : undefined }); if (kk === 'ammo') { ZA.play('k_latch', { vol: 0.95, at: 0.06 }); ZA.play('k_cloth', { vol: 0.6, at: 0.12 }); } }
+        if (t0) pushPick(t0.replace(/^\+ /, ''), kk === 'gun' ? `/dead/p_shop_${LOOT_G[n]}.webp` : itemImg(kk), kk === 'cash' ? 'cash' : undefined);
         syncHud(true);
       }
     } else if (k === 'lx') {
       const it = (g.loot || []).find((q) => q.id === e[1]);
-      if (it) { lootGone(it, 0); g.loot = g.loot.filter((q) => q.id !== e[1]); if (g.me && Math.hypot(it.x - g.me.x, it.z - g.me.z) < 40) ZA.play('loot_vanish', { pos: [it.x, fy(it.x, it.z, it.lv) + 0.4, it.z], vol: 0.6, ref: 6, roll: 0.8, max: 40 }); }
+      if (it) { lootGone(it, 0); g.loot = g.loot.filter((q) => q.id !== e[1]); if (g.me && Math.hypot(it.x - g.me.x, it.z - g.me.z) < 40) ZA.play('whoosh', { pos: [it.x, fy(it.x, it.z, it.lv) + 0.4, it.z], vol: 0.35, rate: 0.8, ref: 6, roll: 0.8, max: 40 }); }
       if (g.lootA) g.lootA.delete(e[1]);
     } else if (k === 'do') {
       const D = (g.drops || []).find((q) => q.id === e[1]);
       if (D) {
         D.open = true; D.oa = 0;
         const y0 = fy(D.x, D.z, 0);
-        ZA.play('crate_open', { pos: [D.x, y0 + 0.6, D.z], vol: 1.1, ref: 10, roll: 0.6, max: 90 });
+        ZA.play('chop', { pos: [D.x, y0 + 0.6, D.z], vol: 1, rate: 0.85, ref: 10, roll: 0.6, max: 90 }); ZA.play('thud', { pos: [D.x, y0 + 0.4, D.z], vol: 0.8, rate: 0.9, at: 0.08, ref: 10, roll: 0.6, max: 90 });
         for (let i = 0; i < 18; i++) { const a = (i / 18) * 6.28; fxPush({ x: D.x + Math.cos(a) * 0.6, y: y0 + 0.9, z: D.z + Math.sin(a) * 0.6, size: rnd(0.05, 0.09), alpha: 1, type: i % 3 ? 4 : 9, life: rnd(0.6, 1.1), vx: Math.cos(a) * rnd(1.5, 3.5), vy: rnd(2, 4.5), vz: Math.sin(a) * rnd(1.5, 3.5), grav: 1, drag: 1.2 }); }
         for (let i = 0; i < 10; i++) { const a = Math.random() * 6.28; fxPush({ x: D.x, y: y0 + 0.5, z: D.z, size: rnd(0.6, 1.1), alpha: 0.5, type: 24, life: rnd(0.8, 1.4), vx: Math.cos(a) * rnd(1, 3), vz: Math.sin(a) * rnd(1, 3), vy: rnd(0.4, 1.2), drag: 2.5, grow: 1.4, fout: 0.8, seed: Math.random() }); }
       }
-      if (e[2] === myId) pushNote('Supply crate opened, grab the loot', 'join', 2.5);
+
     } else if (k === 'dx') {
       const D = (g.drops || []).find((q) => q.id === e[1]);
-      if (D) { lootGone({ id: D.id, k: 'crate', v: 0, x: D.x, z: D.z, lv: 0 }, 0); if (g.me && Math.hypot(D.x - g.me.x, D.z - g.me.z) < 60) ZA.play('loot_vanish', { pos: [D.x, fy(D.x, D.z, 0) + 0.6, D.z], vol: 0.9, ref: 8, roll: 0.7, max: 60 }); }
+      if (D) { lootGone({ id: D.id, k: 'crate', v: 0, x: D.x, z: D.z, lv: 0 }, 0); if (g.me && Math.hypot(D.x - g.me.x, D.z - g.me.z) < 60) ZA.play('whoosh', { pos: [D.x, fy(D.x, D.z, 0) + 0.6, D.z], vol: 0.5, rate: 0.7, ref: 8, roll: 0.7, max: 60 }); }
       g.drops = (g.drops || []).filter((q) => q.id !== e[1]);
     } else if (k === 'za') {
       const x = e[2] / 10, z = e[3] / 10, y0 = fy(x, z, 0);
       for (let i = 0; i < 10; i++) { const a = (i / 10) * 6.28; fxPush({ x, y: y0 + 0.3, z, size: rnd(0.04, 0.07), alpha: 1, type: 4, life: rnd(0.5, 0.9), vx: Math.cos(a) * rnd(0.8, 1.8), vy: rnd(1.5, 3), vz: Math.sin(a) * rnd(0.8, 1.8), grav: 1 }); }
-      if (g.me && Math.hypot(x - g.me.x, z - g.me.z) < 30) ZA.play('ui_pick', { pos: [x, y0 + 0.3, z], vol: 0.45, rate: 0.85, ref: 5, roll: 0.9, max: 30 });
+      if (g.me && Math.hypot(x - g.me.x, z - g.me.z) < 30) ZA.play('nbounce', { pos: [x, y0 + 0.3, z], vol: 0.5, rate: 0.8, ref: 5, roll: 0.9, max: 30 });
     } else if (k === 'wb') {
-      if (e[1] === myId) { pushNote(`+ $${(e[2] | 0).toLocaleString()} wave bonus`, 'join', 3); ZA.play('ui_buy', { vol: 0.7, at: 0.4 }); }
+      if (e[1] === myId) { pushPick(`Wave bonus $${(e[2] | 0).toLocaleString()}`, '', 'cash'); ZA.play('cash', { vol: 0.8, at: 0.4 }); }
     } else if (k === 'dp') {
       (g.dropTaken = g.dropTaken || new Set()).add(e[2]);
       if (e[1] === myId && g.me) {
@@ -1415,9 +1524,11 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
       }
     } else if (k === 'dn') {
       g.waveDown = (g.waveDown || 0) + 1;
+      if (e[1] === myId) g.downBy = e[2] || '';
       pushFeed(`${nameOf(e[1])} is down`, '#FF8A7A');
-      if (e[1] !== myId) { pushNote(`${nameOf(e[1])} is down, help them up`, 'leave', 5); ZA.play('ui_click', { rate: 0.6, vol: 0.9 }); ZA.play('ui_click', { rate: 0.6, vol: 0.9, at: 0.17 }); }
+      if (e[1] !== myId) { pushNote(`${nameOf(e[1])} is down`, 'leave', 5); ZA.play('ui_click', { rate: 0.6, vol: 0.9 }); ZA.play('ui_click', { rate: 0.6, vol: 0.9, at: 0.17 }); }
     } else if (k === 'dd') {
+      if (e[1] === myId) g.killedBy = e[2] || g.downBy || '';
       pushFeed(`${nameOf(e[1])} died`, '#FF6A5A');
       if (e[1] !== myId) pushNote(`${nameOf(e[1])} died`, 'leave', 4);
     } else if (k === 'rv') {
@@ -1447,12 +1558,15 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
       if (g.bank) g.bank.rebase = true;
       const best = Math.max(g.best, e[1]);
       g.best = best; setPref(PREF.best, best);
-      setResult({ wave: e[1], kills: g.me ? g.me.kills : 0, pts: g.me ? g.me.pts : 0, best, at: Date.now() });
+      const S9 = g.snaps[g.snaps.length - 1];
+      const board = S9 ? [...S9.ps.values()].map((q) => { const r9 = g.roster.get(q.id) || {}; return { id: q.id, n: q.id === myId ? myFirst || 'You' : r9.n || 'Player', bot: !!r9.bot, pts: q.pts | 0, kills: q.kills | 0, hs: q.hs | 0, revs: q.revs | 0, downs: q.downs | 0, me: q.id === myId }; }).sort((a9, b9) => b9.pts - a9.pts) : [];
+      setResult({ wave: e[1], kills: g.me ? g.me.kills : 0, pts: g.me ? g.me.pts : 0, best, at: Date.now(), board, by: g.killedBy || g.downBy || '', secs: Math.max(0, Math.round((Date.now() - (g.playStart || Date.now())) / 1000)) });
+      g.killedBy = ''; g.downBy = '';
       ZA.synth('horn', { vol: 0.6 });
       ZA.say('vo_failed', { at: 0.5 }); ZA.say('vo_gameover');
       ZA.musLevel(0.3);
     } else if (k === 'rs') {
-      if (e[1] === '*') { setResult(null); if (g.me) { for (const s0 of g.me.slots) g.me.mag[s0] = WEAPONS[s0].mag; } }
+      if (e[1] === '*') { setResult(null); g.playStart = Date.now(); if (g.me) { for (const s0 of g.me.slots) g.me.mag[s0] = WEAPONS[s0].mag; } }
     } else if (k === 'pj') {
       if (g.roster.size < 14 && e[1] !== myId) { const r = g.roster.get(e[1]); if (r && !r.bot) pushNote(`${r.n} joined`, 'join'); }
     } else if (k === 'pa' || k === 'pb' || k === 'px') {
@@ -1461,7 +1575,7 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
       if (e[1] !== myId && r && !r.bot) pushNote(k === 'pa' ? `${r.n} lost connection` : k === 'pb' ? `${r.n} is back` : `${r.n} left`, k === 'pb' ? 'join' : 'leave');
     } else if (k === 'th') {
       const p = ps.get(e[1]);
-      if (p && e[1] !== myId) { g.fx.push({ nade: true, k: e[2], x0: p.x, z0: p.z, lv0: p.lv | 0, x1: e[3] / 10, z1: e[4] / 10, lv1: e[5] | 0, t: 0, life: e[2] === 'grenade' ? THROW.grenade.fuse : e[2] === 'c4' ? THROW.c4.fuse : 0.9 }); const P = g.panim.get(e[1]); if (P) P.thr = 0; ZA.play('whoosh', { pos: [p.x, 1.5, p.z] }); }
+      if (p && e[1] !== myId) { g.fx.push({ nade: true, k: e[2], x0: p.x, z0: p.z, lv0: p.lv | 0, x1: e[3] / 10, z1: e[4] / 10, lv1: e[5] | 0, t: 0, life: e[2] === 'grenade' ? THROW.grenade.fuse : e[2] === 'c4' ? THROW.c4.fuse : 0.9 }); const P = g.panim.get(e[1]); if (P) P.thr = 0; ZA.play('whoosh', { pos: [p.x, 1.5, p.z] }); const rq = g.roster.get(e[1]); if (e[2] !== 'c4') ZA.call('nade', rq && charOf(rq.sv || 'jay', rq.col | 0).v === 'f' ? 'f' : 'm', { key: e[1], cd: 6, chance: 0.7, pos: [p.x, fy(p.x, p.z, p.lv | 0) + 1.6, p.z] }); }
     } else if (k === 'm') {
       const P = g.panim.get(e[1]); if (P) P.mel = 0;
     } else if (k === 'pz') {
@@ -1534,7 +1648,7 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
     const M = g.me;
     const W = WEAPONS[M.w];
     if (!W || M.st !== 0) return;
-    if (M.rel > 0 || M.fcd > 0 || M.swapT > 0 || g.thr || M.bolt > 0 || g.plateT) return;
+    if (M.rel > 0 || M.fcd > 0 || M.swapT > 0 || g.thr || M.bolt > 0 || g.plateT || g.medT) return;
     if ((M.mag[M.w] == null ? W.mag : M.mag[M.w]) <= 0) { ZA.play('dry', {}); M.fcd = 0.25; startReload(g); return; }
     M.mag[M.w] = (M.mag[M.w] == null ? W.mag : M.mag[M.w]) - 1;
     M.fcd = 1 / W.rate;
@@ -1545,7 +1659,7 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
     const list = [];
     for (const a of g.anim.values()) list.push(a);
     const hits = [], sh = [];
-    const mz = g.view === 'fp' ? muzzleWorld(g.F, {}, { pos: cam.pos, yaw: g.yaw, pitch: g.pitch, fov: cam.fov, vmFov: 0.98 }) : (g.myMuzzle || cam.pos);
+    const mz = g.eyeV ? muzzleWorld(g.F, {}, { pos: cam.pos, yaw: g.yaw, pitch: g.pitch, fov: cam.fov, vmFov: 0.98 }) : (g.myMuzzle || cam.pos);
     const as = W.pel === 1 && (!g.opt || g.opt.assist) ? assist(g, W, list) : null;
     if (as && g.fire) { g.yaw = angLerp(g.yaw, as.ay, 0.12); g.pitch = lerp(g.pitch, as.ap, 0.08); }
     const sp0 = W.spr * spreadK(g, M) + g.bloom * (g.ads ? 0.3 : M.cr && !(M.sl > 0) ? 0.8 : 1);
@@ -1555,7 +1669,7 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
       let ey = (Math.random() - 0.5) * 2 * sp, ep = (Math.random() - 0.5) * 2 * sp;
       if (as && p === 0) { ey = angDiff(g.yaw, as.ay) * 0.85 + ey * 0.3; ep = (as.ap - g.pitch) * 0.85 + ep * 0.3; }
       const d = camDir(g, ey, ep);
-      const tw0 = g.view === 'fp' ? 0 : Math.max(0, (M.x - cam.pos[0]) * d[0] + (fy(M.x, M.z, M.lv) + 1.45 - cam.pos[1]) * d[1] + (M.z - cam.pos[2]) * d[2]);
+      const tw0 = g.eyeV ? 0 : Math.max(0, (M.x - cam.pos[0]) * d[0] + (fy(M.x, M.z, M.lv) + (M.jy || 0) + 1.45 - cam.pos[1]) * d[1] + (M.z - cam.pos[2]) * d[2]);
       const wall = hitRay([cam.pos[0] + d[0] * tw0, cam.pos[1] + d[1] * tw0, cam.pos[2] + d[2] * tw0], d, W.rng - tw0);
       const wallT = wall ? wall.t + tw0 : 1e9;
       if (W.boom) {
@@ -1584,7 +1698,7 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
       let end = W.rng;
       for (let pc = 0; pc <= (W.pierce || 0); pc++) {
         const hit = rayZ(cam.pos, d, Math.min(W.rng, wallT), list, skip);
-        if (!hit || rayBlocked(M.x, M.z, hit.A.x, hit.A.z, fy(M.x, M.z, M.lv) + 1.45, cam.pos[1] + d[1] * hit.t)) break;
+        if (!hit || rayBlocked(M.x, M.z, hit.A.x, hit.A.z, fy(M.x, M.z, M.lv) + (M.jy || 0) + 1.45, cam.pos[1] + d[1] * hit.t)) break;
         skip.add(hit.A);
         if (pc === 0) end = hit.t;
         hits.push(hit.leg && !hit.head ? [hit.A.id, 0, 1] : [hit.A.id, hit.head ? 1 : 0]);
@@ -1613,14 +1727,14 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
       }
       let tgt = [cam.pos[0] + d[0] * end, cam.pos[1] + d[1] * end, cam.pos[2] + d[2] * end];
       if (end >= W.rng && nHole < 4) {
-        const t0 = g.view === 'fp' ? 0 : Math.max(0, (M.x - cam.pos[0]) * d[0] + (fy(M.x, M.z, M.lv) + 1.45 - cam.pos[1]) * d[1] + (M.z - cam.pos[2]) * d[2]);
+        const t0 = g.eyeV ? 0 : Math.max(0, (M.x - cam.pos[0]) * d[0] + (fy(M.x, M.z, M.lv) + (M.jy || 0) + 1.45 - cam.pos[1]) * d[1] + (M.z - cam.pos[2]) * d[2]);
         const h = holeAt([cam.pos[0] + d[0] * t0, cam.pos[1] + d[1] * t0, cam.pos[2] + d[2] * t0], d, Math.min(W.rng, 70) - t0, nHole++);
         if (h) tgt = h.p;
       }
       if (p < 3) tracer(mz, tgt);
       if (sh.length < 2) { const dd = [tgt[0] - mz[0], tgt[1] - mz[1], tgt[2] - mz[2]]; const L = Math.hypot(dd[0], dd[1], dd[2]) || 1; sh.push([Math.round(mz[0] * 10), Math.round(mz[1] * 10), Math.round(mz[2] * 10), Math.round(dd[0] / L * 100), Math.round(dd[1] / L * 100), Math.round(dd[2] / L * 100), Math.round(L * 10)]); }
     }
-    flash(mz, camDir(g, 0, 0), { pistol: 0.75, smg: 0.85, shotgun: 1.35, sniper: 1.2 }[wcls(M.w)] || 1, g.view === 'fp');
+    flash(mz, camDir(g, 0, 0), { pistol: 0.75, smg: 0.85, shotgun: 1.35, sniper: 1.2 }[wcls(M.w)] || 1, !!g.eyeV);
     fxPush({ x: mz[0], y: mz[1], z: mz[2], size: 0.35, alpha: 0.35, type: 11, life: 0.5, vy: 0.5 });
     const rt = [Math.cos(g.yaw), 0, -Math.sin(g.yaw)];
     fxPush({ x: mz[0] - rt[0] * 0.05, y: mz[1] - 0.05, z: mz[2] - rt[2] * 0.05, size: 0.03, alpha: 1, type: 27, life: 0.45, vx: -rt[0] * 2.4 + rnd(-0.4, 0.4), vy: rnd(1.4, 2.4), vz: -rt[2] * 2.4 + rnd(-0.4, 0.4), grav: 1 });
@@ -1640,7 +1754,7 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
   };
   const startReload = (g) => {
     const M = g.me, W = WEAPONS[M.w];
-    if (!W || M.st !== 0 || M.rel > 0 || M.swapT > 0 || g.plateT || (M.mag[M.w] != null && M.mag[M.w] >= W.mag)) return;
+    if (!W || M.st !== 0 || M.rel > 0 || M.swapT > 0 || g.plateT || g.medT || (M.mag[M.w] != null && M.mag[M.w] >= W.mag)) return;
     if (M.res && (M.res[M.w] || 0) <= 0) { if ((M.noAmmoT || 0) < g.t) { M.noAmmoT = g.t + 2; ZA.play('dry', {}); pushNote('Out of ammo', 'leave', 2.4); } return; }
     M.rel = W.rel; M.relMax = W.rel;
     if (g.F) g.F.rel = 0;
@@ -1651,10 +1765,10 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
   const swapGun = () => {
     const g = G.current, M = g.me;
     if (!M || M.st !== 0 || M.swapT > 0 || g.thr) return;
-    ZA.synth('tap', { f: 500, vol: 0.4 });
     M.rel = 0;
     M.swapT = 0.5;
     if (!M.slots || M.slots.length < 2) { M.swapT = 0; return; }
+    ZA.play('velcro', { vol: 0.32, rate: 1.35, dur: 0.16 });
     M.swapTo = (M.slot + 1) % M.slots.length;
     if (g.F) { g.F.rel = -1; g.F.swap = 0.001; }
     syncHud(true);
@@ -1662,7 +1776,7 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
   const switchTo = (i) => {
     const g = G.current, M = g.me;
     if (!M || M.st !== 0 || M.swapT > 0 || g.thr || !M.slots || !M.slots[i] || i === M.slot) return;
-    ZA.synth('tap', { f: 500, vol: 0.4 });
+    ZA.play('velcro', { vol: 0.32, rate: 1.35, dur: 0.16 });
     M.rel = 0;
     M.swapT = 0.5;
     M.swapTo = i;
@@ -1709,7 +1823,7 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
   };
   const throwStart = (k) => {
     const g = G.current, M = g.me;
-    if (!M || M.st !== 0 || g.thr || M.swapT > 0 || g.plateT) return;
+    if (!M || M.st !== 0 || g.thr || M.swapT > 0 || g.plateT || g.medT) return;
     if (k === 'grenade' ? M.nades <= 0 : k === 'c4' ? !(M.c4s > 0) : M.molos <= 0) return;
     if (g.t < (g.thrCd || 0)) { ZA.play('dry', {}); return; }
     M.rel = 0;
@@ -1871,14 +1985,14 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
   };
 
   useEffect(() => {
-    setKitTap((kind) => { try { if (ZA.init()) ZA.play(kind === 'click' ? 'ui_tick' : 'ui_tap2', { vol: 1 }); } catch {} return true; });
+    setKitTap((kind) => { try { if (ZA.init()) ZA.play(kind === 'toggle' ? 'k_tog' : kind === 'click' ? 'ui_tap' : 'ui_click', { vol: kind === 'toggle' ? 0.9 : kind === 'click' ? 1.1 : 1.05 }); } catch {} return true; });
     return () => setKitTap(null);
   }, []);
   useEffect(() => {
     const was = sheetWas.current;
     sheetWas.current = sheet;
     if (!!was === !!sheet) return;
-    try { if (ZA.init()) ZA.play(sheet ? 'ui_open' : 'ui_back', { vol: 0.85 }); } catch {}
+    try { if (ZA.init()) ZA.play(sheet ? 'k_open' : 'k_close', { vol: sheet ? 0.75 : 0.6 }); } catch {}
   }, [sheet]);
   useEffect(() => { G.current.view = view; G.current.sens = sens; G.current.torch = torch; G.current.opt = opt; }, [view, sens, torch, opt]);
 
@@ -1973,7 +2087,7 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
       ssMatrix(S, px, floorH(px, pz), pz, pyaw);
       hits.push({ key: 'me', x: px, y0: floorH(px, pz), y1: floorH(px, pz) + 1.8, z: pz, r: 0.3 });
       items.push({ mesh: smd.mesh, model: S.M, skin: S.skin, tex: smd.tex, nrm: smd.nrm, col: g.survCol || (g.survCol = new Float32Array([0.95, 0.95, 0.95, 0])), cast: true });
-      if (!S.hideGun) { const gd = GUNS[gun] || GUNS.rifle; const Gm = ssGun(S, smd, V.sm.anims.clips, gun, gd.grip.o, S.G); if (Gm) tpGunItems(items, V.R, gun, Gm, true); }
+      if (!S.hideGun) { const Gm = ssGun(S, smd, V.sm.anims.clips, gun, GUNS[gun] ? GUNS[gun].grip.o : null, S.G); if (Gm) { tpGunItems(items, V.R, gun, Gm, true); ssHold(S, smd, V.sm.anims.clips, gun, Gm, tpHold()); } }
     }
     parts.push({ x: px, y: floorH(px, pz) + 0.03, z: pz, size: 0.45, alpha: 0.45, type: 21, dw: -1 });
     const mates = g.sqMates || [];
@@ -2004,7 +2118,7 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
         ssMatrix(RM.S, x, fyM, z, Math.atan2(ccx - x, ccz - z) + (sr < 0 ? 0.22 : -0.22) + spinA(m0.id));
         hits.push({ key: m0.id, x, y0: fyM, y1: fyM + 1.8, z, r: 0.3 });
         items.push({ mesh: md.mesh, model: RM.S.M, skin: RM.S.skin, tex: md.tex, nrm: md.nrm, col: RM.col, cast: true });
-        if (!RM.S.hideGun) { const gd = GUNS[w] || GUNS.rifle; const Gm = ssGun(RM.S, md, V.sm.anims.clips, w, gd.grip.o, RM.S.G); if (Gm) tpGunItems(items, V.R, w, Gm, true); }
+        if (!RM.S.hideGun) { const Gm = ssGun(RM.S, md, V.sm.anims.clips, w, GUNS[w] ? GUNS[w].grip.o : null, RM.S.G); if (Gm) { tpGunItems(items, V.R, w, Gm, true); ssHold(RM.S, md, V.sm.anims.clips, w, Gm, tpHold()); } }
         parts.push({ x, y: fyM + 0.03, z, size: 0.45, alpha: 0.45, type: 21, dw: -1 });
         tagPts.push([m0.id, x, fyM + 2.0, z]);
       });
@@ -2045,6 +2159,7 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
     const fy0 = floorH(px, pz);
     const lift = mates.length ? 0.25 : 0;
     const VP = V.R.render({ env: V.env, cam: { pos: [cx, fy0 + 1.42 + lift, cz], at: [px, fy0 + 0.98, pz], fov: 0.62, shadowAt: [px, 0, pz], far: 420 }, items, parts, lights: lights.slice(0, 4) });
+    blackCheck(g, V);
     if (VP && VP.length >= 16) { (g.lobVP || (g.lobVP = new Float32Array(16))).set(VP.subarray ? VP.subarray(0, 16) : VP.slice(0, 16)); g.lobHits = hits; }
     const box = g.lobTagBox;
     if (box && VP) {
@@ -2060,6 +2175,18 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
         el.style.opacity = '1';
       }
     }
+  };
+
+  const blackCheck = (g, V) => {
+    const B = g.blk;
+    if (!B || B.done || !V.R.probe) return;
+    B.n++;
+    if (B.n % 8) return;
+    const v = V.R.probe();
+    if (v < 0) return;
+    if (v < 4) B.bad++;
+    else { B.bad = 0; if (B.n > 160) B.done = true; }
+    if (B.bad >= 8) { B.done = true; if (blackRef.current) blackRef.current(); }
   };
 
   const step = (g, V, dt, now) => {
@@ -2090,7 +2217,7 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
     if (ml > 1) { mx /= ml; my /= ml; }
     const Wc = WEAPONS[M.w];
     const joyRun = J.joy.current.id != null && (g.opt && g.opt.spr ? J.joy.current.mag > 0.62 && my < -0.5 : J.joy.current.mag > 0.97 && my < -0.82);
-    M.sprint = M.st === 0 && (joyRun || (keys.has('ShiftLeft') && my < -0.5)) && !g.fire && !g.fireL && !g.ads && !g.thr && !g.plateT && M.rel <= 0 && M.mcd <= 0 && !(M.sl > 0);
+    M.sprint = M.st === 0 && (joyRun || (keys.has('ShiftLeft') && my < -0.5)) && !g.fire && !g.fireL && !g.ads && !g.thr && !g.plateT && !g.medT && M.rel <= 0 && M.mcd <= 0 && !(M.sl > 0);
     if (M.st !== 0) { M.cr = 0; M.sl = 0; M.jy = 0; M.jv = 0; M.air = false; }
     if (g.crReq) {
       g.crReq = false;
@@ -2110,9 +2237,18 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
       g.jumpReq = false;
       if (M.st === 0 && !M.mant) {
         const feet = fy(M.x, M.z, M.lv) + (M.jy || 0);
-        const L = lv0 && (!M.air || M.jv > -3) ? ledgeAhead(M.x, M.z, g.yaw, feet) : null;
-        if (L) {
-          M.mant = { t: 0, dur: 0.32 + 0.11 * Math.max(0, L.y - feet), x0: M.x, z0: M.z, f0: feet, x1: L.x, z1: L.z, f1: L.y };
+        const Vt = lv0 && !g.onTop && (!M.air || M.jv > -2) ? vaultAhead(M.x, M.z, g.yaw, feet, (qx, qz) => { const c = collide(qx, qz, 0.38, 0); return Math.hypot(c[0] - qx, c[1] - qz) < 0.12 && !inHouse(qx, qz, 0.2); }) : null;
+        const L = !Vt && lv0 && (!M.air || M.jv > -3) ? ledgeAhead(M.x, M.z, g.yaw, feet) : null;
+        if (Vt) {
+          const tg = topAt(Vt.x, Vt.z), g1 = fy(Vt.x, Vt.z, 0);
+          M.mant = { vault: true, t: 0, dur: 0.46 + 0.1 * Math.max(0, Vt.top - feet - 0.6), x0: M.x, z0: M.z, f0: feet, x1: Vt.x, z1: Vt.z, f1: tg != null && tg <= feet + 0.3 ? Math.max(g1, tg) : g1, peak: Vt.top + 0.14 };
+          M.air = false; M.jv = 0; M.sl = 0; M.cr = 0; M.sprint = false;
+          ZA.synth('step', { surf: stepSurf(M.x, M.z, M.lv), vol: 0.8 });
+          ZA.play('k_cloth', { vol: 0.55, rate: 1.1 });
+          ZA.play('whoosh', { vol: 0.3, rate: 0.9, at: 0.1 });
+        } else if (L) {
+          const hgt = Math.max(0, L.y - feet);
+          M.mant = { t: 0, dur: hgt > 1.15 ? 0.45 + 0.42 * hgt : 0.32 + 0.11 * hgt, climb: hgt > 1.15, x0: M.x, z0: M.z, f0: feet, x1: L.x, z1: L.z, f1: L.y };
           M.air = false; M.jv = 0; M.sl = 0; M.cr = 0; M.sprint = false;
           ZA.synth('step', { surf: stepSurf(M.x, M.z, M.lv), vol: 0.7 });
           ZA.play('whoosh', { vol: 0.25, rate: 0.8 });
@@ -2131,10 +2267,20 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
     const gnd0 = fy(M.x, M.z, M.lv), top0 = lv0 ? topAt(M.x, M.z) : null;
     const onTop = top0 != null && gnd0 + (M.jy || 0) >= top0 - 0.3 && (M.jy || 0) > 0.25;
     g.onTop = onTop;
-    if (M.mant) {
+    if (M.mant && M.mant.vault) {
+      const Q = M.mant;
+      Q.t += dt;
+      const k = Math.min(1, Q.t / Q.dur), fw = k * k * (3 - 2 * k);
+      M.x = Q.x0 + (Q.x1 - Q.x0) * fw; M.z = Q.z0 + (Q.z1 - Q.z0) * fw;
+      const base = Q.f0 + (Q.f1 - Q.f0) * fw, arc = Math.max(0, Q.peak - Math.max(Q.f0, Q.f1)) * Math.sin(Math.PI * Math.min(1, k * 1.04));
+      M.jy = base + arc - fy(M.x, M.z, M.lv);
+      M.vx = 0; M.vz = 0; M.air = false; M.jv = 0;
+      if (k >= 1) { M.mant = null; M.jy = Math.max(0, Q.f1 - fy(M.x, M.z, M.lv)); g.land = 0.12; ZA.synth('step', { surf: stepSurf(M.x, M.z, M.lv), vol: 1 }); }
+    } else if (M.mant) {
       const Q = M.mant;
       Q.t += dt;
       const k = Math.min(1, Q.t / Q.dur);
+      if (Q.climb && !Q.snd) { Q.snd = true; ZA.play('k_cloth', { vol: 0.6 }); ZA.synth('step', { surf: 'metal', vol: 0.6, at: 0.25 }); ZA.play('k_cloth', { vol: 0.5, rate: 0.9, at: Q.dur * 0.55 }); }
       const up = 1 - Math.pow(1 - Math.min(1, k / 0.72), 2);
       const fw0 = clamp((k - 0.3) / 0.7, 0, 1), fw = fw0 * fw0 * (3 - 2 * fw0);
       M.x = Q.x0 + (Q.x1 - Q.x0) * fw; M.z = Q.z0 + (Q.z1 - Q.z0) * fw;
@@ -2143,15 +2289,18 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
       if (k >= 1) { M.mant = null; M.jy = Q.f1 - fy(M.x, M.z, M.lv); g.land = 0.1; ZA.synth('step', { surf: 'wood', vol: 0.9 }); }
     } else if (M.st === 0) {
       const fx = Math.sin(g.yaw), fz = Math.cos(g.yaw), rx = -Math.cos(g.yaw), rz = Math.sin(g.yaw);
-      const sp = (M.sprint ? 7.5 : 5.5) * (g.ads ? 0.55 : 1) * (g.thr ? 0.7 : 1) * (g.plateT ? 0.75 : 1) * (M.cr && !(M.sl > 0) ? 0.52 : 1) * (({ sniper: 0.92, shotgun: 0.97, smg: 1.04, pistol: 1.05 }[wcls(M.w)] || 1) * (M.w === 'lmg' ? 0.88 : 1));
+      const sp = (M.sprint ? 7.5 : 5.5) * (g.ads ? 0.55 : 1) * (g.thr ? 0.7 : 1) * (g.plateT || g.medT ? 0.75 : 1) * (M.cr && !(M.sl > 0) ? 0.52 : 1) * (({ sniper: 0.92, shotgun: 0.97, smg: 1.04, pistol: 1.05 }[wcls(M.w)] || 1) * (M.w === 'lmg' ? 0.88 : 1));
       let tvx = (fx * -my + rx * mx) * sp, tvz = (fz * -my + rz * mx) * sp;
       if (M.sl > 0) { const ss0 = 3.4 + 6.4 * clamp(M.sl / 0.85, 0, 1); tvx = M.sdx * ss0 + tvx * 0.15; tvz = M.sdz * ss0 + tvz * 0.15; }
       M.vx = lerp(M.vx || 0, tvx, Math.min(1, dt * 12)); M.vz = lerp(M.vz || 0, tvz, Math.min(1, dt * 12));
       if (Math.hypot(M.vx, M.vz) > 0.05) {
         let nx = M.x + M.vx * dt, nz = M.z + M.vz * dt;
+        const tA = !onTop && lv0 && (M.jy || 0) > 0.3 ? topAt(nx, nz) : null;
         if (onTop) {
           const tN = topAt(nx, nz);
           if (tN != null && tN > gnd0 + M.jy + 0.3) { nx = M.x; nz = M.z; }
+          M.x = nx; M.z = nz;
+        } else if (tA != null && tA <= gnd0 + M.jy + 0.3) {
           M.x = nx; M.z = nz;
         } else {
         for (const A of g.anim.values()) { if ((A.lv | 0) !== (M.lv | 0)) continue; const r = (ZT[A.k] || ZT.walker).r + 0.32; const dx = nx - A.x, dz = nz - A.z, d = Math.hypot(dx, dz); if (d < r && d > 1e-4) { nx = A.x + dx / d * r; nz = A.z + dz / d * r; } }
@@ -2180,6 +2329,17 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
     const F = g.F;
     M.fcd = Math.max(0, M.fcd - dt);
     M.mcd = Math.max(0, M.mcd - dt);
+    if (g.medT) {
+      const Q = g.medT;
+      Q.t += dt;
+      g.ads = false;
+      if (M.st !== 0) g.medT = null;
+      else {
+        if (!Q.cap && Q.t >= Q.dur * 0.38) { Q.cap = true; ZA.play('pin', { vol: 0.55, rate: 1.25 }); }
+        if (!Q.sent && Q.t >= Q.dur * 0.6) { Q.sent = true; g.useQ = [(g.useQ ? g.useQ[0] : 0) + 1, 'med']; }
+        if (Q.t >= Q.dur) g.medT = null;
+      }
+    }
     if (g.plateT) {
       const P0 = g.plateT;
       P0.t += dt;
@@ -2205,7 +2365,7 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
     if (M.swapT > 0) {
       const was = M.swapT;
       M.swapT -= dt;
-      if (was > 0.25 && M.swapT <= 0.25) { M.slot = M.swapTo; M.w = M.slots[M.slot]; const nf = V.fp(M.w); nf.rel = -1; nf.thr = -1; nf.thrHold = 0; nf.mel = -1; nf.bolt = -1; nf.swap = F ? F.swap : 0.5; g.F = nf; ZA.play('r_cock', { vol: 0.5, rate: 1.3 }); }
+      if (was > 0.25 && M.swapT <= 0.25) { M.slot = M.swapTo; M.w = M.slots[M.slot]; { const c0 = wcls(M.w); ZA.play(c0 === 'shotgun' ? 'r_pump' : 'r_cock', { vol: 0.6, rate: c0 === 'pistol' ? 1.3 : c0 === 'smg' ? 1.15 : 1, dur: c0 === 'shotgun' ? 0.6 : 0.45 }); } const nf = V.fp(M.w); nf.rel = -1; nf.thr = -1; nf.thrHold = 0; nf.mel = -1; nf.bolt = -1; nf.swap = F ? F.swap : 0.5; g.F = nf; ZA.play('r_cock', { vol: 0.5, rate: 1.3 }); }
       if (g.F) g.F.swap = M.swapT > 0 ? 1 - M.swapT / 0.5 : 0;
     }
     if (M.pendSwap != null && M.swapT <= 0 && M.st === 0 && !g.thr) {
@@ -2249,7 +2409,7 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
     if (g.emo) { g.emo.t += dt; if (g.emo.t > emoDur(g.emo.k) || M.st !== 0 || (g.emo.t > 0.25 && (M.mv || g.fire || g.ads))) { const dn = DANCES.includes(g.emo.k); g.emo = null; if (g.emoSnd) { g.emoSnd.fade(0.35); g.emoSnd = null; } if (dn) ZA.unduck(); } }
     for (const [id, e] of g.pemo) { e.t += dt; if (e.t > (e.k ? emoDur(e.k) + 0.2 : 3)) pemoEnd(g, id); }
     const rv = g.revHold && hudPrev.current && hudPrev.current.near ? hudPrev.current.near : null;
-    const fl = (M.mv ? 1 : 0) | (M.fireT > 0 || g.ads ? 8 : 0) | (M.rel > 0 ? 16 : 0) | (M.sprint ? 32 : 0) | (M.cr ? 128 : 0) | (M.air ? 256 : 0) | (M.sl > 0 ? 512 : 0);
+    const fl = (M.mv ? 1 : 0) | (M.fireT > 0 || g.ads ? 8 : 0) | (M.rel > 0 ? 16 : 0) | (M.sprint ? 32 : 0) | (M.cr ? 128 : 0) | (M.air || (M.mant && M.mant.vault) ? 256 : 0) | (M.sl > 0 ? 512 : 0) | (M.mant && M.mant.climb ? 1024 : 0);
     if (g.sim) {
       g.sim.setPlayer(myId, { x: M.x, z: M.z, lv: M.lv | 0, ey: g.onTop || M.mant ? Math.round((M.jy || 0) * 100) / 100 : 0, yaw: g.yaw, aim: g.pitch, w: M.w, fl, rv, gu: g.giveUp && M.st === 1 ? 1 : 0, buy: g.buyQ, use: g.useQ, rd: g.rdy ? 1 : undefined, det: g.detQ || undefined, cn: [M.nades | 0, M.molos | 0, M.c4s | 0], dr: g.dropQs && g.dropQs.length ? g.dropQs.shift() : undefined, pk: g.pickQ || undefined });
       g.simAcc += dt;
@@ -2312,7 +2472,9 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
     const vm = [];
     const out = M.st === 2;
     const emoteCam = !!g.emo;
-    const fp = g.view === 'fp' && !out && !emoteCam;
+    const tpAim = g.view !== 'fp' && g.ads && !!WEAPONS[M.w] && M.st === 0 && !g.thr && !M.sprint;
+    const fp = (g.view === 'fp' || tpAim) && !out && !emoteCam;
+    g.eyeV = fp;
     let pos, yaw = g.yaw, pitch = g.pitch + g.recP, fov = BASE_FOV;
     const gyT = fy(M.x, M.z, M.lv);
     M.ys = M.ys == null || Math.abs(M.ys - gyT) > 1.5 ? gyT : lerp(M.ys, gyT, Math.min(1, dt * 16));
@@ -2368,8 +2530,15 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
         for (let i = 1; i <= n; i++) { const t = i / n, qx = M.x + bdx * t, qz = M.z + bdz * t; if (houseBlocked(qx, qz, M.lv | 0, false) || (M.lv && houseY(qx, qz, 1) == null)) { keep = Math.max(0.25, bl * t - 0.3); break; } }
         if (keep < bl) { cx = M.x + bdx / bl * keep; cz = M.z + bdz / bl * keep; }
       }
-      const cc = collide(cx, cz, 0.3, M.lv); cx = cc[0]; cz = cc[1];
       let cy = Math.max(gy + 1.95 + (M.air ? (M.jy0 || 0) + ((M.jy || 0) - (M.jy0 || 0)) * 0.7 : M.jy || 0) - Math.min(1, M.crK || 0) * 0.45 - (emoteCam ? 0.75 - Math.sin(g.emo.op) * back : Math.sin(g.pitch) * back * 0.9), fy(cx, cz, M.lv) + 0.5);
+      {
+        const hy0 = gy + 1.5 + (M.jy || 0) - Math.min(1, M.crK || 0) * 0.45;
+        const tf = camClip(M.x, M.z, hy0, cx, cz, cy, M.lv | 0);
+        const kf = g.camF == null || tf < g.camF ? tf : lerp(g.camF, tf, Math.min(1, dt * 3));
+        g.camF = kf;
+        if (kf < 0.999) { cx = M.x + (cx - M.x) * kf; cz = M.z + (cz - M.z) * kf; cy = hy0 + (cy - hy0) * kf; }
+      }
+      const cc = collide(cx, cz, 0.12, M.lv); cx = cc[0]; cz = cc[1];
       if (inHouse(cx, cz) && houseY(cx, cz, 1) != null) cy = Math.min(cy, M.lv ? HOUSE.f1 + 2.05 : HOUSE.f1 - 0.3);
       pos = [cx, cy, cz];
       if (emoteCam) { yaw = Math.atan2(M.x - cx, M.z - cz); pitch = Math.atan2(gy + 1.1 - cy, Math.hypot(M.x - cx, M.z - cz)); }
@@ -2890,14 +3059,17 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
         const relOn = isMe ? M.rel > 0 : !!(p1.fl & 16);
         A.relT = relOn ? (A.relT < 0 ? 0 : A.relT + dt) : -1;
         const rel = isMe ? (M.rel > 0 ? clamp(1 - M.rel / (M.relMax || 1), 0, 1) : -1) : A.relT >= 0 ? clamp(A.relT / ((WEAPONS[wk] && WEAPONS[wk].rel) || 2), 0, 1) : -1;
-        ssPose(smd, V.sm.anims.clips, S, { v: A.mv, mdir, sprint: isMe ? !!M.sprint : !!(p1.fl & 32), w: p1.st === 0 ? wk : null, aim: p1.aim || 0, aiming: !!(p1.fl & 8) || ft > 0, st: p1.st, kneel: (!!(p1.fl & 4) || (!V.sm.anims.clips.c_idle && !!(p1.fl & 640))) && p1.st === 0, crouch: !!(p1.fl & 128) && !(p1.fl & 512), slide: !!(p1.fl & 512), air: !!(p1.fl & 256), emo: emo && emo.k ? emo.k : null, emoT: emo ? emo.t : 0, thr: A.thr, mel: A.mel, hit: A.hit, rel, shot, dead: A.deadT == null ? -1 : A.deadT }, dt);
+        if (!isMe) A.clT = p1.fl & 1024 ? (A.clT || 0) + dt : 0;
+        const clb = isMe ? (M.mant && M.mant.climb ? Math.min(1, M.mant.t / M.mant.dur) : -1) : p1.fl & 1024 ? Math.min(1, A.clT / 1.45) : -1;
+        ssPose(smd, V.sm.anims.clips, S, { climb: clb, v: A.mv, mdir, sprint: isMe ? !!M.sprint : !!(p1.fl & 32), w: p1.st === 0 ? wk : null, aim: p1.aim || 0, aiming: !!(p1.fl & 8) || ft > 0, st: p1.st, kneel: (!!(p1.fl & 4) || (!V.sm.anims.clips.c_idle && !!(p1.fl & 640))) && p1.st === 0, crouch: !!(p1.fl & 128) && !(p1.fl & 512), slide: !!(p1.fl & 512), air: !!(p1.fl & 256), emo: emo && emo.k ? emo.k : null, emoT: emo ? emo.t : 0, thr: A.thr, mel: A.mel, hit: A.hit, rel, shot, dead: A.deadT == null ? -1 : A.deadT }, dt);
         ssMatrix(S, x, yy, z, pyaw);
         items.push({ mesh: smd.mesh, model: S.M, skin: S.skin, tex: smd.tex, nrm: smd.nrm, col: SC, cast: T.shadow > 0 && dist < 30 });
         if (!S.hideGun && p1.st === 0) {
           const gd = GUNS[wk] || GUNS.rifle;
-          const Gm = ssGun(S, smd, V.sm.anims.clips, wk, gd.grip.o, S.G);
+          const Gm = ssGun(S, smd, V.sm.anims.clips, wk, GUNS[wk] ? GUNS[wk].grip.o : null, S.G);
           if (Gm) {
             const mzN = dist < 70 ? tpGunItems(items, V.R, wk, Gm, T.shadow > 0 && dist < 12) : null;
+            if (dist < 40) ssHold(S, smd, V.sm.anims.clips, wk, Gm, mzN ? tpHold() : null);
             const mz = mzN || gd.muzzle || [0, 0.08, 0.7];
             const w0 = m4.apply(Gm, mz[0], mz[1], mz[2]);
             A.muzzle = [w0[0], w0[1], w0[2]];
@@ -3101,6 +3273,7 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
     let vmLights = null;
     if (fp && M.st === 0 && g.F) {
       const Wn = WEAPONS[M.w], mg = M.mag[M.w] == null ? (Wn ? Wn.mag : 0) : M.mag[M.w];
+      g.F.use = g.medT ? Math.min(1, g.medT.t / g.medT.dur) : -1;
       fpItems(vm, V, g.F, { dt, t: g.t, ads: g.ads && !g.thr && !g.plateT, speed: M.speed, sprint: M.sprint || !!g.plateT, scope: wcls(M.w) === 'sniper' || M.w === 'xpr', throwK: g.thr ? g.thr.k : g.lastThrowK, mag: mg, need: Wn ? Wn.mag - mg : 0, pump: M.w === 'shotgun' && mg > 0, plate: g.plateT ? clamp(g.plateT.t / g.plateT.dur, 0, 1) : -1 }, { pos, yaw, pitch });
       vmLights = [{ p: [pos[0] - Math.cos(yaw) * 0.35, pos[1] + 0.3, pos[2] + Math.sin(yaw) * 0.35], r: 1.5, c: [0.9, 0.85, 0.8] }].concat(useLights.filter((l) => l.d < 6));
     }
@@ -3231,15 +3404,15 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
       if (xh.dataset.k !== kind) { xh.dataset.k = kind; const ch = xh.children; for (let i = 0; i < 4; i++) ch[i].style.display = kind === '0' ? 'block' : 'none'; ch[4].style.display = kind === '1' ? 'block' : 'none'; ch[5].style.display = kind === '2' ? 'block' : 'none'; }
       if (kind === '1') xh.style.setProperty('--rr', `${(gap * 1.5 + 9).toFixed(1)}px`);
       let onZ = false;
-      if (Wc && g.cam && M.st === 0) { const d = camDir(g); const h = rayZ(g.cam.pos, d, Wc.rng, g.anim.values()); onZ = !!h && !rayBlocked(M.x, M.z, h.A.x, h.A.z, fy(M.x, M.z, M.lv) + 1.45, g.cam.pos[1] + d[1] * h.t); }
+      if (Wc && g.cam && M.st === 0) { const d = camDir(g); const h = rayZ(g.cam.pos, d, Wc.rng, g.anim.values()); onZ = !!h && !rayBlocked(M.x, M.z, h.A.x, h.A.z, fy(M.x, M.z, M.lv) + (M.jy || 0) + 1.45, g.cam.pos[1] + d[1] * h.t); }
       const xc = onZ ? '#FF3B30' : XCOL[(g.opt && g.opt.xcol) || 'white'] || '#FFFFFF';
       if (xh.dataset.xc !== xc) { xh.dataset.xc = xc; xh.style.setProperty('--xc', xc); }
-      xh.style.opacity = M.st === 0 && !g.thr && !g.emo && !(g.ads && g.view === 'fp') && !M.sprint ? '1' : '0';
+      xh.style.opacity = M.st === 0 && !g.thr && !g.emo && !(g.ads && g.eyeV) && !M.sprint ? '1' : '0';
       const rd = rdRef.current;
-      if (rd) { const on = (M.w === 'rifle' || M.w === 'lmg') && g.ads && g.view === 'fp' && M.st === 0 && !g.thr && g.F && g.F.ads > 0.8; rd.style.opacity = on ? '1' : '0'; if (on && rd.dataset.xc !== xc) { rd.dataset.xc = xc; rd.style.background = onZ ? '#FF3B30' : '#FF2A1F'; } }
+      if (rd) { const on = (M.w === 'rifle' || M.w === 'lmg') && g.ads && g.eyeV && M.st === 0 && !g.thr && g.F && g.F.ads > 0.8; rd.style.opacity = on ? '1' : '0'; if (on && rd.dataset.xc !== xc) { rd.dataset.xc = xc; rd.style.background = onZ ? '#FF3B30' : '#FF2A1F'; } }
     }
     const sc = scopeRef.current;
-    if (sc) { const on = g.ads && (wcls(M.w) === 'sniper' || M.w === 'xpr') && g.view === 'fp' && g.F && g.F.ads > 0.85; sc.style.display = on ? 'block' : 'none'; const dot = sc.nextSibling; if (dot) dot.style.display = g.ads && M.w !== 'sniper' && g.view === 'fp' && g.F && g.F.ads > 0.6 && !g.thr ? 'block' : 'none'; }
+    if (sc) { const on = g.ads && (wcls(M.w) === 'sniper' || M.w === 'xpr') && g.eyeV && g.F && g.F.ads > 0.85; sc.style.display = on ? 'block' : 'none'; const dot = sc.nextSibling; if (dot) dot.style.display = g.ads && M.w !== 'sniper' && g.view === 'fp' && g.F && g.F.ads > 0.6 && !g.thr ? 'block' : 'none'; }
     g.hurtT = Math.max(0, g.hurtT - dt);
     const hv = hurtRef.current;
     if (hv) { hv.style.opacity = String(clamp(g.hurtT * 1.8, 0, 0.8) + (M.hp < 35 && M.st === 0 ? 0.22 + Math.sin(g.t * 5) * 0.08 : 0)); hv.style.filter = g.acidT > 0 ? 'hue-rotate(80deg)' : 'none'; }
@@ -3268,7 +3441,7 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
       if (Sn) for (const p of Sn.ps.values()) { if (p.id !== myId && p.st !== 2) ps.push([p.x, p.z, p.yaw, p.st]); if (p.id === myId && p.pst >= 0) petp = [p.px, p.pz]; }
       const mapD = { x: M.x, z: M.z, yaw: g.yaw, scale: 2.2, roads: ROADS, blocks: BLOCKS, water: WATER, zs, ps, pet: petp, acid: Sn ? (Sn.ac || []).map((q) => [q[0] / 10, q[1] / 10]) : [], heal: Sn ? (Sn.hz || []).map((q) => [q[0] / 10, q[1] / 10, q[2] / 10]) : [], nests: (g.nests || []).map((n) => [n.x, n.z]), ammo: (g.abox || []).map((b0) => [b0.x, b0.z]), drops: (g.drops || []).map((d0) => [d0.x, d0.z]), heli: g.heli && g.heliPos ? [g.heliPos[0], g.heliPos[2]] : null };
       drawMinimap(mapRef.current, mapD);
-      if (bigRef.current) drawMinimap(bigRef.current, { ...mapD, scale: 1.25 });
+      if (bigRef.current) drawBigMap(bigRef.current, { ...mapD, px: 2, bounds: BIG_B, labels: MAP_LABELS, house: [HOUSE.x0, HOUSE.z0, HOUSE.x1, HOUSE.z1], lot: TOWN.lot, plat: RAIL.plat });
     }
   };
 
@@ -3418,6 +3591,17 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
     setInvited((s0) => new Set(s0).add(fr.id));
     pushNote(`Invite sent to ${String(fr.name || 'Friend').split(' ')[0]}`, 'join');
   };
+  const invList = (() => {
+    const on = (id) => !!(online && online.has && online.has(id));
+    const q = invQ.trim().toLowerCase();
+    let L = [...friends];
+    if (q) {
+      L = L.filter((f) => String(f.name || '').toLowerCase().includes(q) || String(f.username || '').toLowerCase().includes(q));
+      const have = new Set(L.map((f) => f.id));
+      for (const f of invFound || []) if (f && !have.has(f.id) && f.id !== myId) { have.add(f.id); L.push(f); }
+    }
+    return L.sort((a, b) => (on(b.id) ? 1 : 0) - (on(a.id) ? 1 : 0));
+  })();
   const inviteOne = (f) => {
     if (!onInvite) return;
     const inSq = lobbyMode !== 'friends' && pendJoin && /^[fh]/.test(String(pendJoin.r)) && (lobbyMode === 'join' || !lobbyMode);
@@ -3622,7 +3806,7 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
   };
   const chNow = charOf(sv, col);
   const friendRows = (canInvite ? friends : []).map((f) => ({ id: f.id, name: f.name || 'Friend', avatar: f.avatar, on: !!(online && online.has && online.has(f.id)), sent: invited.has(f.id), raw: f }))
-    .sort((a, b) => (b.on ? 1 : 0) - (a.on ? 1 : 0)).slice(0, 4);
+    .sort((a, b) => (b.on ? 1 : 0) - (a.on ? 1 : 0));
   const startLabel = { join: 'Join', rejoin: 'Rejoin', online: 'Start', friends: 'Start', offline: 'Start' }[modeNow] || 'Start';
   const openMaker = () => {
     kitTap();
@@ -3678,7 +3862,7 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
     pickChar: (c) => { kitTap(); setSv(GUN_SV[c.gun]); setCol(100 + c.i); setGun(c.gun); if (!c.st.ready) resFront(`s:${c.k}`, true); },
     guns: WKEYS.map((w) => { const W0 = WEAPONS[w]; return { k: w, n: W0.n, on: gun === w, img: gunIcons[w] || '', st: resItem(`g:${w}`), dmg: (W0.dmg * (W0.pel || 1)) / 150, rate: W0.rate / 11, rng: W0.rng / 95 }; }),
     pickGun: (w) => { kitTap(); setGun(w); if (!resItem(`g:${w}`).ready) resFront(`g:${w}`, true); },
-    dogs: [...DOGS.map((d) => ({ k: d.key, n: d.name, img: `/dead/p_dog_${d.key}.webp`, on: pet === d.key })), { k: 'none', n: 'None', img: '', on: pet === 'none' }],
+    dogs: DOGS.map((d) => ({ k: d.key, n: d.name, img: `/dead/p_dog_${d.key}.webp`, on: pet === d.key })),
     pickDog: (k0) => { kitTap(); setPet(k0); },
     onMaker: isAdmin ? openMaker : null,
     book, setBook: (v) => { kitTap(); const g = G.current; g.book = v; if (v == null) g.bookS = null; else if (g.lobSpins) g.lobSpins.delete('book'); setBook(v); },
@@ -3906,8 +4090,7 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
       <TopBtn size={40} text={view === 'fp' ? 'FPP' : 'TPP'} label={view === 'fp' ? 'First person, tap for third person' : 'Third person, tap for first person'} style={{ position: 'absolute', left: left(136), top: top(12) }} onTap={() => { const v = view === 'fp' ? 'tp' : 'fp'; kitTap(); setView(v); setPref(PREF.view, v); }} />
       {bigMap && (
         <div role="dialog" aria-label="Map" onPointerDown={(e) => { e.stopPropagation(); setBigMap(false); }} style={{ position: 'absolute', inset: 0, zIndex: 26, pointerEvents: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, background: 'rgba(6,8,10,0.45)' }}>
-          <canvas ref={bigRef} width={340} height={340} style={{ width: 'min(78vh, 340px)', height: 'min(78vh, 340px)' }} />
-          <span style={{ fontSize: 12, fontWeight: 800, color: 'rgba(255,255,255,0.75)', textShadow: '0 1px 2px rgba(0,0,0,0.9)' }}>Tap anywhere to close</span>
+          <canvas ref={bigRef} width={Math.round(GS.H * 0.84 * 1.18 * 2)} height={Math.round(GS.H * 0.84 * 2)} style={{ width: Math.round(GS.H * 0.84 * 1.18), height: Math.round(GS.H * 0.84), maxWidth: '94vw', objectFit: 'contain' }} />
         </div>
       )}
       <div style={{ position: 'absolute', left: '50%', top: top(8), transform: 'translateX(-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, textShadow: '0 1px 3px rgba(0,0,0,0.9)' }}>
@@ -3984,7 +4167,8 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
           <span style={{ fontSize: 10.5, fontWeight: 700, color: 'rgba(230,255,238,0.75)' }}>Move to stop</span>
         </div>
       )}
-      <GNotices items={notes} style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: top(land ? 58 : 110), width: 'min(52%, 420px)' }} />
+      <ZNotes items={notes} style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: top(land ? 58 : 110), width: 'min(52%, 420px)' }} />
+      <ZPicks items={picks} style={{ position: 'absolute', right: right(px(150)), top: land ? '29%' : '35%' }} />
       {banner && Date.now() - banner.at < 4200 && (
         <div key={banner.at} aria-live="polite" style={{ position: 'absolute', left: 0, right: 0, top: banner.boss ? '63%' : land ? '25%' : '27%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, pointerEvents: 'none', visibility: 'visible', fontFamily: WFONT, animation: 'zgk-rib 4.2s ease-out forwards' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -4050,7 +4234,7 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
             </button>
             <span style={{ flex: 1 }} />
             {[['band', 'Bandage', H.band], ['med', 'Med shot', H.med]].map(([k0, n0, c0]) => (
-              <button key={k0} type="button" aria-label={`Use ${n0.toLowerCase()}, ${c0} left`} disabled={!c0 || H.hp >= 100} onPointerDown={(e) => e.stopPropagation()} onClick={() => { const g = G.current; g.useQ = [(g.useQ ? g.useQ[0] : 0) + 1, k0]; kitTap(); }}
+              <button key={k0} type="button" aria-label={`Use ${n0.toLowerCase()}, ${c0} left`} disabled={!c0 || H.hp >= 100} onPointerDown={(e) => e.stopPropagation()} onClick={() => { const g = G.current; kitTap(); if (k0 === 'med' && g.view === 'fp' && g.me && g.me.st === 0) { if (!g.medT && !g.plateT && !g.thr) { g.medT = { t: 0, dur: 2.5, sent: false }; if (g.me.rel > 0) g.me.rel = 0; } return; } g.useQ = [(g.useQ ? g.useQ[0] : 0) + 1, k0]; }}
                 style={{ position: 'relative', width: 36, height: 36, padding: 0, flexShrink: 0, border: 'none', borderRadius: 6, background: 'transparent', color: '#FFFFFF', fontFamily: FONT, cursor: 'pointer', touchAction: 'manipulation' }}>
                 <MetalFace size={36} k={k0 === 'band' ? 'bandage' : 'syringe'} disabled={!c0 || H.hp >= 100} square />
                 <span aria-hidden="true" style={{ position: 'absolute', right: -6, top: -6, minWidth: 16, height: 16, padding: '0 4px', boxSizing: 'border-box', borderRadius: 8, background: 'radial-gradient(circle at 50% 35%, #3A4049, #0C0E12)', boxShadow: '0 0 0 1.4px #DDE2E8', fontSize: 10, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', fontVariantNumeric: 'tabular-nums' }}>{c0}</span>
@@ -4086,9 +4270,9 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
           <CBtn big size={CD.fire.size} icon="bullet" label="Shoot" active={!!G.current.fire} style={hs('fire')}
             onDown={() => { ZA.init(); if (G.current.thr) { throwEnd(false); return; } G.current.fire = true; fireDown(G.current); }} onMove={(dx, dy) => lookBy(dx, dy)} onUp={() => { G.current.fire = false; fireUp(G.current); }} />
           <CBtn size={CD.ads.size} icon="scope" label={H.ads ? 'Stop aiming' : 'Aim down sights'} active={H.ads} style={hs('ads')} onMove={(dx, dy) => lookBy(dx, dy)}
-            onDown={() => { if (opt.adsMode === 'hold') { const g = G.current; g.ads = true; ZA.synth('tap', { f: 700, vol: 0.3 }); syncHud(true); } }}
+            onDown={() => { if (opt.adsMode === 'hold') { const g = G.current; g.ads = true; ZA.synth('shuffle', { surf: 'grass', vol: 0.5 }); syncHud(true); } }}
             onUp={() => { if (opt.adsMode === 'hold') { G.current.ads = false; syncHud(true); } }}
-            onTap={() => { if (opt.adsMode === 'hold') return; const g = G.current; g.ads = !g.ads; ZA.synth('tap', { f: 700, vol: 0.3 }); syncHud(true); }} />
+            onTap={() => { if (opt.adsMode === 'hold') return; const g = G.current; g.ads = !g.ads; ZA.synth('shuffle', { surf: 'grass', vol: 0.5 }); syncHud(true); }} />
           <CBtn size={CD.rel.size} icon="mag" label="Reload" ring={H.rel} style={hs('rel')} onTap={() => startReload(G.current)} />
           <CBtn size={CD.mel.size} icon="knife" label="Melee" style={hs('mel')} onTap={melee} />
           <ThrowBox size={CD.thr.size} style={hs('thr')} nade={H.nades} molo={H.molos} nadeOn={H.aiming && G.current.thr && G.current.thr.k === 'grenade'} moloOn={H.aiming && G.current.thr && G.current.thr.k === 'molotov'}
@@ -4179,39 +4363,7 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
           )} />
         </div>
       )}
-      {sheet === 'bag' && (
-        <GLobbySheet GS={GS} title="Bag" onClose={() => setSheet(null)} width={420}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <div style={{ fontSize: 12.5, fontWeight: 700, color: 'rgba(239,232,210,0.72)', paddingBottom: 6 }}>Drop throws it in front of you, so a teammate can pick it up.</div>
-            {H.st !== 0 && <div style={{ fontSize: 13, fontWeight: 800, color: '#FFB0A4', paddingBottom: 6 }}>You can drop things again once you are back up.</div>}
-            {H.st === 0 && (G.current.simRev | 0) < 57 && <div style={{ fontSize: 13, fontWeight: 800, color: '#FFD27A', paddingBottom: 6 }}>This server is updating, dropping comes back in a few minutes.</div>}
-            {(() => {
-              const off = H.st !== 0 || (G.current.simRev | 0) < 57;
-              const pill = (t, onP, dis, gold) => (
-                <button key={t} type="button" disabled={dis || off} onClick={() => onP()} style={{ height: 32, minWidth: 54, padding: '0 11px', border: gold ? 'none' : '1px solid rgba(239,232,210,0.28)', borderRadius: 4, background: dis || off ? 'rgba(255,255,255,0.04)' : gold ? 'linear-gradient(180deg, #FFD36A, #E9A825)' : 'rgba(255,255,255,0.08)', color: dis || off ? 'rgba(255,255,255,0.35)' : gold ? '#1A1408' : '#FFFFFF', fontFamily: FONT, fontSize: 12.5, fontWeight: 900, cursor: dis || off ? 'default' : 'pointer', touchAction: 'manipulation', whiteSpace: 'nowrap' }}>{t}</button>
-              );
-              const row = (key, img, name, sub, acts) => (
-                <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 50, padding: '4px 0', borderTop: '1px solid rgba(239,232,210,0.09)' }}>
-                  <div style={{ width: 58, height: 40, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 4, background: 'rgba(255,255,255,0.05)' }}>{img}</div>
-                  <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
-                    <span style={{ fontSize: 14, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
-                    {sub ? <span style={{ fontSize: 12, fontWeight: 700, color: 'rgba(239,232,210,0.62)' }}>{sub}</span> : null}
-                  </div>
-                  <div style={{ display: 'flex', gap: 5, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>{acts}</div>
-                </div>
-              );
-              const cash = H.cash | 0, guns = H.slots || [];
-              const items = [['plate', H.plates | 0], ['band', H.band | 0], ['med', H.med | 0], ['nade', H.nades | 0], ['molo', H.molos | 0], ['c4', H.c4s | 0]];
-              return <>
-                {row('cash', <span style={{ fontSize: 22, fontWeight: 900, color: '#86F09A' }}>$</span>, 'Cash', `$${cash.toLocaleString()}`, [100, 500, 1000].map((v) => pill(`$${v}`, () => dropOut('cash', v), cash < v)).concat(pill('All', () => dropOut('cash', cash), cash < 1, true)))}
-                {guns.map((w) => row(`g${w}`, <img src={`/dead/ui/g_${w}.webp`} alt="" draggable={false} style={{ width: 54, height: 30, objectFit: 'contain' }} />, WEAPONS[w] ? WEAPONS[w].n : w, w === H.w ? 'In your hands' : '', [pill('Drop', () => dropOut('gun', w), guns.length < 2, true)]))}
-                {items.filter(([, n]) => n > 0).map(([k0, n]) => row(k0, <img src={`/dead/p_shop_${k0}.webp`} alt="" draggable={false} style={{ width: 38, height: 38, objectFit: 'contain' }} />, SHOP[k0] ? SHOP[k0].n : k0, `${n} in your bag`, [pill('Drop 1', () => dropOut(k0, 1), n < 1), ...(n > 1 ? [pill('Drop all', () => dropOut(k0, n), false, true)] : [])]))}
-                {guns.length < 2 && <div style={{ fontSize: 11.5, fontWeight: 700, color: 'rgba(239,232,210,0.5)', paddingTop: 4 }}>You always keep at least one gun.</div>}
-              </>;
-            })()}
-          </div>
-        </GLobbySheet>
-      )}
+      {sheet === 'bag' && <BagScreen GS={GS} H={H} off={H.st !== 0 || (G.current.simRev | 0) < 57} onDrop={(k0, n0) => dropOut(k0, n0)} onClose={() => setSheet(null)} />}
       {sheet === 'shop' && <ShopScreen GS={GS} H={H} me={G.current.me} onBuy={(k) => { const g = G.current; g.buyQ = [(g.buyQ ? g.buyQ[0] : 0) + 1, k]; }} onClose={() => setSheet(null)} />}
       {sheet === 'pause' && (
         <GLobbySheet GS={GS} title={mode && mode.solo ? 'Paused' : 'Menu'} onClose={() => setSheet(null)} width={380}>
@@ -4254,12 +4406,12 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
       {sheet === 'invite' && (
         <GLobbySheet GS={GS} title="Invite friends" onClose={() => setSheet(null)} width={420}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <div style={{ fontSize: 12.5, fontWeight: 700, color: 'rgba(239,232,210,0.75)', lineHeight: 1.4 }}>
-              {phase === 'play' && mode && !mode.solo ? 'Friends join your server. Each one takes a bot spot right away.' : phase === 'play' ? 'Your game moves to a server so friends can join. Bots fill the empty spots until they arrive.' : 'Tap Invite next to a friend. They join you here before the game starts.'}
-            </div>
-            {friends.length === 0 && <div style={{ fontSize: 13, fontWeight: 800, color: 'rgba(239,232,210,0.8)', padding: '8px 0' }}>Chat with a friend first, then they show up here.</div>}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 236, overflowY: 'auto', touchAction: 'pan-y', overscrollBehavior: 'contain' }}>
-              {[...friends].sort((a, b) => (online && online.has && online.has(b.id) ? 1 : 0) - (online && online.has && online.has(a.id) ? 1 : 0)).map((fr) => {
+            <input type="search" value={invQ} onChange={(e) => setInvQ(e.target.value)} placeholder="Search by name or username" aria-label="Search friends" autoComplete="off"
+              style={{ height: 40, borderRadius: 6, border: '1px solid rgba(239,232,210,0.18)', padding: '0 12px', background: 'rgba(255,255,255,0.06)', color: '#FFFFFF', fontFamily: FONT, fontSize: 14, fontWeight: 600, outline: 'none' }} />
+            {friends.length === 0 && !invQ.trim() && <div style={{ fontSize: 13, fontWeight: 800, color: 'rgba(239,232,210,0.8)', padding: '8px 0' }}>Search for a player to invite.</div>}
+            {invQ.trim() && invList.length === 0 && <div style={{ fontSize: 13, fontWeight: 800, color: 'rgba(239,232,210,0.7)', padding: '6px 0' }}>{invFound == null && invQ.trim().length >= 2 ? 'Searching' : 'No players found'}</div>}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 'min(52vh, 360px)', overflowY: 'auto', touchAction: 'pan-y', overscrollBehavior: 'contain' }}>
+              {invList.map((fr) => {
                 const sent = invited.has(fr.id);
                 const on = !!(online && online.has && online.has(fr.id));
                 return (
@@ -4314,33 +4466,67 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
       {sheet === 'chat' && (
         <Sheet title="Talk to the town" onClose={() => setSheet(null)}>
           {chatLog.length > 0 && <div style={{ display: 'flex', flexDirection: 'column', gap: 6, margin: '12px 0 4px', maxHeight: 140, overflowY: 'auto' }}>{chatLog.slice(-8).map((m0, i) => <div key={i} style={{ fontSize: 13.5, lineHeight: 1.4 }}><span style={{ fontWeight: 800, color: m0.who === 'You' ? '#E0A85A' : '#9CD4FF' }}>{m0.who}</span> <span style={{ color: 'rgba(255,255,255,0.85)' }}>{m0.t}</span></div>)}</div>}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>{QUICK_LINES.map((p) => <button key={p} type="button" className="zgk-btn" onClick={() => sendChat(p)} style={{ height: 38, padding: '0 14px', borderRadius: 19, border: 'none', background: 'rgba(255,255,255,0.1)', color: '#FFFFFF', fontSize: 13.5, fontWeight: 800, fontFamily: FONT, cursor: 'pointer' }}>{p}</button>)}</div>
           <form onSubmit={(e) => { e.preventDefault(); sendChat(chatText); }} style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-            <input value={chatText} onChange={(e) => setChatText(e.target.value)} maxLength={90} placeholder="Write a message" aria-label="Message" style={{ flex: 1, minWidth: 0, height: 42, borderRadius: 21, border: 'none', padding: '0 16px', background: 'rgba(255,255,255,0.1)', color: '#FFFFFF', fontSize: 15, fontFamily: FONT, outline: 'none' }} />
+            <input autoFocus enterKeyHint="send" value={chatText} onChange={(e) => setChatText(e.target.value)} maxLength={90} placeholder="Write a message" aria-label="Message" style={{ flex: 1, minWidth: 0, height: 42, borderRadius: 21, border: 'none', padding: '0 16px', background: 'rgba(255,255,255,0.1)', color: '#FFFFFF', fontSize: 15, fontFamily: FONT, outline: 'none' }} />
             <GPill text="Send" color="green" small onPress={() => sendChat(chatText)} disabled={!chatText.trim()} />
           </form>
         </Sheet>
       )}
       {sheet === 'emote' && phase === 'play' && <EmoteWheel icons={emoIcons} onPick={doEmote} onClose={() => setSheet(null)} />}
       {sheet === 'emote' && phase === 'menu' && <EmoteWheel icons={emoIcons} onPick={lobbyEmote} onClose={() => setSheet(null)} />}
-      {result && phase === 'play' && (
-        <div style={{ position: 'absolute', inset: 0, zIndex: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'radial-gradient(ellipse at center, rgba(46,8,6,0.62), rgba(6,4,4,0.86))', padding: 16 }}>
-          <div style={{ width: '100%', maxWidth: 400, padding: '16px 16px 14px', display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'stretch', borderRadius: 8, background: 'linear-gradient(180deg, rgba(20,14,14,0.94), rgba(9,8,9,0.94))', boxShadow: '0 16px 44px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(255,255,255,0.08), inset 0 2px 0 rgba(214,58,46,0.9)', animation: 'zgk-pop 0.3s ease-out' }}>
-            <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <span style={{ fontSize: 30, fontWeight: 900, color: '#FFFFFF', textShadow: '0 2px 14px rgba(214,58,46,0.55)' }}>Overrun</span>
-              <span style={{ fontSize: 13, fontWeight: 800, color: '#F2C14E' }}>{`You held the town until wave ${result.wave}`}</span>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 1, borderRadius: 8, overflow: 'hidden' }}>
-              {[['Kills', result.kills], ['Points', fmt(result.pts)], ['Best wave', result.best]].map(([a0, v]) => <div key={a0} style={{ padding: '9px 4px 8px', background: 'rgba(239,232,210,0.07)', textAlign: 'center' }}><div style={{ fontSize: 19, fontWeight: 900, color: '#EFE8D2', fontVariantNumeric: 'tabular-nums' }}>{v}</div><div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(239,232,210,0.6)', marginTop: 2 }}>{a0}</div></div>)}
-            </div>
-            {mode && !mode.solo ? <div style={{ fontSize: 12.5, fontWeight: 800, color: 'rgba(239,232,210,0.8)', textAlign: 'center' }}>A new game starts in a few seconds</div> : null}
-            <div style={{ display: 'flex', gap: 8 }}>
-              <GPill text="Leave" color="white" small wide style={{ flex: 1 }} onPress={quit} />
-              {mode && mode.solo && <GPill text="Play again" color="gold" small wide style={{ flex: 1 }} onPress={() => start({ solo: true })} />}
+      {result && phase === 'play' && (() => {
+        const KN = { walker: 'Walker', worker: 'Worker', runner: 'Runner', crawler: 'Crawler', bloater: 'Bloater', screamer: 'Screamer', spitter: 'Spitter', riot: 'Riot', brute: 'Brute', boss: 'The boss', fire: 'Your own fire', self: 'Your own explosion' };
+        const by = KN[result.by] || '';
+        const mm = Math.floor((result.secs || 0) / 60), ss0 = String((result.secs || 0) % 60).padStart(2, '0');
+        const cols = [['Score', 'pts'], ['Kills', 'kills'], ['Headshots', 'hs'], ['Revives', 'revs'], ['Downs', 'downs']];
+        const board = result.board && result.board.length ? result.board : [{ id: myId, n: myFirst || 'You', me: true, pts: result.pts, kills: result.kills, hs: 0, revs: 0, downs: 0 }];
+        const btn = (t, onP, gold) => (
+          <button type="button" onClick={() => { kitTap(); onP(); }} style={{ minWidth: 150, height: 44, padding: '0 22px', border: gold ? 'none' : '1px solid rgba(255,255,255,0.35)', borderRadius: 3, background: gold ? 'linear-gradient(180deg, #F3C14F, #C98E1C)' : 'rgba(255,255,255,0.06)', color: gold ? '#16120A' : '#FFFFFF', fontFamily: FONT, fontSize: 15, fontWeight: 900, letterSpacing: '0.04em', cursor: 'pointer', touchAction: 'manipulation' }}>{t}</button>
+        );
+        return (
+          <div role="dialog" aria-label="Game over" style={{ position: 'absolute', inset: 0, zIndex: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: `${top(10)} ${right(16)} ${bottom(10)} ${left(16)}`, background: 'radial-gradient(ellipse at 50% 40%, rgba(70,8,6,0.55), rgba(4,3,3,0.93) 70%)', overflowY: 'auto' }}>
+            <div style={{ width: '100%', maxWidth: 640, display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 12 }}>
+              <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                <span style={{ fontFamily: WFONT, fontSize: 40, fontWeight: 800, letterSpacing: '0.08em', color: '#E9E1CF', textShadow: '0 3px 0 rgba(0,0,0,0.6), 0 0 30px rgba(190,30,20,0.45)', lineHeight: 1 }}>Game over</span>
+                <span style={{ fontSize: 15, fontWeight: 800, color: '#E2B64D', letterSpacing: '0.03em' }}>{`You survived ${result.wave} ${result.wave === 1 ? 'wave' : 'waves'}`}</span>
+                {by ? (
+                  <span style={{ marginTop: 2, display: 'flex', alignItems: 'center', gap: 8, padding: '5px 14px', background: 'linear-gradient(90deg, rgba(120,14,10,0), rgba(120,14,10,0.6) 20%, rgba(120,14,10,0.6) 80%, rgba(120,14,10,0))', fontSize: 13.5, fontWeight: 800, color: '#FFFFFF' }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5c-5 0-8.5 3.4-8.5 8 0 2.7 1.2 4.6 3 5.8V20c0 .8.7 1.5 1.5 1.5h8c.8 0 1.5-.7 1.5-1.5v-3.7c1.8-1.2 3-3.1 3-5.8 0-4.6-3.5-8-8.5-8zM9 14.2a2 2 0 1 1 0-4 2 2 0 0 1 0 4zm6 0a2 2 0 1 1 0-4 2 2 0 0 1 0 4z" fill="#FF8A7A" /></svg>
+                    <span style={{ color: 'rgba(255,255,255,0.7)', fontWeight: 700 }}>Killed by</span>{by}
+                  </span>
+                ) : null}
+              </div>
+              <div role="table" aria-label="Scoreboard" style={{ display: 'flex', flexDirection: 'column', background: 'rgba(10,10,12,0.72)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.09)' }}>
+                <div role="row" style={{ display: 'grid', gridTemplateColumns: `minmax(0, 1.6fr) repeat(${cols.length}, minmax(0, 1fr))`, alignItems: 'center', height: 30, padding: '0 12px', borderBottom: '1px solid rgba(255,255,255,0.1)', fontSize: 11, fontWeight: 800, color: 'rgba(233,225,207,0.6)', letterSpacing: '0.04em' }}>
+                  <span role="columnheader">Player</span>
+                  {cols.map(([t]) => <span key={t} role="columnheader" style={{ textAlign: 'right' }}>{t}</span>)}
+                </div>
+                <div style={{ maxHeight: 'min(38vh, 260px)', overflowY: 'auto' }}>
+                  {board.map((q) => (
+                    <div key={q.id} role="row" style={{ display: 'grid', gridTemplateColumns: `minmax(0, 1.6fr) repeat(${cols.length}, minmax(0, 1fr))`, alignItems: 'center', height: 36, padding: '0 12px', borderBottom: '1px solid rgba(255,255,255,0.05)', background: q.me ? 'linear-gradient(90deg, rgba(226,182,77,0.18), rgba(226,182,77,0.04))' : 'transparent', boxShadow: q.me ? 'inset 3px 0 0 #E2B64D' : 'none' }}>
+                      <span role="cell" style={{ fontSize: 14, fontWeight: 800, color: q.me ? '#F6E7BF' : '#E9E1CF', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{q.n}{q.bot ? <span style={{ marginLeft: 6, fontSize: 10.5, fontWeight: 800, color: 'rgba(233,225,207,0.45)' }}>Bot</span> : null}</span>
+                      {cols.map(([t, k0]) => <span key={t} role="cell" style={{ textAlign: 'right', fontSize: 14, fontWeight: 800, color: '#FFFFFF', fontVariantNumeric: 'tabular-nums' }}>{k0 === 'pts' ? fmt(q[k0] || 0) : q[k0] || 0}</span>)}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'center', gap: 28 }}>
+                {[['Best wave', String(result.best)], ['Time', `${mm}:${ss0}`]].map(([t, v]) => (
+                  <div key={t} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    <span style={{ fontSize: 20, fontWeight: 900, color: '#FFFFFF', fontVariantNumeric: 'tabular-nums' }}>{v}</span>
+                    <span style={{ fontSize: 11, fontWeight: 800, color: 'rgba(233,225,207,0.6)', letterSpacing: '0.04em' }}>{t}</span>
+                  </div>
+                ))}
+              </div>
+              {mode && !mode.solo ? <div style={{ fontSize: 12.5, fontWeight: 800, color: 'rgba(233,225,207,0.75)', textAlign: 'center' }}>Next game starts soon</div> : null}
+              <div style={{ display: 'flex', justifyContent: 'center', gap: 10, flexWrap: 'wrap' }}>
+                {btn('Leave', quit)}
+                {mode && mode.solo && btn('Play again', () => start({ solo: true }), true)}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </>
   );
 

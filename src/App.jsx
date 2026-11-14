@@ -18596,7 +18596,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-export const APP_VERSION = '56.2V';
+export const APP_VERSION = '56.3V';
 const WN_REV = 55;
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
@@ -36664,7 +36664,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const peerId = st.x === session.user.id ? st.o : st.x;
     notifyUser(peerId, me.name, `Is waiting to play ${GAME_TITLES[st.g] || 'a game'} with you now`, `/?dm=${session.user.id}`, me.avatar);
   };
-  const gameFriends = conversations.map((c) => c.otherProfile).filter((pp) => pp && !pp.is_bot && !pp.is_deleted).slice(0, 20);
+  const gameFriends = conversations.map((c) => c.otherProfile).filter((pp) => pp && !pp.is_bot && !pp.is_deleted);
   const [duelPlay, setDuelPlay] = useState(null);
   useBackClose(!!duelPlay, () => setDuelPlay(null));
   const lastGameStartRef = useRef(0);
@@ -48390,7 +48390,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onInvite={(ps) => { const rm = racePick.rm; setRacePick(null); setShowGames(false); startRaceWith(ps, rm); }} />
       )}
       {zombieGame && me && (
-        <ZombieGamePage key={zombieGame.at} me={me} myId={session.user.id} isAdmin={isZAdmin} join={zombieGame.join || null} friends={gameFriends} online={onlineIds} onInvite={(ps, room) => startZombieWith(ps, room)} onClose={() => { setZombieGame(null); setShowGames(true); }} />
+        <ZombieGamePage key={zombieGame.at} me={me} myId={session.user.id} isAdmin={isZAdmin} join={zombieGame.join || null} friends={gameFriends} online={onlineIds} onInvite={(ps, room) => startZombieWith(ps, room)} onSearch={async (q) => { const r = await searchByUsername(q); return (r.data || []).filter((pp) => pp && pp.id !== session.user.id && !pp.is_bot && !pp.is_deleted); }} onKick={() => { setZombieGame(null); setShowGames(false); showSnack('Your account started a game on another device'); }} onClose={() => { setZombieGame(null); setShowGames(true); }} />
       )}
       {siegeGame && me && (
         <SiegeGamePage key={siegeGame.rm} solo={!!siegeGame.solo} room={siegeGame.solo ? null : siegeGame} me={me} myId={session.user.id} watch={!!siegeGame.watch}
@@ -59852,7 +59852,7 @@ function svgMarkup(node) {
   return `<${node.type}${attrs}>${svgMarkup(node.props.children)}</${node.type}>`;
 }
 const gameArtSrcs = new Map();
-const GAME_ART_FILES = { zombie: '/zombie-art2.webp', duo: '/duo-art.webp', gulp: '/gulp-art.webp', gulpco: '/gulp-art.webp', roll: '/roll-art.webp', race: '/race-art.webp', siege: '/bolt-art.webp' };
+const GAME_ART_FILES = { zombie: '/zombie-art3s.webp', duo: '/duo-art.webp', gulp: '/gulp-art.webp', gulpco: '/gulp-art.webp', roll: '/roll-art.webp', race: '/race-art.webp', siege: '/bolt-art.webp' };
 function gameArtSrc(kIn) {
   const key = String(kIn == null ? '' : kIn);
   if (GAME_ART_FILES[key]) return GAME_ART_FILES[key];

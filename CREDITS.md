@@ -43,6 +43,11 @@ From Sketchfab, CC BY 4.0
 - Animated SMG, by DJMaesen: https://sketchfab.com/3d-models/fps-animated-smg-ea3dad7478624495a5a46f40127b0579
 - Animated sniper, by DJMaesen: https://sketchfab.com/3d-models/sniper-animated-b48999a250b2433da59f705c371a49b2
 - Throwing arms, by DJMaesen: https://sketchfab.com/3d-models/fps-arms-throwing-99ff0b0e5b144cbfbf67cb34f8ce83bb
+- Animated AK, by DJMaesen: https://sketchfab.com/3d-models/fps-ak-animated-b0b1bae40337449189483f6187cf7af7
+- Animated SMG9, by DJMaesen: https://sketchfab.com/3d-models/fps-smg9-animated-e77e2cd81dc048b998fd4652da644eb0
+- Animated LMG, by DJMaesen: https://sketchfab.com/3d-models/lmg-animated-c02dc6663f344008a502148e751c9974
+- Animated grenade launcher, by DJMaesen: https://sketchfab.com/3d-models/grenadelauncher-animated-f05bbd6934c84c1eac6053e0513e3b16
+- Medical syringe healing FPS animation, by BURNER: https://sketchfab.com/3d-models/medical-syringe-healing-fps-animation-8de32be8633a4c87ba7ed1d125b45ec9
 
 ## Characters
 

@@ -44,6 +44,7 @@ const STALL = [
   ['wg_mag', 0.86, 0.842, 0.95, 0.3, 0, 1, 1], ['wg_mag', 1.02, 0.842, 1.2, -0.25, 0, 1, 1], ['wg_mag', 0.7, 0.842, 1.28, 0.1, 0, 1, 1],
 ];
 const KIT_CORE = new Set(PLAY.map((q) => q[0]).filter((id) => /^k[A-Z]/.test(id)).map((id) => `dead/kit/st_${id}.bin`));
+export const allFiles = () => resAll(() => true);
 export function coreFiles(k, guns) {
   const base = resAll((p) => p.startsWith('dead/town/') || p === 'dead/kit/kit.json' || p.startsWith('dead/kit/tex_') || KIT_CORE.has(p) || /^dead\/z[^/]*$/.test(p) || p === 'dead/sanim.bin' || p === 'dead/fx-v1.webp' || p.startsWith('dead/nade') || p.startsWith('dead/molo') || p === 'dead/fx2-v1.webp' || p === 'dead/boom-v1.webp' || p.startsWith('dead/emo/') || p.startsWith('dead/ui/') || p.startsWith('dead/sky/') || p.startsWith('dead/rail/') || p.startsWith('dead/sdog') || p.startsWith('dead/sell') || p.startsWith('dead/props/') || p === 'dead/danim.bin' || p.startsWith('sounds/dead/'));
   return [...new Set([...base, ...survFiles(k), ...fpFiles('throw'), ...guns.flatMap((g) => fpFiles(g))])];

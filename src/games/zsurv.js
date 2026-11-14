@@ -28,7 +28,7 @@ export const EMO_DUR = { wave: 3.2, cheer: 5.8, point: 3.9, thumbs: 3.6, salute:
 const EMO_REP = { wave: 'pp', cheer: 'pp', point: 'pp', thumbs: 'pp', laugh: 'pp', dance: 'loop', samba: 'loop', hiphop: 'loop', clap: 'loop', victory: 'loop' };
 export const emoDur = (k) => EMO_DUR[k] || 2.7;
 
-const NB = 52, HAND_R = 28;
+const NB = 52, HAND_R = 28, ARM_L = 7, FORE_L = 8, HAND_L = 9;
 const UPPER = []; for (let i = 1; i <= 43; i++) UPPER.push(i);
 const ARMS = []; for (let i = 6; i <= 43; i++) ARMS.push(i);
 const LOCO = {
@@ -231,9 +231,71 @@ export function ssSocket(md, C, kind) {
   const sc = Math.hypot(R[0][0], R[1][0], R[2][0]) || 1;
   const inv = (v) => [(R[0][0] * v[0] + R[1][0] * v[1] + R[2][0] * v[2]) / (sc * sc), (R[0][1] * v[0] + R[1][1] * v[1] + R[2][1] * v[2]) / (sc * sc), (R[0][2] * v[0] + R[1][2] * v[1] + R[2][2] * v[2]) / (sc * sc)];
   const t = inv([grip[0] - Hm[3], grip[1] - Hm[7], grip[2] - Hm[11]]);
-  const res = { x: inv(X), y: inv(U), z: inv(F), t };
+  const lw = P(HAND_L);
+  const lh = inv([lw[0] - Hm[3], lw[1] - Hm[7], lw[2] - Hm[11]]);
+  const lq = new Float32Array(4), qa = new Float32Array(4), qb = new Float32Array(4);
+  m3q(W, HAND_R * 12, qa); m3q(W, HAND_L * 12, qb); conj(T4, qa, 0); qmul(lq, 0, T4, 0, qb, 0);
+  const res = { x: inv(X), y: inv(U), z: inv(F), t, lh, lq };
   md[key] = res;
   return res;
+}
+
+function m3q(W, o, out) {
+  const m00 = W[o], m01 = W[o + 1], m02 = W[o + 2], m10 = W[o + 4], m11 = W[o + 5], m12 = W[o + 6], m20 = W[o + 8], m21 = W[o + 9], m22 = W[o + 10];
+  const sx = Math.hypot(m00, m10, m20) || 1, sy = Math.hypot(m01, m11, m21) || 1, sz = Math.hypot(m02, m12, m22) || 1;
+  const a = m00 / sx, b = m01 / sy, c = m02 / sz, d = m10 / sx, e = m11 / sy, f = m12 / sz, g = m20 / sx, h = m21 / sy, i = m22 / sz;
+  const tr = a + e + i;
+  let x, y, z, w;
+  if (tr > 0) { const k = Math.sqrt(tr + 1) * 2; w = 0.25 * k; x = (h - f) / k; y = (c - g) / k; z = (d - b) / k; }
+  else if (a > e && a > i) { const k = Math.sqrt(1 + a - e - i) * 2; w = (h - f) / k; x = 0.25 * k; y = (b + d) / k; z = (c + g) / k; }
+  else if (e > i) { const k = Math.sqrt(1 + e - a - i) * 2; w = (c - g) / k; x = (b + d) / k; y = 0.25 * k; z = (f + h) / k; }
+  else { const k = Math.sqrt(1 + i - a - e) * 2; w = (d - b) / k; x = (c + g) / k; y = (f + h) / k; z = 0.25 * k; }
+  const l = Math.hypot(x, y, z, w) || 1;
+  out[0] = x / l; out[1] = y / l; out[2] = z / l; out[3] = w / l;
+  return out;
+}
+function fromTo(u, v, out) {
+  const d = u[0] * v[0] + u[1] * v[1] + u[2] * v[2];
+  let x = u[1] * v[2] - u[2] * v[1], y = u[2] * v[0] - u[0] * v[2], z = u[0] * v[1] - u[1] * v[0], w = 1 + d;
+  if (w < 1e-6) { x = Math.abs(u[0]) > 0.9 ? 0 : 1; y = Math.abs(u[0]) > 0.9 ? 1 : 0; z = 0; w = 0; }
+  const l = Math.hypot(x, y, z, w) || 1;
+  out[0] = x / l; out[1] = y / l; out[2] = z / l; out[3] = w / l;
+  return out;
+}
+function rotV(q, v) {
+  const x = q[0], y = q[1], z = q[2], w = q[3];
+  const ix = w * v[0] + y * v[2] - z * v[1], iy = w * v[1] + z * v[0] - x * v[2], iz = w * v[2] + x * v[1] - y * v[0], iw = -x * v[0] - y * v[1] - z * v[2];
+  return [ix * w + iw * -x + iy * -z - iz * -y, iy * w + iw * -y + iz * -x - ix * -z, iz * w + iw * -z + ix * -y - iy * -x];
+}
+const IKQ = { a: new Float32Array(4), b: new Float32Array(4), c: new Float32Array(4), d: new Float32Array(4), e: new Float32Array(4), f: new Float32Array(4), g: new Float32Array(4), h: new Float32Array(4) };
+function leftHandIK(S, T, lq, q, w) {
+  const W = S.W, P = (i) => [W[i * 12 + 3], W[i * 12 + 7], W[i * 12 + 11]];
+  const A = P(ARM_L), B = P(FORE_L), Cc = P(HAND_L);
+  const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]], len = (a) => Math.hypot(a[0], a[1], a[2]) || 1e-6, nor = (a) => { const l = len(a); return [a[0] / l, a[1] / l, a[2] / l]; };
+  const l1 = len(sub(B, A)), l2 = len(sub(Cc, B));
+  const at = sub(T, A), d = Math.min(len(at), (l1 + l2) * 0.999), dirT = nor(at);
+  let pole = sub(B, A);
+  const pd = pole[0] * dirT[0] + pole[1] * dirT[1] + pole[2] * dirT[2];
+  pole = [pole[0] - dirT[0] * pd, pole[1] - dirT[1] * pd - 0.02, pole[2] - dirT[2] * pd];
+  pole = nor(pole);
+  const ca = Math.max(-1, Math.min(1, (l1 * l1 + d * d - l2 * l2) / (2 * l1 * d))), sa = Math.sqrt(1 - ca * ca);
+  const B2 = [A[0] + l1 * (ca * dirT[0] + sa * pole[0]), A[1] + l1 * (ca * dirT[1] + sa * pole[1]), A[2] + l1 * (ca * dirT[2] + sa * pole[2])];
+  const Q = IKQ;
+  m3q(W, ARM_L * 12, Q.a); m3q(W, FORE_L * 12, Q.b); m3q(W, HAND_R * 12, Q.c); m3q(W, (ARM_L - 1) * 12, Q.d);
+  fromTo(nor(sub(B, A)), nor(sub(B2, A)), Q.e);
+  qmul(Q.f, 0, Q.e, 0, Q.a, 0);
+  qmul(Q.g, 0, Q.e, 0, Q.b, 0);
+  const c1 = rotV(Q.e, sub(Cc, B));
+  const Tn = [A[0] + dirT[0] * d, A[1] + dirT[1] * d, A[2] + dirT[2] * d];
+  fromTo(nor(c1), nor(sub(Tn, B2)), Q.h);
+  qmul(Q.b, 0, Q.h, 0, Q.g, 0);
+  qmul(Q.g, 0, Q.c, 0, lq, 0);
+  conj(T4, Q.d, 0); qmul(Q.e, 0, T4, 0, Q.f, 0);
+  conj(T4, Q.f, 0); qmul(Q.h, 0, T4, 0, Q.b, 0);
+  conj(T4, Q.b, 0); qmul(Q.c, 0, T4, 0, Q.g, 0);
+  nlerp(q, ARM_L * 4, q, ARM_L * 4, Q.e, 0, w);
+  nlerp(q, FORE_L * 4, q, FORE_L * 4, Q.h, 0, w);
+  nlerp(q, HAND_L * 4, q, HAND_L * 4, Q.c, 0, w);
 }
 
 export function ssGun(S, md, C, kind, gripO, out) {
@@ -263,6 +325,7 @@ export function ssPose(md, C, S, inp, dt) {
   if (inp.dead >= 0 && C.s_die) { mode = 'dead'; full = 's_die'; fullT = Math.min(inp.dead, C.s_die.dur); }
   else if ((inp.st === 1 || inp.kneel) && C.s_kneel) { mode = 'kneel'; full = 's_kneel'; }
   else if (inp.slide && C.slide) { mode = 'slide'; full = 'slide'; }
+  else if (inp.climb >= 0 && C.climb) { mode = 'climb'; full = 'climb'; fullT = (C.climb.ph || 0.25) + Math.min(1, inp.climb) * (C.climb.dur - 0.7); }
   else if (inp.air && C.j_loop) { mode = 'air'; full = 'j_loop'; }
   else if (inp.emo && C[EMO_CLIP[inp.emo]]) {
     mode = 'emo:' + inp.emo; full = EMO_CLIP[inp.emo]; fullT = inp.emoT || 0;
@@ -327,11 +390,12 @@ export function ssPose(md, C, S, inp, dt) {
       sampleK(md, C, 's_reload', 0.35 + p * 2.6, S.qu, S.hu);
       applyUpper(S, q, null, S.qu, 0, 'full', S.relW, 0);
     }
-    const thrOn = inp.thr >= 0 && C.s_toss ? 1 : 0;
+    const tk = C.s_throw ? 's_throw' : 's_toss';
+    const thrOn = inp.thr >= 0 && C[tk] ? 1 : 0;
     S.thrW += (thrOn - S.thrW) * Math.min(1, dt * 12);
-    if (S.thrW > 0.002 && C.s_toss) {
-      const pk = C.s_toss.ph || 1.8, p = inp.thr >= 0 ? inp.thr : 1;
-      sampleK(md, C, 's_toss', pk - 0.3 + p * 0.85, S.qu, S.hu);
+    if (S.thrW > 0.002 && C[tk]) {
+      const pk = C[tk].ph || 1.8, p = inp.thr >= 0 ? inp.thr : 1;
+      sampleK(md, C, tk, pk - 0.45 + p * 0.95, S.qu, S.hu);
       applyUpper(S, q, null, S.qu, 0, 'full', S.thrW, 0);
     }
     const melOn = inp.mel >= 0 && C.melee ? 1 : 0;
@@ -355,6 +419,23 @@ export function ssPose(md, C, S, inp, dt) {
   }
   S.hideGun = !inp.w || (mode !== 'loco' && mode !== 'air') || S.thrW > 0.5;
   poseSkin(M, q, hp, 1, S.W, S.skin);
+  const ikOn = !S.hideGun && !pistolish(inp.w) && !(inp.rel >= 0) && S.relW < 0.05 && S.melW < 0.05 && S.thrW < 0.05 && mode === 'loco' ? 1 : 0;
+  S.ikW = (S.ikW || 0) + (ikOn - (S.ikW || 0)) * Math.min(1, dt * 10);
+}
+
+export function ssHold(S, md, C, kind, Gm, lh) {
+  if (!(S.ikW > 0.02) || !Gm || pistolish(kind)) return;
+  const so = ssSocket(md, C, kind);
+  if (!so) return;
+  const W = S.W, h = HAND_R * 12, M = S.M;
+  let T;
+  if (lh) {
+    const wx = Gm[0] * lh[0] + Gm[4] * lh[1] + Gm[8] * lh[2] + Gm[12], wy = Gm[1] * lh[0] + Gm[5] * lh[1] + Gm[9] * lh[2] + Gm[13], wz = Gm[2] * lh[0] + Gm[6] * lh[1] + Gm[10] * lh[2] + Gm[14];
+    const dx = wx - M[12], dy = wy - M[13], dz = wz - M[14], s2 = M[0] * M[0] + M[1] * M[1] + M[2] * M[2] || 1;
+    T = [(M[0] * dx + M[1] * dy + M[2] * dz) / s2, (M[4] * dx + M[5] * dy + M[6] * dz) / s2, (M[8] * dx + M[9] * dy + M[10] * dz) / s2];
+  } else T = [W[h] * so.lh[0] + W[h + 1] * so.lh[1] + W[h + 2] * so.lh[2] + W[h + 3], W[h + 4] * so.lh[0] + W[h + 5] * so.lh[1] + W[h + 6] * so.lh[2] + W[h + 7], W[h + 8] * so.lh[0] + W[h + 9] * so.lh[1] + W[h + 10] * so.lh[2] + W[h + 11]];
+  leftHandIK(S, T, so.lq, S.q, S.ikW);
+  poseSkin(md.M, S.q, S.hp, 1, S.W, S.skin);
 }
 
 export function ssMatrix(S, x, y, z, yaw) {

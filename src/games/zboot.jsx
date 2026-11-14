@@ -32,7 +32,7 @@ export function ZBoot({ GS, boot, onRetry, onClose }) {
   const side = down ? `${mb(boot.got)} of ${mb(boot.tot)} MB` : boot.st === 'load' ? `${Math.round(boot.pct * 100)}%` : '';
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 6, background: '#0D0C0B', overflow: 'hidden', fontFamily: FONT, color: '#EFE8D2' }}>
-      <img src="/zombie-art2.webp" alt="" draggable={false} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: '50% 38%', display: 'block' }} />
+      <img src="/zombie-art3.webp" alt="" draggable={false} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: '50% 38%', display: 'block' }} />
       <div aria-hidden="true" style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(13,12,11,0.6) 0%, rgba(13,12,11,0) 24%, rgba(13,12,11,0) 42%, rgba(13,12,11,0.86) 74%, #0D0C0B 100%)' }} />
       <div style={{ position: 'absolute', top: top(10), left: left(14) }}>
         <GBtn icon="close" color="white" size={42} fast={false} label="Leave" onPress={onClose} />

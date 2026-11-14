@@ -217,6 +217,41 @@ export function drawMinimap(cv, d) {
   ctx.fillText('N', nx, ny);
 }
 
+export function drawBigMap(cv, d) {
+  if (!cv) return;
+  const ctx = cv.getContext('2d');
+  if (!ctx) return;
+  const W = cv.width, H = cv.height, B = d.bounds, k = d.px || 1;
+  const sc = Math.min(W / (B[2] - B[0]), H / (B[3] - B[1]));
+  const ox = (W - (B[2] - B[0]) * sc) / 2 - B[0] * sc, oz = (H - (B[3] - B[1]) * sc) / 2 - B[1] * sc;
+  const tx = (x, z) => [x * sc + ox, z * sc + oz];
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = 'rgba(38,46,36,0.94)'; ctx.fillRect(0, 0, W, H);
+  if (d.water) {
+    ctx.fillStyle = 'rgba(52,104,128,0.9)';
+    for (const P of d.water) { ctx.beginPath(); P.forEach((q, i) => { const [a, b] = tx(q[0], q[1]); if (i) ctx.lineTo(a, b); else ctx.moveTo(a, b); }); ctx.closePath(); ctx.fill(); }
+  }
+  const rect = (R, fill) => { const [a, b] = tx(R[0], R[1]), [c, e] = tx(R[2], R[3]); ctx.fillStyle = fill; ctx.fillRect(Math.min(a, c), Math.min(b, e), Math.abs(c - a), Math.abs(e - b)); };
+  for (const R of d.roads || []) rect(R, 'rgba(78,82,86,0.95)');
+  if (d.lot) rect(d.lot, 'rgba(92,94,96,0.75)');
+  if (d.plat) rect(d.plat, 'rgba(120,110,96,0.7)');
+  if (d.house) { rect(d.house, 'rgba(120,96,70,0.55)'); const [a, b] = tx(d.house[0], d.house[1]), [c, e] = tx(d.house[2], d.house[3]); ctx.strokeStyle = 'rgba(230,200,150,0.85)'; ctx.lineWidth = 1.5 * k; ctx.strokeRect(a, b, c - a, e - b); }
+  for (const R of d.blocks || []) rect(R, 'rgba(176,164,140,0.8)');
+  for (const z of d.zs || []) { const [a, b] = tx(z[0], z[1]); ctx.fillStyle = z[2] ? '#FF3B2E' : 'rgba(255,70,60,0.85)'; ctx.beginPath(); ctx.arc(a, b, (z[2] ? 4 : 2.2) * k, 0, Math.PI * 2); ctx.fill(); }
+  for (const n0 of d.nests || []) { const [a, b] = tx(n0[0], n0[1]); ctx.fillStyle = 'rgba(150,210,60,0.95)'; ctx.beginPath(); ctx.arc(a, b, 4 * k, 0, Math.PI * 2); ctx.fill(); }
+  for (const m0 of d.drops || []) { const [a, b] = tx(m0[0], m0[1]); ctx.fillStyle = '#FF6A4A'; ctx.strokeStyle = 'rgba(40,10,0,0.9)'; ctx.lineWidth = 1.2 * k; ctx.fillRect(a - 4 * k, b - 3 * k, 8 * k, 6 * k); ctx.strokeRect(a - 4 * k, b - 3 * k, 8 * k, 6 * k); }
+  for (const m0 of d.ammo || []) { const [a, b] = tx(m0[0], m0[1]); ctx.fillStyle = '#FFD84A'; ctx.fillRect(a - 3 * k, b - 2.2 * k, 6 * k, 4.4 * k); }
+  if (d.heli) { const [a, b] = tx(d.heli[0], d.heli[1]); ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 1.6 * k; ctx.beginPath(); ctx.moveTo(a - 6 * k, b); ctx.lineTo(a + 6 * k, b); ctx.moveTo(a, b - 6 * k); ctx.lineTo(a, b + 6 * k); ctx.stroke(); }
+  ctx.font = `800 ${Math.round(11 * k)}px system-ui, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+  for (const [x, z, t] of d.labels || []) { const [a, b] = tx(x, z); ctx.lineWidth = 3 * k; ctx.strokeStyle = 'rgba(0,0,0,0.75)'; ctx.strokeText(t, a, b); ctx.fillStyle = 'rgba(255,244,214,0.95)'; ctx.fillText(t, a, b); }
+  const arrow = (x, z, yaw, col, s0) => { const [a, b] = tx(x, z); ctx.save(); ctx.translate(a, b); ctx.rotate(Math.PI - yaw); ctx.fillStyle = col; ctx.strokeStyle = 'rgba(0,0,0,0.8)'; ctx.lineWidth = 1.2 * k; ctx.scale(k, k); ctx.beginPath(); ctx.moveTo(0, -6 * s0); ctx.lineTo(4.4 * s0, 4.4 * s0); ctx.lineTo(0, 2 * s0); ctx.lineTo(-4.4 * s0, 4.4 * s0); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore(); };
+  for (const p of d.ps || []) arrow(p[0], p[1], p[2], p[3] === 1 ? '#FFB43A' : '#5CC8FF', 1);
+  if (d.pet) { const [a, b] = tx(d.pet[0], d.pet[1]); ctx.fillStyle = '#F2D27A'; ctx.beginPath(); ctx.arc(a, b, 2.6 * k, 0, Math.PI * 2); ctx.fill(); }
+  arrow(d.x, d.z, d.yaw, '#FFFFFF', 1.35);
+  ctx.fillStyle = '#FFFFFF'; ctx.font = `900 ${Math.round(12 * k)}px system-ui, sans-serif`; ctx.fillText('N', W - 14 * k, 14 * k);
+  ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 1.5 * k; ctx.strokeRect(0.75 * k, 0.75 * k, W - 1.5 * k, H - 1.5 * k);
+}
+
 export const EMOTE_LIST = [['wave', 'Wave'], ['cheer', 'Cheer'], ['point', 'This way'], ['thumbs', 'Nice'], ['salute', 'Salute'], ['dance', 'Dance'], ['laugh', 'Laugh'], ['flip', 'Flip'], ['samba', 'Samba'], ['hiphop', 'Hip hop'], ['clap', 'Clap'], ['victory', 'Victory']];
 export const QUICK_LINES = ['Behind you', 'Help me up', 'Reloading', 'Big one coming', 'Stay together', 'Nice shot'];
 

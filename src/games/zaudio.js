@@ -2,16 +2,16 @@ import { Sfx } from './sfx.js';
 import { resBuf } from './zres.js';
 
 const FILES = {
-  ui_tap2: 0.55, ui_tick: 0.45, ui_open: 0.45, ui_back: 0.45, ui_buy: 0.8, ui_err: 0.6, ui_pick: 0.75, ui_drop: 0.7, loot_vanish: 0.7, crate_open: 0.85,
-  cash: 0.75, heart: 0.9, nbounce: 0.6, g_ak47: 0.85, g_uzi: 1.7, g_qq9: 1.55, g_lmg: 1.0, g_deagle: 0.85, g_awm: 0.9, g_xpr: 0.9, g_mgl: 0.95, g_spas: 0.8, sv_what: 1, sv_lost: 1, sv_alive: 1, sv_salut: 1, sv_greet: 1, sv_time: 1, velcro: 0.9, gore: 1, heli: 0.9, em_laugh_m: 1, em_laugh_f: 1, em_cheer_m: 1, em_cheer_f: 1, em_hey: 1, em_dance: 0.9, em_samba: 0.95, em_hiphop: 0.85, em_clap: 0.9, g_rifle: 0.75, g_smg: 1.5, g_pistol: 0.8, g_sniper: 0.85, g_shotgun: 0.9,
-  r_rifle: 0.55, r_pistol: 0.9, r_sniper: 0.6, r_pump: 0.65, r_cock: 0.75, dry: 0.6,
-  boom: 0.95, boom2: 0.9, whoosh: 0.7, pin: 0.5,
+  ui_click: 0.35, ui_tap: 0.3, cash: 0.7, k_open: 0.45, k_close: 0.4, k_buy: 0.55, k_err: 0.5, k_tog: 0.45, k_latch: 0.65, k_cloth: 0.55, velcro: 0.9, r_cock: 0.75, r_shell: 0.55, dry: 0.6, pin: 0.5, whoosh: 0.7,
+  heart: 0.9, nbounce: 0.6, g_ak47: 0.85, g_uzi: 1.7, g_qq9: 0.8, g_lmg: 0.85, g_deagle: 0.85, g_awm: 0.95, g_xpr: 0.85, g_mgl: 0.95, g_spas: 0.9, sv_what: 1, sv_lost: 1, sv_alive: 1, sv_salut: 1, sv_greet: 1, sv_time: 1, gore: 1, heli: 0.9, em_laugh_m: 1, em_laugh_f: 1, em_cheer_m: 1, em_cheer_f: 1, em_hey: 1, em_dance: 0.9, em_samba: 0.95, em_hiphop: 0.85, em_clap: 0.9, g_rifle: 0.8, g_smg: 0.8, g_pistol: 0.8, g_sniper: 0.9, g_shotgun: 0.9,
+  r_rifle: 0.55, r_pistol: 0.9, r_sniper: 0.6, r_pump: 0.65,
+  boom: 0.95, boom2: 0.9,
   z_growl: 0.6, z_hurt: 0.6, z_death: 0.6, z_moan: 0.55, z_war: 0.6, z_die1: 0.6, z_die2: 0.6, z_pain1: 0.6, z_pain2: 0.55, z_pain3: 0.5,
   z_pain4: 0.6, z_die3: 0.7, z_call1: 0.6, z_call2: 0.6, z_call3: 0.6, z_horde: 0.7, zt_brains1: 0.8, zt_brains2: 0.8, zt_come: 0.8, zt_kill: 0.8, zt_gib: 0.75, z_boss: 1,
   stinger: 0.7, bone: 0.55, d_bark1: 0.75, d_bark2: 0.75, d_bark3: 0.75, d_bark4: 0.75, d_angry: 0.7, d_growl: 0.5, d_whine: 0.5,
   d_step0: 0.35, d_step1: 0.35, d_step2: 0.35, d_step3: 0.35, hit0: 0.5, hit1: 0.5, hit2: 0.5, hithead: 0.6,
-  glass0: 0.65, glass1: 0.65, slime0: 0.55, slime1: 0.55, fire: 0.5, slash0: 0.55, slash1: 0.55, chop: 0.65, ui_click: 0.35, ui_tap: 0.3,
-  wave_ok: 0.5, shell: 0.45, thud: 0.6, over: 0.75, boom3: 0.85, scream0: 0.75, scream1: 0.75, z_g1: 0.55, z_g2: 0.55, z_g3: 0.55, r_shell: 0.55,
+  glass0: 0.65, glass1: 0.65, slime0: 0.55, slime1: 0.55, fire: 0.5, slash0: 0.55, slash1: 0.55, chop: 0.65,
+  wave_ok: 0.5, shell: 0.45, thud: 0.6, over: 0.75, boom3: 0.85, scream0: 0.75, scream1: 0.75, z_g1: 0.55, z_g2: 0.55, z_g3: 0.55,
   amb_wind: 1, amb_night: 1, water: 1, wave_go: 0.95, tr_pass: 1, tr_horn: 1,
   vo_prepare: 0.95, vo_survival: 0.95, vo_fight: 0.95, vo_r1: 0.95, vo_r2: 0.95, vo_r3: 0.95, vo_r4: 0.95, vo_r5: 0.95, vo_final: 0.95, vo_gameover: 0.95, vo_flawless: 0.95, vo_multi: 0.9, vo_sudden: 0.95,
   vo_obj: 0.8, vo_ready: 0.8, vo_best: 0.8, vo_failed: 0.8, vo_hurry: 0.8,
@@ -173,13 +173,14 @@ export const ZA = {
     if (!ac || !Sfx.sfxOn) return false;
     const now = performance.now();
     this.cmT = this.cmT || {};
-    if (now < (this.cmT[kind] || 0) || now < (this.cmAny || 0)) return false;
+    const key = o.key ? `${kind}:${o.key}` : kind;
+    if (now < (this.cmT[key] || 0) || now < (this.cmAny || 0)) return false;
     if (o.chance != null && Math.random() > o.chance) return false;
     const n = `cm_${kind}_${sex === 'f' ? 'f' : 'm'}`;
     if (!bufs[n]) return false;
-    this.cmT[kind] = now + (o.cd || 8) * 1000;
-    this.cmAny = now + 1500;
-    this.play(n, { at: o.at || 0, cat: 'cm', lim: 1, vary: 0.02, pri: 2 });
+    this.cmT[key] = now + (o.cd || 8) * 1000;
+    this.cmAny = now + (o.pos ? 1100 : 1500);
+    this.play(n, o.pos ? { at: o.at || 0, cat: 'cm', lim: 2, vary: 0.03, pri: 2, pos: o.pos, ref: 5, roll: 0.8, max: 70, vol: o.vol || 1 } : { at: o.at || 0, cat: 'cm', lim: 1, vary: 0.02, pri: 2 });
     return true;
   },
   init() {

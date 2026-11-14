@@ -4,7 +4,7 @@ import { BS, kitTap, injectKitCss } from './gamekit.jsx';
 
 const GUN_COLS = [['Pistols', ['pistol', 'deagle']], ['SMGs', ['uzi', 'smg', 'qq9']], ['Rifles', ['rifle', 'ak47']], ['Shotguns', ['shotgun', 'spas']], ['Snipers', ['xpr', 'sniper', 'awm']], ['Heavy', ['lmg', 'mgl']]];
 const GEAR = ['ammo', 'plate', 'band', 'med', 'nade', 'molo', 'c4'];
-const SHORT = { pistol: 'Pistol', deagle: 'Desert Eagle', uzi: 'Uzi', smg: 'SMG', qq9: 'MP5', rifle: 'Rifle', ak47: 'AK47', shotgun: 'Shotgun', spas: 'SPAS 12', xpr: 'UAR 10', sniper: 'Sniper', awm: 'AWM', lmg: 'M249', mgl: 'Bomb gun', ammo: 'Ammo', plate: 'Armor plate', band: 'Bandage', med: 'Med shot', nade: 'Grenade', molo: 'Molotov', c4: 'C4' };
+const SHORT = { pistol: 'Pistol', deagle: 'Desert Eagle', uzi: 'Uzi', smg: 'SMG', qq9: 'SMG9', rifle: 'Rifle', ak47: 'AK47', shotgun: 'Shotgun', spas: 'SPAS 12', xpr: 'UAR 10', sniper: 'Sniper', awm: 'AWM', lmg: 'M249', mgl: 'Bomb gun', ammo: 'Ammo', plate: 'Armor plate', band: 'Bandage', med: 'Med shot', nade: 'Grenade', molo: 'Molotov', c4: 'C4' };
 const KIND = { pistol: 'Pistol', deagle: 'Heavy pistol', uzi: 'Machine pistol', smg: 'SMG', qq9: 'SMG', rifle: 'Assault rifle', ak47: 'Assault rifle', shotgun: 'Shotgun', spas: 'Combat shotgun', xpr: 'Marksman rifle', sniper: 'Sniper rifle', awm: 'Sniper rifle', lmg: 'Machine gun', mgl: 'Grenade launcher' };
 const INFO = { ammo: 'Fills the ammo for all your guns', plate: 'Blocks most damage until it cracks. Your vest holds 3', band: 'Heals 35 over a few seconds', med: 'Heals 60 right away', nade: 'Blows up everything near where it lands', molo: 'Leaves a patch of fire that burns zombies', c4: 'Throw it, then set it off when you want' };
 const CASH = '#86F09A';

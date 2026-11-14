@@ -34,6 +34,7 @@ export const resSize = (list) => list.reduce((a, p) => a + (RES[p] ? RES[p][0] :
 export const resAll = (test) => Object.keys(RES).filter(test);
 export const resOn = (f) => { subs.add(f); return () => { subs.delete(f); }; };
 export const resLocked = () => locked;
+export const resCanKeep = async () => !!(await openC());
 
 export function resIndex() {
   if (!idxP) idxP = (async () => {
