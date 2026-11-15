@@ -170,7 +170,6 @@ function flower(c, x, y, r, col, rot) {
   c.fillStyle = '#FFC93C'; c.beginPath(); c.arc(0, 0, r * 0.32, 0, TAU); c.fill();
   c.restore();
 }
-const INKL = 'rgba(40,24,30,0.55)';
 
 const DRAW = {
   puppy(c, G, t) {

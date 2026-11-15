@@ -48,14 +48,11 @@ From Sketchfab, CC BY 4.0
 - Animated LMG, by DJMaesen: https://sketchfab.com/3d-models/lmg-animated-c02dc6663f344008a502148e751c9974
 - Animated grenade launcher, by DJMaesen: https://sketchfab.com/3d-models/grenadelauncher-animated-f05bbd6934c84c1eac6053e0513e3b16
 - Medical syringe healing FPS animation, by BURNER: https://sketchfab.com/3d-models/medical-syringe-healing-fps-animation-8de32be8633a4c87ba7ed1d125b45ec9
-- Bolt War blasters, by Kenney (CC0): https://kenney.nl/assets/blaster-kit
 
 ## Characters
 
 - Survivors, zombies and their animations, by Mixamo by Adobe (Mixamo license): https://www.mixamo.com
-- Bolt War heroes and their animations, KayKit Adventurers by Kay Lousberg (CC0): https://kaylousberg.com
-- Bolt War robot, by Tomás Laulhé of Quaternius, changes by Don McCurdy (CC0): https://quaternius.com
-- Bolt War mechs, Animated Mech Pack by Quaternius (CC0): https://quaternius.com
+- Bolt War heroes, mechs, aliens and power ups, Ultimate Space Kit by Quaternius (CC0): https://quaternius.com
 
 ## Icons
 From game icons, CC BY 3.0
@@ -70,6 +67,7 @@ From game icons, CC BY 3.0
 - Explosions, cars, water, wind and night sounds, by Mixkit (Mixkit license): https://mixkit.co/free-sound-effects/
 - Grenade, dog and older zombie sounds, by freesound.org and OpenGameArt creators (CC0): https://getzchat.com/sounds/dead/CREDITS.txt
 - Bolt War sound effects and announcer, by Kenney (CC0): https://kenney.nl/assets/sci-fi-sounds
+- Bolt War skill sounds, Sci Fi Pack Vol 1 and Fantasy SFX Pack Vol 1 by JC Sounds (CC BY 4.0): https://opengameart.org/content/jc-sounds-sci-fi-pack-vol-1
 
 ## Music
 

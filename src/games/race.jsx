@@ -3,16 +3,16 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Avatar, Portal, useBackClose, FONT, Spinner } from '../App.jsx';
 import { useRoomLink } from './relay.jsx';
 import { EMOTES, Sheet, injectCss, useGameChat, ChatSheet } from './livekit.jsx';
-import { GBtn, GPill, GPanel, GChip, GTitle, GIcon, GHudBtn, GHudPanel, GNotices, useNotices, useWatchNotices, injectKitCss, kitTap, pressProps, maxDpr, INK, useCtlLook, useGameStage, GControlsPanel, GVolBars, GLobby, GSlot, GLobbySheet, GSwitchRow, GSeg , GTalkers, GWatchBar, GSkin, GChatFeed, useChatFeed, GJoinAsks } from './gamekit.jsx';
+import { GBtn, GPill, GPanel, GChip, GTitle, GIcon, GHudBtn, GHudPanel, GNotices, useNotices, useWatchNotices, injectKitCss, kitTap, pressProps, maxDpr, INK, useCtlLook, useGameStage, GControlsPanel, GVolBars, GLobby, GSlot, GLobbySheet, GSwitchRow, GSeg , GTalkers, GWatchBar, GSkin, GChatFeed, useChatFeed, GJoinAsks, GSetRow } from './gamekit.jsx';
 import { Sfx } from './sfx.js';
 import { setWatchAllowed, useLiveBeacon, useGamePrivacy, useJoinAsks } from './live.js';
 import { createRenderer, m4, MeshBuilder } from './race3d.js';
 import { buildTrack, buildWorld } from './racetrack.js';
-import { MAPS, MAP_KEYS, bottleSpots } from './racemaps.js';
+import { MAPS, bottleSpots } from './racemaps.js';
 import { carMesh, wheelMesh, WHEELS, fxMeshes } from './racecars.js';
 import { SkillIcon, NitroIcon, SteerArrow, PedalArt, skillFace, raceGlyph, MapSelect } from './raceui.jsx';
 import { GSkill } from './gskill.jsx';
-import { CARS, CAR_KEYS, COLORS, BOT_NAMES, MAX_RACERS, LAPS, SKILLS, SKILL_KEYS, EN_MAX, BOTTLE_BACK, DRINKS, drinkUse, RACER_SKILLS, COP_SKILLS, BUST_R, BUST_V, cutOf, carAt, driveCar, ROCKET_V, SPIN_ROCKET, SPIN_OIL, SLOW_SHOCK, SHIELD_T, mkCar, stepCar, airStep, launchCar, groundSlope, collide, botInput, botSkill, rocketStep, standings, lapOf, fmtRace, clamp } from './raceengine.js';
+import { CARS, CAR_KEYS, COLORS, BOT_NAMES, MAX_RACERS, LAPS, SKILLS, SKILL_KEYS, EN_MAX, BOTTLE_BACK, DRINKS, drinkUse, RACER_SKILLS, COP_SKILLS, BUST_R, BUST_V, carAt, driveCar, ROCKET_V, SPIN_ROCKET, SPIN_OIL, SLOW_SHOCK, SHIELD_T, mkCar, stepCar, airStep, launchCar, groundSlope, collide, botInput, botSkill, rocketStep, standings, lapOf, fmtRace, clamp } from './raceengine.js';
 import { useTalking } from './talk.js';
 import { mkNet, netPush, netRead } from './netlerp.js';
 
@@ -173,12 +173,6 @@ function Seg({ value, items, onPick, disabled }) {
   return <GSeg value={value} items={items} onPick={onPick} disabled={disabled} height={34} />;
 }
 
-const Chevron = ({ dir }) => (
-  <svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true" style={{ display: 'block', transform: dir === 'r' ? 'scaleX(-1)' : 'none' }}>
-    <path d="M23 9 L12 20 L23 31" fill="none" stroke="#FFFFFF" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
-    <path d="M31 13 L24 20 L31 27" fill="none" stroke="rgba(255,255,255,0.55)" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-);
 
 export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, watch = false }) {
   injectCss(); injectKitCss();
@@ -228,6 +222,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
   const [notes, pushNote] = useNotices();
   const look = useCtlLook('rally');
   const GS = useGameStage(useMemo(() => ({ ...look, side: true }), [look]));
+  const stSideRef = useRef(false); stSideRef.current = GS.side;
   const { top, right, bottom, left } = GS.at;
   const land = GS.land;
   useLiveBeacon({ game: 'race', room: room ? room.rm : null, info: { h: room && room.host, n: Math.max(1, roster.length) }, active: !solo && !watch && !!room, allow: allowWatch });
@@ -830,7 +825,8 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
   useEffect(() => {
     if (!tilt) return undefined;
     const on = (e) => {
-      const ang = (window.screen && window.screen.orientation && window.screen.orientation.angle) || window.orientation || 0;
+      const ang0 = (window.screen && window.screen.orientation && window.screen.orientation.angle) || window.orientation || 0;
+      const ang = stSideRef.current && !ang0 ? 90 : ang0;
       const raw = ang === 90 ? e.beta : ang === -90 || ang === 270 ? -e.beta : e.gamma;
       tiltV.current = clamp((raw || 0) / 22, -1, 1);
     };
@@ -1844,7 +1840,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
 
           {ctl && (
             <div onPointerDown={(e) => e.stopPropagation()} style={{ position: 'absolute', inset: 0, zIndex: 45, background: 'rgba(10,8,24,0.55)', display: 'flex', padding: 12, overflowY: 'auto', touchAction: 'pan-x pan-y' }}>
-              <div style={{ margin: 'auto', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><GControlsPanel sideways onClose={() => setCtl(false)} /></div>
+              <div style={{ margin: 'auto', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><GControlsPanel sideways onClose={() => setCtl(false)} tabs={[{ k: 'graphics', label: 'Graphics', body: <GSetRow label="Graphics quality" sub="Fast helps older phones"><GSeg value={gfx} items={GFX} onPick={pickGfx} label="Graphics quality" /></GSetRow> }]} /></div>
             </div>
           )}
           <GTalkers ids={talking} nameOf={nameOf} top={top(phase === 'count' ? 150 : 50)} />

@@ -1,4 +1,4 @@
-import { TAU, LIGHT_R, clamp, mulberry, at as atW, alive, dist, litAt, isWallCh, onTile, spikeAmt, spikeWarn, spikeOff, crumbleState, isPad, SPIKE_P, TDOOR_T } from './duoengine.js';
+import { TAU, LIGHT_R, clamp, mulberry, at as atW, alive, dist, litAt, isWallCh, onTile, spikeAmt, spikeWarn, spikeOff, crumbleState, TDOOR_T } from './duoengine.js';
 let LITE = 0;
 export const setDuoLite = (v) => { LITE = v ? 1 : 0; };
 
@@ -202,7 +202,6 @@ const CRY = ['#B57BFF', '#7FE3FF', '#FF8AD8'];
 const PADC = { 1: '#5CE1E6', 2: '#FF7AD9', 3: '#B8F55A', 4: '#FFC94A' };
 export const padColor = (d) => PADC[d] || '#5CE1E6';
 const thOf = (W) => THEMES[(W && W.theme) || 'sand'] || THEMES.sand;
-const FLOORISH = '.ABXYfotk';
 
 function floorTile(c, x, y, s, r, tx, ty, T, glows) {
   const base = T.floor[Math.floor(r() * 4)];
@@ -443,7 +442,6 @@ function tplateBase(c, x, y, s) {
   c.fillStyle = '#5E6A78'; c.beginPath(); c.ellipse(cx, cy, s * 0.36, s * 0.25, 0, 0, TAU); c.fill();
 }
 
-const FLOOR_UNDER = '.ABXYfotkFNhjTHJODEVZzQ';
 function findAll(W, chs) {
   const out = [];
   for (let y = 0; y < W.MH; y++) for (let x = 0; x < W.MW; x++) if (chs.includes(W.map[y][x])) out.push([x, y]);

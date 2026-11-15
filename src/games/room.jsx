@@ -7,11 +7,7 @@ import { preloadScene } from './scenes.jsx';
 import { withFaces } from './faces.jsx';
 import { GOLF } from './golf.jsx';
 import { useKit, usePeerKit, setGear } from './kits.jsx';
-import {
-  ThemeContext, THEMES, Avatar, GAME_TITLES, GAME_RULES, GameArt, g1Mem, g1Send, gameVariantTitle, gameRulesFor, listenNow, listenSyncClock,
-  ANIM_STICKERS, useBackClose, reducedMotion, appSnack, ga1Name, GameBareCtx, gameBoardCard, chatGameLink, g1Load,
-  PoolTable, CarromTable, ZapTable, ZapCardGuide,
-} from '../App.jsx';
+import { ThemeContext, THEMES, Avatar, GameArt, g1Mem, g1Send, gameVariantTitle, gameRulesFor, listenNow, listenSyncClock, ANIM_STICKERS, useBackClose, reducedMotion, appSnack, ga1Name, GameBareCtx, gameBoardCard, chatGameLink, g1Load, PoolTable, CarromTable, ZapTable, ZapCardGuide } from '../App.jsx';
 
 export function warmRoom(g) {
   preloadScene(g);

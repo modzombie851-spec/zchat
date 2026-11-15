@@ -1,17 +1,7 @@
-import React, { useState, useRef, useEffect, useLayoutEffect, useMemo, createContext, useContext } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
 import ReactDOM from 'react-dom';
-import {
-  Send, Paperclip, Search, Mail, ShieldCheck, ShieldOff, AtSign, LogOut, Eye, EyeOff, Lock,
-  Flag, X, Trash2, User, Phone, MoreVertical, Image as ImageIcon, Video as VideoIcon, Pin,
-  Smile, ArrowLeft, Check, CheckCheck, Settings as SettingsIcon, Moon, Sun, UserPlus,
-  FileText, HelpCircle, ChevronRight, ChevronLeft, Compass, Bell, Volume2, Volume1, VolumeX, Palette, Mic, Play, Pause, Download, Users, Camera, Reply, Forward, Ban, Edit3, Archive, Bookmark, Share2, Copy, Crop, Type, Pencil, Undo2, Scissors, BellOff, Link as LinkIcon, ShieldAlert, Heart, Repeat, PhoneOff, MicOff, VideoOff, SwitchCamera, Clock, Timer, Smartphone, Plus, ThumbsUp, ThumbsDown, LayoutDashboard, Megaphone, Database, Activity, MessageSquare,
-} from 'lucide-react';
-import {
-  supabase, registerWithEmail, verifyOtp, setPassword, signInWithPassword,
-  sendPasswordReset, signOut, getSession, checkUsernameTaken,
-  sendMessage, getConversation,
-  subscribeToMessages, reportUser, uploadMedia as uploadMediaRaw, deleteMessage,
-} from '../supabaseClient.js';
+import { Send, Search, Mail, ShieldCheck, ShieldOff, AtSign, LogOut, Eye, EyeOff, Lock, X, Trash2, User, Phone, Image as ImageIcon, Smile, ArrowLeft, Check, CheckCheck, Settings as SettingsIcon, Moon, Sun, UserPlus, FileText, HelpCircle, ChevronRight, Bell, Volume2, Volume1, VolumeX, Palette, Mic, Play, Download, Users, Camera, Reply, Ban, Share2, Type, Pencil, Undo2, BellOff, Link as LinkIcon, ShieldAlert, Heart, Repeat, Clock, Timer, Smartphone, Plus, Megaphone, Database, Activity, MessageSquare } from 'lucide-react';
+import { supabase, setPassword, signInWithPassword, sendMessage } from '../supabaseClient.js';
 import {
   openPermHelp,
   ACCENT_PALETTES,
@@ -1574,7 +1564,6 @@ export function NotificationsPage({ visitorsOn = false, onOpenVisitors = null, m
     const actors = new Set(keep.map((r) => r.actor).filter(Boolean));
     bootSnapPut(myId, 'notifs', { items: keep, follow: [...followMap.entries()].filter(([id]) => actors.has(id)) });
   };
-  const atTop = () => { const el = notifScrollRef.current; return !el || el.scrollTop < 24; };
   const pickAnchor = () => {
     const el = notifScrollRef.current;
     if (!el || el.scrollTop < 24) return null;

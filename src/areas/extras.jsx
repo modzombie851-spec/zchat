@@ -1,17 +1,7 @@
-import React, { useState, useRef, useEffect, useLayoutEffect, useMemo, createContext, useContext } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import ReactDOM from 'react-dom';
-import {
-  Send, Paperclip, Search, Mail, ShieldCheck, ShieldOff, AtSign, LogOut, Eye, EyeOff, Lock,
-  Flag, X, Trash2, User, Phone, MoreVertical, Image as ImageIcon, Video as VideoIcon, Pin,
-  Smile, ArrowLeft, Check, CheckCheck, Settings as SettingsIcon, Moon, Sun, UserPlus,
-  FileText, HelpCircle, ChevronRight, ChevronLeft, Compass, Bell, Volume2, Volume1, VolumeX, Palette, Mic, Play, Pause, Download, Users, Camera, Reply, Forward, Ban, Edit3, Archive, Bookmark, Share2, Copy, Crop, Type, Pencil, Undo2, Scissors, BellOff, Link as LinkIcon, ShieldAlert, Heart, Repeat, PhoneOff, MicOff, VideoOff, SwitchCamera, Clock, Timer, Smartphone, Plus, ThumbsUp, ThumbsDown, LayoutDashboard, Megaphone, Database, Activity, MessageSquare,
-} from 'lucide-react';
-import {
-  supabase, registerWithEmail, verifyOtp, setPassword, signInWithPassword,
-  sendPasswordReset, signOut, getSession, checkUsernameTaken,
-  sendMessage, getConversation,
-  subscribeToMessages, reportUser, uploadMedia as uploadMediaRaw, deleteMessage,
-} from '../supabaseClient.js';
+import { Send, Search, Mail, ShieldCheck, AtSign, Eye, EyeOff, Flag, X, Trash2, Phone, MoreVertical, Image as ImageIcon, ArrowLeft, Check, Settings as SettingsIcon, UserPlus, ChevronRight, ChevronLeft, Compass, Bell, Volume2, VolumeX, Mic, Play, Pause, Users, Camera, Edit3, Archive, Bookmark, Share2, Copy, Pencil, Undo2, Link as LinkIcon, Repeat, SwitchCamera, Clock, Timer, Plus, Activity, MessageSquare } from 'lucide-react';
+import { supabase, reportUser } from '../supabaseClient.js';
 import {
   openPermHelp,
   permDenied,
@@ -3040,7 +3030,6 @@ export function CollectionPanel({ me, rewards, onClose, onEquip, onWear, isAdmin
   const wearingBubble = bubbleKeyOf(bubbleStyle) || 'classic';
   const cols = gw >= 700 ? 4 : gw >= 500 ? 3 : 2;
   const tileW = Math.max(110, Math.floor((gw - (cols - 1) * 10) / cols) - 8);
-  const rarity = (spec) => RARITY_STYLE[spec.rarity] || RARITY_STYLE.epic;
   const rewardFor = (kind, key) => (rewards || []).find((r) => r.kind === kind && r.reward_key === key) || null;
   const items = tab === 'charm'
     ? Object.entries(CUSTOM_BADGES).filter(([key]) => ownedCharms.has(key)).map(([key, spec]) => ({ key, spec, owned: true, equipped: me.custom_badge === key, reward: rewardFor('charm', key) }))
@@ -6574,7 +6563,7 @@ function WnSegments({ total, at, onArt, dark }) {
   );
 }
 
-const WN_PHOTOS = { zombies49: '/wn49-zombies.webp', mutant49: '/wn49-mutant.webp', guns50: '/wn50-guns.webp', house50: '/wn50-house.webp', pond50: '/wn50-pond.webp', buttons50: '/wn50-buttons.webp', settings50: '/wn50-settings.webp', pack51: '/wn51-pack.webp', emote51: '/wn51-emote.webp', lobby51: '/wn51-lobby.webp', waves52: '/wn52-waves.webp', sky52: '/wn52-sky.webp', map52: '/wn52-map.webp', boss53: '/wn53-boss.webp', fire53: '/wn53-fire.webp', dog53: '/wn53-dog.webp', train53: '/wn53-train.webp', hud531: '/wn531-hud.webp', moves531: '/wn531-moves.webp', pc531: '/wn531-pc.webp', squad54: '/wn54-squad.webp', boom54: '/wn54-boom.webp', heli54: '/wn54-heli.webp', gas54: '/wn54-gas.webp' , shop55: '/wn55-shop.webp', stall55: '/wn55-stall.webp', boss55: '/wn55-boss.webp', climb55: '/wn55-climb.webp', drop55: '/wn55-drop.webp', squad55: '/wn55-squad.webp', hud55: '/wn55-hud.webp', set55: '/wn55-settings.webp', music55: '/wn55-music.webp', guns55: '/wn55-guns.webp', zj55: '/zombie-art2.webp', bolt55: '/bolt-art.webp', torch55: '/duo-art.webp' };
+const WN_PHOTOS = { zombies49: '/wn49-zombies.webp', mutant49: '/wn49-mutant.webp', guns50: '/wn50-guns.webp', house50: '/wn50-house.webp', pond50: '/wn50-pond.webp', buttons50: '/wn50-buttons.webp', settings50: '/wn50-settings.webp', pack51: '/wn51-pack.webp', emote51: '/wn51-emote.webp', lobby51: '/wn51-lobby.webp', waves52: '/wn52-waves.webp', sky52: '/wn52-sky.webp', map52: '/wn52-map.webp', boss53: '/wn53-boss.webp', fire53: '/wn53-fire.webp', dog53: '/wn53-dog.webp', train53: '/wn53-train.webp', hud531: '/wn531-hud.webp', moves531: '/wn531-moves.webp', pc531: '/wn531-pc.webp', squad54: '/wn54-squad.webp', boom54: '/wn54-boom.webp', heli54: '/wn54-heli.webp', gas54: '/wn54-gas.webp' , shop55: '/wn55-shop.webp', stall55: '/wn55-stall.webp', boss55: '/wn55-boss.webp', climb55: '/wn55-climb.webp', drop55: '/wn55-drop.webp', squad55: '/wn55-squad.webp', hud55: '/wn55-hud.webp', set55: '/wn55-settings.webp', music55: '/wn55-music.webp', guns55: '/wn55-guns.webp', zj55: '/zombie-art2.webp', bolt55: '/bolt-art2.webp', torch55: '/duo-art.webp' };
 const WN_HIGHLIGHTS = [
   { k: 'hud55', art: 'hud55', go: 'zombie', cta: 'Play now', title: 'New buttons', text: 'Every button has a new metal look with clear icons, plus a gun bar with your ammo and a Reloading sign.' },
   { k: 'shop55', art: 'shop55', go: 'zombie', cta: 'Play now', title: 'A real gun shop', text: 'Every gun, plate and grenade has a real picture with its price under it. Pick one, check its damage and range, then tap Buy.' },

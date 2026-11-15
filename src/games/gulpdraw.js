@@ -1,4 +1,4 @@
-import { WW, WH, TAU, SPECIES, PLAYER_SP, SP_INDEX, rOf, floorAt, rngOf, bodySeg, clamp, viewOf, suckR, regionAt, CURRENTS } from './gulpengine.js';
+import { WW, WH, TAU, SPECIES, PLAYER_SP, SP_INDEX, rOf, floorAt, rngOf, clamp, viewOf, suckR, regionAt, CURRENTS } from './gulpengine.js';
 
 const FF = "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
 const K = 46;
@@ -694,7 +694,6 @@ export function bits(P, x, y, col, n, sc) { for (let i = 0; i < n; i++) { const 
 export function zap(P, x, y, r) { P.push({ k: 'zap', x, y, vx: 0, vy: 0, life: 0.42, max: 0.42, r, n: 9, a0: Math.random() * TAU, seed: Math.floor(Math.random() * 97) }); P.push({ k: 'ring', x, y, vx: 0, vy: 0, life: 0.5, max: 0.5, r: r * 0.8, col: '#BFF4FF' }); }
 export function ring(P, x, y, r, col) { P.push({ k: 'ring', x, y, vx: 0, vy: 0, life: 0.6, max: 0.6, r, col }); }
 
-function palOfPlayer(p, i) { return PLAYER_PAL[p.color || (p.kind === 'sun' || p.kind === 'moon' ? p.kind : `b${(i % 4) + 1}`)] || PLAYER_PAL.sun; }
 export function playerColorKey(p, i) { return p.color || (p.kind === 'sun' || p.kind === 'moon' ? p.kind : `b${(i % 4) + 1}`); }
 
 const kk0 = (p, mine) => p.kind === mine;

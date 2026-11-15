@@ -1,167 +1,13 @@
-import React, { useState, useRef, useEffect, useLayoutEffect, useMemo, createContext, useContext } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useMemo, useContext } from 'react';
 import ReactDOM from 'react-dom';
-import {
-  Send, Paperclip, Search, Mail, ShieldCheck, ShieldOff, AtSign, LogOut, Eye, EyeOff, Lock,
-  Flag, X, Trash2, User, Phone, MoreVertical, Image as ImageIcon, Video as VideoIcon, Pin,
-  Smile, ArrowLeft, Check, CheckCheck, Settings as SettingsIcon, Moon, Sun, UserPlus,
-  FileText, HelpCircle, ChevronRight, ChevronLeft, Compass, Bell, Volume2, Volume1, VolumeX, Palette, Mic, Play, Pause, Download, Users, Camera, Reply, Forward, Ban, Edit3, Archive, Bookmark, Share2, Copy, Crop, Type, Pencil, Undo2, Scissors, BellOff, Link as LinkIcon, ShieldAlert, Heart, Repeat, PhoneOff, MicOff, VideoOff, SwitchCamera, Clock, Timer, Smartphone, Plus, ThumbsUp, ThumbsDown, LayoutDashboard, Megaphone, Database, Activity, MessageSquare,
-} from 'lucide-react';
-import {
-  supabase, registerWithEmail, verifyOtp, setPassword, signInWithPassword,
-  sendPasswordReset, signOut, getSession, checkUsernameTaken,
-  sendMessage, getConversation,
-  subscribeToMessages, reportUser, uploadMedia as uploadMediaRaw, deleteMessage,
-} from '../supabaseClient.js';
-import {
-  Avatar,
-  BigButton,
-  ChatRowSheet,
-  ConfirmSheet,
-  CrownIcon,
-  ANIM_STICKERS,
-  THEMES,
-  ThemeContext,
-  DetailRow,
-  DetailSection,
-  EmptyState,
-  FONT,
-  FRIEND_GAME_GROUPS,
-  FRIEND_GAME_SUBS,
-  FullPage,
-  G1BallDots,
-  G1Canvas,
-  G1WelcomeCardBody,
-  G1_LEVELS,
-  G2EmoImg,
-  G2EmojiGrid,
-  GA2_PLAYERS,
-  GA2_SUBS,
-  GAME_ART_BG,
-  GAME_RULES,
-  GAME_TITLES,
-  GH_CARDS,
-  GH_GROUP_MORE,
-  GH_SECRET,
-  Ga1TextBtn,
-  GameAgainButton,
-  GameArt,
-  GameButton,
-  GameCardShell,
-  GameInfoButton,
-  GamepadIcon,
-  GhViewCtx,
-  GoneGameCard,
-  HeaderIconButton,
-  HowToPlaySheet,
-  IgHeading,
-  IgToggle,
-  LIVE_GAME_KEYS,
-  LineGlyph,
-  MediaImg,
-  NameBadge,
-  PAINT_NAMES,
-  PageArt,
-  PickTiles,
-  Pin_,
-  Portal,
-  QUIZ_POOL,
-  ReactionBoard,
-  SOLO_GAMES,
-  SegmentedControl,
-  SoloGame,
-  Spinner,
-  TrophyIcon,
-  TugBoard,
-  appSnack,
-  copyTextToClipboard,
-  countWord,
-  detailsCardBg,
-  fetchProfilesView,
-  fmtDate,
-  fmtHM,
-  formatGameScore,
-  formatListTime,
-  friendlyError,
-  g1Clock,
-  g1First,
-  g1Mem,
-  g1Name,
-  g1Outcome,
-  g1PoolLeft,
-  g1Preview,
-  g1Send,
-  g1Test,
-  g2EmoOf,
-  g2EmoPut,
-  g2KwOf,
-  g2KwPing,
-  g2KwUse,
-  g2Write,
-  g3Board,
-  g3dk,
-  g3lt,
-  ga1Name,
-  gameKeyTitle,
-  gameNet,
-  gameNetMissing,
-  ghAfterMove,
-  ghBotCan,
-  ghBotLevel,
-  ghEmit,
-  ghEnv,
-  ghErrText,
-  ghFirst,
-  ghLiveSet,
-  ghMove,
-  ghPlural,
-  ghRoundLabel,
-  ghRpc,
-  hapticTap,
-  inputStyle,
-  isSoloGameKey,
-  jsonAfter,
-  kitOnInk,
-  listenNow,
-  listenSyncClock,
-  loadImageElement,
-  loadMyGames,
-  newClientId,
-  parseGameMessage,
-  parseOnce,
-  playUiSound,
-  readBest,
-  reducedMotion,
-  rtDrop,
-  rtKeep,
-  rtName,
-  rtReady,
-  seededRandom,
-  siteOrigin,
-  timeAgoLong,
-  useBackClose,
-  useG1,
-  useG2Emo,
-  useG2Kw,
-  useGhEnv,
-  useGhPub,
-  useGhSecret,
-  useGhWatchers,
-  useRtRefresh,
-  useSheetDrag,
-  useTheme,
-} from '../App.jsx';
+import { ShieldCheck, LogOut, Flag, X, Trash2, User, Smile, ArrowLeft, CheckCheck, Settings as SettingsIcon, UserPlus, FileText, ChevronRight, ChevronLeft, Bell, Mic, Users, Camera, Share2, Copy, Pencil, Link as LinkIcon, Repeat, MicOff, Plus } from 'lucide-react';
+import { supabase } from '../supabaseClient.js';
+import { Avatar, BigButton, ChatRowSheet, ConfirmSheet, CrownIcon, ANIM_STICKERS, THEMES, ThemeContext, DetailRow, DetailSection, EmptyState, FONT, FRIEND_GAME_SUBS, FullPage, G1WelcomeCardBody, G1_LEVELS, G2EmoImg, G2EmojiGrid, GA2_PLAYERS, GA2_SUBS, GAME_RULES, GAME_TITLES, GH_CARDS, GH_GROUP_MORE, GH_SECRET, Ga1TextBtn, GameAgainButton, GameArt, GameButton, GameCardShell, GameInfoButton, GhViewCtx, GoneGameCard, HeaderIconButton, IgHeading, IgToggle, MediaImg, PAINT_NAMES, PageArt, Pin_, Portal, QUIZ_POOL, ReactionBoard, SegmentedControl, Spinner, TugBoard, appSnack, copyTextToClipboard, detailsCardBg, fetchProfilesView, fmtDate, fmtHM, formatListTime, friendlyError, g1Clock, g1First, g1Mem, g1Name, g1Outcome, g1Preview, g1Send, g1Test, g2EmoOf, g2EmoPut, g2KwOf, g2KwPing, g2KwUse, g2Write, g3Board, ghAfterMove, ghEmit, ghEnv, ghErrText, ghFirst, ghLiveSet, ghMove, ghPlural, ghRoundLabel, ghRpc, hapticTap, inputStyle, jsonAfter, kitOnInk, listenNow, listenSyncClock, loadImageElement, newClientId, parseOnce, playUiSound, reducedMotion, rtDrop, rtKeep, rtName, rtReady, seededRandom, siteOrigin, timeAgoLong, useBackClose, useG1, useG2Emo, useG2Kw, useGhEnv, useGhPub, useGhSecret, useGhWatchers, useRtRefresh, useSheetDrag, useTheme } from '../App.jsx';
 import { PageCast } from '../games/livecast.jsx';
 import { GameRoom, RoomButton, RoomSheet, sfx as kitSfx } from '../games/kit.jsx';
 import { withFaces } from '../games/faces.jsx';
 import { GOLF } from '../games/golf.jsx';
-import {
-  KitTabs,
-  LIVE_GAME_INFO,
-  MemberCrownGlyph,
-  MemberRemoveGlyph,
-  MemberTagGlyph,
-  mutedUntilText,
-} from './shared.jsx';
+import { LIVE_GAME_INFO, MemberCrownGlyph, MemberRemoveGlyph, MemberTagGlyph, mutedUntilText } from './shared.jsx';
 
 const G1_LOG = new Map();
 const G1_FLOW = ['welcome', 'hi', 'hey', 'hello', 'glad', 'good', 'great', 'nice', 'thanks', 'thank', 'please', 'say', 'read', 'be', 'we', "we're", 'you', "you're", 'your', 'this', 'here', 'make', 'feel', 'take', 'check', 'so', 'enjoy', 'have', 'come', 'meet', 'join', 'it', "it's", 'our', 'introduce', 'tell', 'share', 'drop', 'start', 'happy', 'lovely', 'awesome'];
@@ -886,8 +732,6 @@ export function WatchPartyPage({ msgId, d, me, onClose }) {
 }
 const GH_GROUP_KINDS = ['ttt', 'c4', 'gomoku', 'reversi', 'dots', 'ship', 'hang'];
 const GH_TOUR_KINDS = GH_GROUP_KINDS.filter((k) => k !== 'hang');
-const GH_LEVELS = [[1, 'Easy'], [2, 'Medium'], [3, 'Hard']];
-function ghSetBotLevel(v) { try { localStorage.setItem('zchat-bot-level', String(v)); } catch {} }
 function ghStatus(p) {
   if (!p) return '';
   if (p.w) {
@@ -1246,25 +1090,6 @@ function liveQuestions(seed, n) {
   return pool.slice(0, n);
 }
 
-function LiveScoreBar({ me, peer, mineScore, theirScore, isHost }) {
-  const { theme } = useTheme();
-  const side = (p, label, s, right) => (
-    <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8, flexDirection: right ? 'row-reverse' : 'row' }}>
-      <Avatar emoji={p && p.avatar} name={(p && p.name) || label} size={40} />
-      <div style={{ minWidth: 0, textAlign: right ? 'right' : 'left' }}>
-        <div style={{ fontSize: 12.5, fontWeight: 800, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</div>
-        <div style={{ fontSize: 22, fontWeight: 900, color: theme.ink, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{s}</div>
-      </div>
-    </div>
-  );
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 18, background: theme.rowBg }}>
-      {side(me, 'You', mineScore, false)}
-      <div style={{ fontSize: 12, fontWeight: 900, color: theme.muted }}>VS</div>
-      {side(peer, String((peer && peer.name) || 'Friend').split(' ')[0], theirScore, true)}
-    </div>
-  );
-}
 
 export function QuizRaceBoard({ isHost, bus, seed, onHostFinish, onScore }) {
   const { theme } = useTheme();

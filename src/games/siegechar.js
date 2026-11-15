@@ -133,20 +133,28 @@ function hsv(r, g, b) { const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d 
 function rgb(h, s, v) { const c = v * s, x = c * (1 - Math.abs(((h / 60) % 2) - 1)), m = v - c; const [r, g, b] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x] : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x]; return [r + m, g + m, b + m]; }
 const inBand = (h, a, b) => (a <= b ? h >= a && h <= b : h >= a || h <= b);
 
-export function recolor(img, size, band, target, shift, lift = 1) {
+export function recolor(img, size, band, target, shift, lift = 1, extra = null) {
   const cv = document.createElement('canvas'); cv.width = size; cv.height = size;
   const x = cv.getContext('2d', { willReadFrequently: true });
+  x.imageSmoothingEnabled = false;
   x.drawImage(img, 0, 0, size, size);
   if (!band) return cv;
   const d = x.getImageData(0, 0, size, size), p = d.data;
   const mid = band[2] != null ? band[2] : band[0] <= band[1] ? (band[0] + band[1]) / 2 : ((band[0] + band[1] + 360) / 2) % 360;
   const smin = band[3] != null ? band[3] : 0.18;
   const rot = target == null ? shift : target - mid + shift;
-  if (!rot && lift === 1) return cv;
+  const sat = extra && extra.sat ? extra.sat : 1, suit = extra && extra.suit;
+  if (!rot && lift === 1 && sat === 1 && !suit) return cv;
+  const sh = ((((target == null ? mid : target) + shift) % 360) + 360) % 360;
   for (let i = 0; i < p.length; i += 4) {
     const [h, s, v] = hsv(p[i] / 255, p[i + 1] / 255, p[i + 2] / 255);
+    if (suit && s > 0.03 && s < 0.12 && v > 0.58 && v < 0.74 && inBand(h, 230, 290)) {
+      const [r, g, b] = rgb(sh, suit, Math.min(1, v * 1.12));
+      p[i] = r * 255; p[i + 1] = g * 255; p[i + 2] = b * 255;
+      continue;
+    }
     if (s < smin || !inBand(h, band[0], band[1])) continue;
-    const [r, g, b] = rgb(((h + rot) % 360 + 360) % 360, s, Math.min(1, v * lift));
+    const [r, g, b] = rgb(((h + rot) % 360 + 360) % 360, Math.min(1, s * sat), Math.min(1, v * lift));
     p[i] = r * 255; p[i + 1] = g * 255; p[i + 2] = b * 255;
   }
   x.putImageData(d, 0, 0);

@@ -1,7 +1,7 @@
 import { MeshBuilder, hexRgb, m4 } from './race3d.js';
-import { MAT as MB, hsh, sq, ball, withT, tube, cone, rot } from './siegemesh.js';
+import { MAT as MB, hsh, sq, ball, withT, tube, rot } from './siegemesh.js';
 import { carMesh } from './zmesh.js';
-import { TOWN, BOUNDS, HOUSES, CARS, FENCES, BARRIERS, OAKS, BARN, BALES, TENTS, CRATES, sat, ss, fade, vn, fbm, rng, inRect, roadDist, nearHouse, groundH, forestD, forestList } from './ztown.js';
+import { TOWN, BOUNDS, HOUSES, CARS, FENCES, BARRIERS, OAKS, BARN, BALES, TENTS, CRATES, sat, ss, vn, fbm, rng, inRect, roadDist, nearHouse, groundH, forestD, forestList } from './ztown.js';
 
 export { TOWN, groundH };
 
@@ -37,27 +37,6 @@ function blockC(m, x0, y0, z0, x1, y1, z1, col, mt, o = {}) {
   if (!sk.includes('n')) quadC(m, B, A, E, F, lo, lo, hi, hi, mt);
   if (!sk.includes('e')) quadC(m, Cc, B, F, G, lo, lo, hi, hi, mt);
   if (!sk.includes('w')) quadC(m, A, D, H, E, lo, lo, hi, hi, mt);
-}
-function blobC(m, c, r, seg, rows, jit, seed, colFn, mt = 0) {
-  const P = [], CC = [];
-  for (let i = 0; i <= rows; i++) {
-    const v = -Math.PI / 2 + (Math.PI * i) / rows, cv = Math.cos(v), sv = Math.sin(v);
-    const row = [], crow = [];
-    for (let j = 0; j < seg; j++) {
-      const u = (2 * Math.PI * j) / seg;
-      const pole = i === 0 || i === rows;
-      const k = 1 + jit * ((pole ? hsh(seed, i, 0) : hsh(seed, i, j)) - 0.5) * 2;
-      row.push([c[0] + r[0] * cv * Math.cos(u) * k, c[1] + r[1] * sv * k, c[2] + r[2] * cv * Math.sin(u) * k]);
-      crow.push(colFn(sv, hsh(seed + 7, i, pole ? 0 : j), cv * Math.cos(u), cv * Math.sin(u)));
-    }
-    P.push(row); CC.push(crow);
-  }
-  for (let i = 0; i < rows; i++) for (let j = 0; j < seg; j++) {
-    const j1 = (j + 1) % seg;
-    const a = P[i][j], b = P[i + 1][j], cc = P[i + 1][j1], d = P[i][j1];
-    const ca = CC[i][j], cb = CC[i + 1][j], ccc = CC[i + 1][j1], cd = CC[i][j1];
-    quadC(m, a, d, cc, b, ca, cd, ccc, cb, mt);
-  }
 }
 
 function blobS(m, c, r, seg, rows, jit, seed, colFn, mt = 0) {

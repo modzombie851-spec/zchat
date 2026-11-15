@@ -1,6 +1,6 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { GameRoom, RoomLayer, defineSfx, sfx, haptic, useGameKit } from './kit.jsx';
-import { clamp, lerp, makeCanvas, fitCanvas, dpr, grain, woodTexture, rrect, rgba, shade, tint, mix, perfMeter, noiseHit, tone, loopNoise, easeOut, rng, r2, gameCache, onGameCacheDrop, dropGameCaches, canvasBlank, guardCanvases } from './physics.jsx';
+import { clamp, lerp, makeCanvas, fitCanvas, dpr, grain, woodTexture, rrect, rgba, tint, mix, perfMeter, noiseHit, tone, loopNoise, easeOut, rng, r2, gameCache, onGameCacheDrop, dropGameCaches, canvasBlank, guardCanvases } from './physics.jsx';
 import { CarromSim, BW, C, CR, SR, PR, POCK, BASE_HALF, QUEEN, isWhite, isBlack, baseY, strikerOk, judge, colorOfMark, findShot } from './carromsim.jsx';
 import { useShotLink, throttle } from './live.jsx';
 import { kitFor, gearLook } from './kits.jsx';

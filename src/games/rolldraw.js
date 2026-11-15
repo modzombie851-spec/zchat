@@ -1,4 +1,4 @@
-import { TAU, R, BALLS, atL, foePos, moverPos, doorOpen, clamp } from './rollengine.js';
+import { TAU, R, BALLS, atL, foePos, moverPos, clamp } from './rollengine.js';
 
 export const INK = '#1B1430';
 export const SKY = {

@@ -1,17 +1,7 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useMemo, createContext, useContext } from 'react';
 import ReactDOM from 'react-dom';
-import {
-  Send, Paperclip, Search, Mail, ShieldCheck, ShieldOff, AtSign, LogOut, Eye, EyeOff, Lock,
-  Flag, X, Trash2, User, Phone, MoreVertical, Image as ImageIcon, Video as VideoIcon, Pin,
-  Smile, ArrowLeft, Check, CheckCheck, Settings as SettingsIcon, Moon, Sun, UserPlus,
-  FileText, HelpCircle, ChevronRight, ChevronLeft, Compass, Bell, Volume2, Volume1, VolumeX, Palette, Mic, Play, Pause, Download, Users, Camera, Reply, Forward, Ban, Edit3, Archive, Bookmark, Share2, Copy, Crop, Type, Pencil, Undo2, Scissors, BellOff, Link as LinkIcon, ShieldAlert, Heart, Repeat, PhoneOff, MicOff, VideoOff, Clock, Timer, Smartphone, Plus, ThumbsUp, ThumbsDown, LayoutDashboard, Megaphone, Database, Activity, MessageSquare,
-} from 'lucide-react';
-import {
-  supabase, registerWithEmail, verifyOtp, setPassword, signInWithPassword,
-  sendPasswordReset, signOut, getSession, checkUsernameTaken,
-  sendMessage, getConversation,
-  subscribeToMessages, reportUser, uploadMedia as uploadMediaRaw, deleteMessage,
-} from './supabaseClient.js';
+import { Send, Search, Mail, ShieldCheck, ShieldOff, AtSign, LogOut, Eye, EyeOff, Lock, Flag, X, Trash2, User, Phone, MoreVertical, Image as ImageIcon, Video as VideoIcon, Pin, Smile, ArrowLeft, Check, CheckCheck, Settings as SettingsIcon, Moon, UserPlus, FileText, HelpCircle, ChevronRight, ChevronLeft, Compass, Bell, Volume2, VolumeX, Mic, Play, Pause, Download, Users, Camera, Reply, Forward, Ban, Edit3, Archive, Bookmark, Share2, Copy, Type, Pencil, BellOff, Link as LinkIcon, ShieldAlert, Heart, Repeat, PhoneOff, MicOff, Clock, Timer, Smartphone, Plus, ThumbsUp, ThumbsDown, LayoutDashboard, Megaphone, Database, Activity, MessageSquare } from 'lucide-react';
+import { supabase, registerWithEmail, verifyOtp, setPassword, signInWithPassword, sendPasswordReset, signOut, getSession, checkUsernameTaken, sendMessage, getConversation, reportUser, uploadMedia as uploadMediaRaw, deleteMessage } from './supabaseClient.js';
 import { zLazy, zLazyPrefetch, zLazySetUi } from './lazy.jsx';
 import { GAME_KITS, GAME_KIT_BY, GameKitArt, kitUser, gameKitPull } from './games/kits.jsx';
 import { loadLiveFriends, castMe, liveKind, useJoinWait } from './games/live.js';
@@ -6447,12 +6437,6 @@ function fetchFollowList(userId, viewerId, mode) {
   followListJobs.set(key, job);
   return job;
 }
-function prefetchFollowLists(userId, viewerId) {
-  ['followers', 'following'].forEach((mode) => {
-    const hit = followListCache.get(`${viewerId}:${userId}:${mode}`);
-    if (!hit || Date.now() - hit.at > 60000) fetchFollowList(userId, viewerId, mode);
-  });
-}
 
 export function FollowListModal({ userId, viewerId, mode, onClose, onOpenProfile }) {
   const { theme } = useTheme();
@@ -6893,7 +6877,6 @@ function moneyToast(text) {
   return hit;
 }
 
-const achToastMem = { ran: false };
 async function runAchievementCheck(uid, extra) {
   const keys = await checkMyAchievements(uid, extra);
   if (keys && keys.length) {
@@ -9828,15 +9811,6 @@ export function qrDataUrl(text, px = 360, dark = '#111114', light = '#FFFFFF') {
   }
 }
 
-function PosterIconButton({ onClick, children, label }) {
-  return (
-    <div role="button" aria-label={label} onClick={onClick} style={{
-      width: 38, height: 38, borderRadius: '50%', background: 'rgba(0,0,0,0.38)',
-      backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'white', flexShrink: 0,
-    }}>{children}</div>
-  );
-}
 
 const visitMem = new Map();
 function recordProfileVisit(profileId) {
@@ -11501,8 +11475,6 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '0 10px',
     background: primary ? theme.coral : theme.soft, color: primary ? '#FFFFFF' : theme.ink, fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap',
   });
-  const heroTool = { flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, padding: '4px 2px', cursor: 'pointer', color: '#FFFFFF', fontSize: 12, fontWeight: 600, lineHeight: 1.2, textAlign: 'center', textShadow: '0 1px 3px rgba(0,0,0,0.6)' };
-  const heroGlyph = { height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.5))' };
 
   const decorFrame = isDecorKey(profile.avatar_frame) ? profile.avatar_frame : null;
   const decorPlate = isDecorKey(profile.nameplate) ? profile.nameplate : null;
@@ -11515,7 +11487,6 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
     !profile.is_bot && { v: followingCount, l: 'following', on: () => setListModal('following') },
   ].filter(Boolean);
   const pageBg = theme.bgGradient;
-  const glassCircle = { width: 38, height: 38, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: theme.ink, background: theme.dark ? 'rgba(0,0,0,0.35)' : 'rgba(255,255,255,0.65)', border: `1px solid ${theme.dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.06)'}`, backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' };
   const pinPill = (accent) => ({ height: 32, padding: '0 16px', borderRadius: 16, border: 'none', cursor: 'pointer', fontFamily: FONT, fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, background: accent ? theme.coral : theme.soft, color: accent ? '#FFFFFF' : theme.ink, transition: 'background 0.2s ease, color 0.2s ease' });
   const pinIcon = { width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: theme.ink, flexShrink: 0 };
   const pinCanMsg = !!onMessage && !onBreak && !isBlocked && (followState === 'accepted' || profile.is_bot || !profile.is_private);
@@ -15425,14 +15396,6 @@ function AnimPicGlyph({ size = 26 }) {
     </svg>
   );
 }
-function DrawBrushIcon({ k, size = 24 }) {
-  const p = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': 'true' };
-  if (k === 'marker') return <svg {...p}><path d="M14.2 3.8l6 6-7.6 7.6H7v-5.6z" /><path d="M7 11.8l5.6 5.6" /><path d="M4 20.5h7" /></svg>;
-  if (k === 'neon') return <svg {...p}><path d="M16.4 4.6l3 3L9.8 17.2l-4.3 1.3 1.3-4.3z" /><path d="M3.5 5.5l1.6 1.6M7.8 2.8v2.3M2.8 9.6h2.3" /></svg>;
-  if (k === 'hl') return <svg {...p}><path d="M9.4 15.6l-4.4 4.4h6.2l1.6-1.6" /><path d="M8 14.2l8.9-8.9a2.4 2.4 0 0 1 3.4 3.4l-8.9 8.9z" /><path d="M8 14.2l-.9 3.7 3.7-.9" /></svg>;
-  if (k === 'erase') return <PaintToolIcon k="eraser" size={size} />;
-  return <svg {...p}><path d="M16.8 3.8l3.4 3.4L8.4 19 4 20l1-4.4z" /><path d="M14.4 6.2l3.4 3.4" /></svg>;
-}
 export function layerPosOf(p) {
   if (!p || typeof p !== 'object') return null;
   const n = (v, lo, hi, d) => { const x = Number(v); return Number.isFinite(x) ? Math.max(lo, Math.min(hi, x)) : d; };
@@ -18596,7 +18559,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-export const APP_VERSION = '56.5V';
+export const APP_VERSION = '57.0V';
 const WN_REV = 55;
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
@@ -18699,134 +18662,6 @@ async function clPlanFetch() {
   ids.forEach((id) => { if (!seen.has(String(id))) clPlans.map.set(String(id), { missing: true }); });
   clPlanEmit();
   if (clPlans.want.size) clPlanFetch();
-}
-function clPlanAsk(id, again) {
-  if (!Number.isFinite(Number(id)) || (!again && clPlans.map.has(String(id)))) return;
-  clPlans.want.add(Number(id));
-  clearTimeout(clPlans.timer);
-  clPlans.timer = setTimeout(clPlanFetch, 40);
-}
-function clPlanLive(uid) {
-  if (!uid || clPlans.uid === uid) return;
-  if (clPlans.live) { rtDrop(clPlans.live.keep); clPlans.live.off(); }
-  clPlans.uid = uid;
-  clPlans.map = new Map();
-  const apply = (r, fn) => { if (!r || r.message_id == null) return; const key = String(r.message_id); const cur = clPlans.map.get(key); if (!cur || cur.missing) return; clPlans.map.set(key, fn(cur)); clPlanEmit(); };
-  const keep = rtKeep(() => supabase.channel(rtName(`cl-plans-${uid}`))
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'zchat_cl_plan_rsvps' }, (p) => { const r = p && p.new; apply(r, (cur) => { const set = new Set(cur.going); if (r.going) set.add(String(r.user_id)); else set.delete(String(r.user_id)); return { ...cur, going: [...set] }; }); })
-    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'zchat_cl_plans' }, (p) => { const r = p && p.new; apply(r, (cur) => ({ ...cur, cancelled: !!r.cancelled_at })); }));
-  const off = rtOnRefresh(() => { [...clPlans.map.keys()].slice(-60).forEach((k) => clPlanAsk(k, true)); });
-  clPlans.live = { keep, off };
-}
-function useClPlan(id, uid) {
-  const [, setTick] = useState(0);
-  useEffect(() => { const fn = () => setTick((n) => n + 1); clPlans.subs.add(fn); return () => { clPlans.subs.delete(fn); }; }, []);
-  useEffect(() => { clPlanLive(uid); if (id != null) clPlanAsk(id); }, [id, uid]);
-  return id == null ? null : clPlans.map.get(String(id)) || null;
-}
-function clPlanName(id) {
-  const n = clPlans.names.get(String(id));
-  if (n !== undefined) return n;
-  clPlans.nameWant.add(String(id));
-  clearTimeout(clPlans.nameTimer);
-  clPlans.nameTimer = setTimeout(async () => {
-    const ids = [...clPlans.nameWant].slice(0, 40);
-    ids.forEach((x) => { clPlans.nameWant.delete(x); clPlans.names.set(x, ''); });
-    const { data } = await fetchProfilesView(ids);
-    (data || []).forEach((p) => clPlans.names.set(String(p.id), String(p.name || p.username || '')));
-    clPlanEmit();
-  }, 60);
-  return '';
-}
-async function clPlanRsvp(id, uid, on) {
-  const key = String(id);
-  const cur = clPlans.map.get(key);
-  if (!cur || cur.missing) return;
-  const before = cur.going;
-  const set = new Set(before);
-  if (on) set.add(String(uid)); else set.delete(String(uid));
-  clPlans.map.set(key, { ...cur, going: [...set] });
-  clPlanEmit();
-  const { data, error } = await supabase.rpc('zchat_cl_plan_rsvp', { p_message: Number(id), p_going: !!on });
-  if (!error && data && data.ok !== false) return;
-  const now = clPlans.map.get(key);
-  if (now) { clPlans.map.set(key, { ...now, going: before, ...(data && data.reason === 'cancelled' ? { cancelled: true } : {}) }); clPlanEmit(); }
-  appSnack(data && data.reason === 'cancelled' ? 'This call was cancelled' : data && data.reason === 'past' ? 'This call already happened' : friendlyError(error, "Couldn't save that. Try again."));
-}
-async function clPlanCancel(id) {
-  const key = String(id);
-  const cur = clPlans.map.get(key);
-  if (!cur || cur.missing) return;
-  clPlans.map.set(key, { ...cur, cancelled: true });
-  clPlanEmit();
-  const { data, error } = await supabase.rpc('zchat_cl_plan_cancel', { p_message: Number(id) });
-  if (!error && data && data.ok !== false) { appSnack('Call cancelled'); return; }
-  const now = clPlans.map.get(key);
-  if (now) { clPlans.map.set(key, { ...now, cancelled: false }); clPlanEmit(); }
-  appSnack(friendlyError(error, "Couldn't cancel the call. Try again."));
-}
-function CallPlanGlyph({ size = 14 }) {
-  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="3" /><path d="M3 9h18M8 2v4M16 2v4" /><path d="M9.6 12.6c.5 1.4 1.4 2.4 2.8 3l.9-.9c.2-.2.5-.2.7-.1l1.3.6c.3.1.4.4.3.7l-.3 1c-.1.3-.4.5-.7.5-3.2-.3-5.6-2.7-5.9-5.9 0-.3.2-.6.5-.7l1-.3c.3-.1.6 0 .7.3l.6 1.3c.1.2.1.5-.1.7z" /></svg>;
-}
-function CallPlanCard({ d, m, isMe, myId, peerName, onJoin }) {
-  const { theme } = useTheme();
-  const temp = !Number.isFinite(Number(m.id));
-  const plan = useClPlan(temp ? null : m.id, myId);
-  const now = useNow(15000);
-  const [ask, setAsk] = useState(false);
-  const at = Date.parse(d.at);
-  const known = plan && !plan.missing;
-  const cancelled = !!(known && plan.cancelled);
-  const gone = !!(plan && plan.missing);
-  const openAt = at - 5 * 60000;
-  const endAt = at + 2 * 3600000;
-  const live = !cancelled && !gone && now >= openAt && now < endAt;
-  const past = now >= endAt;
-  const going = known ? plan.going : [String(m.sender_id)];
-  const iGo = going.includes(String(myId));
-  const kind = d.k === 'video' ? 'video' : 'voice';
-  const left = at - now;
-  const label = cancelled ? 'Call cancelled' : past ? 'Planned call' : live ? (left <= 0 ? 'Call time' : `Starts in ${Math.max(1, Math.ceil(left / 60000))} min`) : `Planned ${kind} call`;
-  const names = going.filter((id) => id !== String(myId)).map((id) => (!m.group_id && peerName && id !== String(myId) ? String(peerName) : clPlanName(id))).map((n) => String(n || '').split(' ')[0]).filter(Boolean);
-  const others = going.filter((id) => id !== String(myId)).length;
-  const who = (() => {
-    if (!going.length) return 'Nobody said they will join yet';
-    const shown = names.slice(0, 2);
-    const rest = Math.max(0, others - shown.length);
-    const parts = [...(iGo ? ['You'] : []), ...shown];
-    if (rest) parts.push(`${rest} ${rest === 1 ? 'other' : 'others'}`);
-    if (!parts.length) return `${others} ${others === 1 ? 'person' : 'people'} will join`;
-    const text = parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
-    return `${text} will join`;
-  })();
-  const btn = (text, primary, onClick, aria, disabled) => (
-    <div role="button" aria-label={aria || text} aria-disabled={disabled ? 'true' : undefined} onClick={(e) => { e.stopPropagation(); if (!disabled && onClick) onClick(); }} className={disabled ? undefined : 'zchat-press'}
-      style={{ flex: 1, height: 40, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 14, fontWeight: 800, cursor: disabled ? 'default' : 'pointer', background: primary ? (disabled ? (theme.dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)') : theme.coral) : `${theme.coral}1F`, color: primary ? (disabled ? theme.muted : '#FFFFFF') : theme.coral, transition: 'background 0.2s ease' }}>{text}</div>
-  );
-  return (
-    <FeatureCardShell colors={[theme.coral]} icon={<CallPlanGlyph size={14} />} label={label} title={d.t || (kind === 'video' ? 'Video call' : 'Voice call')}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 2px 2px' }}>
-        <div style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: `${theme.coral}1F`, color: theme.coral }}>{kind === 'video' ? <VideoIcon size={20} /> : <Phone size={19} />}</div>
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontSize: 14, fontWeight: 800, color: cancelled ? theme.muted : theme.ink, textDecoration: cancelled ? 'line-through' : 'none' }}>{Number.isFinite(at) ? reminderWhen(at) : ''}</div>
-          <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 1, lineHeight: 1.35 }}>{temp ? 'Planning' : cancelled ? (isMe ? 'You cancelled this call' : 'This call was cancelled') : who}</div>
-        </div>
-      </div>
-      {!temp && !cancelled && !gone && !past && (
-        <div style={{ display: 'flex', gap: 6, marginTop: 11 }}>
-          {live
-            ? btn(kind === 'video' ? 'Join video call' : 'Join call', true, () => { hapticTap(); if (!iGo) clPlanRsvp(m.id, myId, true); if (onJoin) onJoin(kind); }, kind === 'video' ? 'Join the video call' : 'Join the call', !onJoin)
-            : btn('Join', true, null, 'Join opens 5 minutes before', true)}
-          {btn(iGo ? <><Check size={16} />Going</> : 'I will join', false, () => { hapticTap(); clPlanRsvp(m.id, myId, !iGo); }, iGo ? 'You said you will join. Tap to undo' : 'Say you will join')}
-        </div>
-      )}
-      {!temp && !cancelled && !gone && !past && !live && <div style={{ fontSize: 12, color: theme.muted, marginTop: 8, lineHeight: 1.4 }}>Join opens 5 minutes before. Everyone gets a reminder 10 minutes before.</div>}
-      {isMe && !temp && known && !cancelled && !past && (
-        <div role="button" aria-label="Cancel this call" onClick={(e) => { e.stopPropagation(); setAsk(true); }} style={{ marginTop: 9, fontSize: 12.5, fontWeight: 800, color: theme.danger || '#FF3B30', cursor: 'pointer', display: 'inline-block' }}>Cancel call</div>
-      )}
-      {ask && <ConfirmSheet title="Cancel this call?" text="Everyone in the chat sees that it was cancelled." confirmLabel="Cancel call" onCancel={() => setAsk(false)} onConfirm={() => { setAsk(false); clPlanCancel(m.id); }} />}
-    </FeatureCardShell>
-  );
 }
 function PlanCallPage({ chatName, isGroup, onClose, onSend }) {
   useBackClose(true, onClose);
@@ -21607,19 +21442,6 @@ function decorScrollRoot(el) {
   return null;
 }
 const decorLiveSubs = new Map();
-let decorLiveIo = null;
-function decorLiveWatch(el, cb) {
-  if (!el) return undefined;
-  if (typeof IntersectionObserver === 'undefined') { cb(true); return undefined; }
-  if (!decorLiveIo) {
-    decorLiveIo = new IntersectionObserver((list) => {
-      list.forEach((e) => { const f = decorLiveSubs.get(e.target); if (f) f(e.isIntersecting); });
-    }, { threshold: 0 });
-  }
-  decorLiveSubs.set(el, cb);
-  decorLiveIo.observe(el);
-  return () => { decorLiveSubs.delete(el); try { decorLiveIo.unobserve(el); } catch {} };
-}
 const decorBudget = { subs: new Map(), io: null, raf: 0, max: 0, seq: 0 };
 function decorBudgetMax() {
   if (decorBudget.max) return decorBudget.max;
@@ -22556,10 +22378,6 @@ export function fxDprCap() {
     return 1;
   }
 }
-function wornFxKey(p) {
-  const f = p && p.avatar_frame;
-  return f && f === p.nameplate && DECOR_BY_KEY[f] && DECOR_BY_KEY[f].fx ? f : null;
-}
 export const PROFILE_THEMES = {
   golden_hour: { label: 'Golden hour', rarity: 'epic', price: 400, about: 'Slow clouds and a low sun over a quiet sea, with birds heading home.', day: ['#BFD8F2', '#F3E6D4', '#FFC796'], night: ['#151A3E', '#8C4A68', '#F7A35C'] },
   snow_town: { label: 'Snowy town', rarity: 'epic', price: 400, about: 'Snow falls on a small town where the windows light up one by one.', day: ['#D6E1EE', '#E2E8F1', '#F1F1F3'], night: ['#070D1F', '#111D3A', '#2D3D66'] },
@@ -22742,30 +22560,6 @@ export function DropArt({ drop, me, size }) {
     );
   }
   return <div style={{ width: size, height: size, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><img src={bubbleArtUri(drop.item_key)} alt="" draggable={false} style={{ width: size * 0.8, height: size * 0.8 }} /></div>;
-}
-function DropCard({ drop, me, rewards, onOpen }) {
-  useSecondTick(true);
-  const set = drop.kind === 'set' ? DECOR_BY_KEY[drop.item_key] : null;
-  const accent = set ? set.accent : '#8B6CFF';
-  const phase = dropPhase(drop);
-  const owned = dropOwned(drop, rewards);
-  const left = phase === 'soon' ? Date.parse(drop.starts_at) - Date.now() : Date.parse(drop.ends_at) - Date.now();
-  return (
-    <div role="button" aria-label={`Drop ${drop.title}`} onClick={onOpen} className="zchat-press"
-      style={{ position: 'relative', overflow: 'hidden', borderRadius: 22, padding: '12px 14px 12px 10px', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', background: `radial-gradient(130% 150% at 0% 0%, ${accent}59 0%, rgba(16, 16, 24, 0) 62%), linear-gradient(160deg, #171a2e 0%, #0b0c14 100%)`, boxShadow: `inset 0 0 0 1px ${accent}47` }}>
-      <DropArt drop={drop} me={me} size={88} />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 22, padding: '0 9px', borderRadius: 11, background: phase === 'live' ? '#FF3B5C' : 'rgba(255, 255, 255, 0.13)', fontSize: 11.5, fontWeight: 800 }}>
-          {phase === 'live' && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#FFFFFF', animation: reducedMotion() ? 'none' : 'zchat-live-dot 1.4s ease-in-out infinite' }} />}
-          {phase === 'live' ? 'Drop is live' : phase === 'soon' ? 'Next drop' : 'Drop ended'}
-        </div>
-        <div style={{ fontSize: 18, fontWeight: 900, marginTop: 6, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{drop.title}</div>
-        <div style={{ fontSize: 13, color: 'rgba(255, 255, 255, 0.72)', marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>{owned ? 'Yours to keep' : phase === 'soon' ? `Opens in ${shortLeft(left)}` : phase === 'live' ? `Ends in ${shortLeft(left)}` : 'This drop has ended'}</div>
-      </div>
-      {!owned && <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontWeight: 800, fontSize: 14.5, flexShrink: 0 }}><CoinIcon size={17} />{formatCount(drop.price)}</div>}
-      <ChevronRight size={18} color="rgba(255, 255, 255, 0.5)" style={{ flexShrink: 0 }} />
-    </div>
-  );
 }
 
 export const limitMem = { uid: null, data: null, at: 0, job: null, local: 0, subs: new Set() };
@@ -23066,16 +22860,6 @@ export function shopItemName(kind, k) {
   if (kind === 'bubble') return CHAR_BUBBLES[k] ? CHAR_BUBBLES[k].label : k;
   return CUSTOM_BADGES[k] ? CUSTOM_BADGES[k].label.replace(/ charm$/i, '') : k;
 }
-function shopKindTitle(kind) {
-  if (SI_KINDS.includes(kind)) return siTitle(kind);
-  if (kind === 'wallpaper') return 'Live wallpapers';
-  if (kind === 'set') return 'Sets';
-  if (kind === 'bubble') return 'Bubbles';
-  if (kind === 'charm') return 'Charms';
-  if (kind === 'namestyle') return 'Name styles';
-  if (kind === 'theme') return 'Profile themes';
-  return 'Super reactions';
-}
 
 export function ShopBagIcon({ size = 22, color = 'currentColor', strokeWidth = 1.9 }) {
   return (
@@ -23157,46 +22941,6 @@ function PtTileArt({ k, me, covered }) {
   const ref = useRef(null);
   const w = useWidthOf(ref, 150);
   return <div ref={ref} style={{ alignSelf: 'stretch' }}><ThemeArt k={k} me={me} w={Math.max(80, w)} h={Math.round(Math.max(80, w) * 1.18)} covered={covered} /></div>;
-}
-function CxShopSections({ me, rewards, free, onOpen, mode = 'shop', covered = false }) {
-  const ownedNs = NS_KEYS.filter((k) => cxOwns(rewards, 'namestyle', k, mode === 'shop'));
-  const ownedTh = THEME_KEYS.filter((k) => cxOwns(rewards, 'theme', k, mode === 'shop'));
-  const ownedRx = SUPER_KEYS.filter((k) => cxOwns(rewards, 'reaction', k, mode === 'shop'));
-  const rank = (kind) => (a, b) => (STORE_RARITY_ORDER[cxSpec(kind, b).rarity] ?? 9) - (STORE_RARITY_ORDER[cxSpec(kind, a).rarity] ?? 9) || (cxSpec(kind, a).price || 0) - (cxSpec(kind, b).price || 0);
-  const shopList = (kind, keys, owned) => (mode === 'shop' ? keys.filter((k) => !owned.includes(k) && cxKnown(kind, k)) : owned).slice().sort(mode === 'shop' ? rank(kind) : () => 0);
-  const ns = shopList('namestyle', NS_KEYS, ownedNs);
-  const th = shopList('theme', THEME_KEYS, ownedTh);
-  const rx = mode === 'shop' ? shopList('reaction', SUPER_KEYS, ownedRx) : [...SUPER_FREE, ...ownedRx.filter((k) => !SUPER_REACTS[k].free)];
-  const wearNs = cxNs(me);
-  const wearTh = ptKeyOf(me);
-  const status = (kind, k) => {
-    if (mode === 'shop') return [String(shopPrice(kind, k) || 0), 'coin'];
-    if (kind === 'namestyle' && wearNs === k) return ['In use', 'use'];
-    if (kind === 'theme' && wearTh === k) return ['In use', 'use'];
-    if (kind === 'reaction' && SUPER_REACTS[k].free) return ['Free', 'free'];
-    const rw = (rewards || []).find((r) => r.kind === kind && r.reward_key === k && rewardActive(r));
-    const left = rw ? daysLeft(rw) : null;
-    return [left != null ? `${left} ${left === 1 ? 'day' : 'days'} left` : 'Yours', 'own'];
-  };
-  const grid = (kind, keys, cols) => (
-    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gap: 10 }}>
-      {keys.map((k) => { const [st, tone] = status(kind, k); return <CxTile key={k} kind={kind} k={k} me={me} status={st} tone={tone} on={tone === 'use'} cols={cols} covered={covered} onOpen={() => onOpen(kind, k)} />; })}
-    </div>
-  );
-  const none = (text) => <div style={{ fontSize: 13.5, color: CL.ink2, lineHeight: 1.5, padding: '2px 2px 4px' }}>{text}</div>;
-  return (
-    <>
-      <CollSection title="Name styles" sub={mode === 'shop' ? 'Your name, drawn your way, wherever it shows' : 'Everyone sees the one you wear'}>
-        {ns.length ? grid('namestyle', ns, 2) : none(mode === 'shop' ? 'Every name style is yours. Switch them in your Collection.' : 'No name styles yet. You can find them in the Shop.')}
-      </CollSection>
-      <CollSection title="Profile themes" sub={mode === 'shop' ? 'A moving scene behind your profile' : 'Shows behind your profile for everyone who visits'}>
-        {th.length ? grid('theme', th, 2) : none(mode === 'shop' ? 'Every theme is yours. Switch them in your Collection.' : 'No themes yet. You can find them in the Shop.')}
-      </CollSection>
-      <CollSection title="Super reactions" sub={mode === 'shop' ? (free ? `Big reactions that play over the chat. ${SUPER_FREE_WORD} are free for everyone.` : 'Big reactions that play over the chat') : 'Hold a message and pick one from the top row'}>
-        {rx.length ? grid('reaction', rx, 3) : none('Every super reaction is yours. Hold a message to send one.')}
-      </CollSection>
-    </>
-  );
 }
 let siCssOn = false;
 export function siCss() {
@@ -23457,13 +23201,6 @@ export function useGfPeople(ids) {
     return () => { gfCardMem.subs.delete(fn); };
   }, [key]);
   return (ids || []).map((id) => gfCardMem.people.get(id) || null);
-}
-function GiftBagIcon({ size = 20, color = 'currentColor', strokeWidth = 1.8, style }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" style={style} aria-hidden="true">
-      <path d="M9.2 6.6c-3.2 1.7-5.7 5.3-5.7 8.9 0 3.3 2.7 5 8.5 5s8.5-1.7 8.5-5c0-3.6-2.5-7.2-5.7-8.9" /><path d="M9 6.5h6" /><path d="M9.6 6.5 8.4 3.6c1.2.5 2.4.6 3.6.6s2.4-.1 3.6-.6l-1.2 2.9" /><circle cx="12" cy="14" r="2.6" /><path d="M12 12.9v2.2" />
-    </svg>
-  );
 }
 export function SantaHatIcon({ size = 20, color = 'currentColor', strokeWidth = 1.8, style }) {
   return (
@@ -24188,63 +23925,6 @@ export function CharmPreview({ charm, size }) {
 
 export const feedPanelMem = new Map();
 
-function SwipeToReply({ onReply, children }) {
-  const rowRef = useRef(null);
-  const hintRef = useRef(null);
-  const st = useRef({ x: 0, y: 0, dx: 0, active: false, decided: false, horizontal: false, buzzed: false });
-  const paint = (dx, animate) => {
-    const el = rowRef.current;
-    if (el) {
-      el.style.transition = animate ? 'transform 0.18s ease' : 'none';
-      el.style.transform = dx ? `translateX(${dx}px)` : '';
-    }
-    const h = hintRef.current;
-    if (h) {
-      h.style.opacity = String(Math.min(1, dx / 48));
-      h.style.transform = `scale(${0.6 + Math.min(0.4, dx / 120)})`;
-    }
-  };
-  const onStart = (e) => {
-    const t = e.touches[0];
-    st.current = { x: t.clientX, y: t.clientY, dx: 0, active: true, decided: false, horizontal: false, buzzed: false };
-  };
-  const onMove = (e) => {
-    const s = st.current;
-    if (!s.active) return;
-    const t = e.touches[0];
-    const dx = t.clientX - s.x;
-    const dy = t.clientY - s.y;
-    if (!s.decided) {
-      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
-      s.decided = true;
-      s.horizontal = dx > 0 && Math.abs(dx) > Math.abs(dy) * 1.2;
-    }
-    if (!s.horizontal) return;
-    e.stopPropagation();
-    s.dx = Math.max(0, Math.min(84, dx * 0.8));
-    paint(s.dx, false);
-    if (s.dx >= 56 && !s.buzzed) { s.buzzed = true; if (navigator.vibrate) navigator.vibrate(12); }
-    if (s.dx < 56) s.buzzed = false;
-  };
-  const onEnd = () => {
-    const s = st.current;
-    if (!s.active) return;
-    s.active = false;
-    const fire = s.horizontal && s.dx >= 56;
-    paint(0, true);
-    if (fire) onReply();
-  };
-  return (
-    <div style={{ position: 'relative', touchAction: 'pan-y' }}>
-      <div ref={hintRef} aria-hidden="true" style={{ position: 'absolute', left: 16, top: '50%', marginTop: -10, opacity: 0, color: 'rgba(255,255,255,0.75)', pointerEvents: 'none' }}>
-        <Reply size={20} />
-      </div>
-      <div ref={rowRef} onTouchStart={onStart} onTouchMove={onMove} onTouchEnd={onEnd} onTouchCancel={onEnd} style={{ willChange: 'transform' }}>
-        {children}
-      </div>
-    </div>
-  );
-}
 
 const COMMENT_QUICK = ['❤️', '🙌', '🔥', '👏', '😢', '😍', '😮', '😂'];
 const LEGACY_REPLY_BEFORE = Date.parse('2026-11-20T00:00:00Z');
@@ -24956,7 +24636,6 @@ const CHAR_BUBBLE_DATA = [
   ['bee', 'Bee', '#FFC958', '#D9981C', '#3D2806', null, ['top', 148, 168, 1.074, 11.4, 150, 0]],
   ['wolf', 'Wolf', '#AAB3CC', '#66748F', '#0C1220', null, ['top', 135, 168, 0.979, -6.6, 150, 0], 1],
 ];
-const BUBBLE_FREE_PICKS = 2;
 export const CHAR_BUBBLES = (() => {
   const out = {};
   CHAR_BUBBLE_DATA.forEach(([key, label, fill, line, ink, svg, place, fresh]) => { out[key] = { key, label, fill, line, ink, svg, place: place || null, fresh: !!fresh, uri: null }; });
@@ -25877,7 +25556,6 @@ function useReplyIdeas({ myId, profile, group, messages, draft, blocked }) {
   const key = target && last ? `${target.k}|${last.id}` : '';
   return { show: eligible && ai === true, open: open && eligible && ai === true, key, target, toggle: () => { hapticTap(); setOpen((v) => !v); }, close: () => setOpen(false) };
 }
-const WA_KINDS = ['text', 'photo', 'video', 'audio', 'sticker', 'gif', 'document', 'contact', 'media', 'deleted', 'system'];
 export function WaImportIcon({ size = 20, color = 'currentColor', strokeWidth = 1.8 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -26155,7 +25833,6 @@ function axSave() { try { localStorage.setItem('zchat-ax', JSON.stringify({ uid:
 function axPing() { axPrefs.subs.forEach((f) => { try { f(); } catch {} }); }
 export function useAx() { return React.useSyncExternalStore((f) => { axPrefs.subs.add(f); return () => axPrefs.subs.delete(f); }, axRow, axRow); }
 function labOn(key) { return axRow().labs.includes(key); }
-function useLab(key) { return useAx().labs.includes(key); }
 export function axTabsOf(row) { const t = row && row.tabs; return t && t.length ? t : AX_TABS_DEFAULT; }
 export function axMissing(error) { return !!error && (rpcMissing(error) || /PGRST20[45]|42P01|42703|schema cache|does not exist/i.test(`${error.code || ''} ${error.message || ''}`)); }
 export function axSet(patch) {
@@ -28477,10 +28154,6 @@ function dropChatLocal(uid) {
   [...chatPending.keys()].filter((k) => k.startsWith(prefix)).forEach((k) => { chatPending.delete(k); clearTimeout(chatWriteTimers.get(k)); chatWriteTimers.delete(k); });
   return localDbKeys(prefix).then((keys) => localDbDelete(keys));
 }
-function countChatLocal(uid) {
-  if (!uid) return Promise.resolve(0);
-  return localDbKeys(`${uid}|`).then((keys) => keys.length);
-}
 export function forgetLocalUser(uid) {
   dropHomeSnap(uid);
   dropBootSnap(uid);
@@ -29526,11 +29199,6 @@ function birthdayMdsToday(d) {
   const leap = (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
   return md === '02-28' && !leap ? ['02-28', '02-29'] : [md];
 }
-function birthdayLabel(md) {
-  const [m, d] = String(md || '').split('-').map((n) => parseInt(n, 10));
-  if (!m || !d) return '';
-  return `${MONTH_NAMES[m - 1]} ${d}`;
-}
 
 function momentDayNumber(d) {
   const x = d || new Date();
@@ -29577,38 +29245,6 @@ function FriendEmoji({ rank, streak, size = 12 }) {
   return <span role="img" aria-label={fe.t} title={fe.t} style={{ fontSize: size, lineHeight: 1, flexShrink: 0 }}>{fe.e}</span>;
 }
 const zscoreMem = new Map();
-function ZScoreLine({ userId }) {
-  const { theme } = useTheme();
-  const [n, setN] = useState(() => (zscoreMem.has(userId) ? zscoreMem.get(userId) : null));
-  const [info, setInfo] = useState(false);
-  useEffect(() => {
-    let alive = true;
-    supabase.rpc('zchat_score', { p_user: userId }).then(({ data, error }) => {
-      if (!alive || error || data == null) return;
-      const v = Math.max(0, Number(data) || 0);
-      zscoreMem.set(userId, v);
-      setN(v);
-    }, () => {});
-    return () => { alive = false; };
-  }, [userId]);
-  if (n == null) return null;
-  return (
-    <>
-      <div role="button" aria-label={`ZChat score ${n}`} onClick={() => setInfo(true)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 10, fontSize: 13, color: theme.muted, cursor: 'pointer' }}>
-        <ScoreIcon size={15} color={theme.coral} />ZChat score <b style={{ color: theme.ink, fontVariantNumeric: 'tabular-nums' }}>{n.toLocaleString('en-US')}</b>
-      </div>
-      {info && <ConfirmSheet title="ZChat score" text="It goes up when you send and get messages, share stories and post. Everyone starts at zero." confirmLabel="Got it" danger={false} zIndex={120} onCancel={() => setInfo(false)} onConfirm={() => setInfo(false)} />}
-    </>
-  );
-}
-function ScoreIcon({ size = 16, color = 'currentColor', style }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style} aria-hidden="true">
-      <path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z" />
-      <path d="M7 6H4.5a2.5 2.5 0 0 0 2.5 4M17 6h2.5a2.5 2.5 0 0 1-2.5 4" />
-    </svg>
-  );
-}
 function FriendshipIcon({ size = 20, color = 'currentColor', strokeWidth = 1.8, style }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" style={style} aria-hidden="true">
@@ -29999,46 +29635,6 @@ function SecretText({ m, myId, onMention }) {
   return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, opacity: 0.7 }}><Spinner size={12} color={theme.muted} />Unlocking</span>;
 }
 
-function focusJoinedIds(d, reactions, senderId) {
-  const ids = new Set([senderId]);
-  (reactions || []).forEach((r) => { if (r && r.emoji === 'zfj') ids.add(r.user_id); });
-  return ids;
-}
-function FocusCard({ d, reactions, myId, senderId, onJoin }) {
-  const { theme } = useTheme();
-  const now = useNow(1000);
-  const start = new Date(d.at).getTime();
-  const end = start + Math.round(Number(d.m) || 25) * 60000;
-  const left = end - now;
-  const done = left <= 0;
-  const joined = focusJoinedIds(d, reactions, senderId);
-  const iJoined = joined.has(myId);
-  const pct = Math.max(0, Math.min(1, (now - start) / Math.max(1, end - start)));
-  const R = 30;
-  const C = 2 * Math.PI * R;
-  const tint = '#7C5CFF';
-  return (
-    <FeatureCardShell colors={[tint]} icon={<FocusIcon size={14} />} label={done ? 'Focus session done' : 'Focus together'} title={String(d.t || 'Focus time').slice(0, 60)}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '2px 4px 10px' }}>
-        <svg width="72" height="72" viewBox="0 0 72 72" aria-hidden="true" style={{ flexShrink: 0 }}>
-          <circle cx="36" cy="36" r={R} fill="none" stroke={theme.dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)'} strokeWidth="6" />
-          <circle cx="36" cy="36" r={R} fill="none" stroke={tint} strokeWidth="6" strokeLinecap="round" strokeDasharray={C} strokeDashoffset={C * (1 - pct)} transform="rotate(-90 36 36)" />
-          <text x="36" y="40" textAnchor="middle" fontSize="13" fontWeight="800" fill={theme.ink} fontFamily={FONT}>{done ? 'Done' : `${Math.round(Number(d.m) || 25)}m`}</text>
-        </svg>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 22, fontWeight: 800, color: theme.ink, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.02em' }}>{done ? 'Nice work' : mmss(left)}</div>
-          <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 2 }}>{joined.size === 1 ? 'Just one so far' : `${joined.size} people focusing`}</div>
-        </div>
-      </div>
-      {!done && (
-        <div role="button" aria-label={iJoined ? 'You joined this focus session' : 'Join focus session'} onClick={(e) => { e.stopPropagation(); if (!iJoined && onJoin) onJoin(); }} className="zchat-press"
-          style={{ height: 40, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 14, fontWeight: 800, cursor: iJoined ? 'default' : 'pointer', background: iJoined ? `${tint}22` : tint, color: iJoined ? tint : '#FFFFFF' }}>
-          {iJoined ? <><Check size={16} />Focusing</> : 'Join and focus'}
-        </div>
-      )}
-    </FeatureCardShell>
-  );
-}
 
 function WatchCard({ d, onOpen }) {
   const { theme } = useTheme();
@@ -31759,57 +31355,6 @@ function ctKeyOfMsg(m) {
   if (!m) return null;
   if (m.group_id) return `g:${m.group_id}`;
   return m.sender_id && m.receiver_id ? albumChatKey(m.sender_id, m.receiver_id) : null;
-}
-function CtFindCard({ d, m, myId, onOpen }) {
-  const { theme } = useTheme();
-  useCtTick();
-  const key = ctKeyOfMsg(m);
-  const c = ctHub.ctx && ctHub.ctx.key === key ? ctHub.ctx : null;
-  useEffect(() => { if (key && d.i) ctLoadPoll(key, d.i); }, [key, d.i]);
-  const e = key ? ctEntry(key) : null;
-  const poll = e ? e.polls.get(d.i) : null;
-  const votes = e ? e.votes.get(d.i) : null;
-  const ready = poll && !poll.missing && Array.isArray(poll.starts);
-  const people = ctPeople(c);
-  const s = ready ? ctFindStats(poll, votes, people) : null;
-  const mine = votes && votes.get(myId);
-  const closed = ready && !!poll.closed_at;
-  const at = closed && poll.picked_at ? new Date(poll.picked_at) : null;
-  const days = ready ? poll.starts.length : 0;
-  return (
-    <FeatureCardShell colors={[theme.coral]} icon={<FindTimeIcon size={14} />} label={closed ? 'Time picked' : 'Find a time'} title={(poll && poll.title) || d.t || 'When works for everyone?'}>
-      {!poll ? <div style={{ height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Spinner size={16} color={theme.muted} /></div>
-        : poll.failed !== undefined ? <div onClick={(ev) => ev.stopPropagation()}><LoadFail small code={poll.failed} onRetry={() => { e.polls.delete(d.i); ctEmit(); ctLoadPoll(key, d.i, true); }} /></div>
-        : poll.missing ? <div style={{ fontSize: 13, color: theme.muted, padding: '6px 2px 4px', lineHeight: 1.45 }}>{poll.setup ? 'This switches on once the latest ZChat setup is finished.' : 'This plan is not available anymore.'}</div> : (
-        <>
-          {at ? (
-            <div style={{ padding: '2px 2px 4px' }}>
-              <div style={{ fontSize: 17, fontWeight: 800, color: theme.ink }}>{ctDayName(at, true)}</div>
-              <div style={{ fontSize: 14, color: theme.ink2, marginTop: 1 }}>{ctTimeLabel(at)}, {fmtDate(at, { day: 'numeric', month: 'long' })}</div>
-            </div>
-          ) : (
-            <div role="button" aria-label="Open the times" onClick={(ev) => { ev.stopPropagation(); if (onOpen) onOpen(); }} style={{ display: 'grid', gridTemplateColumns: `30px repeat(${poll.slots}, minmax(0, 1fr))`, gap: 2, alignItems: 'center', cursor: 'pointer', padding: '2px 0 4px' }}>
-              {poll.starts.map((st, di) => (
-                <React.Fragment key={st}>
-                  <div style={{ fontSize: 10.5, fontWeight: 700, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden' }}>{fmtDate(new Date(st), { weekday: 'short' })}</div>
-                  {Array.from({ length: poll.slots }).map((_, i) => {
-                    const n = s.counts[di * poll.slots + i];
-                    return <div key={i} style={{ height: days > 4 ? 8 : 11, borderRadius: 2.5, background: n ? ctAlpha(theme.coral, 0.2 + 0.8 * (n / people)) : theme.rowBg }} />;
-                  })}
-                </React.Fragment>
-              ))}
-            </div>
-          )}
-          <div style={{ fontSize: 13.5, fontWeight: 700, color: theme.ink, marginTop: 8, lineHeight: 1.35 }}>{closed ? (() => { const n = poll.picked != null ? s.counts[poll.picked] || 0 : 0; return n >= people ? (people === 2 ? 'Works for both of you' : 'Works for everyone') : n ? `${n} of ${people} said they are free then` : 'Picked by the person who planned it'; })() : s.text || 'No one has answered yet'}</div>
-          <div style={{ fontSize: 12, color: theme.muted, marginTop: 2 }}>{s.voters} of {people} answered</div>
-          <div role="button" aria-label={closed ? 'See the times' : mine && mine.slots && mine.slots.length ? 'Change your times' : 'Add your times'} onClick={(ev) => { ev.stopPropagation(); if (onOpen) onOpen(); }} className="zchat-press"
-            style={{ height: 40, marginTop: 10, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 14, fontWeight: 800, cursor: 'pointer', background: closed ? (theme.dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)') : theme.coral, color: closed ? theme.ink : '#FFFFFF' }}>
-            {closed ? 'See the times' : mine && mine.slots && mine.slots.length ? 'Change your times' : 'Add your times'}
-          </div>
-        </>
-      )}
-    </FeatureCardShell>
-  );
 }
 
 function ChatToolsHost({ chatKey, uid, me, peer, group, members, isAdmin, streak, setMessages, placeSentRow, upsertConversation, listForgetTemp, notifyUser, messagesRef, onListen, onJump }) {
@@ -33917,11 +33462,6 @@ function LiveTrayItem({ l, edge }) {
     </div>
   );
 }
-function GoLiveButton({ style }) {
-  const ln = useLiveNow();
-  if (ln.missing) return null;
-  return <button onClick={() => { hapticTap(); liveOpenStart(); }} aria-label="Go live" style={style}><LiveMicGlyph size={18} /></button>;
-}
 function LiveNowStrip({ profile, isSelf }) {
   const { theme } = useTheme();
   const ln = useLiveNow();
@@ -35401,19 +34941,6 @@ function FocusBanner({ focus, onEnd }) {
   );
 }
 
-function ChannelsEntryRow({ onOpen }) {
-  const { theme } = useTheme();
-  return (
-    <div role="button" aria-label="Open channels" onClick={onOpen} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderTop: `1px solid ${theme.border}`, cursor: 'pointer' }}>
-      <span style={{ width: 44, display: 'flex', justifyContent: 'center', color: theme.ink, flexShrink: 0 }}><ChannelIcon size={24} /></span>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 14.5, fontWeight: 700, color: theme.ink }}>Channels</div>
-        <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 1 }}>Follow updates from people and pages</div>
-      </div>
-      <ChevronRight size={18} color={theme.muted} />
-    </div>
-  );
-}
 
 function HistoryLoadingChip({ at }) {
   const { theme } = useTheme();
@@ -36049,9 +35576,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [listFilter, setListFilter] = useState('all');
   const chipHoldRef = useRef({ t: 0, fired: false });
   const [pollComposer, setPollComposer] = useState(false);
-  const [eventComposer, setEventComposer] = useState(false);
-  const [checklistComposer, setChecklistComposer] = useState(false);
-  const [countdownComposer, setCountdownComposer] = useState(false);
   const [contactPicker, setContactPicker] = useState(false);
   const [pickComposer, setPickComposer] = useState(false);
   const [jumpDateOpen, setJumpDateOpen] = useState(false);
@@ -36070,7 +35594,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [onceViewer, setOnceViewer] = useState(null);
   const [showDoodle, setShowDoodle] = useState(false);
   const [paintSeed, setPaintSeed] = useState(null);
-  const [diceSheet, setDiceSheet] = useState(false);
   const [bombOpen, setBombOpen] = useState(false);
   const [railOn] = usePref('zchat-quick-rail');
   const [voiceTyping, setVoiceTyping] = useState(false);
@@ -36420,7 +35943,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [gameSheetFor, setGameSheetFor] = useState(null);
   const [infoFor, setInfoFor] = useState(null);
   const [editsFor, setEditsFor] = useState(null);
-  const [waPage, setWaPage] = useState(null);
   const [waView, setWaView] = useState(null);
   const [screenEffect, setScreenEffect] = useState(null);
   const [badgePrefTick, setBadgePrefTick] = useState(0);
@@ -39573,45 +39095,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       specialLockRef.current = false;
     }
   };
-  const [capsuleOpen, setCapsuleOpen] = useState(false);
   const [wifiOpen, setWifiOpen] = useState(false);
-  const [bagOpen, setBagOpen] = useState(false);
   const [santaStart, setSantaStart] = useState(null);
-  const sendBag = async ({ total, slots, note }) => {
-    const group = activeGroup;
-    const peer = group ? null : activeProfile;
-    if (!group && !peer) return;
-    if (typeof navigator !== 'undefined' && navigator.onLine === false) { showSnack('No connection. Try again when you are back online'); return; }
-    const n = group ? slots : 1;
-    if (!(await spendGate(`Send a gift bag of ${coinsText(total)} to ${group ? group.name : String(peer.name || '').split(' ')[0]}`, { coins: total, send: true }))) return;
-    setBagOpen(false);
-    const uid = session.user.id;
-    const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    const clientId = newClientId();
-    const here = () => (group ? activeGroupIdRef.current === group.id : !!activeProfileRef.current && activeProfileRef.current.id === peer.id && !activeGroupRef.current);
-    gfCardPut('bag', { id: tempId, sender: uid, to: peer ? peer.id : null, group: group ? group.id : null, total, slots: n, share: Math.floor(total / n), opened: 0, left: total, note, opens: [], created_at: new Date().toISOString(), expires_at: new Date(Date.now() + 86400000).toISOString(), closed_at: null, returned: 0 });
-    setMessages((prev) => [...prev, { id: tempId, sender_id: uid, receiver_id: peer ? peer.id : null, group_id: group ? group.id : null, type: 'text', content: `zbag:${JSON.stringify({ i: tempId, n: total, s: n })}`, media_url: null, client_id: clientId, created_at: new Date().toISOString(), read: false, delivered: false, deleted: false, sending: true }]);
-    playUiSound('send');
-    setTimeout(() => scrollChatToBottom(true), 60);
-    const r = await moneyRun(uid, { coins: total, run: async () => {
-      const x = await giftRpc('zchat_bag_send', { p_to: peer ? peer.id : null, p_group: group ? group.id : null, p_total: total, p_slots: n, p_note: note, p_client_id: clientId, p_topic: group ? (groupTopicRef.current || null) : null }, 'Gift bag');
-      return x.error ? { error: x.error } : { ok: true, coins: x.row.coins, row: x.row };
-    } });
-    if (r.error) {
-      setMessages((prev) => prev.filter((x) => x.id !== tempId));
-      listForgetTemp(group ? 'group' : 'dm', group ? group.id : peer.id, tempId);
-      showSnack(r.error);
-      return;
-    }
-    gfCardPut('bag', r.row.bag);
-    if (here() && r.row.message) placeSentRow(tempId, r.row.message);
-    if (peer) {
-      upsertConversation(peer.id, (r.row.message && r.row.message.content) || 'Coin gift bag', 'text');
-      notifyUser(peer.id, me.name, 'Sent you a coin gift bag', `/?dm=${uid}`, me.avatar);
-    } else {
-      groupMembers.filter((gm) => gm.user_id !== uid && gm.profile && !gm.profile.is_bot).forEach((gm) => notifyUser(gm.user_id, `${me.name} in ${group.name}`, `Sent a coin gift bag, ${coinsText(total)}`, `/?group=${group.id}`, me.avatar));
-    }
-  };
   const startSanta = async ({ budget, join, reveal, note }) => {
     const group = santaStart;
     if (!group) return { error: 'Open the group first.' };
@@ -39636,40 +39121,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (here() && x.row.message) placeSentRow(tempId, x.row.message);
     groupMembers.filter((gm) => gm.user_id !== uid && gm.profile && !gm.profile.is_bot).forEach((gm) => notifyUser(gm.user_id, `${me.name} in ${group.name}`, `Started Secret Santa, gifts up to ${coinsText(budget)}`, `/?group=${group.id}`, me.avatar));
     return { ok: true };
-  };
-  const sendCapsule = async ({ body, file, kind, at }) => {
-    const group = activeGroup;
-    const peer = group ? null : activeProfile;
-    if (!group && !peer) return false;
-    if (typeof navigator !== 'undefined' && navigator.onLine === false) { showSnack('No connection. Try again when you are back online'); return false; }
-    const uid = session.user.id;
-    const o = new Date(Math.floor(at / 60000) * 60000).toISOString().replace(/\.\d{3}Z$/, 'Z');
-    const content = `zcap:${JSON.stringify({ o, k: kind || null })}`;
-    const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    const clientId = newClientId();
-    const here = () => (group ? activeGroupIdRef.current === group.id : !!activeProfileRef.current && activeProfileRef.current.id === peer.id && !activeGroupRef.current);
-    setMessages((prev) => [...prev, { id: tempId, sender_id: uid, receiver_id: peer ? peer.id : null, group_id: group ? group.id : null, type: 'text', content, media_url: null, client_id: clientId, created_at: new Date().toISOString(), read: false, delivered: false, deleted: false, sending: true }]);
-    playUiSound('send');
-    setTimeout(() => scrollChatToBottom(true), 60);
-    const drop = (msg) => { setMessages((prev) => prev.filter((x) => x.id !== tempId)); listForgetTemp(group ? 'group' : 'dm', group ? group.id : peer.id, tempId); showSnack(msg); };
-    let path = null;
-    if (file) {
-      const up = await uploadChatMedia(file, uid);
-      if (!up || up.error || !up.url || String(up.url).indexOf('zp:') !== 0) { drop('The file did not go in. Check your connection and try again.'); return false; }
-      path = String(up.url).slice(3);
-    }
-    const { data, error } = await supabase.rpc('zchat_capsule_send', { p_to: peer ? peer.id : null, p_group: group ? group.id : null, p_open_at: o, p_body: body || null, p_media_path: path, p_media_type: path ? kind : null, p_client_id: clientId, p_topic: group ? (groupTopicRef.current || null) : null });
-    const row = data && (Array.isArray(data) ? data[0] : data);
-    if (error || !row || row.id == null) { drop(rpcMissing(error) ? 'Time capsules switch on once the latest ZChat setup is finished.' : friendlyError(error, 'Could not seal it. Try again.')); return false; }
-    capsulePut({ message_id: row.id, open_at: o, body: body || null, media_path: path, media_type: path ? kind : null, mine: true });
-    if (here()) placeSentRow(tempId, row);
-    if (peer) {
-      upsertConversation(peer.id, 'Time capsule', 'text');
-      if (peer.id !== uid) notifyUser(peer.id, me.name, 'Sent you a time capsule', `/?dm=${uid}`, me.avatar);
-    } else {
-      groupMembers.filter((gm) => gm.user_id !== uid && gm.profile && !gm.profile.is_bot).forEach((gm) => notifyUser(gm.user_id, `${me.name} in ${group.name}`, 'Sent a time capsule', `/?group=${group.id}`, me.avatar));
-    }
-    return true;
   };
   const sendDmTo = async (who, content, notifyText) => {
     if (!who || !who.id || who.id === session.user.id) return false;
@@ -44703,7 +44154,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [trTick, setTrTick] = useState(0);
   const [trMap, setTrMap] = useState({});
   const [catchUp, setCatchUp] = useState(null);
-  const [focusSheetOpen, setFocusSheetOpen] = useState(false);
   const [watchComposer, setWatchComposer] = useState(false);
   const [watchParty, setWatchParty] = useState(null);
   const [listenComposer, setListenComposer] = useState(false);
@@ -45628,7 +45078,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     return true;
   };
   const [gifMaker, setGifMaker] = useState(false);
-  const [memeStart, setMemeStart] = useState(false);
   const [pdfExport, setPdfExport] = useState(false);
   const sendOwnMedia = async ({ file, kind, w, h, replyTo, label, fail }) => {
     if ((!activeProfile && !activeGroup) || !file) return false;
@@ -45682,11 +45131,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     setShowStickers(false);
     const content = `zpack:${JSON.stringify({ i: pk.id, n: String(pk.name || 'Stickers').slice(0, 40), c: pk.stickers.length, p: pk.stickers.slice(0, 4) })}`;
     await sendSpecial(content, `Shared a sticker pack: ${pk.name}`);
-  };
-  const sendFocus = async (d) => {
-    const ok = await sendSpecial(`zfocus:${JSON.stringify(d)}`, `Started a ${d.m} minute focus session`);
-    if (ok) { setFocusSheetOpen(false); writeFocus({ until: new Date(d.at).getTime() + d.m * 60000, chat: chatPref, t: d.t || '' }); }
-    return ok;
   };
   const sendWatch = async (d) => {
     const ok = await sendSpecial(`zwatch:${JSON.stringify(d)}`, d.t ? `Watch together: ${d.t}` : 'Started a watch party');
@@ -50745,37 +50189,6 @@ function c4Winner(b) {
   if (b.every(Boolean)) return { who: 3, line: null };
   return null;
 }
-function RpsIcon({ h, size = 28 }) {
-  const gid = `rps${React.useId().replace(/[^a-zA-Z0-9]/g, '')}`;
-  if (h === 'r') {
-    return (
-      <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true" style={{ display: 'block' }}>
-        <defs><linearGradient id={gid} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#CBD5E1" /><stop offset="1" stopColor="#64748B" /></linearGradient></defs>
-        <path d="M7 20.5l2.2 -8.4l7 -5.1l7.6 2.2l3.4 7.4l-3 7.6l-9.4 2.6l-6.2 -2.2z" fill={`url(#${gid})`} stroke="#475569" strokeWidth="1.2" strokeLinejoin="round" />
-        <path d="M10.5 13l5 -3.4l5.2 1.6" fill="none" stroke="rgba(255,255,255,0.75)" strokeWidth="1.4" strokeLinecap="round" />
-        <path d="M14 19.5l3.5 2.2M19.5 16l2 3" stroke="#475569" strokeWidth="1" strokeLinecap="round" opacity="0.6" />
-      </svg>
-    );
-  }
-  if (h === 'p') {
-    return (
-      <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true" style={{ display: 'block' }}>
-        <path d="M8 4.5h11.5l5 5v18H8z" fill="#FFFFFF" stroke="#94A3B8" strokeWidth="1.2" strokeLinejoin="round" />
-        <path d="M19.5 4.5v5h5" fill="#E2E8F0" stroke="#94A3B8" strokeWidth="1.2" strokeLinejoin="round" />
-        <path d="M11.5 14h9.5M11.5 17.5h9.5M11.5 21h6.5" stroke="#3B82F6" strokeWidth="1.4" strokeLinecap="round" opacity="0.7" />
-      </svg>
-    );
-  }
-  return (
-    <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true" style={{ display: 'block' }}>
-      <path d="M13.5 17.5L25 5.5M18.5 17.5L7 5.5" stroke="#94A3B8" strokeWidth="2.6" strokeLinecap="round" />
-      <path d="M13.5 17.5L25 5.5" stroke="#E2E8F0" strokeWidth="1" strokeLinecap="round" />
-      <circle cx="10.5" cy="22.5" r="4.2" fill="none" stroke="#EF4444" strokeWidth="2.6" />
-      <circle cx="21.5" cy="22.5" r="4.2" fill="none" stroke="#EF4444" strokeWidth="2.6" />
-      <circle cx="16" cy="16" r="1.3" fill="#475569" />
-    </svg>
-  );
-}
 const RPS_HANDS = { r: { l: 'Rock', e: '\u270A' }, p: { l: 'Paper', e: '\u270B' }, s: { l: 'Scissors', e: '\u270C\uFE0F' } };
 function rpsRoundWinner(a, b) {
   if (!a || !b || a === b) return 0;
@@ -51111,14 +50524,6 @@ export function mapDistText(meters) {
   if (meters < 1000) return `${Math.max(10, Math.round(meters / 10) * 10)} m away`;
   if (meters < 100000) return `${(meters / 1000).toFixed(meters < 10000 ? 1 : 0)} km away`;
   return `${Math.round(meters / 1000).toLocaleString('en-US')} km away`;
-}
-function MapRoundButton({ label, onClick, children, theme, style }) {
-  return (
-    <div role="button" aria-label={label} onClick={onClick} className="zchat-press"
-      style={{ width: 44, height: 44, borderRadius: '50%', background: theme.dark ? 'rgba(28,28,32,0.94)' : 'rgba(255,255,255,0.97)', color: theme.ink, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 4px 16px rgba(0,0,0,0.22)', flexShrink: 0, ...(style || {}) }}>
-      {children}
-    </div>
-  );
 }
 export function readMyPos() {
   try { const v = JSON.parse(localStorage.getItem('zchat-my-pos') || 'null'); return v && Number.isFinite(v.lat) && Number.isFinite(v.lng) && Date.now() - (v.at || 0) < 86400000 ? v : null; } catch { return null; }
@@ -55542,10 +54947,6 @@ function FeatureCardShell({ width = 252, colors, icon, label, title, children })
   );
 }
 
-function voteIndexOf(votes, userId) {
-  const v = (votes || []).find((r) => r.user_id === userId && typeof r.emoji === 'string' && r.emoji.indexOf('zv:') === 0);
-  return v ? parseInt(v.emoji.slice(3), 10) : -1;
-}
 export function pollPicks(emoji) {
   if (typeof emoji !== 'string' || emoji.indexOf('zv:') !== 0) return [];
   return emoji.slice(3).split(',').map((x) => parseInt(x, 10)).filter((n) => Number.isFinite(n) && n >= 0);
@@ -55779,54 +55180,6 @@ function RetiredCard({ label }) {
     </div>
   );
 }
-function EventCard({ ev, votes, myId, onVote, onShowVotes }) {
-  const { theme } = useTheme();
-  const d = eventDate(ev);
-  const list = (votes || []).filter((r) => typeof r.emoji === 'string' && r.emoji.indexOf('zv:') === 0);
-  const counts = RSVP_OPTIONS.map((_, i) => list.filter((r) => r.emoji === `zv:${i}`).length);
-  const mine = voteIndexOf(list, myId);
-  const past = d && d.getTime() < Date.now() - 3 * 3600 * 1000;
-  const untilMs = d ? d.getTime() - Date.now() : 0;
-  const countdown = !d || past ? '' : untilMs <= 0 ? 'happening now' : untilMs < 3600000 ? `in ${Math.max(1, Math.round(untilMs / 60000))} min` : untilMs < 86400000 ? `in ${Math.round(untilMs / 3600000)} ${Math.round(untilMs / 3600000) === 1 ? 'hour' : 'hours'}` : `in ${Math.round(untilMs / 86400000)} ${Math.round(untilMs / 86400000) === 1 ? 'day' : 'days'}`;
-  const addToCalendar = (e) => {
-    e.stopPropagation();
-    try {
-      const blob = new Blob([eventIcs(ev)], { type: 'text/calendar' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = `${(ev.t || 'event').replace(/[^a-z0-9 ]/gi, '').trim() || 'event'}.ics`;
-      document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 4000);
-    } catch {}
-  };
-  return (
-    <FeatureCardShell colors={['#E8590C']} icon={<CalendarIcon size={14} />} label={past ? 'Event ended' : countdown ? `Event ${countdown}` : 'Event'} title={ev.t}>
-      <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-        <div style={{ width: 54, flexShrink: 0, borderRadius: 14, overflow: 'hidden', textAlign: 'center', boxShadow: '0 3px 0 rgba(0,0,0,0.2)', border: `1px solid ${theme.border}` }}>
-          <div style={{ background: '#EF4444', color: 'white', fontSize: 10.5, fontWeight: 900, padding: '3px 0', letterSpacing: '0.06em' }}>{d ? d.toLocaleString([], { month: 'short' }).toUpperCase() : ''}</div>
-          <div style={{ background: theme.dark ? '#222226' : '#FFFFFF', color: theme.ink, fontSize: 22, fontWeight: 900, padding: '3px 0 5px' }}>{d ? d.getDate() : '?'}</div>
-        </div>
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontSize: 13.5, fontWeight: 800, color: theme.ink }}>{d ? (() => { const a = new Date(); a.setHours(0, 0, 0, 0); const b = new Date(d); b.setHours(0, 0, 0, 0); const diff = Math.round((b - a) / 86400000); return diff === 0 ? 'Today' : diff === 1 ? 'Tomorrow' : d.toLocaleString([], { weekday: 'long' }); })() : ''}</div>
-          <div style={{ fontSize: 13, color: theme.muted, marginTop: 1 }}>{d ? fmtHM(d) : ''}</div>
-          {ev.p && <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12.5, color: theme.muted, marginTop: 2, minWidth: 0 }}><MapPinIcon size={13} /><span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ev.p}</span></div>}
-        </div>
-      </div>
-      {ev.n && <div style={{ fontSize: 13, color: theme.ink, marginTop: 9, lineHeight: 1.4, wordBreak: 'break-word' }}>{ev.n}</div>}
-      <div style={{ display: 'flex', gap: 6, marginTop: 11 }}>
-        {RSVP_OPTIONS.map(([l, col], i) => (
-          <button key={l} type="button" aria-label={`Answer ${l}`} onClick={(e) => { e.stopPropagation(); if (onVote) onVote(i); }} className="zchat-gbtn" style={{ ...gameBtnStyle(mine === i ? col : 'white'), flex: 1, height: 40, padding: '0 4px', fontSize: 12, borderRadius: 12, flexDirection: 'column', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1.1 }}>
-            <span>{l}</span><span style={{ fontSize: 10.5, opacity: 0.85 }}>{counts[i]}</span>
-          </button>
-        ))}
-      </div>
-      <div style={{ marginTop: 9, display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: onShowVotes && list.length ? 'space-between' : 'center', gap: '6px 10px', fontSize: 12.5, fontWeight: 800, color: theme.coral }}>
-        {onShowVotes && list.length > 0 && <span role="button" aria-label="See answers" onClick={(e) => { e.stopPropagation(); onShowVotes(); }} style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', whiteSpace: 'nowrap' }}><Users size={14} />See answers</span>}
-        <span role="button" aria-label="Add to calendar" onClick={addToCalendar} style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', whiteSpace: 'nowrap' }}><CalendarIcon size={14} />Add to calendar</span>
-      </div>
-    </FeatureCardShell>
-  );
-}
 
 function ChecklistIcon({ size = 16, color = 'currentColor', strokeWidth = 2, style }) {
   return (
@@ -55929,76 +55282,7 @@ function checklistState(votes) {
   return best || { ts: 0, mask: 0 };
 }
 
-function ChecklistCard({ list, votes, onToggle }) {
-  const { theme } = useTheme();
-  const st = checklistState(votes);
-  const done = list.i.map((_, i) => !!(st.mask & (1 << i)));
-  const n = done.filter(Boolean).length;
-  const all = n === list.i.length;
-  const green = '#12B886';
-  return (
-    <FeatureCardShell colors={[green]} icon={<ChecklistIcon size={14} />} label={all ? 'Checklist done' : 'Checklist'} title={list.t}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        {list.i.map((item, i) => (
-          <div key={i} role="button" aria-label={`${done[i] ? 'Untick' : 'Tick'} ${item}`} onClick={(e) => { e.stopPropagation(); if (onToggle) onToggle(i); }} className="zchat-row-press"
-            style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 6px', borderRadius: 10, cursor: onToggle ? 'pointer' : 'default' }}>
-            <span style={{ width: 22, height: 22, borderRadius: '50%', flexShrink: 0, border: `2px solid ${done[i] ? green : theme.muted}`, background: done[i] ? green : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.15s ease, border-color 0.15s ease' }}>
-              {done[i] && <Check size={13} color="#FFFFFF" strokeWidth={3.2} />}
-            </span>
-            <span style={{ flex: 1, minWidth: 0, fontSize: 14.5, fontWeight: 600, color: done[i] ? theme.muted : theme.ink, textDecoration: done[i] ? 'line-through' : 'none', wordBreak: 'break-word' }}>{item}</span>
-          </div>
-        ))}
-      </div>
-      <div style={{ marginTop: 8, padding: '0 4px' }}>
-        <div style={{ height: 5, borderRadius: 3, background: theme.dark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)', overflow: 'hidden' }}>
-          <div style={{ width: `${list.i.length ? (n / list.i.length) * 100 : 0}%`, height: '100%', background: green, borderRadius: 3, transition: 'width 0.3s ease' }} />
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 11.5, fontWeight: 700, color: theme.muted }}>
-          <span>{n} of {list.i.length} done</span>
-          <span>{onToggle ? 'Anyone here can tick' : ''}</span>
-        </div>
-      </div>
-    </FeatureCardShell>
-  );
-}
 
-function BillCard({ bill, votes, myId, senderId, onToggle, onShowVotes }) {
-  const { theme } = useTheme();
-  const share = bill.a / bill.n;
-  const paid = (votes || []).filter((r) => r && r.emoji === 'zv:0' && r.user_id !== senderId);
-  const iPaid = paid.some((r) => r.user_id === myId);
-  const mine = myId === senderId;
-  const owed = Math.max(1, bill.n - 1);
-  const settled = paid.length >= owed;
-  const blue = '#1C7ED6';
-  return (
-    <FeatureCardShell colors={[blue]} icon={<BillIcon size={14} />} label={settled ? 'Bill settled' : 'Split the bill'} title={bill.t}>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, padding: '0 2px' }}>
-        <div style={{ fontSize: 26, fontWeight: 900, color: theme.ink, letterSpacing: '-0.02em' }}>{billMoney(bill.c, bill.a)}</div>
-        <div style={{ fontSize: 12.5, color: theme.muted, fontWeight: 700, textAlign: 'right' }}>{bill.n} people</div>
-      </div>
-      <div style={{ marginTop: 6, padding: '10px 12px', borderRadius: 12, background: theme.dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span style={{ fontSize: 13, color: theme.muted, fontWeight: 600 }}>Each pays</span>
-        <span style={{ fontSize: 17, fontWeight: 900, color: theme.ink }}>{billMoney(bill.c, share)}</span>
-      </div>
-      <div style={{ display: 'flex', gap: 4, marginTop: 10 }}>
-        {Array.from({ length: Math.min(owed, 12) }).map((_, i) => (
-          <div key={i} style={{ flex: 1, height: 5, borderRadius: 3, background: i < paid.length ? '#12B886' : (theme.dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.09)') }} />
-        ))}
-      </div>
-      <div style={{ fontSize: 11.5, fontWeight: 700, color: theme.muted, marginTop: 6 }}>{settled ? 'Everyone paid back' : `${paid.length} of ${owed} paid back`}</div>
-      {!mine && onToggle && (
-        <button type="button" aria-label={iPaid ? 'Undo paid' : 'Mark my share as paid'} onClick={(e) => { e.stopPropagation(); onToggle(); }} className="zchat-gbtn"
-          style={{ ...gameBtnStyle(iPaid ? 'white' : 'green'), width: '100%', height: 42, marginTop: 10, fontSize: 13.5, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-          {iPaid ? <><Check size={15} strokeWidth={3} />You paid</> : `I paid ${billMoney(bill.c, share)}`}
-        </button>
-      )}
-      {(mine || paid.length > 0) && onShowVotes && (
-        <div role="button" aria-label="See who paid" onClick={(e) => { e.stopPropagation(); onShowVotes(); }} style={{ marginTop: 9, textAlign: 'center', fontSize: 12.5, fontWeight: 800, color: blue, cursor: 'pointer' }}>See who paid</div>
-      )}
-    </FeatureCardShell>
-  );
-}
 
 function useTicker(active, ms) {
   const [, setT] = useState(0);
@@ -56261,47 +55545,6 @@ function CapsuleCard({ d, m, isMe, myId, senderName, onOpenImage }) {
   return <div onClick={(e) => e.stopPropagation()} style={shell}>{letter}</div>;
 }
 
-function CountdownCard({ cd }) {
-  const { theme } = useTheme();
-  const target = new Date(cd.d).getTime();
-  const left = target - Date.now();
-  const running = left > 0;
-  useTicker(running, 1000);
-  const wasRunning = useRef(running);
-  useEffect(() => {
-    if (wasRunning.current && !running) {
-      try { window.dispatchEvent(new CustomEvent('zchat-screen-fx', { detail: 'confetti' })); } catch {}
-      hapticTap();
-    }
-    wasRunning.current = running;
-  }, [running]);
-  const s = Math.max(0, Math.floor(left / 1000));
-  const units = [[Math.floor(s / 86400), 'days'], [Math.floor((s % 86400) / 3600), 'hours'], [Math.floor((s % 3600) / 60), 'min'], [s % 60, 'sec']];
-  const when = new Date(target);
-  const violet = '#7048E8';
-  return (
-    <FeatureCardShell colors={[violet]} icon={<CountdownIcon size={14} />} label={running ? 'Countdown' : 'Countdown finished'} title={cd.t}>
-      {running ? (
-        <div style={{ display: 'flex', gap: 6 }}>
-          {units.map(([v, l]) => (
-            <div key={l} style={{ flex: 1, minWidth: 0, textAlign: 'center', padding: '9px 0 7px', borderRadius: 12, background: theme.dark ? 'rgba(112,72,232,0.22)' : 'rgba(112,72,232,0.1)' }}>
-              <div style={{ fontSize: 21, fontWeight: 900, color: theme.ink, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>{String(v).padStart(2, '0')}</div>
-              <div style={{ fontSize: 10.5, fontWeight: 800, color: theme.muted, marginTop: 2 }}>{l}</div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div style={{ textAlign: 'center', padding: '10px 0 6px' }}>
-          <div style={{ fontSize: 22, fontWeight: 900, color: violet }}>It is time</div>
-          <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 3 }}>{timeAgoLong(when.toISOString())}</div>
-        </div>
-      )}
-      <div style={{ marginTop: 9, fontSize: 12.5, fontWeight: 700, color: theme.muted, textAlign: 'center' }}>
-        {fmtDate(when, { weekday: 'short', day: 'numeric', month: 'short', year: when.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined })} at {fmtHM(when)}
-      </div>
-    </FeatureCardShell>
-  );
-}
 
 function PickWheel({ size = 60 }) {
   const cols = ['#FF6B6B', '#FFD43B', '#51CF66', '#339AF0', '#845EF7', '#FF922B'];
@@ -56324,42 +55567,6 @@ function PickWheel({ size = 60 }) {
   );
 }
 
-function PickCard({ d, fresh, ink }) {
-  const { theme } = useTheme();
-  const [shown, setShown] = useState(() => (fresh ? 0 : d.v[0]));
-  const [spinning, setSpinning] = useState(!!fresh);
-  useEffect(() => {
-    if (!fresh) return undefined;
-    let n = 0;
-    let delay = 70;
-    let t = 0;
-    const step = () => {
-      n += 1;
-      if (n >= 16) { setShown(d.v[0]); setSpinning(false); hapticTap(); return; }
-      setShown((x) => (x + 1) % d.o.length);
-      delay = Math.round(delay * 1.13);
-      t = setTimeout(step, delay);
-    };
-    t = setTimeout(step, delay);
-    return () => clearTimeout(t);
-  }, []);
-  return (
-    <div style={{ width: 236, maxWidth: '100%', padding: '12px 14px', borderRadius: 18, background: theme.dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', boxSizing: 'border-box' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div className={spinning ? 'zchat-pick-spin' : ''} style={{ flexShrink: 0 }}><PickWheel size={42} /></div>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: ink || theme.muted, opacity: ink ? 0.75 : 1 }}>{spinning ? 'Picking' : 'Picked for you'}</div>
-          <div key={shown} className={spinning ? '' : 'zchat-roll-land'} style={{ fontSize: 18, fontWeight: 900, color: ink || theme.ink, marginTop: 1, wordBreak: 'break-word', lineHeight: 1.2 }}>{d.o[shown]}</div>
-        </div>
-      </div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 10 }}>
-        {d.o.map((o, i) => (
-          <span key={i} style={{ fontSize: 11.5, fontWeight: 700, padding: '3px 8px', borderRadius: 10, background: !spinning && i === d.v[0] ? '#845EF7' : (theme.dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'), color: !spinning && i === d.v[0] ? '#FFFFFF' : (ink || theme.muted), maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o}</span>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 function PickComposerSheet({ onClose, onSend }) {
   useBackClose(true, onClose);
@@ -56389,41 +55596,6 @@ function PickComposerSheet({ onClose, onSend }) {
   );
 }
 
-function CountdownComposerPage({ onClose, onSend }) {
-  useBackClose(true, onClose);
-  const { theme } = useTheme();
-  const pad = (n) => String(n).padStart(2, '0');
-  const soon = new Date(Date.now() + 7 * 86400000);
-  const [title, setTitle] = useState('');
-  const [date, setDate] = useState(`${soon.getFullYear()}-${pad(soon.getMonth() + 1)}-${pad(soon.getDate())}`);
-  const [time, setTime] = useState('18:00');
-  const [busy, setBusy] = useState(false);
-  const when = new Date(`${date}T${time || '00:00'}`);
-  const future = !Number.isNaN(when.getTime()) && when.getTime() > Date.now() + 30000;
-  const ok = title.trim().length > 0 && future;
-  const field = { ...inputStyle(theme), fontSize: 15.5 };
-  const submit = async () => {
-    if (!ok || busy) return;
-    setBusy(true);
-    await onSend({ t: title.trim().slice(0, 80), d: when.toISOString() });
-    setBusy(false);
-  };
-  return (
-    <FullPage title="New countdown" subtitle="Count down to something together" onBack={onClose} zIndex={70}
-      footer={<BigButton label={busy ? 'Sending' : 'Send countdown'} disabled={!ok || busy} onClick={submit} />}>
-      <PageArt k="event" text="Birthdays, trips, exams or a new episode. Everyone sees the same clock tick down." />
-      <IgHeading>Counting down to</IgHeading>
-      <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Summer trip" aria-label="Countdown title" maxLength={80} style={field} />
-      <IgHeading>When</IgHeading>
-      <div style={{ display: 'flex', gap: 8 }}>
-        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} aria-label="Countdown date" style={{ ...field, flex: 1.3 }} />
-        <input type="time" value={time} onChange={(e) => setTime(e.target.value)} aria-label="Countdown time" style={{ ...field, flex: 1 }} />
-      </div>
-      {!future && date && <div style={{ fontSize: 13, color: theme.danger, fontWeight: 700, padding: '8px 2px 0' }}>Pick a time in the future</div>}
-      <div style={{ fontSize: 12.5, color: theme.muted, lineHeight: 1.5, padding: '10px 2px 12px' }}>When it reaches zero, confetti fills the chat for whoever has it open.</div>
-    </FullPage>
-  );
-}
 
 function ContactPickerPage({ myId, recent, onClose, onPick }) {
   useBackClose(true, onClose);
@@ -57129,45 +56301,6 @@ function PipIcon({ size = 21, color = 'currentColor', strokeWidth = 2 }) {
   );
 }
 
-function EventComposerPage({ onClose, onSend }) {
-  useBackClose(true, onClose);
-  const { theme } = useTheme();
-  const pad = (n) => String(n).padStart(2, '0');
-  const now = new Date(Date.now() + 3600 * 1000);
-  const [title, setTitle] = useState('');
-  const [date, setDate] = useState(`${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`);
-  const [time, setTime] = useState(`${pad(now.getHours())}:00`);
-  const [place, setPlace] = useState('');
-  const [note, setNote] = useState('');
-  const [busy, setBusy] = useState(false);
-  const when = new Date(`${date}T${time || '00:00'}`);
-  const ok = title.trim().length > 0 && !Number.isNaN(when.getTime());
-  const field = { ...inputStyle(theme), fontSize: 15.5 };
-  const submit = async () => {
-    if (!ok || busy) return;
-    setBusy(true);
-    await onSend({ t: title.trim().slice(0, 120), d: when.toISOString(), p: place.trim().slice(0, 120) || undefined, n: note.trim().slice(0, 300) || undefined });
-    setBusy(false);
-  };
-  return (
-    <FullPage title="New event" subtitle="Plan something together" onBack={onClose} zIndex={70}
-      footer={<BigButton label={busy ? 'Sending' : 'Send event'} disabled={!ok || busy} onClick={submit} />}>
-      <PageArt k="event" text="Plan something. Everyone can say if they are going." />
-      <IgHeading>What</IgHeading>
-      <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Movie night, football, study group" aria-label="Event title" maxLength={120} style={field} />
-      <IgHeading>When</IgHeading>
-      <div style={{ display: 'flex', gap: 8 }}>
-        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} aria-label="Event date" style={{ ...field, flex: 1.3 }} />
-        <input type="time" value={time} onChange={(e) => setTime(e.target.value)} aria-label="Event time" style={{ ...field, flex: 1 }} />
-      </div>
-      <IgHeading>Where</IgHeading>
-      <input value={place} onChange={(e) => setPlace(e.target.value)} placeholder="Optional" aria-label="Event place" maxLength={120} style={field} />
-      <IgHeading>Note</IgHeading>
-      <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Optional details" aria-label="Event note" maxLength={300} rows={3} style={{ ...field, resize: 'none', lineHeight: 1.4 }} />
-      <div style={{ fontSize: 12.5, color: theme.muted, lineHeight: 1.5, padding: '10px 2px 12px' }}>Friends answer Going, Maybe or Can't go and can add it to their calendar.</div>
-    </FullPage>
-  );
-}
 
 const DEFAULT_QUICK_REPLIES = [
   { k: 'hi', t: 'Hey! How are you doing?' },
@@ -57277,14 +56410,6 @@ function reminderChoices() {
   return list;
 }
 
-function Wordmark({ size = 24 }) {
-  const { theme } = useTheme();
-  return (
-    <span aria-label="ZChat" style={{ fontFamily: FONT, fontSize: size, fontWeight: 900, letterSpacing: '-0.055em', lineHeight: 1, color: theme.ink, userSelect: 'none' }}>
-      <span style={{ color: theme.coral }}>z</span>chat
-    </span>
-  );
-}
 
 function ComposerIconButton({ label, on, onClick, children, className }) {
   const { theme } = useTheme();
@@ -57303,17 +56428,6 @@ export function PlusCircleIcon({ size = 22, color = 'currentColor', strokeWidth 
   );
 }
 
-function HomeTopBar({ me, onAvatar, right }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 10px 10px 16px', flexShrink: 0 }}>
-      <div role="button" aria-label="My profile" onClick={onAvatar} className="zchat-press" style={{ display: 'flex', cursor: 'pointer', flexShrink: 0 }}>
-        <Avatar emoji={me ? me.avatar : null} name={me ? me.name : ''} size={32} />
-      </div>
-      <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center' }}><Wordmark size={25} /></div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>{right}</div>
-    </div>
-  );
-}
 
 function ActiveStrip({ items: given }) {
   const { theme } = useTheme();
@@ -57999,97 +57113,7 @@ function diceSummary(d) {
 }
 const diceRolledOnce = new Set();
 
-function RollDie({ n, size = 58 }) {
-  const P = { 1: [[1, 1]], 2: [[0, 0], [2, 2]], 3: [[0, 0], [1, 1], [2, 2]], 4: [[0, 0], [2, 0], [0, 2], [2, 2]], 5: [[0, 0], [2, 0], [1, 1], [0, 2], [2, 2]], 6: [[0, 0], [2, 0], [0, 1], [2, 1], [0, 2], [2, 2]] };
-  return (
-    <svg width={size} height={size} viewBox="0 0 60 60" aria-hidden="true" style={{ display: 'block' }}>
-      <rect x="3" y="5" width="54" height="52" rx="13" fill="#D9D4E8" />
-      <rect x="3" y="2" width="54" height="52" rx="13" fill="#FFFFFF" stroke="#2B2540" strokeWidth="2.6" />
-      {(P[n] || P[1]).map(([px, py], i) => <circle key={i} cx={15 + px * 15} cy={13 + py * 15} r="5" fill={n === 1 ? '#E8604F' : '#2B2540'} />)}
-    </svg>
-  );
-}
-function RollCoin({ side, size = 64 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true" style={{ display: 'block' }}>
-      <circle cx="32" cy="34" r="28" fill="#C88A12" />
-      <circle cx="32" cy="31" r="28" fill="#FFD24D" stroke="#2B2540" strokeWidth="2.6" />
-      <circle cx="32" cy="31" r="20" fill="none" stroke="#E0A92E" strokeWidth="3" />
-      {side === 'h'
-        ? <path d="M23 22 H41 L24 40 H41" fill="none" stroke="#7A4E05" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
-        : <path d={artStarPath(32, 31, 13, 6)} fill="#7A4E05" />}
-    </svg>
-  );
-}
-function RollCard({ d, fresh, ink }) {
-  const { theme } = useTheme();
-  const [faces, setFaces] = useState(() => (fresh ? d.v.map(() => (d.k === 'coin' ? 'h' : 1)) : d.v));
-  const [rolling, setRolling] = useState(!!fresh);
-  const [landed, setLanded] = useState(false);
-  useEffect(() => {
-    if (!fresh) return undefined;
-    let n = 0;
-    const iv = setInterval(() => {
-      n += 1;
-      if (n >= 11) { clearInterval(iv); setFaces(d.v); setRolling(false); setLanded(true); hapticTap(); return; }
-      setFaces(d.v.map(() => (d.k === 'coin' ? (n % 2 ? 't' : 'h') : 1 + Math.floor(Math.random() * 6))));
-    }, 80);
-    return () => clearInterval(iv);
-  }, []);
-  const total = d.k === 'dice' ? d.v.reduce((a, b) => a + b, 0) : 0;
-  const label = rolling ? (d.k === 'coin' ? 'Flipping' : 'Rolling') : d.k === 'coin' ? (d.v[0] === 'h' ? 'Heads' : 'Tails') : d.v.length > 1 ? `${d.v.join(' + ')} = ${total}` : `You got ${d.v[0]}`;
-  const anim = rolling ? (d.k === 'coin' ? 'zchat-coin-flip' : 'zchat-die-tumble') : landed ? 'zchat-roll-land' : '';
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 18, background: theme.dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', minWidth: 170 }}>
-      <div style={{ display: 'flex', gap: 8 }}>
-        {faces.map((f, i) => (
-          <div key={i} className={anim} style={{ animationDelay: rolling ? `${i * 70}ms` : '0ms', willChange: rolling ? 'transform' : 'auto' }}>
-            {d.k === 'coin' ? <RollCoin side={f} /> : <RollDie n={f} />}
-          </div>
-        ))}
-      </div>
-      <div style={{ minWidth: 0 }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: ink || theme.muted, opacity: ink ? 0.75 : 1 }}>{d.k === 'coin' ? 'Coin flip' : d.v.length > 1 ? 'Two dice' : 'Dice'}</div>
-        <div style={{ fontSize: 17, fontWeight: 800, color: ink || theme.ink, marginTop: 1 }}>{label}</div>
-      </div>
-    </div>
-  );
-}
 
-function DiceSheet({ onClose, onPick }) {
-  useBackClose(true, onClose);
-  const { theme } = useTheme();
-  const drag = useSheetDrag(onClose);
-  const opts = [
-    { k: 'd1', label: 'Roll a dice', sub: 'One to six', art: <RollDie n={5} size={60} /> },
-    { k: 'd2', label: 'Roll two dice', sub: 'Two to twelve', art: <div style={{ display: 'flex', gap: 5, transform: 'rotate(-4deg)' }}><RollDie n={3} size={44} /><div style={{ transform: 'translateY(8px) rotate(9deg)' }}><RollDie n={6} size={44} /></div></div> },
-    { k: 'coin', label: 'Flip a coin', sub: 'Heads or tails', art: <RollCoin side="h" size={62} /> },
-    { k: 'pick', label: 'Pick one', sub: 'From your own list', art: <PickWheel size={62} /> },
-  ];
-  return (
-    <Portal>
-      <div onClick={onClose} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 640, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT }}>
-        <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" {...drag.sheetProps} style={{ ...drag.sheetStyle, width: '100%', maxWidth: 480, background: theme.panelBg, borderRadius: '22px 22px 0 0', padding: '0 14px calc(16px + env(safe-area-inset-bottom))', boxSizing: 'border-box' }}>
-          <div data-sheet-handle="true" style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 6px', touchAction: 'none' }}><div style={{ width: 36, height: 4, borderRadius: 2, background: theme.border }} /></div>
-          <div data-sheet-handle="true" style={{ textAlign: 'center', padding: '4px 16px 2px', touchAction: 'none' }}>
-            <div style={{ fontSize: 16, fontWeight: 800, color: theme.ink }}>Dice and coin</div>
-            <div style={{ fontSize: 13, color: theme.muted, marginTop: 3 }}>Everyone in the chat sees the same result</div>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 6, marginTop: 10 }}>
-            {opts.map((o) => (
-              <button key={o.k} type="button" aria-label={o.label} className="zchat-press zdice-opt" onClick={() => { playUiSound('tap'); onPick(o.k); }}
-                style={{ border: 'none', background: 'transparent', padding: '14px 4px 10px', borderRadius: 18, display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'pointer', color: theme.ink, fontFamily: FONT, WebkitTapHighlightColor: 'transparent' }}>
-                <div className="zdice-art" style={{ height: 70, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{o.art}</div>
-                <div style={{ fontSize: 14, fontWeight: 700, marginTop: 12, textAlign: 'center' }}>{o.label}</div>
-                <div style={{ fontSize: 12, color: theme.muted, marginTop: 2, textAlign: 'center' }}>{o.sub}</div>
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-    </Portal>
-  );
-}
 
 export function bioB64u(buf) {
   const bytes = new Uint8Array(buf);
@@ -59002,19 +58026,7 @@ function G3Card({ x, y, w = 26, h = 36, rot = 0, face = '#FFFFFF', back, childre
   );
 }
 
-function g3Pip(cx, cy, r, k) {
-  return <ellipse key={k} cx={cx} cy={cy} rx={r} ry={r * 0.62} fill="#FFFFFF" />;
-}
 
-function g3Die(P, x, y, z, n, color, kk) {
-  const s = 6;
-  const out = [<G3Box key="b" P={P} x={x} y={y} z={z} w={s} d={s} h={s} color={color} />];
-  const top = { 1: [[3, 3]], 2: [[1.6, 1.6], [4.4, 4.4]], 3: [[1.4, 1.4], [3, 3], [4.6, 4.6]], 4: [[1.6, 1.6], [4.4, 1.6], [1.6, 4.4], [4.4, 4.4]], 5: [[1.5, 1.5], [4.5, 1.5], [3, 3], [1.5, 4.5], [4.5, 4.5]], 6: [[1.5, 1.4], [4.5, 1.4], [1.5, 3], [4.5, 3], [1.5, 4.6], [4.5, 4.6]] };
-  (top[n] || top[5]).forEach(([a, b], i) => { const p = P(x + a, y + b, z + s); out.push(g3Pip(p[0], p[1], 1.25, `t${i}`)); });
-  [[1.6, 4.4], [4.4, 1.6]].forEach(([a, h], i) => { const p = P(x + a, y + s, z + h); out.push(<ellipse key={`l${i}`} cx={p[0]} cy={p[1]} rx="1.05" ry="1.25" fill="#FFFFFF" opacity="0.92" />); });
-  [[3, 3]].forEach(([b, h], i) => { const p = P(x + s, y + b, z + h); out.push(<ellipse key={`r${i}`} cx={p[0]} cy={p[1]} rx="1.05" ry="1.25" fill="#FFFFFF" opacity="0.85" />); });
-  return <g key={kk}>{out}</g>;
-}
 
 function g3Letter(x, y, w, ch, color, ink = '#FFFFFF', k, depth = 3.2) {
   return (
@@ -59852,7 +58864,7 @@ function svgMarkup(node) {
   return `<${node.type}${attrs}>${svgMarkup(node.props.children)}</${node.type}>`;
 }
 const gameArtSrcs = new Map();
-const GAME_ART_FILES = { zombie: '/zombie-art3s.webp', duo: '/duo-art.webp', gulp: '/gulp-art.webp', gulpco: '/gulp-art.webp', roll: '/roll-art.webp', race: '/race-art.webp', siege: '/bolt-art.webp' };
+const GAME_ART_FILES = { zombie: '/zombie-art3s.webp', duo: '/duo-art.webp', gulp: '/gulp-art.webp', gulpco: '/gulp-art.webp', roll: '/roll-art.webp', race: '/race-art.webp', siege: '/bolt-art2.webp' };
 function gameArtSrc(kIn) {
   const key = String(kIn == null ? '' : kIn);
   if (GAME_ART_FILES[key]) return GAME_ART_FILES[key];
@@ -60726,13 +59738,6 @@ function g1At(messages, id, n) {
   }
   return null;
 }
-function g1MsgOf(messages, id) {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const m = messages[i];
-    if (m && typeof m.content === 'string' && m.content.indexOf(id) >= 0) { const st = parseGameMessage(m.content); if (st && st.id === id) return m; }
-  }
-  return null;
-}
 export function g1Clock(ms) { return mmss(Math.max(0, ms || 0)); }
 export function g1Test() { return typeof window !== 'undefined' && !!window.__fakeDb; }
 
@@ -61035,12 +60040,6 @@ export function g1Outcome(st, myId) {
   if (!st.w) return null;
   if (st.w === 'd') return 'draw';
   return st.w === (myId === st.x ? 'x' : 'o') ? 'win' : 'lose';
-}
-function g1Status(st, myId, live, peer, turnText) {
-  const out = g1Outcome(st, myId);
-  if (out) return out === 'draw' ? 'Draw' : out === 'win' ? 'You won' : `${peer} won`;
-  if (!live) return turnText ? `${turnText}` : 'Earlier move';
-  return st.t === myId ? 'Your turn' : 'Their turn';
 }
 
 export function G1BallDots({ ids, size = 11 }) {

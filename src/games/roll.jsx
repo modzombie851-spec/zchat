@@ -4,7 +4,7 @@ import { SkillFace } from './gskill.jsx';
 import { Avatar, Portal, useBackClose, hapticTap, FONT, Spinner } from '../App.jsx';
 import { useRoomLink } from './relay.jsx';
 import { EMOTES, Sheet, injectCss, useGameChat, ChatSheet } from './livekit.jsx';
-import { GBtn, GHold, GPill, GPanel, GChip, GTitle, GIcon, GHudBtn, GHudPanel, GHint, GStat, GNotices, useNotices, useWatchNotices, stagePoint, injectKitCss, kitTap, pressProps, maxDpr, newBudget, budgetTick, INK, useCtlLook, useGameStage, GControlsPanel, GVolBars, GLobby, GSlot, GLobbySheet, GTalkers, GWatchBar, GSkin, GChatFeed, useChatFeed, GJoinAsks } from './gamekit.jsx';
+import { GBtn, GPill, GPanel, GChip, GTitle, GIcon, GHudBtn, GHudPanel, GHint, GStat, GNotices, useNotices, useWatchNotices, stagePoint, injectKitCss, kitTap, pressProps, newBudget, budgetTick, INK, useCtlLook, useGameStage, GControlsPanel, GVolBars, GLobby, GSlot, GLobbySheet, GTalkers, GWatchBar, GSkin, GChatFeed, useChatFeed, GJoinAsks } from './gamekit.jsx';
 import { Sfx } from './sfx.js';
 import { setWatchAllowed, useLiveBeacon, useGamePrivacy, useJoinAsks } from './live.js';
 import { WORLDS, LEVEL_N, BALLS, R, levelOf, levelName, makeWorld, mkBall, stepBall, interact, applyEvent, pressedButtons, gatesToOpen, stepPlates, foePos, clamp, demoSetup, demoStep, demoStarts, clipStart, clipRun, DEMO_DT } from './rollengine.js';
@@ -96,7 +96,6 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
   const camKRef = useRef(null);
   const gamePriv = useGamePrivacy();
   const allowWatch = gamePriv.show && gamePriv.watch;
-  const setAllowWatch = () => {};
   const look = useCtlLook('roll');
   const GS = useGameStage(look);
   const side = GS.side, land = GS.land;

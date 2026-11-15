@@ -203,11 +203,6 @@ function anchorPlayers(G) {
   if (ps.length) return ps;
   return G.order.map((k) => G.pl[k]).filter((p) => p && !p.out);
 }
-function nearestPlayer(G, x, y) {
-  let best = null, bd = Infinity;
-  for (const p of anchorPlayers(G)) { const d = Math.hypot(p.x - x, p.y - y) / viewOf(p.n); if (d < bd) { bd = d; best = p; } }
-  return best;
-}
 
 function pickSpecies(G, zone, want) {
   const R = G.rng;

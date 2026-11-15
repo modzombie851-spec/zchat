@@ -71,7 +71,6 @@ function basisAt(p, d) {
   return new Float32Array([x[0], x[1], x[2], 0, y[0], y[1], y[2], 0, z[0], z[1], z[2], 0, p[0], p[1], p[2], 1]);
 }
 
-const GUN_ALIAS = { rifle: 'rifle', shotgun: 'shotgun', pistol: 'pistol', sniper: 'sniper', smg: 'smg', bat: 'bat' };
 
 function face(m, cy, cz, o) {
   const skin = C(o.skin);

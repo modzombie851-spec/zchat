@@ -14,7 +14,6 @@ const RAIL = ['#5A3420', '#2B160B', '#86563A'];
 const LAMPS = [[TW / 2, TH * 0.2], [TW / 2, TH * 0.5], [TW / 2, TH * 0.8]];
 const LAMP_H = 1150;
 const FPS_REC = 120;
-const LABEL_FONT = "800 12px -apple-system, BlinkMacSystemFont, 'SF Pro Rounded', 'Segoe UI', Roboto, sans-serif";
 
 defineSfx('poolCue', (c, out, o) => {
   const v = clamp(o.v == null ? 0.5 : o.v, 0.05, 1);

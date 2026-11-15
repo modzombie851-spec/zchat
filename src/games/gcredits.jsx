@@ -71,7 +71,6 @@ const GROUPS = [
       ['Spas 12 apocalypse', 'minhnguyen2k', 'https://sketchfab.com/minhnguyen2k', 'CC BY 4.0'],
       ['C4 bomb low poly', 'Abel099', 'c4-bomb-low-poly-1a75fffa279d48e88a6f86d644fb227c'],
       ['Armor plates', 'BarnusModels', 'armor-plates-75e70ae8d7a44f81bc9ff20e4eb7a9e7', 'Sketchfab standard license'],
-      ['Bolt War blasters', 'Kenney', 'https://kenney.nl/assets/blaster-kit', 'CC0'],
     ],
   },
   {
@@ -79,9 +78,7 @@ const GROUPS = [
     items: [
       ['Survivors, zombies and their animations', 'Mixamo by Adobe', 'https://www.mixamo.com', 'Mixamo license'],
       ['German Shepherd dog', 'RetroStyle Games', 'https://retrostylegames.artstation.com/store/5Y6zX/german-shepherd-3d-model', 'ArtStation standard license'],
-      ['Bolt War heroes and their animations, KayKit Adventurers', 'Kay Lousberg', 'https://kaylousberg.com', 'CC0'],
-      ['Bolt War robot', 'Tomás Laulhé of Quaternius, changes by Don McCurdy', 'https://quaternius.com', 'CC0'],
-      ['Bolt War mechs, Animated Mech Pack', 'Quaternius', 'https://quaternius.com', 'CC0'],
+      ['Bolt War heroes, mechs, aliens and power ups, Ultimate Space Kit', 'Quaternius', 'https://quaternius.com', 'CC0'],
     ],
   },
   {
@@ -93,6 +90,7 @@ const GROUPS = [
     t: 'Sounds',
     items: [
       ['Impact, interface, UI, RPG, digital and sci fi sounds', 'Kenney', 'https://kenney.nl/assets', 'CC0'],
+      ['Bolt War skill sounds, Sci Fi Pack and Fantasy SFX Pack', 'JC Sounds', 'https://opengameart.org/content/jc-sounds-sci-fi-pack-vol-1', 'CC BY 4.0'],
       ['Authentic gun sounds, packs one and two', 'Snake, F8 Studios', 'https://f8studios.itch.io/snakes-authentic-gun-sounds', 'Free license'],
       ['The Free Firearm Sound Library', 'Ben Jaszczak, Brian Nelson, Kevin Heras and Matthew Nanney', 'https://opengameart.org/content/the-free-firearm-sound-library', 'CC0'],
       ['Zombie sound effects', 'EditingCorp', 'https://www.editingcorp.com/zombie-sound-effects-pack-free-download/', 'Royalty free'],

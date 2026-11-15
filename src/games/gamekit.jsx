@@ -956,7 +956,6 @@ export function useStageBox(ref) {
   return box;
 }
 const envIn = (n) => `env(safe-area-inset-${n}, 0px)`;
-const lockable = () => typeof window !== 'undefined' && window.screen && window.screen.orientation && typeof window.screen.orientation.lock === 'function';
 const fsEl = () => (typeof document !== 'undefined' ? document.fullscreenElement || document.webkitFullscreenElement || null : null);
 const isAndroid = () => typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent || '');
 function iosGap() {
@@ -978,21 +977,13 @@ export function useGameStage(look) {
   const rootRef = useRef(null);
   const box = useStageBox(rootRef);
   const want = !!(look && look.side) && TOUCHY;
-  const [fsOn, setFsOn] = useState(() => !!fsEl());
-  useEffect(() => {
-    if (!want || !lockable()) return undefined;
-    const so = window.screen.orientation;
-    let tried = false;
-    try { const r = so.lock('landscape'); tried = true; if (r && r.catch) r.catch(() => {}); } catch {}
-    return () => { if (tried) { try { so.unlock(); } catch {} } };
-  }, [want, fsOn]);
   useEffect(() => {
     const el = rootRef.current;
     if (!el || typeof document === 'undefined') return undefined;
     const de = document.documentElement;
     const can = TOUCHY && isAndroid() && !!(de.requestFullscreen || de.webkitRequestFullscreen);
     let mine = false, tried = false;
-    const onFs = () => { const on = !!fsEl(); setFsOn(on); if (!on) tried = false; };
+    const onFs = () => { if (!fsEl()) tried = false; };
     const onVis = () => { if (document.visibilityState === 'visible' && !fsEl()) tried = false; };
     document.addEventListener('fullscreenchange', onFs);
     document.addEventListener('webkitfullscreenchange', onFs);

@@ -1,9 +1,9 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Avatar, Portal, useBackClose, hapticTap, FONT, Spinner } from '../App.jsx';
+import React, { useEffect, useRef, useState } from 'react';
+import { Portal, useBackClose, hapticTap, FONT, Spinner } from '../App.jsx';
 import { useGameLink, useRoomRelay, useWatchChannel } from './relay.jsx';
 import { setWatchAllowed, useLiveBeacon, useGamePrivacy } from './live.js';
-import { EMOTES, SignalBars, PingChip, SpeakerIcon, SmileIcon, Check, Heart, MicIcon, ChatIcon, SwapIcon, HandIcon, btnBase, Btn, RoundBtn, Sheet, Stars, injectCss, useVoice, setKitTap } from './livekit.jsx';
-import { LIVES, GLYPHS, GLYPH_NAMES, STORY_N, ENDLESS, ATK_CD, levelDef, makeWorld, stepWorld, buddyInput, applyEvent, snapshot, mergeSnapshot, sameLevel, syncClock, setNet, nearDial, nearMirror, turnMirror, foeRows, setFoes, tryCode, hintFor, aimTarget, clamp, missionsFor, parTime, spikeAmt, crumbleState, demoInputs, demoDuoWorld } from './duoengine.js';
+import { EMOTES, PingChip, btnBase, Sheet, injectCss, useVoice, setKitTap } from './livekit.jsx';
+import { LIVES, GLYPHS, GLYPH_NAMES, STORY_N, ENDLESS, levelDef, makeWorld, stepWorld, buddyInput, applyEvent, snapshot, mergeSnapshot, sameLevel, syncClock, setNet, nearDial, nearMirror, turnMirror, foeRows, setFoes, tryCode, hintFor, aimTarget, clamp, missionsFor, parTime, spikeAmt, crumbleState, demoInputs, demoDuoWorld } from './duoengine.js';
 import { Snd, THEMES, buildStatic, buildMini, drawDuoMini, render, updateParts, dust, puffs, embers, glints, part, ring, glyph, drawExplorer , setDuoLite } from './duodraw.js';
 import { GC, GBtn, GPill, GPanel, GChip, GTitle, GJoy, GIcon, GHudBtn, GHudPanel, GHudSkill, GHint, GStat, GNotices, useNotices, useWatchNotices, injectKitCss, kitTap, pressProps, INK, newBudget, budgetTick, useCtlLook, useGameStage, stagePoint, GControlsPanel, GLobby, GSlot, GLobbySheet, GVolBars, GSeg , GTalkers, GWatchBar, GSkin, GChatFeed, useChatFeed } from './gamekit.jsx';
 import { Sfx } from './sfx.js';
@@ -99,7 +99,6 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
   const talking = useTalking(!solo && !watch, { peer: voice.peerMuted });
   const gamePriv = useGamePrivacy();
   const allowWatch = gamePriv.show && gamePriv.watch;
-  const setAllowWatch = () => {};
   const myFirstName = String((me && me.name) || 'You').split(' ')[0];
   const watchers = useWatchChannel({ room: solo ? null : `duo-${gameId}`, myId, enabled: !solo, role: watch ? 'watcher' : 'player', meta: { n: myFirstName, a: me && me.avatar }, allow: allowWatch, onDenied: () => { setToast({ text: 'The players turned off watching.', at: Date.now() }); setTimeout(() => onClose(), 1600); } });
   useWatchNotices(watchers, (t, kd) => pushNoteRef.current(t, kd), !solo && !watch);

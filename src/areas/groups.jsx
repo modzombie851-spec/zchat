@@ -1,17 +1,7 @@
-import React, { useState, useRef, useEffect, useLayoutEffect, useMemo, createContext, useContext } from 'react';
+import React, { useState, useRef, useEffect, useContext } from 'react';
 import ReactDOM from 'react-dom';
-import {
-  Send, Paperclip, Search, Mail, ShieldCheck, ShieldOff, AtSign, LogOut, Eye, EyeOff, Lock,
-  Flag, X, Trash2, User, Phone, MoreVertical, Image as ImageIcon, Video as VideoIcon, Pin,
-  Smile, ArrowLeft, Check, CheckCheck, Settings as SettingsIcon, Moon, Sun, UserPlus,
-  FileText, HelpCircle, ChevronRight, ChevronLeft, Compass, Bell, Volume2, Volume1, VolumeX, Palette, Mic, Play, Pause, Download, Users, Camera, Reply, Forward, Ban, Edit3, Archive, Bookmark, Share2, Copy, Crop, Type, Pencil, Undo2, Scissors, BellOff, Link as LinkIcon, ShieldAlert, Heart, Repeat, PhoneOff, MicOff, VideoOff, SwitchCamera, Clock, Timer, Smartphone, Plus, ThumbsUp, ThumbsDown, LayoutDashboard, Megaphone, Database, Activity, MessageSquare,
-} from 'lucide-react';
-import {
-  supabase, registerWithEmail, verifyOtp, setPassword, signInWithPassword,
-  sendPasswordReset, signOut, getSession, checkUsernameTaken,
-  sendMessage, getConversation,
-  subscribeToMessages, reportUser, uploadMedia as uploadMediaRaw, deleteMessage,
-} from '../supabaseClient.js';
+import { Search, ShieldCheck, ShieldOff, LogOut, EyeOff, X, Trash2, User, Phone, MoreVertical, Video as VideoIcon, Pin, Smile, ArrowLeft, Check, Settings as SettingsIcon, UserPlus, FileText, ChevronRight, Bell, Palette, Mic, Download, Users, Camera, Edit3, Pencil, BellOff, MicOff, Clock, Timer, Activity } from 'lucide-react';
+import { supabase } from '../supabaseClient.js';
 import {
   AddMembersPanel,
   Avatar,
