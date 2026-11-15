@@ -295,6 +295,13 @@ function wolfCoinBlock(text) {
   return `\nTHE WOLF GAME COIN CALCULATION (exact, worked out by the server). State these coin amounts exactly as written, do not recalculate them, and keep the reply short:\n${lines.join('\n')}${total}\nA cost from level A to level B means the coins needed to upgrade that stat from level A up to level B.`;
 }
 
+function mfaPending(user, token) {
+  try {
+    const claims = JSON.parse(Buffer.from(String(token || '').split('.')[1] || '', 'base64url').toString('utf8')) || {};
+    return Array.isArray(user && user.factors) && user.factors.some((f) => f && f.status === 'verified') && claims.aal !== 'aal2';
+  } catch { return true; }
+}
+
 async function verifyCaller(event, userId) {
   try {
     const headers = event.headers || {};
@@ -303,6 +310,7 @@ async function verifyCaller(event, userId) {
     if (!token) return false;
     const { data, error } = await supabase.auth.getUser(token);
     if (error || !data || !data.user || data.user.id !== userId) return false;
+    if (mfaPending(data.user, token)) return false;
     const { data: st, error: stErr } = await supabase.rpc('zchat_session_state_for', { p_user: data.user.id, p_session: tokenSessionId(token) });
     if (stErr) return /PGRST202|42883|could not find the function|does not exist/i.test(`${stErr.code || ''} ${stErr.message || ''}`);
     return st === 'ok';
@@ -394,7 +402,7 @@ async function geminiOnce({ model, systemText, contents, structured, thinking, t
     const json = await res.json().catch(() => null);
     if (!res.ok) {
       console.error('Gemini error', model, res.status, JSON.stringify(json).slice(0, 300));
-      return { rawText: null, status: res.status };
+      return { rawText: null, status: res.status, daily: res.status === 429 && /PerDay/i.test(JSON.stringify(json || '')) };
     }
     const cand = json && json.candidates && json.candidates[0];
     const parts = (cand && cand.content && cand.content.parts) || [];
@@ -416,15 +424,19 @@ async function runGemini({ systemText, contents, background }) {
   const steps = models.map((model) => ({ model, structured: true, thinking: { thinkingLevel: 'low' } }));
   steps.push({ model: FALLBACK_MODEL, structured: false, thinking: null });
   let lastStatus = null;
+  const limited = new Set();
+  const outToday = new Set();
   for (let round = 0; round < (background ? 6 : 1); round++) {
   for (let i = 0; i < steps.length; i++) {
     const step = { ...steps[i] };
+    if (limited.has(step.model)) continue;
     for (let tries = 0; tries < 3; tries++) {
       const left = budget - (Date.now() - started);
       if (left < 1500) return { reply: null, suggestions: [], rawText: null, status: lastStatus };
       const timeoutMs = background ? Math.min(left, 30000) : (i === 0 ? Math.min(left, 6000) : left - 300);
       const out = await geminiOnce({ ...step, systemText, contents, timeoutMs });
       lastStatus = out.status;
+      if (out.daily) outToday.add(step.model);
       if (out.rawText) {
         const ex = extractReplyAndSuggestions(out.rawText);
         if (ex.reply) return { reply: ex.reply, suggestions: ex.suggestions, rawText: out.rawText, status: 200 };
@@ -434,10 +446,15 @@ async function runGemini({ systemText, contents, background }) {
         break;
       }
       if (out.status === 400 && step.thinking) { step.thinking = null; continue; }
-      if (out.status === 429 && background && tries === 0) { await new Promise((r) => setTimeout(r, 6000)); continue; }
+      if (out.status === 429 && background && tries === 0 && !out.daily) { await new Promise((r) => setTimeout(r, 6000)); continue; }
       break;
     }
-    if (lastStatus === 429 || lastStatus === 401 || lastStatus === 403) break;
+    if (lastStatus === 401 || lastStatus === 403) break;
+    if (lastStatus === 429) limited.add(step.model);
+  }
+  if (limited.size && models.every((m) => limited.has(m))) {
+    lastStatus = models.every((m) => outToday.has(m)) ? 'daily' : 429;
+    break;
   }
   const transient = lastStatus === 503 || lastStatus === 500 || lastStatus === 'timeout' || lastStatus === 'network' || lastStatus === 'empty' || lastStatus === 404;
   if (!transient) break;
@@ -507,7 +524,8 @@ async function runModel(args) {
 }
 
 function failureText(status, again) {
-  if (status === 429) return `I'm getting too many requests right now. ${again} (Error code 429)`;
+  if (status === 'daily') return "I've reached my daily limit. Try again tomorrow.";
+  if (status === 429) return "I'm getting a lot of messages right now. Try again in a minute.";
   return `Sorry, I couldn't come up with a reply just now. ${again}${status ? ` (Error code ${status})` : ''}`;
 }
 

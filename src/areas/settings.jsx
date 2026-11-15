@@ -545,6 +545,15 @@ function InteractionsPage({ me, onClose, onSaved }) {
   const [vals, setVals] = useState(() => Object.fromEntries(INTERACTION_SPECS.map((s) => [s.col, (me && me[s.col]) || 'everyone'])));
   const [open, setOpen] = useState(null);
   const [err, setErr] = useState('');
+  const [filterOn, setFilterOn] = useState(() => !(me && me.comment_filter === false));
+  const flipFilter = async () => {
+    const next = !filterOn;
+    setFilterOn(next);
+    setErr('');
+    const { error } = await supabase.from('profiles').update({ comment_filter: next }).eq('id', me.id);
+    if (error) { setFilterOn(!next); setErr(/comment_filter|column|schema/i.test(String(error.message || '')) ? 'This switches on once the latest ZChat setup is finished.' : 'That could not be saved yet. Try again in a little while.'); return; }
+    onSaved({ comment_filter: next });
+  };
   const pick = async (spec, v) => {
     setOpen(null);
     const before = vals[spec.col];
@@ -560,7 +569,10 @@ function InteractionsPage({ me, onClose, onSaved }) {
     <FullPage title="Interactions" subtitle="Choose who can reach you and how" onBack={onClose} zIndex={72}>
       <div style={{ fontSize: 13, color: theme.muted, lineHeight: 1.5, padding: '6px 4px 6px' }}>These apply to everyone except people you block. Blocked accounts can never reach you.</div>
       {INTERACTION_SPECS.map((s) => (
-        <IgRow key={s.col} inset={false} label={s.title} sub={s.sub} value={interactionLabel(s, vals[s.col])} onClick={() => setOpen(s.col)} />
+        <React.Fragment key={s.col}>
+          <IgRow inset={false} label={s.title} sub={s.sub} value={interactionLabel(s, vals[s.col])} onClick={() => setOpen(s.col)} />
+          {s.col === 'privacy_comments' && <IgRow inset={false} label="Filter offensive comments" sub="Hide rude comments on your posts. Only you and the writer still see them." right={<IgToggle on={filterOn} onClick={flipFilter} />} />}
+        </React.Fragment>
       ))}
       {err && <div role="alert" style={{ padding: '10px 4px', fontSize: 13, color: theme.danger, fontWeight: 700 }}>{err}</div>}
       {spec && <ChoiceSheet title={spec.title} sub={spec.sub} options={spec.options} value={vals[spec.col]} onPick={(v) => pick(spec, v)} onClose={() => setOpen(null)} />}

@@ -11,6 +11,13 @@ function tokenClaims(token) {
   try { return JSON.parse(Buffer.from(String(token).split('.')[1] || '', 'base64url').toString('utf8')) || {}; } catch { return {}; }
 }
 
+function mfaPending(user, token) {
+  try {
+    const claims = JSON.parse(Buffer.from(String(token || '').split('.')[1] || '', 'base64url').toString('utf8')) || {};
+    return Array.isArray(user && user.factors) && user.factors.some((f) => f && f.status === 'verified') && claims.aal !== 'aal2';
+  } catch { return true; }
+}
+
 async function callerFrom(event) {
   try {
     const h = event.headers || {};
@@ -26,6 +33,7 @@ async function callerFrom(event) {
     ]);
     const user = got && !got.error && got.data ? got.data.user : null;
     if (!user || (sub && user.id !== sub)) return null;
+    if (mfaPending(user, token)) return null;
     const stErr = state && state.error;
     if (stErr) {
       if (!/PGRST202|42883|could not find the function|does not exist/i.test(`${stErr.code || ''} ${stErr.message || ''}`)) return null;

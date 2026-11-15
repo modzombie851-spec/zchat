@@ -1,5 +1,8 @@
 import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
+import dns from 'node:dns';
+import http from 'node:http';
+import https from 'node:https';
 import { isIP } from 'node:net';
 import { createClient } from '@supabase/supabase-js';
 import { checkPhotos, photoPathOk } from '../lib/zchat-photo.js';
@@ -24,6 +27,13 @@ function tokenClaims(token) {
   try { return JSON.parse(Buffer.from(String(token).split('.')[1] || '', 'base64url').toString('utf8')) || {}; } catch { return {}; }
 }
 
+function mfaPending(user, token) {
+  try {
+    const claims = JSON.parse(Buffer.from(String(token || '').split('.')[1] || '', 'base64url').toString('utf8')) || {};
+    return Array.isArray(user && user.factors) && user.factors.some((f) => f && f.status === 'verified') && claims.aal !== 'aal2';
+  } catch { return true; }
+}
+
 async function callerFrom(event) {
   try {
     const token = headerOf(event, 'authorization').replace(/^Bearer\s+/i, '').trim();
@@ -38,6 +48,7 @@ async function callerFrom(event) {
     ]);
     const user = got && !got.error && got.data ? got.data.user : null;
     if (!user || (sub && user.id !== sub)) return null;
+    if (mfaPending(user, token)) return null;
     const stErr = state && state.error;
     if (stErr) {
       if (!/PGRST202|42883|could not find the function|does not exist/i.test(`${stErr.code || ''} ${stErr.message || ''}`)) return null;
@@ -243,15 +254,90 @@ async function feedHosts() {
   return feedState.job;
 }
 
+function privateV4(ip) {
+  const p = String(ip).split('.').map((x) => (/^\d{1,3}$/.test(x) ? Number(x) : NaN));
+  if (p.length !== 4 || p.some((x) => !(x >= 0 && x <= 255))) return true;
+  const [a, b, c] = p;
+  return a === 0 || a === 10 || a === 127 || a >= 224
+    || (a === 100 && b >= 64 && b <= 127) || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31)
+    || (a === 192 && b === 168) || (a === 192 && b === 0 && (c === 0 || c === 2)) || (a === 198 && (b === 18 || b === 19))
+    || (a === 198 && b === 51 && c === 100) || (a === 203 && b === 0 && c === 113);
+}
+
+function v6Words(ip) {
+  let s = String(ip).toLowerCase().split('%')[0];
+  const tail = s.match(/(\d+\.\d+\.\d+\.\d+)$/);
+  if (tail) {
+    const q = tail[1].split('.').map(Number);
+    if (q.some((x) => !(x >= 0 && x <= 255))) return null;
+    s = `${s.slice(0, -tail[1].length)}${((q[0] << 8) | q[1]).toString(16)}:${((q[2] << 8) | q[3]).toString(16)}`;
+  }
+  const halves = s.split('::');
+  if (halves.length > 2) return null;
+  const head = halves[0] ? halves[0].split(':') : [];
+  const rest = halves.length === 2 && halves[1] ? halves[1].split(':') : [];
+  const fill = halves.length === 2 ? 8 - head.length - rest.length : 0;
+  if (fill < 0) return null;
+  const words = [...head, ...Array(fill).fill('0'), ...rest].map((h) => (/^[0-9a-f]{1,4}$/.test(h) ? parseInt(h, 16) : NaN));
+  return words.length === 8 && words.every((w) => w >= 0) ? words : null;
+}
+
 function privateAddress(ip) {
   if (!ip) return true;
-  if (ip.includes(':')) {
-    const s = ip.toLowerCase();
-    return s === '::1' || s === '::' || s.startsWith('fc') || s.startsWith('fd') || s.startsWith('fe80') || s.startsWith('::ffff:10.') || s.startsWith('::ffff:127.') || s.startsWith('::ffff:192.168.') || s.startsWith('::ffff:169.254.');
-  }
-  const p = ip.split('.').map(Number);
-  if (p.length !== 4 || p.some((x) => !Number.isFinite(x))) return true;
-  return p[0] === 10 || p[0] === 127 || p[0] === 0 || (p[0] === 169 && p[1] === 254) || (p[0] === 172 && p[1] >= 16 && p[1] <= 31) || (p[0] === 192 && p[1] === 168) || (p[0] === 100 && p[1] >= 64 && p[1] <= 127) || p[0] >= 224;
+  const v = isIP(String(ip).split('%')[0]);
+  if (v === 4) return privateV4(ip);
+  if (v !== 6) return true;
+  const w = v6Words(ip);
+  if (!w) return true;
+  const v4 = (hi, lo) => `${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`;
+  if (w.slice(0, 6).every((x) => x === 0)) return w[6] === 0 || privateV4(v4(w[6], w[7]));
+  if (w.slice(0, 5).every((x) => x === 0) && w[5] === 0xffff) return privateV4(v4(w[6], w[7]));
+  if (w[0] === 0x64 && w[1] === 0xff9b) return privateV4(v4(w[6], w[7]));
+  if (w[0] === 0x2002) return privateV4(v4(w[1], w[2]));
+  if (w[0] === 0x2001 && (w[1] === 0 || w[1] === 0xdb8)) return true;
+  if (w[0] === 0x100 && w[1] === 0 && w[2] === 0 && w[3] === 0) return true;
+  return (w[0] & 0xfe00) === 0xfc00 || (w[0] & 0xffc0) === 0xfe80 || (w[0] & 0xffc0) === 0xfec0 || (w[0] & 0xff00) === 0xff00;
+}
+
+function safeLookup(hostname, opts, cb) {
+  const o = typeof opts === 'object' && opts ? opts : {};
+  dns.lookup(hostname, { all: true, verbatim: true }, (err, list) => {
+    if (err) { cb(err); return; }
+    const addrs = (list || []).filter((x) => x && x.address);
+    if (!addrs.length || addrs.some((x) => privateAddress(x.address))) { cb(Object.assign(new Error('private'), { code: 'EPRIVATE' })); return; }
+    if (o.all) cb(null, addrs);
+    else cb(null, addrs[0].address, addrs[0].family);
+  });
+}
+
+function pinnedGet(u, ms, maxBytes, agent) {
+  return new Promise((resolve) => {
+    let done = false;
+    let req = null;
+    const finish = (v) => { if (done) return; done = true; clearTimeout(timer); resolve(v); };
+    const timer = setTimeout(() => { if (req) req.destroy(); finish(null); }, ms);
+    try {
+      const mod = u.protocol === 'https:' ? https : http;
+      req = mod.request(u, { method: 'GET', lookup: safeLookup, headers: { 'user-agent': agent, accept: 'text/html,*/*;q=0.5', 'accept-encoding': 'identity' } }, (res) => {
+        const status = res.statusCode || 0;
+        const headers = res.headers || {};
+        if (!maxBytes || (status >= 300 && status < 400)) { res.destroy(); finish({ status, headers, body: '' }); return; }
+        const chunks = [];
+        let n = 0;
+        const end = () => finish({ status, headers, body: Buffer.concat(chunks).toString('utf8') });
+        res.on('data', (c) => {
+          if (done) return;
+          if (n + c.length >= maxBytes) { chunks.push(c.subarray(0, maxBytes - n)); n = maxBytes; res.destroy(); end(); return; }
+          chunks.push(c);
+          n += c.length;
+        });
+        res.on('end', end);
+        res.on('error', end);
+      });
+      req.on('error', () => finish(null));
+      req.end();
+    } catch { finish(null); }
+  });
 }
 
 async function safeToFetch(u) {
@@ -268,42 +354,39 @@ async function expandShort(u) {
   let cur = u;
   for (let hop = 0; hop < 5; hop++) {
     if (!(await safeToFetch(cur))) return null;
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 3500);
-    try {
-      const res = await fetch(cur.href, { method: 'GET', redirect: 'manual', signal: ctrl.signal, headers: { 'user-agent': 'ZChatLinkCheck/1.0' } });
-      try { await res.body?.cancel(); } catch {}
-      const loc = res.headers.get('location');
-      if (res.status >= 300 && res.status < 400 && loc) {
-        cur = new URL(loc, cur);
-        const reg = registrable(cur.hostname.toLowerCase());
-        if (!SHORTENERS.has(reg)) return cur;
-        continue;
-      }
-      return hop === 0 ? null : cur;
-    } catch { return null; } finally { clearTimeout(timer); }
+    const res = await pinnedGet(cur, 3500, 0, 'ZChatLinkCheck/1.0');
+    if (!res) return null;
+    const loc = res.headers.location;
+    if (res.status >= 300 && res.status < 400 && loc) {
+      try { cur = new URL(String(loc), cur); } catch { return null; }
+      const reg = registrable(cur.hostname.toLowerCase());
+      if (!SHORTENERS.has(reg)) return cur;
+      continue;
+    }
+    return hop === 0 ? null : cur;
   }
   return null;
 }
 
 async function fakeLoginPage(u) {
-  if (!PATH_WORDS.test(u.pathname + u.search) || !(await safeToFetch(u))) return false;
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 3500);
-  try {
-    const res = await fetch(u.href, { redirect: 'follow', signal: ctrl.signal, headers: { 'user-agent': 'Mozilla/5.0 ZChatLinkCheck/1.0' } });
-    if (!res.ok || !/text\/html/i.test(res.headers.get('content-type') || '')) { try { await res.body?.cancel(); } catch {} return false; }
-    const reader = res.body.getReader();
-    let got = '';
-    while (got.length < 200000) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      got += Buffer.from(value).toString('utf8');
+  if (!PATH_WORDS.test(u.pathname + u.search)) return false;
+  let cur = u;
+  const started = Date.now();
+  for (let hop = 0; hop < 4; hop++) {
+    const left = 3500 - (Date.now() - started);
+    if (left < 300 || !(await safeToFetch(cur))) return false;
+    const res = await pinnedGet(cur, left, 200000, 'Mozilla/5.0 ZChatLinkCheck/1.0');
+    if (!res) return false;
+    const loc = res.headers.location;
+    if (res.status >= 300 && res.status < 400 && loc) {
+      try { cur = new URL(String(loc), cur); } catch { return false; }
+      continue;
     }
-    try { await reader.cancel(); } catch {}
-    const html = got.toLowerCase();
+    if (res.status < 200 || res.status >= 300 || !/text\/html/i.test(String(res.headers['content-type'] || ''))) return false;
+    const html = res.body.toLowerCase();
     return /type\s*=\s*["']?password/.test(html) && /zchat/.test(html);
-  } catch { return false; } finally { clearTimeout(timer); }
+  }
+  return false;
 }
 
 const memo = new Map();

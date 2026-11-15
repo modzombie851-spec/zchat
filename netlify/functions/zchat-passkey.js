@@ -77,12 +77,20 @@ function jwtSessionId(token) {
     return UUID.test(String(claims.session_id || '')) ? claims.session_id : null;
   } catch { return null; }
 }
+function mfaPending(user, token) {
+  try {
+    const claims = JSON.parse(Buffer.from(String(token || '').split('.')[1] || '', 'base64url').toString('utf8')) || {};
+    return Array.isArray(user && user.factors) && user.factors.some((f) => f && f.status === 'verified') && claims.aal !== 'aal2';
+  } catch { return true; }
+}
+
 async function callerFrom(event) {
   try {
     const token = header(event, 'authorization').replace(/^Bearer\s+/i, '').trim();
     if (!token) return null;
     const { data, error } = await supabase.auth.getUser(token);
     if (error || !data || !data.user) return null;
+    if (mfaPending(data.user, token)) return null;
     return { user: data.user, sid: jwtSessionId(token) };
   } catch { return null; }
 }

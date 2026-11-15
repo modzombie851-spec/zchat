@@ -6,6 +6,7 @@ import {
   APP_VERSION,
   AppPinPad,
   Avatar,
+  DecorFrameBadge,
   avatarAnimSrc,
   AxTabGlyph,
   BoardIcon,
@@ -1484,7 +1485,7 @@ function ShopMockName({ name, nsKey, charm, verified, dark, size = 15, weight = 
     </span>
   );
 }
-export function ShopChatMock({ me, dark = true, bubble = null, nsKey = null, charm = null, group = false, reaction = null }) {
+export function ShopChatMock({ me, dark = true, bubble = null, nsKey = null, charm = null, group = false, reaction = null, frame = null }) {
   const stage = useRef(null);
   const cv = useRef(null);
   const bub = useRef(null);
@@ -1515,8 +1516,8 @@ export function ShopChatMock({ me, dark = true, bubble = null, nsKey = null, cha
   const incoming = (text, who, withName) => (
     <div style={{ display: 'flex', alignItems: 'flex-end', gap: 7, alignSelf: 'flex-start', maxWidth: '84%', minWidth: 0 }}>
       {group && (who === 'me'
-        ? <div style={{ flexShrink: 0 }}><Avatar emoji={me.avatar} name={meName} size={26} /></div>
-        : <div style={{ width: 26, height: 26, borderRadius: 13, background: who.color, color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, flexShrink: 0 }}>{who.name[0]}</div>)}
+        ? <div style={{ flexShrink: 0 }}>{frame ? <DecorFrameBadge setKey={frame} size={44} photo={me.avatar} name={meName} /> : <Avatar emoji={me.avatar} name={meName} size={26} />}</div>
+        : <div style={{ width: frame ? 44 : 26, display: 'flex', justifyContent: 'center', flexShrink: 0 }}><div style={{ width: 26, height: 26, borderRadius: 13, background: who.color, color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800 }}>{who.name[0]}</div></div>)}
       <div style={{ minWidth: 0 }}>
         {withName && (
           <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 3, paddingLeft: 2, color: who === 'me' ? T.ink : who.color, display: 'flex', minWidth: 0 }}>
@@ -1576,6 +1577,47 @@ export function ShopChatMock({ me, dark = true, bubble = null, nsKey = null, cha
         <div style={{ flex: 1, height: 38, borderRadius: 19, background: T.inputBg, display: 'flex', alignItems: 'center', padding: '0 14px', fontSize: 14, color: T.muted }}>Message</div>
         <div style={{ width: 38, height: 38, borderRadius: 19, background: '#1D7BF0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Send size={16} color="#FFFFFF" /></div>
       </div>
+    </div>
+  );
+}
+export function ShopListMock({ me, dark = true, frameKey = null, nsKey = null, charm = null }) {
+  const T = THEMES[dark ? 'dark' : 'light'];
+  const page = dark ? '#0C0C0E' : '#FFFFFF';
+  const meName = (me && (me.name || me.username)) || 'You';
+  const F = isDecorKey(frameKey) ? frameKey : null;
+  const rows = [
+    { who: 'me', text: 'Count me in for Saturday', when: 'now', unread: 2 },
+    { name: 'Maya', color: '#29C7B3', text: 'Sent a photo', when: '9:41' },
+    { name: 'Kenji', color: '#7C5CFC', text: 'That game was so close', when: 'Yesterday' },
+    { name: 'Weekend plans', color: '#E9A23B', text: 'Leo: I will bring snacks', when: 'Mon' },
+  ];
+  return (
+    <div style={{ borderRadius: 20, background: page, boxShadow: dark ? `inset 0 0 0 1px ${CL.line}` : 'none', color: T.ink, overflow: 'hidden', fontFamily: FONT }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px 6px' }}>
+        <div style={{ flex: 1, fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em' }}>Chats</div>
+        <div style={{ fontSize: 12.5, color: T.muted, fontWeight: 600 }}>How friends see you</div>
+      </div>
+      {rows.map((r, i) => {
+        const mine = r.who === 'me';
+        return (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: mine && F ? 6 : 12, padding: mine && F ? '2px 14px 2px 6px' : '9px 16px', background: mine ? (dark ? 'rgba(255,255,255,0.05)' : 'rgba(124,92,252,0.07)') : 'transparent' }}>
+            {mine
+              ? (F ? <DecorFrameBadge setKey={F} size={74} photo={me.avatar} name={meName} /> : <Avatar emoji={me.avatar} name={meName} size={50} />)
+              : <div style={{ width: 50, height: 50, borderRadius: 25, background: r.color, color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 19, fontWeight: 800, flexShrink: 0 }}>{r.name[0]}</div>}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                <div style={{ flex: 1, minWidth: 0, display: 'flex' }}>{mine ? <ShopMockName name={meName} nsKey={nsKey} charm={charm} verified={me.verified} dark={dark} size={15.5} weight={750} /> : <span style={{ fontSize: 15.5, fontWeight: 650, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.name}</span>}</div>
+                <span style={{ fontSize: 12, color: r.unread ? '#1D7BF0' : T.muted, fontWeight: r.unread ? 700 : 500, flexShrink: 0 }}>{r.when}</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
+                <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, color: r.unread ? T.ink : T.muted, fontWeight: r.unread ? 650 : 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.text}</span>
+                {r.unread ? <span style={{ minWidth: 20, height: 20, borderRadius: 10, background: '#1D7BF0', color: '#FFFFFF', fontSize: 11.5, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px', flexShrink: 0 }}>{r.unread}</span> : null}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+      <div style={{ height: 8 }} />
     </div>
   );
 }

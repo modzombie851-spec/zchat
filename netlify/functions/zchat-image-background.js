@@ -27,6 +27,13 @@ const STYLES = {
   realistic: 'as a realistic photograph with natural light',
 };
 
+function mfaPending(user, token) {
+  try {
+    const claims = JSON.parse(Buffer.from(String(token || '').split('.')[1] || '', 'base64url').toString('utf8')) || {};
+    return Array.isArray(user && user.factors) && user.factors.some((f) => f && f.status === 'verified') && claims.aal !== 'aal2';
+  } catch { return true; }
+}
+
 async function callerFrom(event) {
   try {
     const h = event.headers || {};
@@ -34,6 +41,7 @@ async function callerFrom(event) {
     if (!token) return null;
     const { data, error } = await supabase.auth.getUser(token);
     if (error || !data || !data.user) return null;
+    if (mfaPending(data.user, token)) return null;
     return data.user;
   } catch { return null; }
 }
@@ -96,7 +104,7 @@ async function geminiImage(parts, ratio) {
           signal: ctrl.signal,
         });
         const json = await res.json().catch(() => null);
-        if (res.status === 429) return { limited: true };
+        if (res.status === 429) return { limited: true, daily: /PerDay/i.test(JSON.stringify(json || '')) };
         if (!res.ok) {
           console.error('Gemini image error', model, res.status, json && json.error && json.error.message);
           if (res.status === 400 && withConfig) continue;
@@ -152,7 +160,7 @@ export const handler = async (event) => {
     parts.push({ text: promptFor(row) });
     const out = await geminiImage(parts, ratio);
     if (!out) return await fail('The picture could not be made. Try different words.');
-    if (out.limited) return await fail('AI images are busy right now. Try again in a minute.');
+    if (out.limited) return await fail(out.daily ? 'AI images reached the daily limit. Try again tomorrow.' : 'AI images are busy right now. Try again in a minute.');
     if (out.blocked) return await fail('That picture is not allowed. Try different words.');
     const buf = Buffer.from(out.data, 'base64');
     if (!buf.length) return await fail('The picture came back empty. Try again.');

@@ -3855,6 +3855,7 @@ function RegisterFlow({ onDone, onBack, onStart, onStageChange, initialStage = '
   const [username, setUsername] = useState('');
   const [name, setName] = useState('');
   const [taken, setTaken] = useState(false);
+  const [badU, setBadU] = useState('');
   const [checkingUsername, setCheckingUsername] = useState(false);
   const [err, setErr] = useState('');
   const [loading, setLoading] = useState(false);
@@ -3936,12 +3937,14 @@ function RegisterFlow({ onDone, onBack, onStart, onStageChange, initialStage = '
     const clean = val.toLowerCase().replace(/[^a-z0-9._]/g, '').slice(0, USERNAME_MAX);
     setUsername(clean);
     setTaken(false);
+    setBadU('');
     clearTimeout(usernameTimer.current);
     if (clean.length >= 3) {
       setCheckingUsername(true);
       usernameTimer.current = setTimeout(async () => {
-        const { taken: t } = await checkUsernameTaken(clean);
+        const [{ taken: t }, bad] = await Promise.all([checkUsernameTaken(clean), nameWordsProblem('', clean)]);
         setTaken(t);
+        setBadU(bad ? "That username has a word we don't allow" : '');
         setCheckingUsername(false);
       }, 400);
     } else {
@@ -4100,13 +4103,14 @@ function RegisterFlow({ onDone, onBack, onStart, onStageChange, initialStage = '
   const usernameIssue = usernameProblem(username);
   const validU = !usernameIssue;
   const validN = name.trim().length >= 2;
-  const canFinish = validU && validN && !taken && !checkingUsername;
+  const canFinish = validU && validN && !taken && !badU && !checkingUsername;
   if (stage === 'username') {
     let hint = null;
     if (username.length > 0 && username.length < 3) hint = { c: AUTH_C.muted, t: 'At least 3 characters' };
     else if (username.length >= 3 && !validU) hint = { c: AUTH_C.danger, t: usernameIssue };
     else if (validU && checkingUsername) hint = { c: AUTH_C.muted, t: 'Checking' };
     else if (validU && taken) hint = { c: AUTH_C.danger, t: 'That username is taken' };
+    else if (validU && badU) hint = { c: AUTH_C.danger, t: badU };
     else if (validU) hint = { c: '#1E8E5A', t: `@${username} is free` };
     return (
       <div className="zchat-tab-in" key="username">
@@ -11030,7 +11034,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
   const animInputRef = useRef(null);
   const animBlobsRef = useRef([]);
   useEffect(() => () => { const list = animBlobsRef.current; setTimeout(() => list.forEach((u) => { try { URL.revokeObjectURL(u); } catch {} }), 8000); }, []);
-  const saving = false;
+  const [saving, setSaving] = useState(false);
   const [showEmail, setShowEmail] = useState(false);
   const cachedStats = profileStatsCache.get(profile.id) || {};
   const [followState, setFollowState] = useState(() => (iFollowIds && iFollowIds.has(profile.id) ? 'accepted' : cachedStats.followState === 'pending' || !(iFollowIds && iFollowIds.size) ? (cachedStats.followState || 'none') : 'none'));
@@ -11375,6 +11379,14 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
       fields.username = cleanUsername;
       fields.username_changed_at = new Date().toISOString();
     }
+    const nameChanged = cleanName !== String(profile.name || '');
+    if (nameChanged || fields.username) {
+      if (saving) return;
+      setSaving(true);
+      const bad = await nameWordsProblem(nameChanged ? cleanName : '', fields.username || '');
+      setSaving(false);
+      if (bad) { setUsernameErr(bad); return; }
+    }
     setUsernameErr('');
     const cleanLinks = readSocialLinks(socialLinks).map((l) => ({ url: l.url, title: l.title || null }));
     const phone = cleanWhatsappNumber(whatsapp);
@@ -11649,7 +11661,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
             <div>
               <EfGroup>
                 <EfRow label="Name">
-                  <input value={displayName} maxLength={NAME_MAX} onChange={(e) => setDisplayName(e.target.value.slice(0, NAME_MAX))} placeholder="Your name" aria-label="Name" style={efInput} />
+                  <input value={displayName} maxLength={NAME_MAX} onChange={(e) => { setDisplayName(e.target.value.slice(0, NAME_MAX)); setUsernameErr(''); }} placeholder="Your name" aria-label="Name" style={efInput} />
                   {displayName.length > NAME_MAX - 6 && <span style={{ fontSize: 12, color: theme.muted, flexShrink: 0 }}>{displayName.length}/{NAME_MAX}</span>}
                 </EfRow>
                 <EfRow label="Username">
@@ -14207,6 +14219,7 @@ function SmartMenu({ anchorEl, open, onClose, children, width = 170 }) {
 export function friendlyError(error, fallback = 'Something went wrong. Try again.') {
   const lim = spendLimitError(error);
   if (lim) return lim;
+  if (error && /^zchat_bad_/.test(String(error.hint || '')) && error.message) return String(error.message);
   const msg = String((error && error.message) || error || '').toLowerCase();
   if (!msg) return fallback;
   if (msg.includes('photo could not be opened')) return String(error.message || error);
@@ -15877,6 +15890,16 @@ const BIO_MAX = 150;
 const STORY_MENTION_TEXT = 'Mentioned you in their story';
 const STORY_GROUP_MENTION_TEXT = 'Mentioned this group in their story';
 
+export async function nameWordsProblem(name, username) {
+  if (!name && !username) return '';
+  try {
+    const { data, error } = await supabase.rpc('zchat_name_check', { p_name: name || null, p_username: username || null });
+    if (error || !data) return '';
+    if (data.name) return "That name has a word we don't allow. Try another one.";
+    if (data.username) return "That username has a word we don't allow. Try another one.";
+  } catch {}
+  return '';
+}
 function usernameProblem(u) {
   if (!u) return 'Choose a username';
   if (['everyone', 'all', 'here', 'admins'].includes(u)) return 'That username is not available';
@@ -18558,7 +18581,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-export const APP_VERSION = '57.2V';
+export const APP_VERSION = '57.3V';
 const WN_REV = 55;
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
@@ -24058,6 +24081,7 @@ export function FeedComments({ post, me, userId, onClose, onCount, onOpenProfile
   const [pinnedId, setPinnedId] = useState(() => (cmMem && cmMem.pinned !== undefined ? cmMem.pinned : post.pinned_comment_id || null));
   const [gifOpen, setGifOpen] = useState(false);
   const [note, setNote] = useState('');
+  const [peek, setPeek] = useState(() => new Set());
   const lp = useRef({});
   const inputRef = useRef(null);
   const goneRef = useRef(new Set());
@@ -24069,6 +24093,7 @@ export function FeedComments({ post, me, userId, onClose, onCount, onOpenProfile
   useKindPrefetch(text, !isOwner);
   const off = !!post.comments_off && !isOwner;
   const canDelete = (c) => !!c && (c.user_id === userId || isOwner);
+  const isHidden = (c) => isOwner && !!c && !!c.filtered && c.user_id !== userId;
   const flash = (t) => { setNote(t); setTimeout(() => setNote(''), 1800); };
   useEffect(() => { if (rows) feedCommentsMem.set(post.id, { rows: rows.filter((r) => !String(r.id).startsWith('temp-')), likes: commentLikes, pinned: pinnedId }); if (feedCommentsMem.size > 60) feedCommentsMem.delete(feedCommentsMem.keys().next().value); }, [rows, commentLikes, pinnedId]);
   const load = async () => {
@@ -24090,7 +24115,7 @@ export function FeedComments({ post, me, userId, onClose, onCount, onOpenProfile
     const mine = (rowsRef.current || []).filter((r) => addedRef.current.has(r.id) && !list.some((c) => c.id === r.id) && !goneRef.current.has(r.id));
     const merged = [...fresh, ...mine, ...temps];
     setRows(merged);
-    onCount(merged.length);
+    onCount(merged.filter((c) => !isHidden(c)).length);
     if (postRes && postRes.data && 'pinned_comment_id' in postRes.data) setPinnedId(postRes.data.pinned_comment_id || null);
     const map = {};
     (likeRes.data || []).forEach((l) => {
@@ -24139,6 +24164,17 @@ export function FeedComments({ post, me, userId, onClose, onCount, onOpenProfile
     const { error } = await supabase.from('post_comments').delete().eq('id', c.id);
     if (error) { gone.forEach((id) => goneRef.current.delete(id)); load(); flash(friendlyError(error, 'That comment could not be deleted. Try again.')); return; }
     if (pinnedId === c.id) setPinnedId(null);
+  };
+  const showComment = async (c) => {
+    setMenuFor(null);
+    hapticTap();
+    const { data, error } = await supabase.rpc('zchat_comment_show', { p_post: post.id, p_comment: String(c.id) });
+    if (error || !data || !data.ok) { flash(error && rpcMissing(error) ? 'This switches on once the latest ZChat setup is finished' : 'That did not work. Try again.'); return; }
+    const next = (rowsRef.current || []).map((r) => (r.id === c.id ? { ...r, filtered: false } : r));
+    rowsRef.current = next;
+    setRows(next);
+    onCount(next.filter((r) => !isHidden(r)).length);
+    flash('Everyone can see this comment now');
   };
   const togglePinComment = async (c) => {
     setMenuFor(null);
@@ -24191,7 +24227,7 @@ export function FeedComments({ post, me, userId, onClose, onCount, onOpenProfile
     setRows(swapped);
     const cm = feedCommentsMem.get(post.id);
     if (cm) feedCommentsMem.set(post.id, { ...cm, rows: [...cm.rows.filter((r) => r.id !== data.id), { ...data, profile: me }] });
-    return true;
+    return data;
   };
   const send = async () => {
     const body = text.trim();
@@ -24202,7 +24238,7 @@ export function FeedComments({ post, me, userId, onClose, onCount, onOpenProfile
     setReplyTo(null);
     playUiSound('send');
     const ok = await postComment(body, parent, body);
-    if (ok) {
+    if (ok && !ok.filtered) {
       const who = (me && me.name) || 'Someone';
       if (!isOwner) sendPushNotification(post.user_id, 'ZChat', `${who} commented on your post`, `/?post=${post.id}`, me && me.avatar);
       if (parent && parent.user_id !== userId && parent.user_id !== post.user_id) sendPushNotification(parent.user_id, 'ZChat', `${who} replied to your comment`, `/?post=${post.id}`, me && me.avatar);
@@ -24216,7 +24252,7 @@ export function FeedComments({ post, me, userId, onClose, onCount, onOpenProfile
     const parent = replyTo ? (replyTo.parent_id && (rows || []).find((r) => r.id === replyTo.parent_id)) || replyTo : null;
     setReplyTo(null);
     const ok = await postComment(`sticker:${file}`, parent, null);
-    if (ok && !isOwner) sendPushNotification(post.user_id, 'ZChat', `${(me && me.name) || 'Someone'} commented with a sticker`, `/?post=${post.id}`, me && me.avatar);
+    if (ok && !ok.filtered && !isOwner) sendPushNotification(post.user_id, 'ZChat', `${(me && me.name) || 'Someone'} commented with a sticker`, `/?post=${post.id}`, me && me.avatar);
   };
   const sendGif = async (g) => {
     setGifOpen(false);
@@ -24226,15 +24262,31 @@ export function FeedComments({ post, me, userId, onClose, onCount, onOpenProfile
     const parent = replyTo ? (replyTo.parent_id && (rows || []).find((r) => r.id === replyTo.parent_id)) || replyTo : null;
     setReplyTo(null);
     const ok = await postComment(`gif:${u}#${Math.round(Number(g.w) || 200)}x${Math.round(Number(g.h) || 150)}`, parent, null);
-    if (ok && !isOwner) sendPushNotification(post.user_id, 'ZChat', `${(me && me.name) || 'Someone'} commented with a GIF`, `/?post=${post.id}`, me && me.avatar);
+    if (ok && !ok.filtered && !isOwner) sendPushNotification(post.user_id, 'ZChat', `${(me && me.name) || 'Someone'} commented with a GIF`, `/?post=${post.id}`, me && me.avatar);
   };
   const openMention = (p) => { if (p) onOpenProfile(p); };
   const { tops, replies } = rows ? commentThreads(rows, pinnedId) : { tops: [], replies: new Map() };
   const ownerName = (post.owner && (post.owner.username || post.owner.name)) || '';
-  const row = (c, small) => (
+  const row = (c, small) => (isHidden(c) && !peek.has(c.id) ? (
+    <div key={c.id} role="listitem" aria-label="Hidden comment" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: small ? '8px 0' : '10px 16px', fontSize: 13.5, color: theme.muted }}>
+      <EyeOff size={16} style={{ flexShrink: 0 }} />
+      <span style={{ flex: 1, minWidth: 0 }}>Hidden because it may be offensive</span>
+      <span role="button" aria-label="View hidden comment" onClick={() => { hapticTap(); setPeek((p) => { const n = new Set(p); n.add(c.id); return n; }); }} style={{ fontWeight: 700, color: theme.ink, cursor: 'pointer', padding: '4px 2px' }}>View</span>
+    </div>
+  ) : isHidden(c) ? (
+    <React.Fragment key={c.id}>
+      <CommentRow c={c} small={small} lp={lp.current} isCreator={c.user_id === post.user_id} owner={post.user_id} pinned={!small && c.id === pinnedId}
+      like={commentLikes[c.id] || { count: 0, mine: false }} onLike={toggleLike} onReply={startReply} onMenu={setMenuFor} onOpenProfile={onOpenProfile} onMention={openMention} mine={c.user_id === userId} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: small ? '0 0 8px 44px' : '0 16px 10px 62px', fontSize: 12.5, color: theme.muted }}>
+        <EyeOff size={14} style={{ flexShrink: 0 }} />
+        <span style={{ flex: 1, minWidth: 0 }}>Only you and the writer can see this</span>
+        <span role="button" aria-label="Show this comment to everyone" onClick={() => showComment(c)} style={{ fontWeight: 700, color: theme.ink, cursor: 'pointer', padding: '2px 0', flexShrink: 0 }}>Show to everyone</span>
+      </div>
+    </React.Fragment>
+  ) : (
     <CommentRow key={c.id} c={c} small={small} lp={lp.current} isCreator={c.user_id === post.user_id} owner={post.user_id} pinned={!small && c.id === pinnedId}
       like={commentLikes[c.id] || { count: 0, mine: false }} onLike={toggleLike} onReply={startReply} onMenu={setMenuFor} onOpenProfile={onOpenProfile} onMention={openMention} mine={c.user_id === userId} />
-  );
+  ));
   const menu = menuFor;
   const menuText = menu ? String(menu.content || '') : '';
   return (
@@ -24325,6 +24377,7 @@ export function FeedComments({ post, me, userId, onClose, onCount, onOpenProfile
             !menuText.startsWith('sticker:') ? { k: 'copy', label: 'Copy text', icon: <Copy />, on: async () => { setMenuFor(null); const ok = await copyTextToClipboard(menuText); flash(ok ? 'Copied' : 'Could not copy'); } } : null,
             isOwner && !menu.parent_id && !String(menu.id).startsWith('temp-') ? { k: 'pin', label: pinnedId === menu.id ? 'Unpin comment' : 'Pin comment', icon: <Pin />, on: () => togglePinComment(menu) } : null,
             menu.user_id !== userId ? { k: 'report', label: 'Report', icon: <Flag />, on: async () => { const c = menu; setMenuFor(null); try { await reportUser(userId, c.user_id, `Comment ${c.id}: ${String(c.content || '').slice(0, 120)}`); } catch {} flash('Thanks. We will take a look.'); } } : null,
+            isHidden(menu) ? { k: 'show', label: 'Show to everyone', icon: <Eye />, on: () => showComment(menu) } : null,
             canDelete(menu) ? { k: 'delete', label: 'Delete comment', icon: <Trash2 />, danger: true, on: () => removeComment(menu) } : null,
           ].filter(Boolean)} />
         )}

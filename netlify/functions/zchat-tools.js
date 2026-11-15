@@ -21,6 +21,13 @@ function tokenClaims(token) {
   try { return JSON.parse(Buffer.from(String(token).split('.')[1] || '', 'base64url').toString('utf8')) || {}; } catch { return {}; }
 }
 
+function mfaPending(user, token) {
+  try {
+    const claims = JSON.parse(Buffer.from(String(token || '').split('.')[1] || '', 'base64url').toString('utf8')) || {};
+    return Array.isArray(user && user.factors) && user.factors.some((f) => f && f.status === 'verified') && claims.aal !== 'aal2';
+  } catch { return true; }
+}
+
 async function callerFrom(event) {
   try {
     const h = event.headers || {};
@@ -36,6 +43,7 @@ async function callerFrom(event) {
     ]);
     const user = got && !got.error && got.data ? got.data.user : null;
     if (!user || (sub && user.id !== sub)) return null;
+    if (mfaPending(user, token)) return null;
     const stErr = state && state.error;
     if (stErr) {
       if (!/PGRST202|42883|could not find the function|does not exist/i.test(`${stErr.code || ''} ${stErr.message || ''}`)) return null;
@@ -89,9 +97,13 @@ async function turnServers() {
   return { iceServers: [], ttl: 3600, source: 'none' };
 }
 
+const limitText = (out, busy) => (out && out.daily ? 'The daily limit has been reached. Try again tomorrow.' : busy);
+
 async function geminiText(parts, systemText, timeoutMs = 20000, asJson = false) {
   if (!process.env.GEMINI_API_KEY) return null;
-  for (const model of [...new Set([GEMINI_MODEL, GEMINI_FALLBACK])]) {
+  const models = [...new Set([GEMINI_MODEL, GEMINI_FALLBACK])];
+  let limits = 0, days = 0;
+  for (const model of models) {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), timeoutMs);
     try {
@@ -102,7 +114,7 @@ async function geminiText(parts, systemText, timeoutMs = 20000, asJson = false) 
         signal: ctrl.signal,
       });
       const json = await res.json().catch(() => null);
-      if (!res.ok) { console.error('Gemini tools error', model, res.status); if (res.status === 429) return { limited: true }; continue; }
+      if (!res.ok) { console.error('Gemini tools error', model, res.status); if (res.status === 429) { limits += 1; if (/PerDay/i.test(JSON.stringify(json || ''))) days += 1; } continue; }
       const cand = json && json.candidates && json.candidates[0];
       const text = ((cand && cand.content && cand.content.parts) || []).filter((p) => typeof p.text === 'string' && !p.thought).map((p) => p.text).join('').trim();
       if (text) return { text };
@@ -110,6 +122,7 @@ async function geminiText(parts, systemText, timeoutMs = 20000, asJson = false) 
       console.error('Gemini tools failed', model, err && err.name);
     } finally { clearTimeout(timer); }
   }
+  if (limits) return { limited: true, daily: days === models.length };
   return null;
 }
 
@@ -138,7 +151,7 @@ async function translate(user, body) {
   if ((await bumpUsage(user.id, 'translate')) > LIMITS.translate) return reply(429, { error: 'You have translated a lot today. Try again tomorrow.' });
   const systemText = `You translate chat messages into ${to}. Keep the meaning, tone, emojis, names, numbers and links exactly. If the message is already in ${to}, return it unchanged. Reply with only the translated message and nothing else.`;
   const out = (await ollamaText(systemText, text)) || (await geminiText([{ text }], systemText));
-  if (!out || out.limited || !out.text) return reply(503, { error: 'Translation is busy right now. Try again soon.' });
+  if (!out || out.limited || !out.text) return reply(503, { error: limitText(out, 'Translation is busy right now. Try again soon.') });
   return reply(200, { text: out.text.slice(0, 6000), to });
 }
 
@@ -150,7 +163,7 @@ async function translateLive(user, body) {
   if ((await bumpUsage(user.id, 'translate_live')) > LIMITS.translate_live) return reply(429, { error: 'You have translated a lot today. Try again tomorrow.' });
   const systemText = `You translate a chat message someone is writing into ${to}. Keep the meaning, tone, emojis, names, numbers, mentions like @name and links exactly. If it is already in ${to}, keep it as it is. Reply with only JSON like {"from":"en","text":"..."}, where "from" is the language it was written in, one of ${Object.keys(LANGS).join(', ')}, or "xx" when you are not sure, and "text" is the translation.`;
   const out = (await ollamaText(systemText, text, 9000, true)) || (await geminiText([{ text }], systemText, 20000, true));
-  if (!out || out.limited || !out.text) return reply(503, { error: 'Translation is busy right now. Try again soon.' });
+  if (!out || out.limited || !out.text) return reply(503, { error: limitText(out, 'Translation is busy right now. Try again soon.') });
   let parsed = null;
   try { parsed = JSON.parse(String(out.text).replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim()); } catch { parsed = null; }
   const done = parsed && typeof parsed.text === 'string' ? parsed.text.trim() : '';
@@ -175,7 +188,7 @@ async function rewrite(user, body) {
   if ((await bumpUsage(user.id, 'rewrite')) > LIMITS.rewrite) return reply(429, { error: 'You have used writing help a lot today. Try again tomorrow.' });
   const systemText = `You help someone polish a chat message before they send it. ${how} Write it as the sender, in the same language and script they used, including mixes like Sinhala or Tamil written in English letters. Keep names, numbers, links and the meaning. Do not add greetings, sign offs or explanations. Reply with only the new message.`;
   const out = (await ollamaText(systemText, text, 12000)) || (await geminiText([{ text }], systemText, 20000));
-  if (!out || out.limited || !out.text) return reply(503, { error: 'Writing help is busy right now. Try again soon.' });
+  if (!out || out.limited || !out.text) return reply(503, { error: limitText(out, 'Writing help is busy right now. Try again soon.') });
   const clean = out.text.replace(/^["\u201C\u201D']+|["\u201C\u201D']+$/g, '').trim().slice(0, 3000);
   if (!clean) return reply(503, { error: 'Writing help is busy right now. Try again soon.' });
   return reply(200, { text: clean });
@@ -203,7 +216,7 @@ async function translateMany(user, body) {
   const systemText = `You translate chat messages into ${to}. You get JSON like {"items":[{"id":"1","t":"text"}]}. Reply with only JSON in the same shape, with the same ids and each "t" holding the translation. Keep the meaning, tone, emojis, names, numbers and links exactly. If a message is already in ${to}, keep it unchanged.`;
   const input = JSON.stringify({ items });
   const out = (await ollamaText(systemText, input, 15000, true)) || (await geminiText([{ text: input }], systemText, 30000, true));
-  if (!out || out.limited || !out.text) return reply(503, { error: 'Translation is busy right now. Try again soon.' });
+  if (!out || out.limited || !out.text) return reply(503, { error: limitText(out, 'Translation is busy right now. Try again soon.') });
   const ids = new Set(items.map((x) => x.id));
   const done = (jsonItems(out.text) || [])
     .filter((x) => x && ids.has(String(x.id)) && typeof x.t === 'string' && x.t.trim())
@@ -222,7 +235,7 @@ async function summary(user, body) {
   const transcript = `${chat ? `Chat: ${chat}\n` : ''}${items.map((x) => `${x.n}: ${x.t}`).join('\n')}`.slice(0, 24000);
   const systemText = 'You catch someone up on a chat they missed. The person reading is called "Me" in the chat. Write 2 to 6 short lines, each starting with "• ". Cover plans, decisions, questions still waiting for an answer and anything that needs the reader. Use first names. Keep it friendly and plain. Never use hyphens, dashes or underscores. Write in the main language of the chat. Reply with only the lines.';
   const out = (await ollamaText(systemText, transcript, 15000)) || (await geminiText([{ text: transcript }], systemText, 30000));
-  if (!out || out.limited || !out.text) return reply(503, { error: 'Catch me up is busy right now. Try again soon.' });
+  if (!out || out.limited || !out.text) return reply(503, { error: limitText(out, 'Catch me up is busy right now. Try again soon.') });
   return reply(200, { text: out.text.slice(0, 3000) });
 }
 
@@ -349,7 +362,7 @@ async function spamcheck(user, body) {
   if ((await bumpUsage(user.id, 'spamcheck')) > LIMITS.spamcheck) return reply(429, { error: 'Spam check is resting for today.' });
   const sys = 'You check one chat message sent by a stranger for spam and scams. Reply with JSON only, like {"verdict":"ok","reason":"Normal greeting"}. verdict is "scam" for phishing, fake prizes, crypto or investment schemes, requests for codes, passwords, money or gift cards, and impersonation. verdict is "spam" for ads, mass promotion, follower selling and adult ads. verdict is "ok" for normal personal messages, even rude, flirty or odd ones. reason is at most 8 plain words.';
   const out = (await ollamaText(sys, text, 8000, true)) || (await geminiText([{ text }], sys, 12000, true));
-  if (!out || out.limited || !out.text) return reply(503, { error: 'Spam check is busy right now.' });
+  if (!out || out.limited || !out.text) return reply(503, { error: limitText(out, 'Spam check is busy right now.') });
   let j = null;
   try { j = JSON.parse(String(out.text).replace(/^```(?:json)?/i, '').replace(/```$/, '').trim()); } catch {}
   const verdict = j && ['spam', 'scam', 'ok'].includes(j.verdict) ? j.verdict : 'ok';
@@ -382,7 +395,9 @@ function characterRules(ch, userName) {
 
 async function geminiChat(contents, systemText, timeoutMs = 25000) {
   if (!process.env.GEMINI_API_KEY) return null;
-  for (const model of [...new Set([GEMINI_MODEL, GEMINI_FALLBACK])]) {
+  const models = [...new Set([GEMINI_MODEL, GEMINI_FALLBACK])];
+  let limits = 0, days = 0;
+  for (const model of models) {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), timeoutMs);
     try {
@@ -393,7 +408,7 @@ async function geminiChat(contents, systemText, timeoutMs = 25000) {
         signal: ctrl.signal,
       });
       const json = await res.json().catch(() => null);
-      if (!res.ok) { console.error('Gemini chat error', model, res.status); if (res.status === 429) return { limited: true }; continue; }
+      if (!res.ok) { console.error('Gemini chat error', model, res.status); if (res.status === 429) { limits += 1; if (/PerDay/i.test(JSON.stringify(json || ''))) days += 1; } continue; }
       const cand = json && json.candidates && json.candidates[0];
       if (json && json.promptFeedback && json.promptFeedback.blockReason) return { blocked: true };
       const text = ((cand && cand.content && cand.content.parts) || []).filter((p) => typeof p.text === 'string' && !p.thought).map((p) => p.text).join('').trim();
@@ -403,6 +418,7 @@ async function geminiChat(contents, systemText, timeoutMs = 25000) {
       console.error('Gemini chat failed', model, err && err.name);
     } finally { clearTimeout(timer); }
   }
+  if (limits) return { limited: true, daily: days === models.length };
   return null;
 }
 
@@ -453,7 +469,7 @@ async function character(user, body) {
   if (contents.length && contents[0].role === 'model') contents.unshift({ role: 'user', parts: [{ text: '(The chat starts.)' }] });
   const out = (await ollamaChat(sys, contents.map((c) => ({ role: c.role === 'model' ? 'assistant' : 'user', content: c.parts[0].text })))) || (await geminiChat(contents, sys));
   if (!out) return reply(503, { error: `${ch.name} is quiet right now. Try again soon.` });
-  if (out.limited) return reply(503, { error: 'Characters are busy right now. Try again in a minute.' });
+  if (out.limited) return reply(503, { error: limitText(out, 'Characters are busy right now. Try again in a minute.') });
   const namePrefix = new RegExp(`^\\s*(\\*\\*)?${String(ch.name).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\*\\*)?\\s*:\\s*`, 'i');
   const text = out.blocked ? 'Let us keep things friendly. Ask me something else?' : String(out.text).replace(namePrefix, '').trim().slice(0, 3000);
   const { data: row, error } = await supabase.from('ai_character_messages').insert({ character_id: cid, user_id: user.id, role: 'char', content: text }).select('id, role, content, created_at').single();
@@ -470,7 +486,7 @@ async function charcheck(user, body) {
   if ((await bumpUsage(user.id, 'charcheck')) > LIMITS.charcheck) return reply(429, { error: 'Try again tomorrow.' });
   const sys = 'You review made up chat characters before they are shared publicly in a social app used by teens and adults. Reply with JSON only, like {"ok":true,"reason":""}. Set ok to false if the character is sexual or adult themed, romantic or flirty toward minors, hateful, violent or encouraging self harm or crime, pretends to be a real living person or celebrity, impersonates a company or ZChat staff, or is built to scam people. reason is at most 10 plain words.';
   const out = (await geminiText([{ text }], sys, 12000, true)) || (await ollamaText(sys, text, 8000, true));
-  if (!out || out.limited || !out.text) return reply(503, { error: 'Could not check right now.' });
+  if (!out || out.limited || !out.text) return reply(503, { error: limitText(out, 'Could not check right now.') });
   let j = null;
   try { j = JSON.parse(String(out.text).replace(/^```(?:json)?/i, '').replace(/```$/, '').trim()); } catch {}
   if (!j || typeof j.ok !== 'boolean') return reply(503, { error: 'Could not check right now.' });
@@ -516,7 +532,7 @@ async function transcribe(user, body) {
     { inlineData: { mimeType, data: media.buf.toString('base64') } },
     { text: 'Write down exactly what is said in this voice message, in the language it is spoken in. Use normal punctuation. If nothing can be heard, reply with only: (no speech)' },
   ], 'You turn voice messages into text. Reply with only the words that were said.', 40000);
-  if (!out || out.limited || !out.text) return reply(503, { error: 'Voice to text is busy right now. Try again soon.' });
+  if (!out || out.limited || !out.text) return reply(503, { error: limitText(out, 'Voice to text is busy right now. Try again soon.') });
   return reply(200, { text: out.text.slice(0, 6000) });
 }
 
@@ -649,7 +665,7 @@ async function replyIdeas(user, body) {
   const transcript = `${groupId ? `Group chat${chatName ? ` called ${chatName}` : ''}` : `Private chat with ${first(peerId)}`}\n${lines.map((m) => `${m.s === user.id ? 'Me' : first(m.s)}: ${m.t}`).join('\n')}`.slice(0, 8000);
   const systemText = 'You suggest what "Me" could send next in a chat app. Read the chat and write exactly 3 short replies to the latest messages, in the voice of Me: copy how Me writes (length, casing, slang, emoji use) and use the same language or language mix as the chat, including Sinhala or Tamil written in English letters. Each reply is one chat message under 90 characters, natural and kind, not formal, and the three are clearly different (for example agree, ask something back, or keep it light). Do not invent plans, places or facts that are not in the chat. Never mention AI or that these are suggestions. Never use hyphens, dashes or underscores. Reply with only JSON like {"items":["first reply","second reply","third reply"]}.';
   const out = (await ollamaText(systemText, transcript, 12000, true)) || (await geminiText([{ text: transcript }], systemText, 20000, true));
-  if (!out || out.limited || !out.text) return reply(503, { error: 'Reply ideas are busy right now. Try again soon.' });
+  if (!out || out.limited || !out.text) return reply(503, { error: limitText(out, 'Reply ideas are busy right now. Try again soon.') });
   const seen = new Set();
   const replies = (jsonItems(out.text) || [])
     .map((x) => (typeof x === 'string' ? x : x && typeof x.t === 'string' ? x.t : x && typeof x.text === 'string' ? x.text : ''))

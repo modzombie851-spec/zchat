@@ -4,7 +4,7 @@ import { Eye, X, Image as ImageIcon, ArrowLeft, Check, ChevronRight, ChevronLeft
 import { supabase } from '../supabaseClient.js';
 import { AppPinPad, Avatar, BIRTHDAY_PINK, BigButton, BioKey, CHAR_BUBBLES, CHAR_BUBBLE_KEYS, CUSTOM_BADGES, CX_KINDS, CharmPreview, ChipStartSheet, CoinIcon, CoinPouchArt, CollectionIcon, ConfirmDialog, ConfirmSheet, CrGlyph, CxGiftPicker, DAILY_COINS, DECOR_ALL, DECOR_BY_KEY, DECOR_SETS, DECOR_SI, DECOR_SPRITE, DecorFrameBadge, DecorHero, DecorStill, EDITION_FIRST, EmptyState, FONT, FullPage, GIFT_MAX, GiftIcon, IgHeading, IgRow, IgToggle, LIVE_WALL_BY, LineGlyph, LiveWallCanvas, LoadFail, MonthlyLimitPage, NS_KEYS, NS_OWN_SAMPLE, NS_ROOM, NameBadge, NameStyleArt, OwnStylePage, PROFILE_THEMES, PickPeoplePage, PieceGlyph, PillButton, Portal, ProfileDecorHero, ProfileEffectLayer, RARITY_STYLE, RedeemCodeSheet, SI_KINDS, SI_SOUND_PACKS, SI_STICKER_PACKS, SI_TYPING, STORE_RARITY_ORDER, SUPER_KEYS, SUPER_REACTS, SecGlyph, SegmentedControl, ShopItemArt, SiItemArt, Spinner, SpotArt, StyledName, SuperFace, THEMES, THEME_KEYS, ThemeArt, ThemeCanvas, ThemePreviewPage, TradeArt, TradeIcon, TypingStyleBubble, VERIFIED_TIERS, VerifiedBadge, WideDim, WrapPickerSheet, addSpendSent, adminWords, announceWallet, appSnack, bdayGiftWhat, bioCheck, bioCredId, bubbleKeyOf, claimDailyCoins, coinsText, copyTextToClipboard, countWord, crFirst, crOpen, cxFlag, cxHas, cxKnown, cxNs, cxOwns, cxSpec, cxWord, dailyNext, daysLeft, decorBudgetQueue, decorFamily, decorOwned, decorPartPrice, detailsCardBg, dropOwned, dropPhase, editionOf, fmtDate, formatCount, friendlyError, giftRpc, giftTheirsMem, giftTheirsPend, hapticTap, igPalette, inputStyle, isDecorKey, kitOnInk, laterInputValue, ledgerMem, limitLeft, listText, liveAddGift, liveBurst, liveCid, liveEmit, liveFirst, livePlanById, livePlanEach, livePlanMerge, livePlanSort, livePlanWhy, livePlans, livePlansEmit, liveRpc, liveRt, liveWallBg, liveWallPaid, liveWallVeil, liveWhenLow, loadPayOptions, mixHex, moneyRun, moreCoinsText, nsOwn, nsOwnSaved, payMem, pickCoverFile, playUiSound, readJsonLs, readRingtone, readTone, reducedMotion, reminderWhen, rewardActive, rpcFailText, rpcMissing, santaPut, saveDecorSets, sendPushNotification, shopItemName, shopPing, shopPrice, shortLeft, siOwns, siSpec, siteOrigin, spPlay, spendAuthBus, spendGate, superAccent, themeFallback, tradeItemName, tradeLive, tradeMem, tradeNorm, tradePut, tradeSides, tradeStatusOf, typingStyleMine, useBackClose, useBioReady, useBirthdayOf, useCr, useDecorLoaded, useEdgeSwipeBack, useGfPeople, useSecondTick, useSheetDrag, useShopTick, useTheme, useWallet, useWidthOf, useWishlist, verifyPin, walletAfter, walletMem, walletPatch, walletSpend, writeJsonLs } from '../App.jsx';
 import { GAME_KITS, GAME_KIT_BY, KIT_GAME_NAMES, kitKeyFor, kitSet, gameKitSave, useKit, GameKitArt } from '../games/kits.jsx';
-import { CharBubbleSample, DECOR_PIECES, GIFT_PAPER_EXTRA, GiftBoxIcon, GiftCodeIcon, KitSection, KitSlider, LIVE_WALL_PAID, ShopChatMock, ShopProfileMock, ThemeMockProfile, WrapBoxArt, buyDeal, buyShopItem, coinTakenBack, dropsMem, giftPaper, giftRibbon, giftWrapText, hexLum, loadMilestones, reasonLine, setTypingStyleMine, shopKindWord, shopKnown, shopMem, shopOwnersMem, shopSave, shopWarm, siWord, useDeal, useDrops, useMoneyToast, useOwnedBubbles, useShopOwners, useSpendLimit } from './shared.jsx';
+import { CharBubbleSample, DECOR_PIECES, GIFT_PAPER_EXTRA, GiftBoxIcon, GiftCodeIcon, KitSection, KitSlider, LIVE_WALL_PAID, ShopChatMock, ShopListMock, ShopProfileMock, ThemeMockProfile, WrapBoxArt, buyDeal, buyShopItem, coinTakenBack, dropsMem, giftPaper, giftRibbon, giftWrapText, hexLum, loadMilestones, reasonLine, setTypingStyleMine, shopKindWord, shopKnown, shopMem, shopOwnersMem, shopSave, shopWarm, siWord, useDeal, useDrops, useMoneyToast, useOwnedBubbles, useShopOwners, useSpendLimit } from './shared.jsx';
 
 function usePayOptions() {
   const [data, setData] = useState(payMem.data);
@@ -1039,6 +1039,55 @@ const SHOP_VIEWS = { new: 'New', popular: 'Popular', wishlist: 'Your wishlist', 
 const SHOP_PIECES = ['frame', 'nameplate', 'effect'];
 const SHOP_CX = ['namestyle', 'theme', 'reaction'];
 const SHOP_INK ={ mythic: ['#FF6B86', '#C81E45'], legendary: ['#F5B829', '#9A6300'], epic: ['#C59BFF', '#8136D8'], rare: ['#6FB0FF', '#1D66D6'] };
+const SHOP_RAR = { rare: ['#3E8EFF', '#1B5BD6', '#123F99'], epic: ['#A562FF', '#6B2EDB', '#481C9C'], legendary: ['#FFB833', '#EE7A0C', '#A84F08'], mythic: ['#FF5C7C', '#D4285C', '#93123E'] };
+function shopRar(r) { return SHOP_RAR[r] || SHOP_RAR.epic; }
+function shopRarFor(kind, k, drop) { return kind === 'drop' ? (drop && drop.kind === 'set' && DECOR_BY_KEY[drop.item_key] ? DECOR_BY_KEY[drop.item_key].rarity : 'rare') : shopRarityOf(kind, k); }
+function shopTint(hex, a) { const n = parseInt(String(hex).slice(1), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`; }
+function shopGlow(pal, a) { return `radial-gradient(circle at 50% 46%, ${pal.stage} 42%, ${shopTint(a, pal.dark ? 0.55 : 0.38)} 100%)`; }
+const SHOP_ON_BAND = { ink3: 'rgba(255,255,255,0.72)' };
+function shopDayNo() { return Math.floor(Date.now() / 86400000); }
+function shopSeeded(seed) {
+  let h = 2166136261;
+  for (let i = 0; i < seed.length; i++) { h ^= seed.charCodeAt(i); h = Math.imul(h, 16777619); }
+  let t = h >>> 0;
+  return () => { t += 0x6D2B79F5; let r = Math.imul(t ^ (t >>> 15), 1 | t); r ^= r + Math.imul(r ^ (r >>> 7), 61 | r); return ((r ^ (r >>> 14)) >>> 0) / 4294967296; };
+}
+function shopDailyPicks(uid, day, cxOn, st) {
+  const saved = readJsonLs(`zchat-shop-daily-${uid}`, null);
+  const ok = (it) => it && typeof it.kind === 'string' && typeof it.key === 'string' && shopKeys(it.kind, cxOn).includes(it.key);
+  if (saved && saved.day === day && Array.isArray(saved.list) && saved.list.length >= 4 && saved.list.every(ok)) return saved.list;
+  const rnd = shopSeeded(`${uid}:${day}`);
+  const slots = cxOn
+    ? [['set'], ['bubble'], ['namestyle'], ['theme', 'stickerpack'], ['reaction', 'typing'], ['charm', 'soundpack']]
+    : [['set'], ['bubble'], ['charm'], ['stickerpack'], ['typing'], ['set', 'soundpack']];
+  const used = new Set();
+  const list = [];
+  slots.forEach((kinds) => {
+    const pool = [];
+    kinds.forEach((kd) => shopKeys(kd, cxOn).forEach((k2) => { if (!(kd === 'namestyle' && k2 === 'own') && !used.has(`${kd}:${k2}`)) pool.push({ kind: kd, key: k2 }); }));
+    const fresh = pool.filter((it) => !st(it.kind, it.key).owned);
+    const from = fresh.length ? fresh : pool;
+    if (!from.length) return;
+    const it = from[Math.floor(rnd() * from.length)];
+    used.add(`${it.kind}:${it.key}`);
+    list.push(it);
+  });
+  writeJsonLs(`zchat-shop-daily-${uid}`, { day, list });
+  return list;
+}
+function ShopResetClock({ pal }) {
+  useSecondTick(true);
+  const s = Math.max(0, Math.floor(((shopDayNo() + 1) * 86400000 - Date.now()) / 1000));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const t = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+  return (
+    <span role="timer" aria-label={`New items in ${countWord(h, 'hour', 'hours')} ${countWord(m, 'minute', 'minutes')}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 30, padding: '0 11px 0 9px', borderRadius: 15, background: pal.stage, boxShadow: `0 3px 0 ${pal.edge}`, fontSize: 13, fontWeight: 800, color: pal.ink, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ display: 'block' }}><circle cx="12" cy="13" r="8" stroke="currentColor" strokeWidth="2.4" /><path d="M12 9v4.4l2.8 1.8M9.5 2.8h5" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" /></svg>
+      {t}
+    </span>
+  );
+}
 const SHOP_WHERE = { set: 'Your profile, chats and Vibes', frame: 'Around your photo everywhere', nameplate: 'Behind your name on your profile', effect: 'Over your profile when someone opens it', bubble: 'Every message you send', charm: 'Next to your name everywhere', namestyle: 'Your name on your profile, in chats and on Vibes', theme: 'Behind your profile for everyone who visits', reaction: 'Over any message you react to', wallpaper: 'Behind any chat you pick it for', stickerpack: 'Your sticker picker in every chat', soundpack: 'Message tones and ringtones', typing: 'Your typing bubble in chats', gamekit: 'Your board and pieces when you play' };
 const SHOP_SUBS = { set: 'Frame, nameplate and profile effect', frame: 'Around your photo everywhere', nameplate: 'Behind your name on your profile', effect: 'Plays when someone opens your profile', bubble: 'Shows on every message you send', namestyle: 'Your name, drawn your way', theme: 'A moving scene behind your profile', reaction: 'Big reactions that play over the chat', charm: 'Sits next to your name everywhere', stickerpack: 'Animated stickers, yours to keep', soundpack: 'Message tones and ringtones', typing: 'What friends see while you type', wallpaper: 'Moving backgrounds for your chats', gamekit: 'Boards, pieces and tables for your games' };
 const SHOP_BUY_REASONS = ['shop', 'deal', 'drop', 'gift_item', 'refund'];
@@ -1049,6 +1098,9 @@ function shopPal(theme) {
 }
 function shopKindLabel(kind) {
   return { set: 'Set', frame: 'Frame', nameplate: 'Nameplate', effect: 'Profile effect', bubble: 'Chat bubble', charm: 'Charm', namestyle: 'Name style', theme: 'Profile theme', reaction: 'Super reaction', wallpaper: 'Live wallpaper', stickerpack: 'Sticker pack', soundpack: 'Sound pack', typing: 'Typing style', gamekit: 'Game style', drop: 'Limited drop' }[kind] || 'Item';
+}
+function shopKindShort(kind) {
+  return { set: 'Set', frame: 'Frame', nameplate: 'Plate', effect: 'Effect', bubble: 'Bubble', charm: 'Charm', namestyle: 'Style', theme: 'Theme', reaction: 'Reaction', wallpaper: 'Wallpaper', stickerpack: 'Stickers', soundpack: 'Sounds', typing: 'Typing', gamekit: 'Game item' }[kind] || shopKindLabel(kind);
 }
 function shopNameOf(kind, key) {
   if (SHOP_PIECES.includes(kind)) return shopItemName('set', key);
@@ -1225,20 +1277,31 @@ function ShopKitStage({ k, pal }) {
     </div>
   );
 }
-const ShopTile = React.memo(function ShopTile({ kind, k, me, pal, w, meta, title, owned, equipped, price, was, flag, flagTone, onOpen, rail = false, drop = null }) {
+const ShopTile = React.memo(function ShopTile({ kind, k, me, pal, w, meta, title, owned, equipped, price, was, flag, flagTone, onOpen, rail = false, drop = null, big = false }) {
   const name = title || shopNameOf(kind, k);
-  const state = equipped ? 'Equipped' : owned ? 'Owned' : `${formatCount(price || 0)} coins`;
+  const rar = shopRarFor(kind, k, drop);
+  const [ca, cb, edge] = shopRar(rar);
+  const off = was && price && was > price ? Math.round((1 - price / was) * 100) : 0;
+  const state = equipped ? 'Equipped' : owned ? 'Owned' : `${formatCount(price || 0)} coins${off ? `, ${off}% off` : ''}`;
   return (
-    <div role="button" aria-label={`${name}${meta ? `, ${meta}` : ''}, ${state}`} onClick={() => onOpen(kind, k)} className="zchat-press"
-      style={{ width: w, flex: rail ? `0 0 ${w}px` : '0 1 auto', minWidth: 0, cursor: 'pointer', scrollSnapAlign: rail ? 'start' : undefined }}>
-      <div style={{ position: 'relative', width: w, height: w, borderRadius: 20, background: pal.stage, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', isolation: 'isolate', boxShadow: `inset 0 0 0 2px ${pal.border}, 0 4px 0 ${pal.edge}` }}>
-        <ShopArt kind={kind} k={k} me={me} size={w} pal={pal} drop={drop} />
-        {flag && <div style={{ position: 'absolute', left: 8, top: 8, zIndex: 3 }}><ShopPill pal={pal} tone={flagTone || 'page'}>{flag}</ShopPill></div>}
-      </div>
-      <div style={{ marginTop: 8, fontSize: 14, fontWeight: 650, color: pal.ink, lineHeight: 1.25, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</div>
-      {meta && <div style={{ marginTop: 2, fontSize: 12.5, color: pal.ink2, lineHeight: 1.25, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{meta}</div>}
-      <div style={{ marginTop: 6, height: 24, display: 'flex', alignItems: 'center' }}>
-        {owned || equipped ? <ShopStatus pal={pal} owned={owned} equipped={equipped} /> : <span style={{ display: 'inline-flex', alignItems: 'center', height: 24, padding: '0 9px 0 5px', borderRadius: 12, background: pal.dark ? 'rgba(255,200,58,0.14)' : 'rgba(255,200,58,0.24)' }}><ShopCoins price={price || 0} was={was} pal={pal} /></span>}
+    <div role="button" aria-label={`${name}, ${shopRarityWord(rar)}${meta ? `, ${meta}` : ''}, ${state}`} onClick={() => onOpen(kind, k)} className="zchat-press"
+      style={{ width: w, flex: rail ? `0 0 ${w}px` : '0 1 auto', minWidth: 0, cursor: 'pointer', scrollSnapAlign: rail ? 'start' : undefined, paddingBottom: 4 }}>
+      <div style={{ position: 'relative', borderRadius: 18, overflow: 'hidden', isolation: 'isolate', background: cb, boxShadow: `0 4px 0 ${edge}` }}>
+        <div style={{ position: 'relative', height: w, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', background: shopGlow(pal, ca), boxShadow: `inset 0 0 0 2px ${shopTint(ca, 0.9)}`, borderRadius: '18px 18px 0 0' }}>
+          <ShopArt kind={kind} k={k} me={me} size={w} pal={pal} drop={drop} />
+          {(off > 0 || flag) && <div style={{ position: 'absolute', left: 8, top: 8, zIndex: 3 }}><ShopPill pal={pal} tone={off > 0 ? 'accent' : flagTone || 'page'}>{off > 0 ? `${off}% off` : flag}</ShopPill></div>}
+          {(owned || equipped) && <div aria-hidden="true" style={{ position: 'absolute', right: 8, top: 8, zIndex: 3, width: 24, height: 24, borderRadius: 12, background: equipped ? '#F59E0B' : '#22B45E', color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 0 rgba(0,0,0,0.2)' }}><Check size={14} strokeWidth={3.4} /></div>}
+        </div>
+        <div style={{ padding: big ? '9px 12px 11px' : '8px 10px 10px', background: `linear-gradient(180deg, ${cb}, ${edge})`, color: '#FFFFFF' }}>
+          <div style={{ fontSize: big ? 15 : 13.5, fontWeight: 750, lineHeight: 1.25, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textShadow: '0 1px 0 rgba(0,0,0,0.25)' }}>{name}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 5, minHeight: 20 }}>
+            {owned || equipped
+              ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12.5, fontWeight: 800 }}><Check size={13} strokeWidth={3.4} />{equipped ? 'Equipped' : 'Owned'}</span>
+              : <ShopCoins price={price || 0} was={off > 0 ? was : null} size={big ? 14.5 : 13} pal={{ ...pal, ...SHOP_ON_BAND }} color="#FFFFFF" weight={800} />}
+            <span style={{ flex: 1 }} />
+            <span style={{ fontSize: 11.5, fontWeight: 650, color: 'rgba(255,255,255,0.84)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{meta || shopRarityWord(rar)}</span>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -1729,6 +1792,7 @@ function ShopProduct({ me, item, items = null, onPick, rewards, wallet, onClose,
   const [sheet, setSheet] = useState(null);
   const [fxRun, setFxRun] = useState(0);
   const [typingMine, setTypingMine] = useState(() => typingStyleMine(me.id));
+  const [tryOn, setTryOn] = useState(false);
   const [reminded, setReminded] = useState(() => !!(drop && dropsMem.mine.has(drop.id)));
   const [remBusy, setRemBusy] = useState(false);
   const [note, setNote] = useState('');
@@ -1740,7 +1804,7 @@ function ShopProduct({ me, item, items = null, onPick, rewards, wallet, onClose,
   useMoneyToast(flash);
   useEffect(() => () => clearTimeout(noteTimer.current), []);
   useEffect(() => { setMode('set'); }, [raw, key]);
-  useEffect(() => { setSheet(null); setFxRun(0); setView('profile'); try { if (boxRef.current) boxRef.current.scrollTop = 0; } catch {} }, [raw, key]);
+  useEffect(() => { setSheet(null); setFxRun(0); setView('profile'); setTryOn(false); try { if (boxRef.current) boxRef.current.scrollTop = 0; } catch {} }, [raw, key]);
   const wish = useWishlist(me.id);
   const deal = useDeal();
   const set = kind === 'set' ? DECOR_BY_KEY[key] || null : null;
@@ -1939,25 +2003,38 @@ function ShopProduct({ me, item, items = null, onPick, rewards, wallet, onClose,
   };
   const W = Math.max(240, Math.min(bw, 600) - 32);
   const showSet = set || dropSet;
-  let stage;
-  if (showSet) {
-    const sk = showSet.key;
-    const m = dropSet ? 'set' : mode;
-    const pf = m === 'nameplate' ? (isDecorKey(me.avatar_frame) ? me.avatar_frame : null) : sk;
-    const pp = m === 'frame' ? (isDecorKey(me.nameplate) ? me.nameplate : null) : sk;
-    stage = <ShopProfileMock me={me} frameKey={pf} plateKey={pp} charm={me.custom_badge} nsKey={cxNs(me)} width={W} dark={dark} />;
-  } else if (kind === 'drop' || kind === 'bubble') stage = <ShopChatMock me={me} dark={dark} bubble={key} />;
-  else if (kind === 'charm' || kind === 'namestyle') {
-    stage = view === 'chat'
-      ? <ShopChatMock me={me} dark={dark} group nsKey={kind === 'namestyle' ? key : cxNs(me)} charm={kind === 'charm' ? key : me.custom_badge} />
-      : <ShopProfileMock me={me} frameKey={me.avatar_frame} plateKey={me.nameplate} charm={kind === 'charm' ? key : me.custom_badge} nsKey={kind === 'namestyle' ? key : cxNs(me)} width={W} dark={dark} />;
-  } else if (kind === 'theme') stage = <ShopThemeStage me={me} k={key} dark={dark} pal={pal} onFull={onPreviewTheme} />;
-  else if (kind === 'reaction') stage = <ShopChatMock me={me} dark={dark} reaction={key} />;
-  else if (kind === 'wallpaper') stage = <LiveWallStage k={key} me={me} dark={dark} />;
-  else if (kind === 'stickerpack') stage = <ShopStickerGrid k={key} dark={dark} pal={pal} />;
-  else if (kind === 'soundpack') stage = <ShopSoundList k={key} owned={has} pal={pal} onUsed={flash} />;
-  else if (kind === 'gamekit') stage = <ShopKitStage k={key} pal={pal} />;
-  else stage = <ShopTypingStage k={key} me={me} dark={dark} pal={pal} />;
+  const myFrame = isDecorKey(me.avatar_frame) ? me.avatar_frame : null;
+  const stageFor = (v, dk, w) => {
+    if (showSet) {
+      const sk = showSet.key;
+      const m = dropSet ? 'set' : mode;
+      const pf = m === 'nameplate' ? myFrame : sk;
+      const pp = m === 'frame' ? (isDecorKey(me.nameplate) ? me.nameplate : null) : sk;
+      if (v === 'chat') return <ShopChatMock me={me} dark={dk} group frame={pf} nsKey={cxNs(me)} charm={me.custom_badge} />;
+      if (v === 'list') return <ShopListMock me={me} dark={dk} frameKey={pf} nsKey={cxNs(me)} charm={me.custom_badge} />;
+      return <ShopProfileMock me={me} frameKey={pf} plateKey={pp} charm={me.custom_badge} nsKey={cxNs(me)} width={w} dark={dk} />;
+    }
+    if (kind === 'drop' || kind === 'bubble') return <ShopChatMock me={me} dark={dk} bubble={key} />;
+    if (kind === 'charm' || kind === 'namestyle') {
+      const ns = kind === 'namestyle' ? key : cxNs(me);
+      const ch = kind === 'charm' ? key : me.custom_badge;
+      if (v === 'chat') return <ShopChatMock me={me} dark={dk} group nsKey={ns} charm={ch} frame={myFrame} />;
+      if (v === 'list') return <ShopListMock me={me} dark={dk} frameKey={myFrame} nsKey={ns} charm={ch} />;
+      return <ShopProfileMock me={me} frameKey={me.avatar_frame} plateKey={me.nameplate} charm={ch} nsKey={ns} width={w} dark={dk} />;
+    }
+    if (kind === 'theme') return <ShopThemeStage me={me} k={key} dark={dk} pal={pal} onFull={onPreviewTheme} />;
+    if (kind === 'reaction') return <ShopChatMock me={me} dark={dk} reaction={key} />;
+    if (kind === 'wallpaper') return <LiveWallStage k={key} me={me} dark={dk} />;
+    if (kind === 'stickerpack') return <ShopStickerGrid k={key} dark={dk} pal={pal} />;
+    if (kind === 'soundpack') return <ShopSoundList k={key} owned={has} pal={pal} onUsed={flash} />;
+    if (kind === 'gamekit') return <ShopKitStage k={key} pal={pal} />;
+    return <ShopTypingStage k={key} me={me} dark={dk} pal={pal} />;
+  };
+  const stage = stageFor(view, dark, W);
+  const tryTabs = showSet ? ((dropSet ? 'set' : mode) === 'nameplate' ? [['profile', 'Profile']] : [['profile', 'Profile'], ['chat', 'Chat'], ['list', 'Chats']])
+    : kind === 'charm' || kind === 'namestyle' ? [['profile', 'Profile'], ['chat', 'Chat'], ['list', 'Chats']]
+    : kind === 'soundpack' || kind === 'gamekit' ? null : [['main', 'Preview']];
+  const openTry = () => { hapticTap(); playUiSound('tap'); if (kind === 'theme' && onPreviewTheme) { onPreviewTheme(key); return; } setTryOn(true); };
   const fxKey = showSet && showSet.fx && (dropSet || mode === 'set' || mode === 'effect' || fxRun) ? showSet.key : null;
   const about = kind === 'drop' ? (drop.blurb || (dropSet && dropSet.about) || '') : kind === 'set' && mode === 'effect' ? 'An animation that plays over your profile when someone opens it. It only plays while you wear the full set.' : shopItemAbout(kind, key);
   const where = kind === 'drop' ? (dropSet ? SHOP_WHERE.set : SHOP_WHERE.bubble) : SHOP_WHERE[kind === 'set' ? mode : kind];
@@ -2035,6 +2112,12 @@ function ShopProduct({ me, item, items = null, onPick, rewards, wallet, onClose,
           <div data-no-swipe="true" onPointerDown={onDown} onPointerUp={onUp} onPointerCancel={() => { swipeRef.current = null; }} style={{ position: 'relative', borderRadius: 24, background: pal.stage, padding: 12, overflow: 'hidden', isolation: 'isolate', touchAction: 'pan-y' }}>
             <div key={`${raw}:${key}:${mode}:${view}`} className="zchat-pop" style={{ position: 'relative', zIndex: 1 }}>{stage}</div>
             {fxKey && <ProfileEffectLayer effectKey={fxKey} runKey={fxRun} force={fxRun > 0} z={3} />}
+            {tryTabs && (
+              <div role="button" aria-label={`Try on ${name}`} onClick={openTry} className="zchat-press" style={{ position: 'absolute', right: 20, top: 20, zIndex: 4, display: 'inline-flex', alignItems: 'center', gap: 6, height: 32, padding: '0 12px 0 10px', borderRadius: 16, background: 'rgba(12,16,32,0.72)', color: '#FFFFFF', fontSize: 13, fontWeight: 750, cursor: 'pointer', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ display: 'block' }}><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                Try on
+              </div>
+            )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, minHeight: 34 }}>
             {kind === 'gamekit' ? <div style={{ fontSize: 13, color: pal.ink2 }}>{GAME_KIT_BY[key] && ['cue', 'striker'].includes(GAME_KIT_BY[key].game) ? 'You and the other player see it on every shot' : 'You see your style when you play'}</div> : kind !== 'soundpack' ? <ShopSeg label="Preview in light or dark" items={[[false, 'Light'], [true, 'Dark']]} value={dark} onChange={setDark} pal={pal} /> : <div style={{ fontSize: 13, color: pal.ink2 }}>Tap a sound to hear it</div>}
@@ -2093,12 +2176,64 @@ function ShopProduct({ me, item, items = null, onPick, rewards, wallet, onClose,
           </div>
         </div>
       )}
+      {tryOn && tryTabs && (
+        <ShopTryOn pal={pal} tabs={tryTabs} startTab={tryTabs.some(([t]) => t === view) ? view : tryTabs[0][0]} startDark={dark} rarity={rarity} name={name} kindWord={kindWord}
+          stageFor={stageFor} fxKey={showSet && showSet.fx && (dropSet || mode === 'set' || mode === 'effect') ? showSet.key : null} left={left} primary={primary} secondary={secondary} onClose={() => setTryOn(false)} />
+      )}
       {sheet && (
         <ShopBuySheet pal={pal} me={me} artKind={kind === 'drop' ? 'drop' : artKind} artKey={key} drop={drop} name={name} kindWord={kindWord} price={price} was={was} coins={sheet.stage === 'busy' && sheet.bal != null ? sheet.bal : coins}
           free={sheet.free ? sheetFree : null} stage={sheet.stage} error={sheet.error} canEquip={canWear && !equipped} doneText={shopDoneText(kind, mode)} coinsInstead={sheet.free && coins >= (kind === 'set' ? full : BUBBLE_PRICE) ? (kind === 'set' ? full : BUBBLE_PRICE) : null}
           onConfirm={confirm} onClose={() => setSheet(null)} onCoins={() => { setSheet(null); if (onOpenWallet) onOpenWallet(); }} onEquip={() => { setSheet(null); equip(); }} />
       )}
       <ShopToast text={note} pal={pal} />
+    </div>
+  );
+}
+function ShopTryOn({ pal, tabs, startTab, startDark, rarity, name, kindWord, stageFor, fxKey, left, primary, secondary, onClose }) {
+  useBackClose(true, onClose);
+  const [tab, setTab] = useState(startTab);
+  const [dark, setDark] = useState(!!startDark);
+  const [run, setRun] = useState(() => Date.now());
+  const boxRef = useRef(null);
+  const bw = useWidthOf(boxRef, typeof window === 'undefined' ? 390 : Math.min(window.innerWidth, 560));
+  const W = Math.max(260, Math.min(bw, 560) - 32);
+  const [ca, cb, edge] = shopRar(rarity);
+  const pick = (t) => { if (t === tab) return; hapticTap(); setTab(t); if (t === 'profile') setRun(Date.now()); };
+  return (
+    <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 30, display: 'flex', flexDirection: 'column', color: pal.ink, fontFamily: FONT, background: `radial-gradient(130% 70% at 50% 0%, ${shopTint(ca, pal.dark ? 0.42 : 0.3)} 0%, ${pal.bg} 72%)`, backgroundColor: pal.bg }}>
+      <div style={{ flexShrink: 0, paddingTop: 'env(safe-area-inset-top)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: 56, padding: '0 12px 0 6px', maxWidth: 640, margin: '0 auto' }}>
+          <div role="button" aria-label="Close try on" onClick={onClose} className="zchat-press" style={{ width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: pal.ink, flexShrink: 0 }}><X size={24} strokeWidth={2.4} /></div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 17, fontWeight: 800, letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</div>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: shopRarityInk(rarity, pal.dark), whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{`${shopRarityWord(rarity)} ${String(kindWord || '').toLowerCase()}`}</div>
+          </div>
+          <ShopSeg label="Light or dark preview" items={[[false, 'Light'], [true, 'Dark']]} value={dark} onChange={setDark} pal={pal} />
+        </div>
+        {tabs.length > 1 && (
+          <div role="tablist" aria-label="Where to preview" style={{ display: 'flex', justifyContent: 'center', gap: 8, padding: '4px 16px 10px' }}>
+            {tabs.map(([t, l]) => {
+              const on = t === tab;
+              return <div key={t} role="tab" aria-selected={on} onClick={() => pick(t)} className="zchat-press" style={{ height: 36, padding: '0 18px', borderRadius: 18, display: 'flex', alignItems: 'center', fontSize: 14, fontWeight: 800, cursor: 'pointer', background: on ? cb : pal.stage, color: on ? '#FFFFFF' : pal.ink, boxShadow: `0 3px 0 ${on ? edge : pal.edge}` }}>{l}</div>;
+            })}
+          </div>
+        )}
+      </div>
+      <div ref={boxRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain', padding: '6px 16px 24px', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ width: '100%', maxWidth: 560, margin: 'auto', position: 'relative', isolation: 'isolate' }}>
+          <div key={`${tab}:${dark ? 1 : 0}`} className="zchat-pop" style={{ position: 'relative', zIndex: 1, borderRadius: 24, padding: 10, background: shopTint(ca, pal.dark ? 0.16 : 0.12), boxShadow: `inset 0 0 0 2px ${shopTint(ca, 0.55)}` }}>{stageFor(tab === 'main' ? 'profile' : tab, dark, W)}</div>
+          {fxKey && tab === 'profile' && <ProfileEffectLayer effectKey={fxKey} runKey={run} force z={3} />}
+        </div>
+      </div>
+      {(left || primary) && (
+        <div style={{ flexShrink: 0, padding: '10px 16px', paddingBottom: 'calc(10px + env(safe-area-inset-bottom))', borderTop: `1px solid ${pal.line}`, background: pal.bg }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, maxWidth: 600, margin: '0 auto' }}>
+            <div style={{ flex: 1, minWidth: 0 }}>{left}</div>
+            {secondary}
+            {primary}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -2131,10 +2266,13 @@ function ShopFeatured({ slides, me, pal, width, onOpen }) {
       <div ref={rowRef} onScroll={onScroll} onPointerDown={touch} onTouchStart={touch} onWheel={touch} className="zshop-row" style={{ display: 'flex', gap: 12, overflowX: 'auto', scrollSnapType: 'x mandatory', margin: '0 -16px', padding: '0 16px', scrollPaddingLeft: 16, scrollbarWidth: 'none' }}>
         {slides.map((s, i) => (
           <div key={s.id} role="button" aria-label={`${s.eyebrowText}, ${s.title}`} onClick={() => onOpen(s.it.kind, s.it.key)} className="zchat-press" style={{ flex: `0 0 ${cw}px`, width: cw, scrollSnapAlign: 'start', cursor: 'pointer', minWidth: 0 }}>
-            <div style={{ position: 'relative', height: stageH, borderRadius: 22, background: pal.stage, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', isolation: 'isolate' }}>
+            <div style={{ position: 'relative', height: stageH, borderRadius: 22, background: shopGlow(pal, shopRar(s.rar || shopRarityOf(s.it.kind, s.it.key))[0]), boxShadow: `inset 0 0 0 2px ${shopTint(shopRar(s.rar || shopRarityOf(s.it.kind, s.it.key))[0], 0.9)}, 0 4px 0 ${shopRar(s.rar || shopRarityOf(s.it.kind, s.it.key))[2]}`, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', isolation: 'isolate' }}>
               {s.art(stageH, i === at)}
               <div style={{ position: 'absolute', left: 12, top: 12, zIndex: 3, display: 'flex', gap: 6 }}>
                 <ShopPill pal={pal} tone="page" style={{ height: 26, padding: '0 10px', fontSize: 12.5 }}>{s.eyebrow}</ShopPill>
+              </div>
+              <div style={{ position: 'absolute', right: 12, top: 12, zIndex: 3 }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', height: 26, padding: '0 10px', borderRadius: 13, background: shopRar(s.rar || shopRarityOf(s.it.kind, s.it.key))[1], color: '#FFFFFF', fontSize: 12.5, fontWeight: 800, boxShadow: `0 2px 0 ${shopRar(s.rar || shopRarityOf(s.it.kind, s.it.key))[2]}` }}>{shopRarityWord(s.rar || shopRarityOf(s.it.kind, s.it.key))}</span>
               </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, padding: '12px 2px 0' }}>
@@ -2156,15 +2294,25 @@ function ShopFeatured({ slides, me, pal, width, onOpen }) {
   );
 }
 function ShopLimitCard({ kind, k, drop, me, pal, w, title, sub, to, before, price, was, owned, onOpen }) {
+  const rar = shopRarFor(kind, k, drop);
+  const [ca, cb, edge] = shopRar(rar);
   return (
-    <div role="button" aria-label={`${title}, ${sub}`} onClick={onOpen} className="zchat-press" style={{ flex: `0 0 ${w}px`, width: w, cursor: 'pointer', scrollSnapAlign: 'start', minWidth: 0 }}>
-      <div style={{ position: 'relative', height: Math.round(w * 0.62), borderRadius: 18, background: pal.stage, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', isolation: 'isolate' }}>
-        <ShopArt kind={kind} k={k} me={me} size={Math.round(w * 0.6)} pal={pal} drop={drop} />
-        {to && <div style={{ position: 'absolute', left: 10, top: 10, zIndex: 3 }}><ShopPill pal={pal} tone="page"><ShopLeft to={to} pal={pal} before={before} color={pal.ink} /></ShopPill></div>}
+    <div role="button" aria-label={`${title}, ${sub}`} onClick={onOpen} className="zchat-press" style={{ flex: `0 0 ${w}px`, width: w, cursor: 'pointer', scrollSnapAlign: 'start', minWidth: 0, paddingBottom: 4 }}>
+      <div style={{ borderRadius: 18, overflow: 'hidden', isolation: 'isolate', background: cb, boxShadow: `0 4px 0 ${edge}` }}>
+        <div style={{ position: 'relative', height: Math.round(w * 0.62), display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', background: shopGlow(pal, ca), boxShadow: `inset 0 0 0 2px ${shopTint(ca, 0.9)}`, borderRadius: '18px 18px 0 0' }}>
+          <ShopArt kind={kind} k={k} me={me} size={Math.round(w * 0.6)} pal={pal} drop={drop} />
+          {to && <div style={{ position: 'absolute', left: 10, top: 10, zIndex: 3 }}><ShopPill pal={pal} tone="page"><ShopLeft to={to} pal={pal} before={before} color={pal.ink} /></ShopPill></div>}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px 11px', background: `linear-gradient(180deg, ${cb}, ${edge})`, color: '#FFFFFF' }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 15, fontWeight: 750, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textShadow: '0 1px 0 rgba(0,0,0,0.25)' }}>{title}</div>
+            <div style={{ marginTop: 2, fontSize: 12, color: 'rgba(255,255,255,0.84)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub}</div>
+          </div>
+          {owned
+            ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12.5, fontWeight: 800, flexShrink: 0 }}><Check size={13} strokeWidth={3.4} />Owned</span>
+            : <ShopCoins price={price} was={was} pal={{ ...pal, ...SHOP_ON_BAND }} color="#FFFFFF" size={14.5} weight={800} />}
+        </div>
       </div>
-      <div style={{ marginTop: 8, fontSize: 14.5, fontWeight: 650, color: pal.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
-      <div style={{ marginTop: 2, fontSize: 12.5, color: pal.ink2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub}</div>
-      <div style={{ marginTop: 6, height: 22, display: 'flex', alignItems: 'center' }}>{owned ? <ShopStatus pal={pal} owned /> : <ShopCoins price={price} was={was} pal={pal} />}</div>
     </div>
   );
 }
@@ -2481,8 +2629,8 @@ export function ShopPage({ me, rewards, onClose, onWear, onRewardsChanged, onOpe
     const base = shopBase(c, it.kind, it.key);
     const pop = opts.pop ? popularList.find((p) => p.kind === it.kind && p.key === it.key) : null;
     const flag = dp != null ? 'Deal' : s.some ? `${s.some} of 3` : !s.owned && freeSets > 0 && it.kind === 'set' && DECOR_BY_KEY[it.key] && DECOR_BY_KEY[it.key].rarity === 'epic' ? 'Free' : !s.owned && freeBubbles > 0 && it.kind === 'bubble' ? 'Free' : null;
-    const meta = opts.meta === 'kind' ? shopKindLabel(it.kind) : pop ? `${formatCount(pop.owners)} have it` : null;
-    return <ShopTile key={`${it.kind}:${it.key}`} kind={it.kind} k={it.key} me={me} pal={pal} w={opts.w} rail={!!opts.rail} meta={meta} owned={s.owned} equipped={s.equipped} price={dp != null ? dp : base} was={dp != null && base > dp ? base : null} flag={flag} flagTone={flag === 'Deal' || flag === 'Free' ? 'accent' : 'page'} onOpen={(kind, k) => openItem(kind, k, list)} />;
+    const meta = opts.meta === 'kind' ? shopKindShort(it.kind) : pop ? `${formatCount(pop.owners)} own it` : null;
+    return <ShopTile key={`${it.kind}:${it.key}`} kind={it.kind} k={it.key} me={me} pal={pal} w={opts.w} rail={!!opts.rail} big={!!opts.big} meta={meta} owned={s.owned} equipped={s.equipped} price={dp != null ? dp : base} was={dp != null && base > dp ? base : null} flag={flag} flagTone={flag === 'Deal' || flag === 'Free' ? 'accent' : 'page'} onOpen={(kind, k) => openItem(kind, k, list)} />;
   };
   const rail = (key, title, sub, list, opts) => {
     if (!list.length) return null;
@@ -2506,7 +2654,7 @@ export function ShopPage({ me, rewards, onClose, onWear, onRewardsChanged, onOpe
   if (heroDrop) {
     const live = dropPhase(heroDrop) === 'live';
     const dset = heroDrop.kind === 'set' ? DECOR_BY_KEY[heroDrop.item_key] : null;
-    slides.push({ id: `drop:${heroDrop.id}`, it: { kind: 'drop', key: heroDrop.id }, eyebrow: <ShopLeft to={live ? heroDrop.ends_at : heroDrop.starts_at} pal={pal} before={live ? 'Limited, ends in' : 'Opens in'} color={pal.ink} />, eyebrowText: live ? 'Limited drop' : 'Next drop', title: heroDrop.title, sub: `${dset ? `${shopRarityWord(dset.rarity)} set` : 'Limited bubble'}, only in this drop`, price: heroDrop.price, owned: dropOwned(heroDrop, rewards), art: (h, active) => <ShopHeroArt kind="drop" drop={heroDrop} me={me} pal={pal} h={h} w={gw} active={active} /> });
+    slides.push({ id: `drop:${heroDrop.id}`, it: { kind: 'drop', key: heroDrop.id }, rar: dset ? dset.rarity : 'rare', eyebrow: <ShopLeft to={live ? heroDrop.ends_at : heroDrop.starts_at} pal={pal} before={live ? 'Limited, ends in' : 'Opens in'} color={pal.ink} />, eyebrowText: live ? 'Limited drop' : 'Next drop', title: heroDrop.title, sub: `${dset ? `${shopRarityWord(dset.rarity)} set` : 'Limited bubble'}, only in this drop`, price: heroDrop.price, owned: dropOwned(heroDrop, rewards), art: (h, active) => <ShopHeroArt kind="drop" drop={heroDrop} me={me} pal={pal} h={h} w={gw} active={active} /> });
   }
   if (dealVisible) {
     const dp = shopDealFor(deal, c, deal.kind, deal.key);
@@ -2532,7 +2680,6 @@ export function ShopPage({ me, rewards, onClose, onWear, onRewardsChanged, onOpe
       const dset = d.kind === 'set' ? DECOR_BY_KEY[d.item_key] : null;
       return <ShopLimitCard key={`d${d.id}`} kind="drop" k={d.item_key} drop={d} me={me} pal={pal} w={limitW} title={d.title} sub={`${dset ? `${shopRarityWord(dset.rarity)} set` : 'Limited bubble'}, ${live ? 'live now' : 'coming soon'}`} to={live ? d.ends_at : d.starts_at} before={live ? 'Ends in' : 'Opens in'} price={d.price} owned={dropOwned(d, rewards)} onOpen={() => openItem('drop', d.id, null)} />;
     }),
-    ...(dealVisible ? [<ShopLimitCard key="deal" kind={deal.kind} k={deal.key} me={me} pal={pal} w={limitW} title={shopNameOf(deal.kind, deal.key)} sub={`Deal of the day, ${shopKindLabel(deal.kind).toLowerCase()}`} to={deal.ends_at} before="Ends in" price={shopDealFor(deal, c, deal.kind, deal.key)} was={shopBase(c, deal.kind, deal.key)} owned={false} onOpen={() => openItem(deal.kind, deal.key, null)} />] : []),
   ];
   const freeNote = (freeSets > 0 || freeBubbles > 0) && (
     <div role="button" aria-label="See where your free picks work" onClick={() => pickCat(freeSets > 0 ? 'set' : 'bubble')} className="zchat-press" style={{ marginTop: 18, display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 16, background: pal.stage, cursor: 'pointer' }}>
@@ -2540,6 +2687,24 @@ export function ShopPage({ me, rewards, onClose, onWear, onRewardsChanged, onOpe
       <div style={{ flex: 1, minWidth: 0, fontSize: 14, lineHeight: 1.4, color: pal.ink2 }}><b style={{ color: pal.ink, fontWeight: 700 }}>{freeSets > 0 ? `${freeSets === 1 ? '1 free set' : `${freeSets} free sets`}` : `${freeBubbles === 1 ? '1 free bubble' : `${freeBubbles} free bubbles`}`}</b>{freeSets > 0 ? ' to pick. Any Epic set, all three pieces.' : ' to pick. Any chat bubble you like.'}</div>
       <ChevronRight size={18} color={pal.ink2} />
     </div>
+  );
+  const daily = shopDailyPicks(me.id, shopDayNo(), cxOn, st);
+  const dailyList = dealVisible && !daily.some((it) => it.kind === deal.kind && it.key === deal.key) ? [{ kind: deal.kind, key: deal.key }, ...daily.slice(0, 5)] : daily;
+  const dailyCols = gw >= 900 ? 6 : gw >= 660 ? 3 : 2;
+  const dailyW = Math.floor((gw - (dailyCols - 1) * 12) / dailyCols);
+  const dailyBlock = dailyList.length > 0 && (
+    <section style={{ marginTop: 26, minWidth: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, marginBottom: 12 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: pal.ink, letterSpacing: '-0.02em', lineHeight: 1.2 }}>Daily shop</h2>
+          <div style={{ fontSize: 13.5, color: pal.ink2, marginTop: 3, lineHeight: 1.35 }}>New picks for you every day</div>
+        </div>
+        <ShopResetClock pal={pal} />
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${dailyCols}, minmax(0, 1fr))`, columnGap: 12, rowGap: 14 }}>
+        {dailyList.map((it) => tile(it, dailyList, { w: dailyW, big: true, meta: 'kind' }))}
+      </div>
+    </section>
   );
   const q = query.trim().toLowerCase();
   const allKinds = ['set', 'gamekit', 'bubble', 'namestyle', 'theme', 'reaction', 'charm', 'stickerpack', 'soundpack', 'typing', 'wallpaper'].filter((k) => !SHOP_CX.includes(k) || cxOn);
@@ -2557,6 +2722,7 @@ export function ShopPage({ me, rewards, onClose, onWear, onRewardsChanged, onOpe
     <>
       <ShopFeatured slides={slides} me={me} pal={pal} width={wide ? Math.min(560, gw) : gw} onOpen={(kind, k) => openItem(kind, k, null)} />
       {freeNote}
+      {dailyBlock}
       {rail('new', 'New', 'Just landed in the Shop', fresh, { meta: 'kind', see: 'new' })}
       {limited.length > 0 && (
         <ShopRail title="Limited time" sub="Here for a short while only" pal={pal} wide={wide} resetKey={limited.map((x) => x.key).join('|')}>{limited}</ShopRail>

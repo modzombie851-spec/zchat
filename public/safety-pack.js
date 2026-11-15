@@ -24,7 +24,7 @@
     severe: build(SEVERE),
     strong: build(STRONG),
     mild: build(MILD),
-    paired: new RegExp('(^|[^a-z])((?:you|u|ur|youre|your|ya|oya|umba)\\s+(?:are\\s+|r\\s+|re\\s+|such\\s+an?\\s+|so\\s+|a\\s+|an\\s+|look\\s+like\\s+an?\\s+)?(?:' + PAIRED.map(pattern).join('|') + '))(?=$|[^a-z])', 'g')
+    paired: new RegExp('(^|[^a-z])((?:(?:you|u|youre|ya|oya|umba)\\s+(?:are\\s+|r\\s+|re\\s+|such\\s+an?\\s+|such\\s+|so\\s+|just\\s+|really\\s+|a\\s+|an\\s+|look\\s+like\\s+an?\\s+){0,3}|ur\\s+(?:are\\s+|r\\s+|re\\s+|such\\s+an?\\s+|such\\s+|so\\s+|just\\s+|really\\s+|a\\s+|an\\s+|look\\s+like\\s+an?\\s+){1,3})(?:' + PAIRED.map(pattern).join('|') + '))(?=$|[^a-z])', 'g')
   };
   var extraKey = '';
   var extraRe = null;

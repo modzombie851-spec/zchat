@@ -17,6 +17,13 @@ function tokenClaims(token) {
   try { return JSON.parse(Buffer.from(String(token).split('.')[1] || '', 'base64url').toString('utf8')) || {}; } catch { return {}; }
 }
 
+function mfaPending(user, token) {
+  try {
+    const claims = JSON.parse(Buffer.from(String(token || '').split('.')[1] || '', 'base64url').toString('utf8')) || {};
+    return Array.isArray(user && user.factors) && user.factors.some((f) => f && f.status === 'verified') && claims.aal !== 'aal2';
+  } catch { return true; }
+}
+
 async function callerFrom(event) {
   try {
     const h = event.headers || {};
@@ -32,6 +39,7 @@ async function callerFrom(event) {
     ]);
     const user = got && !got.error && got.data ? got.data.user : null;
     if (!user || (sub && user.id !== sub)) return null;
+    if (mfaPending(user, token)) return null;
     const stErr = state && state.error;
     if (stErr) {
       if (!/PGRST202|42883|could not find the function|does not exist/i.test(`${stErr.code || ''} ${stErr.message || ''}`)) return null;
@@ -58,10 +66,13 @@ function imagePart(dataUrl, maxChars) {
   return m ? { inlineData: { mimeType: m[1], data: m[2] } } : null;
 }
 
+const limitText = (out, busy) => (out && out.daily ? 'The daily limit has been reached. Try again tomorrow.' : busy);
+
 async function geminiTurns(contents, systemText, timeoutMs, asJson, temperature = 0.2) {
   if (!process.env.GEMINI_API_KEY) return null;
-  let limited = false;
-  for (const model of [...new Set([GEMINI_MODEL, GEMINI_FALLBACK])]) {
+  const models = [...new Set([GEMINI_MODEL, GEMINI_FALLBACK])];
+  let limits = 0, days = 0;
+  for (const model of models) {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), timeoutMs);
     try {
@@ -72,7 +83,7 @@ async function geminiTurns(contents, systemText, timeoutMs, asJson, temperature 
         signal: ctrl.signal,
       });
       const json = await res.json().catch(() => null);
-      if (!res.ok) { console.error('Gemini aiphoto error', model, res.status); if (res.status === 429) limited = true; continue; }
+      if (!res.ok) { console.error('Gemini aiphoto error', model, res.status); if (res.status === 429) { limits += 1; if (/PerDay/i.test(JSON.stringify(json || ''))) days += 1; } continue; }
       if (json && json.promptFeedback && json.promptFeedback.blockReason) return { blocked: true };
       const cand = json && json.candidates && json.candidates[0];
       const text = ((cand && cand.content && cand.content.parts) || []).filter((p) => typeof p.text === 'string' && !p.thought).map((p) => p.text).join('').trim();
@@ -82,7 +93,7 @@ async function geminiTurns(contents, systemText, timeoutMs, asJson, temperature 
       console.error('Gemini aiphoto failed', model, err && err.name);
     } finally { clearTimeout(timer); }
   }
-  return limited ? { limited: true } : null;
+  return limits ? { limited: true, daily: days === models.length } : null;
 }
 
 async function ollamaVision(systemText, turns, timeoutMs, asJson) {
@@ -146,7 +157,7 @@ async function ocr(user, body) {
   if (q.none) return reply(429, { error: 'You have read the text in a lot of photos today. Try again tomorrow.' });
   const sys = 'You read the text in a photo for someone who wants to copy it. Reply with JSON only, like {"text":"OPEN 9 TO 5\\nFresh bread","lang":"en"}. "text" holds every piece of readable text in the photo in reading order, with a line break between lines and a blank line between separate blocks. Keep the original language, spelling, numbers, prices and symbols exactly. Do not translate, explain, describe the photo or add anything. If there is no readable text, use an empty string. "lang" is the two letter code of the main language, or an empty string.';
   const out = await vision([{ role: 'user', parts: [img, { text: 'Read the text in this photo.' }] }], sys, 30000, true, 0);
-  if (!out || out.limited) return reply(503, { error: 'Copy text is busy right now. Try again soon.' });
+  if (!out || out.limited) return reply(503, { error: limitText(out, 'Copy text is busy right now. Try again soon.') });
   if (out.blocked) return reply(200, { text: '', lang: '', blocked: true });
   const j = parseJson(out.text);
   const text = String(j && typeof j.text === 'string' ? j.text : (j ? '' : out.text)).replace(/\r/g, '').replace(/\n{3,}/g, '\n\n').trim().slice(0, 8000);
@@ -182,7 +193,7 @@ async function ask(user, body) {
     turns.push({ role: 'user', parts: [{ text: i + 1 < history.length ? history[i + 1].q : question }] });
   });
   const out = await vision(turns, sys, 30000, false, 0.4);
-  if (!out || out.limited) return reply(503, { error: 'ZChat Bot is busy right now. Try again soon.' });
+  if (!out || out.limited) return reply(503, { error: limitText(out, 'ZChat Bot is busy right now. Try again soon.') });
   if (out.blocked) return reply(200, { text: 'I would rather not answer that one. Ask me something else about the photo?' });
   return reply(200, { text: noDashes(out.text).slice(0, 1500) });
 }
@@ -210,7 +221,7 @@ async function labels(user, body) {
   const parts = [];
   batch.forEach((x, i) => { parts.push({ text: `Photo ${i}` }); parts.push(x.img); });
   const out = await vision([{ role: 'user', parts }], sys, 40000, true, 0.2);
-  if (!out || out.limited) return reply(503, { error: 'Search photos is busy right now. Try again soon.' });
+  if (!out || out.limited) return reply(503, { error: limitText(out, 'Search photos is busy right now. Try again soon.') });
   const j = out.blocked ? null : parseJson(out.text);
   const list = j && Array.isArray(j.items) ? j.items : Array.isArray(j) ? j : [];
   const byIndex = new Map();

@@ -6711,7 +6711,7 @@ function SavedBubble({ r, onOpenMedia, onMenu, onOpenChat }) {
         {r.kind === 'audio' && r.media_url && <MediaAudio src={r.media_url} controls preload="none" style={{ width: 240, maxWidth: '100%' }} />}
         {r.kind === 'sticker' && r.content && <img src={r.content} alt="" style={{ width: 120, height: 120, objectFit: 'contain', display: 'block' }} />}
         {file && (
-          <a href={r.media_url || undefined} target="_blank" rel="noopener noreferrer" onClick={(e) => { if (!r.media_url) e.preventDefault(); }} style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none', color: theme.ink, minWidth: 180 }}>
+          <a href={safeLinkUrl(r.media_url) || undefined} target="_blank" rel="noopener noreferrer" onClick={(e) => { if (!safeLinkUrl(r.media_url)) e.preventDefault(); }} style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none', color: theme.ink, minWidth: 180 }}>
             <span style={{ width: 40, height: 40, borderRadius: 12, background: SAVED_BLUE, color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><FileText size={20} /></span>
             <span style={{ minWidth: 0 }}>
               <span style={{ display: 'block', fontSize: 14.5, fontWeight: 650, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{file.n || 'File'}</span>

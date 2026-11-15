@@ -358,6 +358,7 @@ import {
   walletSpend,
   warmSong,
   writeJsonLs,
+  safeLinkUrl,
 } from '../App.jsx';
 import {
   AiSparkIcon,
@@ -4456,7 +4457,7 @@ function CtBoardView({ c, it, onClose, onRemove }) {
       footer={it.message_id != null || it.kind === 'link' ? (
         <div style={{ display: 'flex', gap: 10 }}>
           {it.message_id != null && <BigButton tone="plain" label="Show in chat" onClick={() => { onClose(); ctClose(); c.jump(it.message_id); }} />}
-          {it.kind === 'link' && <BigButton label="Open link" onClick={() => { try { window.open(it.link_url, '_blank', 'noopener'); } catch {} }} />}
+          {it.kind === 'link' && <BigButton label="Open link" onClick={() => { try { const u = safeLinkUrl(it.link_url); if (u) window.open(u, '_blank', 'noopener'); } catch {} }} />}
         </div>
       ) : null}
       right={can ? <div role="button" aria-label="Remove from the board" onClick={onRemove} className="zchat-press" style={{ width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: theme.muted }}><Trash2 size={19} /></div> : null}>
@@ -6561,36 +6562,30 @@ function WnSegments({ total, at, onArt, dark }) {
   );
 }
 
-const WN_PHOTOS = { rally57: '/race-art.webp', set57: '/wn57-set.webp', lay57: '/wn57-lay.webp', bolt57: '/wn57-bolt.webp', hub57: '/wn57-hub.webp', zombies49: '/wn49-zombies.webp', mutant49: '/wn49-mutant.webp', guns50: '/wn50-guns.webp', house50: '/wn50-house.webp', pond50: '/wn50-pond.webp', buttons50: '/wn50-buttons.webp', settings50: '/wn50-settings.webp', pack51: '/wn51-pack.webp', emote51: '/wn51-emote.webp', lobby51: '/wn51-lobby.webp', waves52: '/wn52-waves.webp', sky52: '/wn52-sky.webp', map52: '/wn52-map.webp', boss53: '/wn53-boss.webp', fire53: '/wn53-fire.webp', dog53: '/wn53-dog.webp', train53: '/wn53-train.webp', hud531: '/wn531-hud.webp', moves531: '/wn531-moves.webp', pc531: '/wn531-pc.webp', squad54: '/wn54-squad.webp', boom54: '/wn54-boom.webp', heli54: '/wn54-heli.webp', gas54: '/wn54-gas.webp' , shop55: '/wn55-shop.webp', stall55: '/wn55-stall.webp', boss55: '/wn55-boss.webp', climb55: '/wn55-climb.webp', drop55: '/wn55-drop.webp', squad55: '/wn55-squad.webp', hud55: '/wn55-hud.webp', set55: '/wn55-settings.webp', music55: '/wn55-music.webp', guns55: '/wn55-guns.webp', zj55: '/zombie-art2.webp', bolt55: '/bolt-art2.webp', torch55: '/duo-art.webp' };
+const WN_PHOTOS = { shop573: '/wn573-shop.webp', try573: '/wn573-try.webp', cmt573: '/wn573-comments.webp', rally57: '/race-art.webp', set57: '/wn57-set.webp', lay57: '/wn57-lay.webp', bolt57: '/wn57-bolt.webp', hub57: '/wn57-hub.webp', zombies49: '/wn49-zombies.webp', mutant49: '/wn49-mutant.webp', guns50: '/wn50-guns.webp', house50: '/wn50-house.webp', pond50: '/wn50-pond.webp', buttons50: '/wn50-buttons.webp', settings50: '/wn50-settings.webp', pack51: '/wn51-pack.webp', emote51: '/wn51-emote.webp', lobby51: '/wn51-lobby.webp', waves52: '/wn52-waves.webp', sky52: '/wn52-sky.webp', map52: '/wn52-map.webp', boss53: '/wn53-boss.webp', fire53: '/wn53-fire.webp', dog53: '/wn53-dog.webp', train53: '/wn53-train.webp', hud531: '/wn531-hud.webp', moves531: '/wn531-moves.webp', pc531: '/wn531-pc.webp', squad54: '/wn54-squad.webp', boom54: '/wn54-boom.webp', heli54: '/wn54-heli.webp', gas54: '/wn54-gas.webp' , shop55: '/wn55-shop.webp', stall55: '/wn55-stall.webp', boss55: '/wn55-boss.webp', climb55: '/wn55-climb.webp', drop55: '/wn55-drop.webp', squad55: '/wn55-squad.webp', hud55: '/wn55-hud.webp', set55: '/wn55-settings.webp', music55: '/wn55-music.webp', guns55: '/wn55-guns.webp', zj55: '/zombie-art2.webp', bolt55: '/bolt-art2.webp', torch55: '/duo-art.webp' };
 const WN_HIGHLIGHTS = [
-  { k: 'set57', art: 'set57', go: 'games', cta: 'Open games', title: 'Full settings in every big game', text: 'Gulp, Roll Squad, Torchbound, Island Rally and Bolt War now have Graphics, HUD, Controls, Audio and Credits, like Zombie Junction.' },
-  { k: 'lay57', art: 'lay57', go: 'siege', cta: 'Play now', title: 'Move your buttons', text: 'Open Settings, then Controls, then Customize. Drag any button where your thumbs rest, make it bigger or smaller and save.' },
-  { k: 'bolt57', art: 'bolt57', go: 'siege', cta: 'Play now', title: 'Space heroes in Bolt War', text: 'Four astronauts and four mechs fight waves of aliens, with new skill sounds and a Glob Queen every five waves.' },
-  { k: 'hub57', art: 'hub57', go: 'games', cta: 'Open games', title: 'Real game pictures', text: 'Every game on the games page shows a real picture from the game, and solo games have a scene behind them.' },
+  { k: 'shop573', art: 'shop573', go: 'shop', cta: 'Open the Shop', title: 'A new Shop', text: 'Every item now has a card in its rarity colour, from Rare to Mythical. The Daily shop brings new picks for you every day with a timer, and everything you have shows Owned or Equipped.' },
+  { k: 'try573', art: 'try573', go: 'shop', cta: 'Try something on', title: 'Try it on first', text: 'Tap Try on to see a set, name style or charm big on your own profile, in a group chat and in a friend\'s chat list before you buy it.' },
+  { k: 'cmt573', art: 'cmt573', title: 'Filter offensive comments', text: 'Rude comments on your posts are hidden from everyone else. You can still view them and show the ones that are fine. Turn it off in Settings, Privacy, Interactions.' },
 ];
 const WN_SECTIONS = [
-  { title: 'Big games', items: [
-    { art: 'set57', title: 'Game settings', text: 'Graphics, HUD, Controls, Audio and Credits in every big game.' },
-    { art: 'lay57', title: 'Custom buttons', text: 'Drag, resize and save your own button layout.' },
-    { art: 'set57', title: 'HUD options', text: 'Turn the mini map, names, race order and damage numbers on or off.' },
-    { art: 'set57', title: 'Camera shake', text: 'Switch off the shake on hits and blasts.' },
-    { art: 'set57', title: 'Keyboard keys', text: 'Every key for every big game, under Controls on a computer.' },
-    { art: 'rally57', title: 'Speed in mph', text: 'Pick km/h or mph in Island Rally.' },
+  { title: 'Shop', items: [
+    { art: 'shop573', title: 'Rarity cards', text: 'Rare, Epic, Legendary and Mythical items each have their own colour.' },
+    { art: 'shop573', title: 'Daily shop', text: 'New picks for you every day, with a timer for the next ones.' },
+    { art: 'shop573', title: 'Deal of the day', text: 'Today\'s deal sits in the Daily shop with the price cut shown.' },
+    { art: 'shop573', title: 'Owned and Equipped', text: 'A green tick on everything you have and a gold tick on what you wear.' },
+    { art: 'try573', title: 'Try on', text: 'See an item big on your profile, in a chat and in a chat list.' },
   ] },
-  { title: 'Bolt War', items: [
-    { art: 'bolt57', title: 'Space heroes', text: 'Astronauts and mechs with their own moves.' },
-    { art: 'bolt55', title: 'Alien waves', text: 'Globs, Spitters, Poppers, Brutes and the Glob Queen.' },
-    { art: 'bolt57', title: 'New skill sounds', text: 'Rockets, shards, freezes and blasts that sound real.' },
-  ] },
-  { title: 'Games page', items: [
-    { art: 'hub57', title: 'Real game pictures', text: 'Every game shows a picture from the real game.' },
-    { art: 'hub57', title: 'Solo game scenes', text: 'Arcade, desk and garden scenes behind solo games.' },
+  { title: 'Comments', items: [
+    { art: 'cmt573', title: 'Filter offensive comments', text: 'Rude comments on your posts stay hidden from others.' },
+    { art: 'cmt573', title: 'Show to everyone', text: 'View a hidden comment and show it if it is fine.' },
   ] },
 ];
 const WN_NEW_COUNT = WN_SECTIONS.reduce((n, sec) => n + sec.items.length, 0);
 const WN_SUMMARY = `${WN_NEW_COUNT} new things to try.`;
 
 const WN_EARLIER = [
+  { title: 'Game settings and your own button layout', text: 'Graphics, HUD, Controls, Audio and Credits in every big game, drag and resize your buttons, space heroes in Bolt War and real pictures on the games page.' },
   { title: 'Gun shop, boss entrance and new names', text: 'A real gun shop and seller stall, a boss entrance with danger music, climbing, parachute airdrops, squad controls, fire modes, new buttons, and the new names Zombie Junction, Bolt War and Torchbound.' },
   { title: 'Squad lobby, airdrops and real explosions', text: 'Play with up to four friends, helicopter airdrops, armor plates and C4, real explosions, nine new guns and cash you keep.' },
   { title: 'Custom buttons, real moves and mouse controls', text: 'Move, resize and fade every button, crouch, jump and slide that everyone sees, and real mouse look on a computer.' },
