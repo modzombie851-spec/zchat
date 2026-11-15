@@ -1508,7 +1508,7 @@ export function ShopChatMock({ me, dark = true, bubble = null, nsKey = null, cha
   const page = dark ? '#0C0C0E' : '#FFFFFF';
   const meName = (me && (me.name || me.username)) || 'You';
   const t = fmtHM(new Date());
-  const them = [{ name: 'Nethmi', color: '#29C7B3' }, { name: 'Kasun', color: '#E9A23B' }];
+  const them = [{ name: 'Maya', color: '#29C7B3' }, { name: 'Kasun', color: '#E9A23B' }];
   const rx = reaction ? SUPER_REACTS[reaction] : null;
   const stamp = (mine) => <span style={{ display: 'inline-block', fontSize: 10.5, color: mine ? 'rgba(255,255,255,0.72)' : T.muted, marginLeft: 8, verticalAlign: 'bottom', whiteSpace: 'nowrap' }}>{t}</span>;
   const dayChip = <div style={{ alignSelf: 'center', fontSize: 11.5, fontWeight: 600, color: T.muted, background: T.soft, borderRadius: 10, padding: '3px 10px', marginBottom: 2 }}>Today</div>;

@@ -10,7 +10,7 @@ export const CARS = {
   cop: { name: 'Police car', vmax: 50.5, acc: 11.5, turn: 1.22, grip: 1.08, boost: 1.05, mass: 1.25, len: 2.0 },
 };
 export const COLORS = ['#FFC23D', '#FF5146', '#3D8BFF', '#3FC67E', '#A979FF', '#FF7EB9', '#FF8A2A', '#2BC7D6'];
-export const BOT_NAMES = ['Kasun', 'Ishara', 'Amaya', 'Ravi', 'Dulani', 'Tharaka', 'Nethmi', 'Sahan'];
+export const BOT_NAMES = ['Maya', 'Leo', 'Aisha', 'Kenji', 'Sofia', 'Kasun', 'Noah', 'Priya'];
 export const SKILLS = {
   rocket: { name: 'Rocket', cost: 35, cd: 6, icon: 'rocket', key: '1' },
   shield: { name: 'Shield', cost: 25, cd: 9, icon: 'shield', key: '2' },

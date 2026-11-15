@@ -8189,10 +8189,10 @@ const LiveWallCtx = createContext(null);
 export const LIVE_WALLS = [
   { k: 'rain', label: 'Rain on glass', free: true, accent: '#8FA9D8', about: 'Drops gather on the window and run down while the city glows behind them.', dark: ['#0A101F', '#251E35'], light: ['#8C9DB6', '#D6CEC9'] },
   { k: 'night', label: 'Night sky', free: true, accent: '#8C8CE6', about: 'Slow stars over quiet hills, and now and then a shooting star.', dark: ['#03061A', '#2C2346'], light: ['#5B6CB3', '#F1C7B4'] },
-  { k: 'aurora', label: 'Aurora', accent: '#4FE3B0', about: 'Green and violet light drifts over the mountains and shows in the lake.', dark: ['#01040C', '#0B2539'], light: ['#2D4B83', '#B9C4E6'] },
-  { k: 'sea', label: 'Sea', accent: '#5E9BD1', about: 'A slow swell under the moon, with light dancing on the water.', dark: ['#070C1F', '#040914'], light: ['#8DB9E2', '#2F6B9C'] },
-  { k: 'sakura', label: 'Sakura', accent: '#F49AC1', about: 'Cherry petals drift down from the branches, never in a hurry.', dark: ['#170E24', '#3A1D3A'], light: ['#FBEEF3', '#EEE2F2'] },
-  { k: 'city', label: 'City lights', accent: '#FFB45A', about: 'Soft city lights float past, like a night drive out of focus.', dark: ['#090716', '#2A1A38'], light: ['#B4AEDB', '#F0D6CC'] },
+  { k: 'aurora', label: 'Aurora', free: true, accent: '#4FE3B0', about: 'Green and violet light drifts over the mountains and shows in the lake.', dark: ['#01040C', '#0B2539'], light: ['#2D4B83', '#B9C4E6'] },
+  { k: 'sea', label: 'Sea', free: true, accent: '#5E9BD1', about: 'A slow swell under the moon, with light dancing on the water.', dark: ['#070C1F', '#040914'], light: ['#8DB9E2', '#2F6B9C'] },
+  { k: 'sakura', label: 'Sakura', free: true, accent: '#F49AC1', about: 'Cherry petals drift down from the branches, never in a hurry.', dark: ['#170E24', '#3A1D3A'], light: ['#FBEEF3', '#EEE2F2'] },
+  { k: 'city', label: 'City lights', free: true, accent: '#FFB45A', about: 'Soft city lights float past, like a night drive out of focus.', dark: ['#090716', '#2A1A38'], light: ['#B4AEDB', '#F0D6CC'] },
 ];
 export const LIVE_WALL_BY = Object.fromEntries(LIVE_WALLS.map((x) => [x.k, x]));
 export function liveWallOf(key) { return typeof key === 'string' && key.indexOf('live:') === 0 ? LIVE_WALL_BY[key.slice(5)] || null : null; }
@@ -18558,7 +18558,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-export const APP_VERSION = '57.1V';
+export const APP_VERSION = '57.2V';
 const WN_REV = 55;
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();

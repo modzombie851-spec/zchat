@@ -1006,9 +1006,8 @@ export function SellPackSheet({ pack, uid, onClose }) {
 }
 function LiveWallShelf({ rewards, onOpen }) {
   const own = new Set((rewards || []).filter((r) => r.kind === 'wallpaper' && rewardActive(r)).map((r) => r.reward_key));
-  const mineN = LIVE_WALLS.filter((w) => w.free || own.has(w.k)).length;
   return (
-    <CollSection title="Live wallpapers" sub={`${mineN} of ${LIVE_WALLS.length} yours. Pick one in any chat from Theme.`}>
+    <CollSection title="Live wallpapers" sub="All free. Pick one in any chat from Theme.">
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10 }}>
         {LIVE_WALLS.map((w) => {
           const mine = w.free || own.has(w.k);

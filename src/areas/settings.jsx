@@ -2130,7 +2130,7 @@ export function ChatThemePage({ value, onSelect, onClose, title, avatar, group, 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', rowGap: 14, columnGap: 10, paddingTop: 6 }}>
               {LIVE_WALLS.map((w) => <LiveWallTile key={w.k} spec={w} on={pick === `live:${w.k}`} locked={!ownedWalls.has(w.k) && start !== `live:${w.k}`} onPick={() => choose(`live:${w.k}`)} dark={theme.dark} />)}
             </div>
-            <div style={{ fontSize: 12.5, color: theme.muted, textAlign: 'center', padding: '14px 10px 2px', lineHeight: 1.5 }}>They move gently and rest when you leave the chat. Rain on glass and Night sky are free.</div>
+            <div style={{ fontSize: 12.5, color: theme.muted, textAlign: 'center', padding: '14px 10px 2px', lineHeight: 1.5 }}>They move gently and rest when you leave the chat. Every one is free.</div>
           </>
         ) : tab === 'photo' ? (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', rowGap: 14, columnGap: 10, paddingTop: 6 }}>

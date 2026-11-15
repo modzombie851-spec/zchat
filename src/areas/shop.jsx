@@ -1034,7 +1034,7 @@ function shopOwnersSeed(rows) {
   (rows || []).forEach((r) => { if (r && r.kind && r.key && Number.isFinite(Number(r.owners))) shopOwnersMem.set(`${r.kind}:${r.key}`, Number(r.owners)); });
 }
 const CX_NEW = [['namestyle', 'aurora'], ['reaction', 'rocket'], ['namestyle', 'lava'], ['reaction', 'trophy'], ['namestyle', 'rosegold'], ['reaction', 'diamond'], ['namestyle', 'midnight'], ['reaction', 'spotlight'], ['namestyle', 'storm'], ['reaction', 'drum_roll'], ['namestyle', 'jade'], ['reaction', 'mic_drop'], ['namestyle', 'glitch'], ['reaction', 'kiss'], ['namestyle', 'ocean'], ['reaction', 'cake'], ['namestyle', 'candy'], ['reaction', 'snowball'], ['namestyle', 'paper']];
-const SHOP_CATS = [['foryou', 'For you'], ['set', 'Sets'], ['bubble', 'Chat bubbles'], ['gamekit', 'Games'], ['namestyle', 'Name styles'], ['theme', 'Themes'], ['reaction', 'Reactions'], ['charm', 'Charms'], ['stickerpack', 'Stickers'], ['soundpack', 'Sounds'], ['typing', 'Typing'], ['wallpaper', 'Wallpapers']];
+const SHOP_CATS = [['foryou', 'For you'], ['set', 'Sets'], ['bubble', 'Chat bubbles'], ['gamekit', 'Games'], ['namestyle', 'Name styles'], ['theme', 'Themes'], ['reaction', 'Reactions'], ['charm', 'Charms'], ['stickerpack', 'Stickers'], ['soundpack', 'Sounds'], ['typing', 'Typing']];
 const SHOP_VIEWS = { new: 'New', popular: 'Popular', wishlist: 'Your wishlist', finish: 'Finish your sets' };
 const SHOP_PIECES = ['frame', 'nameplate', 'effect'];
 const SHOP_CX = ['namestyle', 'theme', 'reaction'];
