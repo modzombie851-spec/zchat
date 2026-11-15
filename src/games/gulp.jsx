@@ -4,7 +4,7 @@ import { Avatar, Portal, useBackClose, hapticTap, FONT, Spinner } from '../App.j
 import { useGameLink, useRoomRelay, useWatchChannel, useMeshRoom } from './relay.jsx';
 import { setWatchAllowed, useLiveBeacon, useGamePrivacy } from './live.js';
 import { EMOTES, PingChip, Sheet, injectCss, useVoice } from './livekit.jsx';
-import { GBtn, GPill, GPanel, GChip, GTitle, GJoy, GIcon, GControlsPanel, GHudBtn, GHudSkill, GFeed, GRibbon, GHint, GIconCap, GStat, GNotices, useNotices, useWatchNotices, GSkillArt, useCtlLook, useGameStage, useJoystick, injectKitCss, kitTap, pressProps, maxDpr, INK, GVolBars, GLobby, GSlot, GLobbySheet, weakPhone, GTalkers, GWatchBar, GSkin, GChatFeed, useChatFeed , useGfx, GGfxRow, useHudOpts, GHudRows, GSetHead, GSetToggle, GSetRow, useHudLay, hudT, layOpen, layEnd, GLayoutRow, GHudEditor} from './gamekit.jsx';
+import { GBtn, GPill, GPanel, GChip, GTitle, GJoy, GIcon, GControlsPanel, GHudBtn, GHudSkill, GFeed, GRibbon, GHint, GIconCap, GStat, GNotices, useNotices, useWatchNotices, GSkillArt, useCtlLook, useGameStage, useJoystick, injectKitCss, kitTap, maxDpr, INK, GVolBars, GLobby, GSlot, GLobbySheet, weakPhone, GTalkers, GWatchBar, GSkin, GChatFeed, useChatFeed, useGfx, GGfxRow, useHudOpts, GHudRows, GSetHead, GSetToggle, GSetRow, useHudLay, hudT, layOpen, layEnd, GLayoutRow, GHudEditor, GQuickPanel, GChatPanel } from './gamekit.jsx';
 import { Sfx } from './sfx.js';
 import { WW, WH, LIVES, STAGES, SKILLS, SKILL_KEYS, SPECIES, rOf, viewOf, stageOf, clamp, makeGame, spawnFish, hostStep, applyGuestEvent, snap, applySnap, guestFollow, setNet, followNet, movePlayer, tickPlayer, canEat, canTake, canOpen, chestGain, eatGain, botInput, useSkill, addPlayer, dropPlayer, adoptHost } from './gulpengine.js';
 import { render, makeDeco, updateParts, bubbles, floatText, burst, bits, ring, zap, drawRadar, placeName, drawBadge, drawSpecies, fmtN, PLAYER_PAL, SLOT_KEYS, warmSprites } from './gulpdraw.js';
@@ -99,7 +99,6 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
   const [quick, setQuick] = useState(false);
   const [paused, setPaused] = useState(false);
   const [ctl, setCtl] = useState(false);
-  const [chatText, setChatText] = useState('');
   const [log, setLog] = useState([]);
   const [chatFeed, pushChat] = useChatFeed();
   const [result, setResult] = useState(null);
@@ -892,7 +891,7 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
     pushChat('You', t);
     setLog((l) => [...l.slice(-30), { who: 'You', text: t }]);
     if (!isSolo) relay.send('chat', { text: t });
-    setChatText(''); setSheet(null); setQuick(false);
+    setSheet(null); setQuick(false);
     Sfx.play('pop');
   };
   const sendEmote = (e) => { bubble(mine, e, true); if (!isSolo) relay.send('emo', { e }); setQuick(false); Sfx.play('bub3', { vol: 0.6 }); };
@@ -991,21 +990,7 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
   ) : null;
 
   const chatSheet = sheet && sheet.k === 'chat' && (
-    <Sheet title={isRoom ? 'Talk to the room' : `Talk to ${peerFirst}`} onClose={() => setSheet(null)}>
-      {log.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, margin: '12px 0 4px', maxHeight: 150, overflowY: 'auto' }}>
-          {log.slice(-8).map((m, i) => <div key={i} style={{ fontSize: 13.5, lineHeight: 1.4 }}><span style={{ fontWeight: 800, color: m.who === 'You' ? '#FFCB7A' : '#A9CCFF' }}>{m.who}</span> <span style={{ color: 'rgba(255,255,255,0.85)' }}>{m.text}</span></div>)}
-        </div>
-      )}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
-        {PHRASES.map((p) => <button key={p} type="button" className="zgk-btn" onClick={() => { kitTap(); sendChat(p); }} style={{ height: 38, padding: '0 14px', borderRadius: 19, border: 'none', background: 'rgba(255,255,255,0.1)', color: '#FFFFFF', fontFamily: FONT, fontSize: 13.5, fontWeight: 700, cursor: 'pointer' }}>{p}</button>)}
-      </div>
-      <form onSubmit={(e) => { e.preventDefault(); sendChat(chatText); }} style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-        <input value={chatText} onChange={(e) => setChatText(e.target.value)} maxLength={90} placeholder="Write a message" aria-label="Message"
-          style={{ flex: 1, minWidth: 0, height: 46, borderRadius: 23, border: 'none', background: 'rgba(255,255,255,0.1)', color: '#FFFFFF', padding: '0 16px', fontSize: 16, fontFamily: FONT, outline: 'none' }} />
-        <GPill text="Send" color="green" small onPress={() => sendChat(chatText)} disabled={!chatText.trim()} />
-      </form>
-    </Sheet>
+    <GChatPanel title={isRoom ? 'Talk to the room' : `Talk to ${peerFirst}`} log={log} phrases={PHRASES} emotes={isSolo ? null : EMOTES} onEmote={sendEmote} at={GS.at} onSend={(t) => { sendChat(t); }} onClose={() => setSheet(null)} />
   );
 
   useEffect(() => { if (phase === 'menu' || phase === 'lobby' || phase === 'join') { Sfx.init(); Sfx.music('lobbyGulp', true); } }, [phase]);
@@ -1169,17 +1154,8 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
               )}
               {!isWatch && ctlBlock()}
               {quick && !isSolo && (
-                <div onPointerDown={(e) => e.stopPropagation()} style={land ? { position: 'absolute', right: right(10), top: top(8 + hb + 8), width: 'min(300px, calc(100% - 40px))', animation: 'zgk-pop 0.2s ease-out', zIndex: 6 } : { position: 'absolute', right: right(16 + hb + 10), bottom: bottom(armB), width: 'min(280px, calc(100% - 90px))', animation: 'zgk-pop 0.2s ease-out', zIndex: 6 }}>
-                  <div style={{ padding: 10, borderRadius: 12, background: 'rgba(10,14,24,0.86)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.14)' }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 6 }}>
-                      {EMOTES.map((e) => <button key={e} type="button" className="zgk-btn" aria-label={`Send ${e}`} {...pressProps(() => sendEmote(e))} style={{ height: 42, borderRadius: 10, border: 'none', background: 'rgba(255,255,255,0.08)', fontSize: 24, cursor: 'pointer' }}>{e}</button>)}
-                    </div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-                      {QUICK.map((p) => <button key={p} type="button" className="zgk-btn" {...pressProps(() => { kitTap(); sendChat(p); })} style={{ height: 30, padding: '0 11px', borderRadius: 15, border: 'none', background: 'rgba(255,255,255,0.1)', color: '#FFFFFF', fontFamily: FONT, fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>{p}</button>)}
-                      <button type="button" className="zgk-btn" {...pressProps(() => { kitTap(); setQuick(false); setSheet({ k: 'chat' }); })} style={{ height: 30, padding: '0 11px', borderRadius: 15, border: 'none', background: 'rgba(255,255,255,0.18)', color: '#FFFFFF', fontFamily: FONT, fontSize: 12.5, fontWeight: 800, cursor: 'pointer' }}>Type a message</button>
-                    </div>
-                  </div>
-                </div>
+                <GQuickPanel land={land} emotes={EMOTES} onEmote={sendEmote} phrases={QUICK} onPhrase={(p) => sendChat(p)} onType={() => { setQuick(false); setSheet({ k: 'chat' }); }}
+                  style={{ position: 'absolute', right: right(10), top: top(8 + hb + 8), width: land ? 'min(460px, calc(100% - 28px))' : 'min(330px, calc(100% - 28px))' }} />
               )}
               {(voice.err || mesh.mic.err) && <div style={{ position: 'absolute', left: '50%', top: '22%', transform: 'translateX(-50%)', pointerEvents: 'none' }}><GChip style={{ background: 'rgba(217,75,75,0.95)' }}>{voice.err || mesh.mic.err}</GChip></div>}
             </>

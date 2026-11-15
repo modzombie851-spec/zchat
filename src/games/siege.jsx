@@ -4,8 +4,8 @@ import { GGlyph } from './gskill.jsx';
 import { Avatar, Portal, useBackClose, FONT, Spinner } from '../App.jsx';
 import { useRoomLink } from './relay.jsx';
 import { cloudOn } from './zcloud.js';
-import { EMOTES, Sheet, injectCss, useGameChat, ChatSheet } from './livekit.jsx';
-import { GBtn, GPill, GPanel, GChip, GTitle, GIcon, GHudBtn, GHudPanel, GNotices, useNotices, useWatchNotices, injectKitCss, kitTap, pressProps, maxDpr, weakPhone, INK, useCtlLook, useGameStage, GControlsPanel, GVolBars, GLobby, GSlot, GLobbySheet, GSeg, GTalkers, GJoy, useJoystick, stagePoint, TOUCHY, GWatchBar, GSkin, GChatFeed, useChatFeed, GJoinAsks, GHudSkill, GSetRow, GSetToggle , GSetHead, useHudLay, hudT, layOpen, layEnd, GLayoutRow, GHudEditor} from './gamekit.jsx';
+import { EMOTES, Sheet, injectCss, useGameChat, ChatSheet, CHAT_PHRASES } from './livekit.jsx';
+import { GBtn, GPill, GPanel, GChip, GTitle, GIcon, GHudBtn, GHudPanel, GNotices, useNotices, useWatchNotices, injectKitCss, kitTap, pressProps, maxDpr, weakPhone, INK, useCtlLook, useGameStage, GControlsPanel, GVolBars, GLobby, GSlot, GLobbySheet, GSeg, GTalkers, GJoy, useJoystick, stagePoint, TOUCHY, GWatchBar, GSkin, GChatFeed, useChatFeed, GJoinAsks, GHudSkill, GSetRow, GSetToggle , GSetHead, useHudLay, hudT, layOpen, layEnd, GLayoutRow, GHudEditor, GQuickPanel } from './gamekit.jsx';
 import { mkNet, netPush, netRead } from './netlerp.js';
 import { Sfx } from './sfx.js';
 import { setWatchAllowed, useLiveBeacon, useGamePrivacy, useJoinAsks } from './live.js';
@@ -218,6 +218,105 @@ function loadProg() {
 const modsPack = (h) => { const M = h.mods; return [Math.round(M.dmg * 100), M.extra | 0, M.pierce | 0, Math.round(M.rad * 100), Math.round(M.heal * 100), Math.round(M.stun * 100), Math.round(M.slow * 100)]; };
 const modsTake = (h, k) => { if (!Array.isArray(k) || k.length < 7 || !h.mods) return; const M = h.mods; M.dmg = clamp(num(k[0], 100) / 100, 0.5, 3); M.extra = clamp(k[1] | 0, 0, 4); M.pierce = clamp(k[2] | 0, 0, 3); M.rad = clamp(num(k[3], 100) / 100, 0.5, 2.5); M.heal = clamp(num(k[4], 100) / 100, 0.5, 3); M.stun = clamp(num(k[5], 100) / 100, 0.5, 3); M.slow = clamp(num(k[6], 100) / 100, 0.5, 3); };
 const fmtK = (n) => (n >= 10000 ? `${Math.round(n / 1000)}k` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(Math.round(n)));
+const fmtN = (n) => Math.round(n || 0).toLocaleString();
+const fmtP = (n) => `${Math.round((n || 0) * 100)}%`;
+const fmtS = (n) => (n > 0 ? `${n.toFixed(1)}s` : '0s');
+const CARD_FX = {
+  tough: ['15% more max health', (s) => ['Health', fmtN(s.max), fmtN(s.hpB * s.m.hp * 1.15)]],
+  power: ['12% more damage', (s) => ['Damage', fmtN(s.dB * s.m.dmg), fmtN(s.dB * s.m.dmg * 1.12)]],
+  reload: ['Ammo refills 20% faster', (s) => ['Reload', fmtP(s.m.reload), fmtP(s.m.reload * 1.2)]],
+  swift: ['Move 8% faster', (s) => ['Speed', fmtP(s.m.spd), fmtP(s.m.spd * 1.08)]],
+  charge: ['Super fills 22% faster', (s) => ['Super', fmtP(s.m.supRate), fmtP(s.m.supRate * 1.22)]],
+  ammo: ['One more shot in your ammo bar', (s) => ['Ammo', String(s.m.ammo), String(Math.min(5, s.m.ammo + 1))]],
+  life: ['Heal 6% of the damage you deal', (s) => ['Lifesteal', fmtP(s.m.life), fmtP(s.m.life + 0.06)]],
+  regen: ['Heal 60% faster out of a fight', (s) => ['Regen', fmtP(s.m.regen), fmtP(s.m.regen * 1.6)]],
+  armor: ['Take 10% less damage', (s) => ['Armor', fmtP(s.m.armor), fmtP(Math.min(0.45, s.m.armor + 0.1))]],
+  dash: ['Dash comes back 28% sooner', (s) => ['Cooldown', fmtS(E.DASH.cd * s.m.dashCd), fmtS(E.DASH.cd * s.m.dashCd * 0.72)]],
+  gadget: ['One more gadget use', (s) => ['Gadgets', String(s.gad), String(s.gad + 1)]],
+  lucky: ['Power ups last longer and do more', (s) => ['Power ups', fmtP(1 + s.m.luck), fmtP(1.4 + s.m.luck)]],
+  blaze: ['Two more pellets each shot', (s) => ['Pellets', String(s.n + s.m.extra), String(s.n + s.m.extra + 2)]],
+  pip: ['Shots go through one more alien', (s) => ['Pierce', String(s.m.pierce), String(s.m.pierce + 1)]],
+  boom: ['Bomb blasts 22% bigger', (s) => ['Blast', fmtP(s.m.rad), fmtP(s.m.rad * 1.22)]],
+  mira: ['Heal friends 35% more', (s) => ['Healing', fmtP(s.m.heal), fmtP(s.m.heal * 1.35)]],
+  rex: ['Stuns last 40% longer', (s) => ['Stun', fmtP(s.m.stun), fmtP(s.m.stun * 1.4)]],
+  volt: ['Zaps jump to one more alien', (s) => ['Jumps', String(s.m.extra), String(s.m.extra + 1)]],
+  kai: ['Rocket blasts 25% bigger', (s) => ['Blast', fmtP(s.m.rad), fmtP(s.m.rad * 1.25)]],
+  ivy: ['Slows last 40% longer', (s) => ['Slow', fmtP(s.m.slow), fmtP(s.m.slow * 1.4)]],
+  crit: ['12% chance to hit twice as hard', (s) => ['Crit chance', fmtP(s.m.crit), fmtP(Math.min(0.36, (s.m.crit || 0) + 0.12))]],
+  chain: ['Aliens you take down explode', (s) => ['Blast', fmtN(320 * (s.m.chain || 0) * s.m.dmg), fmtN(320 * ((s.m.chain || 0) + 1) * s.m.dmg)]],
+  rush: ['Run 22% faster after a takedown', (s) => ['Boost', fmtS(s.m.rush ? 1.6 + s.m.rush : 0), fmtS(2.6 + (s.m.rush || 0))]],
+  magnet: ['Grab power ups from farther away', (s) => ['Reach', fmtP((1.15 + (s.m.magnet || 0)) / 1.15), fmtP((2.45 + (s.m.magnet || 0)) / 1.15)]],
+  guard: ['Your super also gives you a shield', (s) => ['Shield', fmtN(s.max * (s.m.supShield || 0)), fmtN(s.max * ((s.m.supShield || 0) + 0.2))]],
+  medic: ['Help friends up 60% faster', (s) => ['Revive', fmtP(s.m.revive || 1), fmtP((s.m.revive || 1) * 1.6)]],
+};
+const cardLine = (k) => (CARD_FX[k] ? CARD_FX[k][0] : (E.CARDS[k] && E.CARDS[k].text) || '');
+const ABILITY_CARDS = new Set(['life', 'crit', 'chain', 'rush', 'magnet', 'guard', 'medic']);
+const CARD_TIER = {
+  hero: { label: 'Hero power', a: '#FFD84D', b: '#EE8A12', c: '#7A3F00', glow: 'rgba(255,196,60,0.7)', pip: '#FFD84D' },
+  ability: { label: 'Ability', a: '#D592FF', b: '#7B38E2', c: '#2C0C66', glow: 'rgba(200,130,255,0.6)', pip: '#D592FF' },
+  boost: { label: 'Boost', a: '#74C8FF', b: '#2B6EDD', c: '#0A2C70', glow: 'rgba(110,190,255,0.55)', pip: '#74C8FF' },
+};
+const tierOf = (k) => (E.CARDS[k] && E.CARDS[k].hero ? 'hero' : ABILITY_CARDS.has(k) ? 'ability' : 'boost');
+function cardSnap(h) {
+  const have = {};
+  for (const k of h.cards || []) have[k] = (have[k] || 0) + 1;
+  const H = E.HEROES[h.key] || {};
+  return { have, m: { ...(h.mods || E.baseMods()) }, max: h.max, hpB: H.hp || h.max, dB: H.atk ? shotDmg(H) : 0, n: (H.atk && H.atk.n) || 0, gad: h.gad | 0 };
+}
+function UpgradeCard({ k, i, snap, land, short, keyHint, onPick }) {
+  const C = E.CARDS[k];
+  if (!C) return null;
+  const tk = tierOf(k);
+  const T = CARD_TIER[tk];
+  const fx = CARD_FX[k];
+  const pv = fx && snap ? fx[1](snap) : null;
+  const have = (snap && snap.have[k]) || 0;
+  const max = C.max || 0;
+  const line = cardLine(k);
+  const label = `${C.name}. ${T.label}. ${line}.${pv ? ` ${pv[0]} ${pv[1]} to ${pv[2]}.` : ''}${have ? ` Level ${have + 1}.` : ' New.'}`;
+  const tag = { height: 18, padding: '0 7px', borderRadius: 9, display: 'inline-flex', alignItems: 'center', fontSize: 10.5, fontWeight: 900, whiteSpace: 'nowrap', lineHeight: 1 };
+  const tierTag = <span style={{ ...tag, background: 'rgba(0,0,0,0.38)', color: T.a }}>{T.label}</span>;
+  const lvTag = have ? <span style={{ ...tag, background: 'rgba(0,0,0,0.38)', color: '#FFFFFF' }}>{`Level ${have + 1}`}</span> : <span style={{ ...tag, background: '#5BE35B', color: '#0C3A10', boxShadow: `0 0 0 1.5px ${INK}` }}>New</span>;
+  const md = land ? (short ? 46 : 54) : 50;
+  const art = (
+    <span aria-hidden="true" style={{ position: 'relative', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', width: land ? '100%' : 78, height: land ? (short ? 62 : 76) : 'auto', alignSelf: 'stretch', background: `radial-gradient(circle at 50% 60%, ${T.a} 0%, ${T.b} 58%, ${T.c} 100%)` }}>
+      <span style={{ position: 'absolute', left: '50%', top: '60%', width: 260, height: 260, marginLeft: -130, marginTop: -130, background: 'repeating-conic-gradient(rgba(255,255,255,0.15) 0deg 8deg, rgba(255,255,255,0) 8deg 22deg)', borderRadius: '50%', WebkitMaskImage: 'radial-gradient(circle, #000 18%, transparent 62%)', maskImage: 'radial-gradient(circle, #000 18%, transparent 62%)' }} />
+      {tk === 'hero' && <span style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: '40%', background: 'linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,0.45), rgba(255,255,255,0))', animation: 'zgk-shine 2.8s ease-in-out 0.6s infinite' }} />}
+      <span style={{ position: 'relative', width: md, height: md, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: land ? 6 : 0, background: `radial-gradient(circle at 36% 28%, #FFFFFF 0%, ${T.a} 32%, ${T.b} 100%)`, boxShadow: `0 0 0 2.5px ${INK}, inset 0 -4px 0 rgba(0,0,0,0.24), 0 0 18px ${T.glow}` }}>
+        <GIcon k={C.icon} size={Math.round(md * 0.56)} color="#FFFFFF" ink="rgba(0,0,0,0.35)" />
+      </span>
+      {land && <span style={{ position: 'absolute', left: 6, top: 6 }}>{tierTag}</span>}
+      {land && <span style={{ position: 'absolute', right: 6, top: 6 }}>{lvTag}</span>}
+      {keyHint && <span style={{ position: 'absolute', left: 6, bottom: 6, width: 20, height: 20, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11.5, fontWeight: 900, color: '#FFFFFF', background: 'rgba(0,0,0,0.42)', boxShadow: 'inset 0 -2px 0 rgba(0,0,0,0.35), inset 0 0 0 1px rgba(255,255,255,0.3)' }}>{i + 1}</span>}
+    </span>
+  );
+  const preview = pv && (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, height: 22, maxWidth: '100%', padding: '0 9px', borderRadius: 11, background: 'rgba(0,0,0,0.34)', fontSize: 12, fontWeight: 900, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', boxSizing: 'border-box' }}>
+      <span style={{ color: 'rgba(255,255,255,0.78)' }}>{pv[1]}</span>
+      <svg width="9" height="10" viewBox="0 0 9 10" aria-hidden="true" style={{ flexShrink: 0 }}><path d="M2 1.5L6.5 5L2 8.5" stroke="#8CFF7A" strokeWidth="2.2" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>
+      <span style={{ color: '#8CFF7A' }}>{pv[2]}</span>
+    </span>
+  );
+  const pips = max > 1 && (
+    <span aria-hidden="true" style={{ display: 'flex', gap: 4, justifyContent: land ? 'center' : 'flex-start' }}>
+      {Array.from({ length: max }, (_, j) => <span key={j} style={{ width: 15, height: 5, borderRadius: 3, background: j < have ? T.pip : j === have ? '#FFFFFF' : 'rgba(255,255,255,0.18)', boxShadow: j <= have ? '0 0 6px rgba(255,255,255,0.35)' : 'none', animation: j === have ? 'zgk-blink 1.1s ease-in-out infinite' : 'none' }} />)}
+    </span>
+  );
+  return (
+    <button type="button" className="zgk-btn" aria-label={label} {...pressProps(onPick)}
+      style={{ position: 'relative', display: 'flex', flexDirection: land ? 'column' : 'row', alignItems: 'stretch', padding: 0, border: 'none', borderRadius: 15, overflow: 'hidden', cursor: 'pointer', fontFamily: FONT, color: '#FFFFFF', textAlign: land ? 'center' : 'left', minWidth: 0,
+        background: 'linear-gradient(180deg, #2A2552 0%, #1A1638 100%)', boxShadow: `0 0 0 2.5px ${INK}, inset 0 0 0 2px ${T.b}, 0 5px 0 rgba(0,0,0,0.38)`, animation: `zgk-deal 0.38s cubic-bezier(0.2, 0.9, 0.3, 1.25) ${i * 0.07}s both` }}>
+      {art}
+      <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: land ? 'center' : 'flex-start', justifyContent: land ? 'flex-start' : 'center', gap: land ? 5 : 4, padding: land ? (short ? '6px 8px 8px' : '8px 9px 10px') : '9px 11px 10px', boxShadow: 'inset 0 2px 0 rgba(255,255,255,0.07)' }}>
+        {!land && <span style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>{tierTag}{lvTag}</span>}
+        <span style={{ fontSize: land ? 15.5 : 15, fontWeight: 900, lineHeight: 1.1, textShadow: '0 2px 0 rgba(0,0,0,0.35)', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{C.name}</span>
+        <span style={{ fontSize: 12, fontWeight: 750, color: 'rgba(255,255,255,0.8)', lineHeight: 1.25, minHeight: land && !short ? 30 : 0, display: 'flex', alignItems: 'center', justifyContent: land ? 'center' : 'flex-start' }}>{line}</span>
+        {preview}
+        {pips}
+      </span>
+    </button>
+  );
+}
 const srgb = (h) => { const n = parseInt(h.slice(1), 16); return [(n >> 16) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255]; };
 const TINT = { ice: srgb('#9FE6FF'), card: srgb('#C8A070'), white: [1, 1, 1], gold: srgb('#FFD24A'), red: srgb('#FF3B2E'), mint: srgb('#6CFFD4'), me: srgb('#6BF26B'), ally: srgb('#4DA3FF'), foe: srgb('#FF4A3D'), dark: [0, 0, 0], cyan: srgb('#7FE9FF') };
 const DROP_TINT = Object.fromEntries(Object.entries(DROP_TINT_HEX).map(([k, v]) => [k, srgb(v)]));
@@ -361,6 +460,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
   const [kill, setKill] = useState(null);
   const [heroSheet, setHeroSheet] = useState(false);
   const cardsRef = useRef(cards); cardsRef.current = cards;
+  const pickRef = useRef(null);
   const gamePriv = useGamePrivacy();
   const allowWatch = gamePriv.show && gamePriv.watch;
   const [notes, pushNote] = useNotices();
@@ -677,9 +777,11 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
     if (!W || !c || !E.CARDS[k] || !c.list.includes(k)) return;
     g.pend = (g.pend || []).filter((p) => p.id !== c.id);
     const h = W.heroes[kindOf()];
-    if (h && E.applyCard(h, k)) { kitTap(); zap('coin', 0.6); pushNote(`${E.CARDS[k].name}: ${E.CARDS[k].text.toLowerCase()}`, 'join'); }
+    if (h && E.applyCard(h, k)) { kitTap(); zap('coin', 0.6); pushNote(`${E.CARDS[k].name}: ${cardLine(k).toLowerCase()}`, 'join'); }
     if (g.pend.length) setTimeout(() => showPick(false), 240);
   };
+  const tryPick = (k) => { const c = cardsRef.current; if (!c || performance.now() - (c.at || 0) < 380) return; pickCard(k); };
+  pickRef.current = tryPick;
   const laterCard = () => {
     const g = G.current;
     if (!cardsRef.current) return;
@@ -768,7 +870,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
     h.nx = clamp(x, 0, W.A.wx); h.nz = clamp(z, 0, W.A.wz); h.nyaw = num(p[2]) / 100;
     netPush(h.nb || (h.nb = mkNet()), at, [h.nx, h.nz, h.nyaw]);
     if (h.x == null || h.netAt == null) { h.x = h.nx; h.z = h.nz; h.yaw = h.nyaw; }
-    if (p.length >= 12) { h.max = clamp(num(p[9], h.max), 1, 20000); h.shield = clamp(num(p[10]) * 10, 0, 5000); h.lv = clamp(p[11] | 0, 1, E.MAX_LEVEL); }
+    if (p.length >= 12) { h.max = clamp(num(p[9], h.max), 1, 5000000); h.shield = clamp(num(p[10]) * 10, 0, 5000000); h.lv = clamp(p[11] | 0, 1, E.MAX_LEVEL); }
     const hp = clamp(num(p[3]), 0, h.max);
     if (hp < h.hp - 1 && h.st === 0) h.flash = 0.12;
     h.hp = hp;
@@ -965,7 +1067,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
     for (const k of E.cardChoices(h, Math.random)) if (list.length < 3 && !list.includes(k)) list.push(k);
     if (!list.length) { g.pend.splice(i, 1); return; }
     p.list = list;
-    const c = { id: p.id, list, more: g.pend.length - 1 };
+    const c = { id: p.id, list, more: g.pend.length - 1, at: performance.now(), snap: cardSnap(h) };
     cardsRef.current = c; setCards(c);
     zap('star', 0.6);
   };
@@ -979,7 +1081,9 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
   useEffect(() => {
     const kd = (e) => {
       if (phaseRef.current !== 'play') return;
-      const k = e.key.toLowerCase();
+      if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable)) return;
+      const k = String(e.key || '').toLowerCase();
+      if ((k === '1' || k === '2' || k === '3') && cardsRef.current) { const pk = cardsRef.current.list[Number(k) - 1]; if (pk && pickRef.current) { e.preventDefault(); pickRef.current(pk); } return; }
       if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) { keys.current.add(k); e.preventDefault(); }
       else if (k === ' ' || k === 'e') { const g = G.current; const mo = g.mouse; G.current.fireQ.push(mo ? { kind: 'sup', a: mo.a, dist: mo.d } : { kind: 'sup', auto: true }); e.preventDefault(); }
       else if (k === 'f' || k === 'j') { G.current.fireQ.push({ kind: 'atk', auto: true }); }
@@ -1678,7 +1782,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
           if (h.st === 0) {
             const w = 58;
             bar(p[0] - w / 2, p[1], w, 10, clamp(h.hp / h.max, 0, 1), isMe ? '#5BE35B' : '#3D9BFF');
-            txt(String(Math.ceil(h.hp)), p[0], p[1] + 5, 9.5, '#FFFFFF');
+            txt(h.hp >= 100000 ? fmtK(h.hp) : String(Math.ceil(h.hp)), p[0], p[1] + 5, 9.5, '#FFFFFF');
             if (!isMe || !solo) txt(isMe ? 'You' : nameOf(id), p[0], p[1] - 9, 11, isMe ? '#C9FFC0' : '#D8EAFF');
             if (isMe) for (let i = 0; i < 3; i++) { const f = clamp(h.ammo - i, 0, 1); bar(p[0] - w / 2 + i * (w / 3 + 0.5), p[1] + 14, w / 3 - 3, 4.5, f, f >= 1 ? '#FF9F1A' : '#B06A14'); }
             if (h.pw > 0) txt('Power', p[0], p[1] - (isMe && solo ? 9 : 21), 9.5, '#FF8AE0');
@@ -2120,8 +2224,8 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
               )}
               {playing && meHud && meHud.st === 0 && ctlBlock(meHud, superOn)}
               {cards && playing && phase === 'play' && (
-                <div onPointerDown={(e) => e.stopPropagation()} style={{ position: 'absolute', left: '50%', top: land ? top(64) : '24%', transform: 'translateX(-50%)', width: land ? 'min(620px, 76%)' : 'min(400px, 94%)', zIndex: 8, animation: 'zgk-pop 0.25s ease-out' }}>
-                  <GPanel style={{ padding: '10px 12px 12px', display: 'flex', flexDirection: 'column', gap: 9 }}>
+                <div onPointerDown={(e) => e.stopPropagation()} style={{ position: 'absolute', left: '50%', top: land ? top(GS.H < 350 ? 54 : 64) : '18%', transform: 'translateX(-50%)', width: land ? `min(${Math.max(1, cards.list.length) * 200 + 40}px, 82%)` : 'min(420px, 94%)', zIndex: 8, animation: 'zgk-pop 0.22s ease-out' }}>
+                  <GPanel style={{ padding: GS.H < 350 ? '8px 11px 12px' : '10px 12px 14px', display: 'flex', flexDirection: 'column', gap: GS.H < 350 ? 8 : 10 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span style={{ display: 'flex', flexDirection: 'column', gap: 1, flex: 1, minWidth: 0 }}>
                         <span style={{ fontSize: 16, fontWeight: 900 }}>Pick an upgrade</span>
@@ -2130,21 +2234,8 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
                       <button type="button" className="zgk-btn" aria-label="Pick later" {...pressProps(laterCard)}
                         style={{ height: 32, padding: '0 14px', border: 'none', borderRadius: 16, cursor: 'pointer', fontFamily: FONT, fontSize: 13, fontWeight: 900, color: '#FFFFFF', background: 'rgba(255,255,255,0.12)', boxShadow: 'inset 0 0 0 1.5px rgba(255,255,255,0.28)', flexShrink: 0 }}>Later</button>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: land ? 'repeat(3, minmax(0, 1fr))' : '1fr', gap: 7 }}>
-                      {cards.list.map((k) => {
-                        const C = E.CARDS[k];
-                        const mine = !!C.hero;
-                        return (
-                          <button key={k} type="button" className="zgk-btn" aria-label={`${C.name}. ${C.text}`} {...pressProps(() => pickCard(k))}
-                            style={{ display: 'flex', flexDirection: land ? 'column' : 'row', alignItems: 'center', gap: land ? 6 : 10, padding: land ? '12px 8px' : '9px 11px', border: 'none', borderRadius: 14, cursor: 'pointer', fontFamily: FONT, color: '#FFFFFF', textAlign: land ? 'center' : 'left', background: mine ? 'linear-gradient(180deg, rgba(255,214,90,0.26), rgba(255,170,40,0.12))' : 'rgba(255,255,255,0.08)', boxShadow: mine ? 'inset 0 0 0 2px rgba(255,214,90,0.75)' : 'inset 0 0 0 1.5px rgba(255,255,255,0.16)' }}>
-                            <span style={{ width: 40, height: 40, borderRadius: 20, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: mine ? 'radial-gradient(circle at 40% 30%, #FFE98A, #F2A81D)' : 'radial-gradient(circle at 40% 30%, #6FB8FF, #2563C4)', boxShadow: `0 0 0 2px ${INK}` }}><GIcon k={C.icon} size={22} color="#FFFFFF" ink="rgba(0,0,0,0.3)" /></span>
-                            <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-                              <span style={{ fontSize: 14.5, fontWeight: 900 }}>{C.name}</span>
-                              <span style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.78)', lineHeight: 1.3 }}>{C.text}</span>
-                            </span>
-                          </button>
-                        );
-                      })}
+                    <div style={{ display: 'grid', gridTemplateColumns: land ? `repeat(${Math.max(1, cards.list.length)}, minmax(0, 1fr))` : '1fr', gap: land ? 10 : 8 }}>
+                      {cards.list.map((k, i) => <UpgradeCard key={`${cards.id}_${k}`} k={k} i={i} snap={cards.snap} land={land} short={GS.H < 350} keyHint={!TOUCHY} onPick={() => tryPick(k)} />)}
                     </div>
                   </GPanel>
                 </div>
@@ -2161,11 +2252,8 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
                 </div>
               )}
               {quick && (
-                <div onPointerDown={(e) => e.stopPropagation()} style={{ position: 'absolute', right: right(10), top: top(8 + hb + 40), width: 'min(250px, calc(100% - 28px))', animation: 'zgk-pop 0.2s ease-out', zIndex: 6 }}>
-                  <GPanel style={{ padding: 10, display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 6 }}>
-                    {EMOTES.map((e) => <button key={e} type="button" className="zgk-btn" aria-label={`Send ${e}`} {...pressProps(() => sendEmote(e))} style={{ height: 40, borderRadius: 14, border: 'none', background: 'rgba(255,255,255,0.1)', fontSize: 23, cursor: 'pointer' }}>{e}</button>)}
-                  </GPanel>
-                </div>
+                <GQuickPanel land={land} emotes={EMOTES} onEmote={sendEmote} phrases={CHAT_PHRASES} onPhrase={(p) => { chat.send(p); setQuick(false); }} onType={() => { setQuick(false); setChatNew(0); setChatOpen(true); }}
+                  style={{ position: 'absolute', right: right(10), top: top(8 + hb + 40), width: land ? 'min(460px, calc(100% - 28px))' : 'min(330px, calc(100% - 28px))' }} />
               )}
               {Object.keys(bubbles).length > 0 && (
                 <div style={{ position: 'absolute', left: '50%', top: top(90), transform: 'translateX(-50%)', display: 'flex', gap: 8, zIndex: 4, pointerEvents: 'none' }}>
@@ -2285,7 +2373,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
               </div>
             </Sheet>
           )}
-          {chatOpen && <ChatSheet title="Talk to your squad" chat={chat} onClose={() => setChatOpen(false)} />}
+          {chatOpen && <ChatSheet title="Talk to your squad" chat={chat} onEmote={sendEmote} at={GS.at} onClose={() => setChatOpen(false)} />}
           {leaveAsk && (
             <Sheet title="Leave the game?" text="Your squad can keep fighting without you." onClose={() => setLeaveAsk(false)}>
               <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>

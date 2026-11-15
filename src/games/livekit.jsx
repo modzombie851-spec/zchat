@@ -2,6 +2,7 @@ import { backdropProps } from './tap.js';
 import React, { useEffect, useRef, useState } from 'react';
 import { FONT, hapticTap, gameIceConfig } from '../App.jsx';
 import { talkTap, talkDrop } from './talk.js';
+import { GChatPanel } from './gamekit.jsx';
 
 export const EMOTES = ['👍', '😂', '😮', '😅', '❤️', '👋', '🔥', '😡'];
 let kitTap = () => { try { hapticTap(); } catch {} };
@@ -285,23 +286,6 @@ export function useGameChat(relay, nameOf, onNote, onMine) {
   };
   return { log, send };
 }
-export function ChatSheet({ title, chat, onClose }) {
-  const [text, setText] = useState('');
-  const go = (t) => { if (chat.send(t)) setText(''); };
-  return (
-    <Sheet title={title} onClose={onClose}>
-      {chat.log.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, margin: '12px 0 4px', maxHeight: 140, overflowY: 'auto' }}>
-          {chat.log.slice(-8).map((m, i) => <div key={i} style={{ fontSize: 13.5, lineHeight: 1.4 }}><span style={{ fontWeight: 800, color: m.who === 'You' ? '#FFCB7A' : '#A9CCFF' }}>{m.who}</span> <span style={{ color: 'rgba(255,255,255,0.85)' }}>{m.t}</span></div>)}
-        </div>
-      )}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
-        {CHAT_PHRASES.map((p) => <button key={p} type="button" className="zgk-btn" onClick={() => go(p)} style={{ height: 38, padding: '0 14px', borderRadius: 19, border: 'none', background: 'rgba(255,255,255,0.1)', color: '#FFFFFF', fontSize: 13.5, fontWeight: 800, fontFamily: FONT, cursor: 'pointer' }}>{p}</button>)}
-      </div>
-      <form onSubmit={(e) => { e.preventDefault(); go(text); }} style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-        <input value={text} onChange={(e) => setText(e.target.value)} maxLength={90} placeholder="Write a message" aria-label="Message" style={{ flex: 1, minWidth: 0, height: 46, borderRadius: 23, border: 'none', background: 'rgba(255,255,255,0.1)', color: '#FFFFFF', padding: '0 16px', fontSize: 16, fontFamily: FONT, outline: 'none' }} />
-        <button type="submit" className="zgk-btn" disabled={!text.trim()} style={{ height: 46, padding: '0 18px', borderRadius: 23, border: 'none', background: text.trim() ? '#2F7BF5' : 'rgba(255,255,255,0.1)', color: '#FFFFFF', fontSize: 14.5, fontWeight: 900, fontFamily: FONT, cursor: 'pointer' }}>Send</button>
-      </form>
-    </Sheet>
-  );
+export function ChatSheet({ title, chat, onClose, onEmote, at, phrases }) {
+  return <GChatPanel title={title} log={chat.log} phrases={phrases || CHAT_PHRASES} emotes={onEmote ? EMOTES : null} onEmote={onEmote} at={at} onSend={(t) => chat.send(t)} onClose={onClose} />;
 }

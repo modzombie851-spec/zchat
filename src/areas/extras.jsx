@@ -6562,29 +6562,28 @@ function WnSegments({ total, at, onArt, dark }) {
   );
 }
 
-const WN_PHOTOS = { shop573: '/wn573-shop.webp', try573: '/wn573-try.webp', cmt573: '/wn573-comments.webp', rally57: '/race-art.webp', set57: '/wn57-set.webp', lay57: '/wn57-lay.webp', bolt57: '/wn57-bolt.webp', hub57: '/wn57-hub.webp', zombies49: '/wn49-zombies.webp', mutant49: '/wn49-mutant.webp', guns50: '/wn50-guns.webp', house50: '/wn50-house.webp', pond50: '/wn50-pond.webp', buttons50: '/wn50-buttons.webp', settings50: '/wn50-settings.webp', pack51: '/wn51-pack.webp', emote51: '/wn51-emote.webp', lobby51: '/wn51-lobby.webp', waves52: '/wn52-waves.webp', sky52: '/wn52-sky.webp', map52: '/wn52-map.webp', boss53: '/wn53-boss.webp', fire53: '/wn53-fire.webp', dog53: '/wn53-dog.webp', train53: '/wn53-train.webp', hud531: '/wn531-hud.webp', moves531: '/wn531-moves.webp', pc531: '/wn531-pc.webp', squad54: '/wn54-squad.webp', boom54: '/wn54-boom.webp', heli54: '/wn54-heli.webp', gas54: '/wn54-gas.webp' , shop55: '/wn55-shop.webp', stall55: '/wn55-stall.webp', boss55: '/wn55-boss.webp', climb55: '/wn55-climb.webp', drop55: '/wn55-drop.webp', squad55: '/wn55-squad.webp', hud55: '/wn55-hud.webp', set55: '/wn55-settings.webp', music55: '/wn55-music.webp', guns55: '/wn55-guns.webp', zj55: '/zombie-art2.webp', bolt55: '/bolt-art2.webp', torch55: '/duo-art.webp' };
+const WN_PHOTOS = { chat574: '/wn574-chat.webp', cards574: '/wn574-cards.webp', shop573: '/wn573-shop.webp', try573: '/wn573-try.webp', cmt573: '/wn573-comments.webp', rally57: '/race-art.webp', set57: '/wn57-set.webp', lay57: '/wn57-lay.webp', bolt57: '/wn57-bolt.webp', hub57: '/wn57-hub.webp', zombies49: '/wn49-zombies.webp', mutant49: '/wn49-mutant.webp', guns50: '/wn50-guns.webp', house50: '/wn50-house.webp', pond50: '/wn50-pond.webp', buttons50: '/wn50-buttons.webp', settings50: '/wn50-settings.webp', pack51: '/wn51-pack.webp', emote51: '/wn51-emote.webp', lobby51: '/wn51-lobby.webp', waves52: '/wn52-waves.webp', sky52: '/wn52-sky.webp', map52: '/wn52-map.webp', boss53: '/wn53-boss.webp', fire53: '/wn53-fire.webp', dog53: '/wn53-dog.webp', train53: '/wn53-train.webp', hud531: '/wn531-hud.webp', moves531: '/wn531-moves.webp', pc531: '/wn531-pc.webp', squad54: '/wn54-squad.webp', boom54: '/wn54-boom.webp', heli54: '/wn54-heli.webp', gas54: '/wn54-gas.webp' , shop55: '/wn55-shop.webp', stall55: '/wn55-stall.webp', boss55: '/wn55-boss.webp', climb55: '/wn55-climb.webp', drop55: '/wn55-drop.webp', squad55: '/wn55-squad.webp', hud55: '/wn55-hud.webp', set55: '/wn55-settings.webp', music55: '/wn55-music.webp', guns55: '/wn55-guns.webp', zj55: '/zombie-art2.webp', bolt55: '/bolt-art2.webp', torch55: '/duo-art.webp' };
 const WN_HIGHLIGHTS = [
-  { k: 'shop573', art: 'shop573', go: 'shop', cta: 'Open the Shop', title: 'A new Shop', text: 'Every item now has a card in its rarity colour, from Rare to Mythical. The Daily shop brings new picks for you every day with a timer, and everything you have shows Owned or Equipped.' },
-  { k: 'try573', art: 'try573', go: 'shop', cta: 'Try something on', title: 'Try it on first', text: 'Tap Try on to see a set, name style or charm big on your own profile, in a group chat and in a friend\'s chat list before you buy it.' },
-  { k: 'cmt573', art: 'cmt573', title: 'Filter offensive comments', text: 'Rude comments on your posts are hidden from everyone else. You can still view them and show the ones that are fine. Turn it off in Settings, Privacy, Interactions.' },
+  { k: 'chat574', art: 'chat574', go: 'games', cta: 'Open games', title: 'Game chat that turns with you', text: 'Chat in every game now opens a big panel with your messages, quick messages and emojis. The keyboard turns sideways with the game, and you can swipe back through older messages.' },
+  { k: 'cards574', art: 'cards574', go: 'siege', cta: 'Play Bolt War', title: 'New upgrade cards in Bolt War', text: 'Every card shows what it changes with real numbers, your level and its type: Hero power, Ability or Boost. On a computer, press 1, 2 or 3 to pick.' },
 ];
 const WN_SECTIONS = [
-  { title: 'Shop', items: [
-    { art: 'shop573', title: 'Rarity cards', text: 'Rare, Epic, Legendary and Mythical items each have their own colour.' },
-    { art: 'shop573', title: 'Daily shop', text: 'New picks for you every day, with a timer for the next ones.' },
-    { art: 'shop573', title: 'Deal of the day', text: 'Today\'s deal sits in the Daily shop with the price cut shown.' },
-    { art: 'shop573', title: 'Owned and Equipped', text: 'A green tick on everything you have and a gold tick on what you wear.' },
-    { art: 'try573', title: 'Try on', text: 'See an item big on your profile, in a chat and in a chat list.' },
+  { title: 'Games', items: [
+    { art: 'chat574', title: 'Sideways keyboard', text: 'Type in landscape without the tall phone keyboard.' },
+    { art: 'chat574', title: 'Bigger chat', text: 'Read your last messages and swipe back through older ones.' },
+    { art: 'chat574', title: 'Quick messages', text: 'Emojis and quick lines side by side, with a button to type.' },
   ] },
-  { title: 'Comments', items: [
-    { art: 'cmt573', title: 'Filter offensive comments', text: 'Rude comments on your posts stay hidden from others.' },
-    { art: 'cmt573', title: 'Show to everyone', text: 'View a hidden comment and show it if it is fine.' },
+  { title: 'Bolt War', items: [
+    { art: 'cards574', title: 'Real numbers', text: 'See your health, damage or speed before and after a card.' },
+    { art: 'cards574', title: 'Card levels', text: 'See which cards you have and how many more you can take.' },
+    { art: 'cards574', title: 'Keys 1, 2 and 3', text: 'Pick a card from your keyboard on a computer.' },
   ] },
 ];
 const WN_NEW_COUNT = WN_SECTIONS.reduce((n, sec) => n + sec.items.length, 0);
 const WN_SUMMARY = `${WN_NEW_COUNT} new things to try.`;
 
 const WN_EARLIER = [
+  { title: 'A new Shop, try on and a comment filter', text: 'Rarity cards and a Daily shop, try items on before you buy, and rude comments on your posts hidden from others.' },
   { title: 'Game settings and your own button layout', text: 'Graphics, HUD, Controls, Audio and Credits in every big game, drag and resize your buttons, space heroes in Bolt War and real pictures on the games page.' },
   { title: 'Gun shop, boss entrance and new names', text: 'A real gun shop and seller stall, a boss entrance with danger music, climbing, parachute airdrops, squad controls, fire modes, new buttons, and the new names Zombie Junction, Bolt War and Torchbound.' },
   { title: 'Squad lobby, airdrops and real explosions', text: 'Play with up to four friends, helicopter airdrops, armor plates and C4, real explosions, nine new guns and cash you keep.' },

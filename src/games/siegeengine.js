@@ -1369,10 +1369,10 @@ export function smoothRobots(W, dt) {
 export function applyNetEvent(W, e) {
   if (!Array.isArray(e)) return;
   const k = e[0];
-  if (k === 's') { const rid = e[1] | 0, x = +e[2], z = +e[3], a = +e[4]; if ([x, z, a].every(Number.isFinite)) spawnRobotShot(W, rid, x, z, a, clamp(+e[5] || 12, 4, 30), clamp(e[6] | 0, 0, 5000), e[7] === 'tb' ? 'tb' : 'eb'); }
-  else if (k === 'm') { const h = W.heroes[e[2]]; const d = clamp(e[3] | 0, 0, 5000); emit(W, { k: 'melee', id: e[1] | 0, to: e[2], d }); if (h && W.local && W.local.has(h.id)) hurtHero(W, h, d, e[1] | 0); }
+  if (k === 's') { const rid = e[1] | 0, x = +e[2], z = +e[3], a = +e[4]; if ([x, z, a].every(Number.isFinite)) spawnRobotShot(W, rid, x, z, a, clamp(+e[5] || 12, 4, 30), clamp(e[6] | 0, 0, 1000000), e[7] === 'tb' ? 'tb' : 'eb'); }
+  else if (k === 'm') { const h = W.heroes[e[2]]; const d = clamp(e[3] | 0, 0, 1000000); emit(W, { k: 'melee', id: e[1] | 0, to: e[2], d }); if (h && W.local && W.local.has(h.id)) hurtHero(W, h, d, e[1] | 0); }
   else if (k === 'z') {
-    const z = { k: ['boom', 'stomp', 'mis', 'laser'].includes(e[1]) ? e[1] : 'boom', x: +e[2], z: +e[3], r: clamp(+e[4] || 0, 0, 12), d: clamp(e[5] | 0, 0, 6000), t: clamp(+e[6] || 0, 0, 4), a: +e[7] || 0, a1: +e[8] || 0, dur: clamp(+e[9] || 0, 0, 4), len: clamp(+e[10] || 0, 0, 40) };
+    const z = { k: ['boom', 'stomp', 'mis', 'laser'].includes(e[1]) ? e[1] : 'boom', x: +e[2], z: +e[3], r: clamp(+e[4] || 0, 0, 12), d: clamp(e[5] | 0, 0, 1000000), t: clamp(+e[6] || 0, 0, 4), a: +e[7] || 0, a1: +e[8] || 0, dur: clamp(+e[9] || 0, 0, 4), len: clamp(+e[10] || 0, 0, 40) };
     if (Number.isFinite(z.x) && Number.isFinite(z.z)) addZone(W, z, false);
   } else if (k === 'k') { const id = e[1] | 0; markDead(W, id); const b = W.robots.find((r) => r.id === id); if (b) { W.robots.splice(W.robots.indexOf(b), 1); emit(W, { k: 'kill', id: b.id, type: b.type, x: b.x, z: b.z, by: typeof e[2] === 'string' ? e[2] : null, remote: true }); } }
   else if (k === 'f') { const b = W.robots.find((r) => r.id === (e[1] | 0)); if (b) { b.fuse = ROBOTS.bomber.fuse; emit(W, { k: 'fuse', id: b.id }); } }

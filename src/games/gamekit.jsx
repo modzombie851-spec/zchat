@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { CreditsTab } from './gcredits.jsx';
 import { GSkill, GGlyph } from './gskill.jsx';
-import { FONT, hapticTap } from '../App.jsx';
+import { FONT, hapticTap, useBackClose } from '../App.jsx';
 import { Sfx } from './sfx.js';
 
 export const INK = '#1B1430';
@@ -62,6 +62,9 @@ export function injectKitCss() {
     '@keyframes zgk-in{from{transform:translateY(24px);opacity:0}to{transform:none;opacity:1}}',
     '[data-hud-edit] canvas{filter:brightness(.5) saturate(.8)}',
     '@keyframes zgk-spin{to{transform:rotate(360deg)}}',
+    '@keyframes zgk-caret{0%,49%{opacity:1}50%,100%{opacity:0}}',
+    '@keyframes zgk-deal{0%{transform:translateY(28px) scale(.86) rotate(-2deg);opacity:0}65%{transform:translateY(-4px) scale(1.03);opacity:1}100%{transform:none;opacity:1}}',
+    '@keyframes zgk-blink{0%,100%{opacity:1}50%{opacity:.35}}',
     '.zgk-btn{-webkit-tap-highlight-color:transparent;touch-action:none;user-select:none;-webkit-user-select:none;outline:none}',
     '.zgk-range{-webkit-appearance:none;appearance:none;height:6px;border-radius:3px;outline:none;margin:0;cursor:pointer;touch-action:none}',
     '.zgk-range::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:20px;height:20px;border-radius:10px;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.45)}',
@@ -1094,6 +1097,7 @@ export function pressProps(fn) {
   return {
     onPointerDown: (e) => { e.stopPropagation(); if (e.button > 0) return; e.currentTarget.dataset.pd = String(Date.now()); fn(e); },
     onClick: (e) => { e.stopPropagation(); if (Date.now() - Number(e.currentTarget.dataset.pd || 0) < 800) return; fn(e); },
+    onMouseDown: (e) => { if (e.button === 0 && e.currentTarget.getAttribute('role') !== 'textbox') e.preventDefault(); },
   };
 }
 
@@ -1382,4 +1386,288 @@ export function GHudSkill({ icon, art, label, onPress, size = 52, cool = 0, cool
   const gi = SKILL_GI[art] || SKILL_GI[icon] || icon;
   const acc = SKILL_ACC[art] || tone || '#FFC23D';
   return <GSkill icon={gi} label={label} size={size} main={main} cool={cool} coolMax={coolMax} accent={acc} badge={badge} disabled={disabled} tap={() => kitTap(sound)} onPress={() => { if (onPress) onPress(); }} />;
+}
+
+const KB_PAGES = {
+  abc: [['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p'], ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l'], ['@shift', 'z', 'x', 'c', 'v', 'b', 'n', 'm', '@back'], ['@num', '@phone', ',', '@space', '.', '@send']],
+  num: [['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'], ['@', '#', '$', '&', '(', ')', ':', ';', '!', '?'], ['@sym', '/', '*', '+', '=', '%', '\'', '"', '@back'], ['@abc', '@phone', ',', '@space', '.', '@send']],
+  sym: [['[', ']', '{', '}', '<', '>', '^', '~', '|', '\\'], ['€', '£', '¥', '•', '°', '…', '¿', '¡', '♥', '★'], ['@num', '♪', '☺', '✓', '×', '÷', '¢', '§', '@back'], ['@abc', '@phone', ',', '@space', '.', '@send']],
+};
+const KB_FLEX = { '@shift': 1.45, '@back': 1.45, '@num': 1.45, '@abc': 1.45, '@sym': 1.45, '@phone': 1.1, '@space': 4.6, '@send': 2.1 };
+function KbGlyph({ k, on }) {
+  const p = { width: 22, height: 22, viewBox: '0 0 24 24', fill: 'none', 'aria-hidden': 'true', style: { display: 'block' } };
+  if (k === '@shift') return <svg {...p}><path d="M12 4.5l7 7.5h-4v7H9v-7H5z" fill={on ? '#FFFFFF' : 'none'} stroke="#FFFFFF" strokeWidth="2" strokeLinejoin="round" /></svg>;
+  if (k === '@back') return <svg {...p}><path d="M9 5.5h10.5a1.5 1.5 0 0 1 1.5 1.5v10a1.5 1.5 0 0 1-1.5 1.5H9L3.5 12z" stroke="#FFFFFF" strokeWidth="2" strokeLinejoin="round" /><path d="M11.5 9.5l5 5M16.5 9.5l-5 5" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" /></svg>;
+  if (k === '@phone') return <svg {...p}><rect x="2.5" y="6" width="19" height="12" rx="2.5" stroke="#FFFFFF" strokeWidth="1.9" /><path d="M6 9.5h.01M9.3 9.5h.01M12.6 9.5h.01M15.9 9.5h.01M7.5 14.5h9" stroke="#FFFFFF" strokeWidth="2.2" strokeLinecap="round" /></svg>;
+  return null;
+}
+export function GKeyboard({ onType, onBack, onSend, sendOn = true, onPhone, autoCap = false, height = 220 }) {
+  injectKitCss();
+  const [page, setPage] = useState('abc');
+  const [shift, setShift] = useState(0);
+  const [down, setDown] = useState(null);
+  const rep = useRef({ t: 0, iv: 0 });
+  const lastShift = useRef(0);
+  const caps = page === 'abc' && (shift > 0 || autoCap);
+  const stop = () => { clearTimeout(rep.current.t); clearInterval(rep.current.iv); rep.current.t = 0; rep.current.iv = 0; setDown(null); };
+  useEffect(() => stop, []);
+  const hit = (k, e) => {
+    e.stopPropagation();
+    if (e.cancelable) e.preventDefault();
+    if (e.button > 0) return;
+    setDown(k);
+    try { hapticTap(); } catch {}
+    Sfx.init();
+    Sfx.play('click', { vol: 0.28, rate: 1.25 });
+    if (k === '@shift') { const now = Date.now(); setShift((s) => (s === 1 && now - lastShift.current < 320 ? 2 : s ? 0 : 1)); lastShift.current = now; return; }
+    if (k === '@back') {
+      onBack();
+      rep.current.t = setTimeout(() => { rep.current.iv = setInterval(() => onBack(), 70); }, 420);
+      return;
+    }
+    if (k === '@space') { onType(' '); return; }
+    if (k === '@num' || k === '@abc' || k === '@sym') { setPage(k.slice(1)); return; }
+    if (k === '@send') { if (sendOn) onSend(); return; }
+    if (k === '@phone') { if (onPhone) onPhone(); return; }
+    onType(caps ? k.toUpperCase() : k);
+    if (shift === 1) setShift(0);
+  };
+  const rows = KB_PAGES[page];
+  const gap = 6;
+  const keyH = Math.max(30, Math.floor((height - 12 - gap * 3) / 4));
+  const label = (k) => (k === '@num' ? '123' : k === '@abc' ? 'ABC' : k === '@sym' ? '#+=' : k === '@space' ? '' : k === '@send' ? 'Send' : caps && k.length === 1 ? k.toUpperCase() : k);
+  const keyName = (k) => (k === '@shift' ? 'Shift' : k === '@back' ? 'Delete' : k === '@space' ? 'Space' : k === '@send' ? 'Send' : k === '@phone' ? 'Use the phone keyboard' : k === '@num' ? 'Numbers' : k === '@abc' ? 'Letters' : k === '@sym' ? 'More symbols' : k);
+  return (
+    <div role="group" aria-label="Keyboard" onPointerDown={(e) => e.stopPropagation()} style={{ height, boxSizing: 'border-box', padding: '6px 6px 6px', display: 'flex', flexDirection: 'column', gap, background: 'rgba(6,8,14,0.72)', borderRadius: 14, touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none' }}>
+      {rows.map((row, ri) => (
+        <div key={ri} style={{ display: 'flex', gap, height: keyH, padding: ri === 1 && page === 'abc' ? '0 4.6%' : 0 }}>
+          {row.map((k) => {
+            const special = k.charAt(0) === '@' && k.length > 1;
+            const isSend = k === '@send';
+            const on = down === k;
+            const bg = isSend ? (sendOn ? (on ? '#2C9A33' : '#36B23A') : 'rgba(255,255,255,0.1)') : on ? 'rgba(255,255,255,0.42)' : special ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.13)';
+            return (
+              <button key={k} type="button" className="zgk-btn" aria-label={keyName(k)} aria-pressed={k === '@shift' ? shift > 0 : undefined}
+                onPointerDown={(e) => hit(k, e)} onPointerUp={stop} onPointerCancel={stop} onPointerLeave={stop} onClick={(e) => e.stopPropagation()}
+                style={{ flex: `${KB_FLEX[k] || 1} 1 0`, minWidth: 0, height: '100%', border: 'none', borderRadius: 9, padding: 0, cursor: 'pointer', background: bg, color: '#FFFFFF', fontFamily: FONT, fontSize: special ? 14 : Math.min(21, Math.round(keyH * 0.5)), fontWeight: special ? 800 : 600, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 0 rgba(0,0,0,0.35)', transform: on ? 'translateY(1px)' : undefined, opacity: isSend && !sendOn ? 0.6 : 1 }}>
+                {k === '@shift' || k === '@back' || k === '@phone' ? <KbGlyph k={k} on={shift > 0} /> : label(k)}
+                {k === '@shift' && shift === 2 && <span aria-hidden="true" style={{ position: 'absolute', marginTop: 26, width: 10, height: 2, borderRadius: 1, background: '#FFFFFF' }} />}
+              </button>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function useDragScroll(el) {
+  useEffect(() => {
+    if (!el) return undefined;
+    let st = null;
+    let raf = 0;
+    const stop = () => { if (raf) cancelAnimationFrame(raf); raf = 0; };
+    const turned = () => {
+      if (el.closest && el.closest('[data-side="1"]')) return true;
+      const r = el.getBoundingClientRect();
+      return Math.abs(r.width - el.offsetHeight) < 2 && Math.abs(r.height - el.offsetWidth) < 2 && Math.abs(el.offsetWidth - el.offsetHeight) > 4;
+    };
+    const down = (e) => { stop(); st = { x: e.clientX, y: e.clientY, top: el.scrollTop, side: turned(), moved: false, t: performance.now(), d: 0, v: 0 }; };
+    const move = (e) => {
+      if (!st) return;
+      const d = st.side ? e.clientX - st.x : st.y - e.clientY;
+      if (!st.moved && Math.abs(d) > 6) st.moved = true;
+      const now = performance.now();
+      const dt = now - st.t;
+      if (dt > 0) st.v = 0.75 * ((d - st.d) / dt) + 0.25 * st.v;
+      st.t = now; st.d = d;
+      if (st.moved) { el.scrollTop = st.top + d; if (e.cancelable) e.preventDefault(); }
+    };
+    const up = () => {
+      const s0 = st;
+      st = null;
+      if (!s0 || !s0.moved || Math.abs(s0.v) < 0.08 || performance.now() - s0.t > 90) return;
+      let v = Math.max(-4, Math.min(4, s0.v));
+      let last = performance.now();
+      const step = (t) => {
+        const dt = Math.min(40, t - last);
+        last = t;
+        const before = el.scrollTop;
+        el.scrollTop = before + v * dt;
+        v *= Math.pow(0.94, dt / 16);
+        raf = Math.abs(v) > 0.03 && el.scrollTop !== before ? requestAnimationFrame(step) : 0;
+      };
+      raf = requestAnimationFrame(step);
+    };
+    el.addEventListener('pointerdown', down);
+    el.addEventListener('pointermove', move, { passive: false });
+    el.addEventListener('pointerup', up);
+    el.addEventListener('pointercancel', up);
+    el.addEventListener('pointerleave', up);
+    el.addEventListener('wheel', stop, { passive: true });
+    return () => {
+      stop();
+      el.removeEventListener('pointerdown', down);
+      el.removeEventListener('pointermove', move);
+      el.removeEventListener('pointerup', up);
+      el.removeEventListener('pointercancel', up);
+      el.removeEventListener('pointerleave', up);
+      el.removeEventListener('wheel', stop);
+    };
+  }, [el]);
+}
+
+const CHAT_NAME_COLS = ['#7CC8FF', '#FF9BD2', '#9BE58A', '#C9A7FF', '#FFB27A', '#6FE3D6'];
+export function GChatPanel({ title, log, phrases = [], emotes = null, onSend, onEmote, onClose, at = null, placeholder = 'Type a message', youName = 'You' }) {
+  injectKitCss();
+  const S = useSkin();
+  const rootRef = useRef(null);
+  const histRef = useRef(null);
+  const inRef = useRef(null);
+  const box = useStageBox(rootRef);
+  const land = box.w > box.h * 1.05;
+  const [text, setText] = useState('');
+  const [kb, setKb] = useState(false);
+  const [phone, setPhone] = useState(!TOUCHY);
+  useBackClose(kb, () => setKb(false));
+  const [histEl, setHistEl] = useState(null);
+  const histSet = useCallback((el) => { histRef.current = el; setHistEl(el); }, []);
+  useDragScroll(histEl);
+  const items = (log || []).map((m) => ({ who: String((m && m.who) || 'Friend'), t: String((m && (m.t != null ? m.t : m.text)) || '') })).filter((m) => m.t);
+  useLayoutEffect(() => { const el = histRef.current; if (el) el.scrollTop = el.scrollHeight; }, [items.length, kb, land, box.h]);
+  useEffect(() => {
+    if (!phone) return undefined;
+    const f = () => { try { if (inRef.current && document.activeElement !== inRef.current) inRef.current.focus({ preventScroll: true }); } catch {} };
+    f();
+    const t1 = setTimeout(f, 60), t2 = setTimeout(f, 220);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, [phone]);
+  const clean = (v) => String(v || '').replace(/\s+/g, ' ').slice(0, 90);
+  const send = (t) => {
+    const v = String(t == null ? text : t).replace(/\s+/g, ' ').trim().slice(0, 90);
+    if (!v) return;
+    const ok = onSend(v);
+    if (ok === false) return;
+    setText('');
+    setKb(false);
+    if (onClose) onClose();
+  };
+  const sendOn = !!text.trim();
+  const autoCap = !text || /[.!?]\s$/.test(text);
+  const pad = 10;
+  const P = at ? { t: at.top(pad), r: at.right(pad), b: at.bottom(pad), l: at.left(pad) } : { t: pad, r: pad, b: pad, l: pad };
+  const kbH = Math.round(Math.max(150, Math.min(land ? box.h * 0.5 : box.h * 0.4, land ? 240 : 270)));
+  const name = (w) => { if (w === youName) return '#FFD27A'; let n = 0; for (let i = 0; i < w.length; i++) n = (n * 31 + w.charCodeAt(i)) % 997; return CHAT_NAME_COLS[n % CHAT_NAME_COLS.length]; };
+  const hist = (
+    <div ref={histSet} aria-label="Messages" style={{ flex: 1, minHeight: 0, overflow: 'hidden auto', touchAction: 'none', overscrollBehavior: 'contain', padding: '8px 12px', borderRadius: 12, background: 'rgba(0,0,0,0.28)', display: 'flex', flexDirection: 'column', gap: 5, scrollbarWidth: 'thin' }}>
+      {items.length === 0 && <div style={{ margin: 'auto', fontSize: 14, fontWeight: 700, color: 'rgba(255,255,255,0.55)', textAlign: 'center' }}>No messages yet. Say hi.</div>}
+      {items.length > 0 && <div style={{ flex: 1 }} />}
+      {items.slice(-40).map((m, i) => (
+        <div key={i} style={{ fontSize: 15, lineHeight: 1.35, color: '#FFFFFF', wordBreak: 'break-word', flexShrink: 0 }}>
+          <span style={{ fontWeight: 900, color: name(m.who) }}>{m.who}</span>{' '}<span style={{ color: 'rgba(255,255,255,0.92)' }}>{m.t}</span>
+        </div>
+      ))}
+    </div>
+  );
+  const quick = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
+      {phrases.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 7 }}>
+          {phrases.map((p) => (
+            <button key={p} type="button" className="zgk-btn" {...pressProps(() => { kitTap(); send(p); })}
+              style={{ minHeight: 40, padding: '5px 10px', border: 'none', borderRadius: 11, cursor: 'pointer', background: 'rgba(255,255,255,0.13)', color: '#FFFFFF', fontFamily: FONT, fontSize: 14, fontWeight: 800, lineHeight: 1.15, textAlign: 'center', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.12)' }}>{p}</button>
+          ))}
+        </div>
+      )}
+      {emotes && emotes.length > 0 && onEmote && (
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(8, emotes.length)}, minmax(0, 1fr))`, gap: 6 }}>
+          {emotes.map((e) => <button key={e} type="button" className="zgk-btn" aria-label={`Send ${e}`} {...pressProps(() => { onEmote(e); if (onClose) onClose(); })} style={{ height: 40, border: 'none', borderRadius: 11, cursor: 'pointer', background: 'rgba(255,255,255,0.1)', fontSize: 22, lineHeight: 1, padding: 0 }}>{e}</button>)}
+        </div>
+      )}
+    </div>
+  );
+  const field = phone ? (
+    <form onSubmit={(e) => { e.preventDefault(); send(); }} style={{ flex: 1, minWidth: 0, display: 'flex' }}>
+      <input ref={inRef} value={text} onChange={(e) => setText(clean(e.target.value))} maxLength={90} enterKeyHint="send" placeholder={placeholder} aria-label="Message"
+        onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Escape' && onClose) onClose(); }} onKeyUp={(e) => e.stopPropagation()}
+        style={{ flex: 1, minWidth: 0, height: 44, borderRadius: 22, border: 'none', background: 'rgba(255,255,255,0.13)', color: '#FFFFFF', padding: '0 16px', fontSize: 16, fontFamily: FONT, outline: 'none' }} />
+    </form>
+  ) : (
+    <div role="textbox" aria-label="Message" tabIndex={0} {...pressProps(() => { kitTap(); setKb(true); })}
+      onKeyDown={(e) => { e.stopPropagation(); const k = e.key || ''; if (k === 'Enter') { e.preventDefault(); send(); } else if (k === 'Backspace') { e.preventDefault(); setText((v) => v.slice(0, -1)); } else if (k === 'Escape') { if (kb) setKb(false); else if (onClose) onClose(); } else if (k.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); setText((v) => clean(v + k)); } }} onKeyUp={(e) => e.stopPropagation()}
+      style={{ flex: 1, minWidth: 0, height: 44, borderRadius: 22, background: 'rgba(255,255,255,0.13)', boxShadow: kb ? `inset 0 0 0 2px ${S.name || '#FFD27A'}` : 'none', display: 'flex', alignItems: 'center', padding: '0 16px', overflow: 'hidden', cursor: 'text', fontSize: 16, fontFamily: FONT }}>
+      <span style={{ flex: '0 1 auto', minWidth: 0, display: 'flex', justifyContent: 'flex-end', overflow: 'hidden' }}><span style={{ whiteSpace: 'pre', flexShrink: 0, color: text ? '#FFFFFF' : 'rgba(255,255,255,0.5)' }}>{text || (kb ? '' : placeholder)}</span></span>
+      {kb && <span aria-hidden="true" style={{ width: 2, height: 20, marginLeft: 1, background: '#FFFFFF', flexShrink: 0, animation: 'zgk-caret 1s steps(1) infinite' }} />}
+    </div>
+  );
+  const sendBtn = <GPill text="Send" color="green" small onPress={() => send()} disabled={!sendOn} />;
+  const head = (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+      <div style={{ flex: 1, minWidth: 0, fontSize: 17, fontWeight: 900, color: '#FFFFFF', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
+      <button type="button" className="zgk-btn" aria-label="Close chat" {...pressProps(() => { kitTap(); if (onClose) onClose(); })}
+        style={{ width: 36, height: 36, flexShrink: 0, border: 'none', borderRadius: 18, cursor: 'pointer', background: 'rgba(255,255,255,0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3l10 10M13 3L3 13" stroke="#FFFFFF" strokeWidth="2.4" strokeLinecap="round" /></svg>
+      </button>
+    </div>
+  );
+  return (
+    <div ref={rootRef} onPointerDown={(e) => { e.stopPropagation(); if (e.target === e.currentTarget) { if (kb) setKb(false); else if (onClose) onClose(); } }}
+      style={{ position: 'absolute', inset: 0, zIndex: 45, background: 'rgba(2,4,10,0.55)', display: 'flex', alignItems: 'stretch', justifyContent: 'center', paddingTop: P.t, paddingRight: P.r, paddingBottom: P.b, paddingLeft: P.l, boxSizing: 'border-box', fontFamily: FONT, animation: 'zgk-in 0.2s ease-out' }}>
+      <div onPointerDown={(e) => { e.stopPropagation(); if (kb && e.target === e.currentTarget) setKb(false); }}
+        style={{ width: '100%', maxWidth: land ? 900 : 520, maxHeight: kb ? 'none' : 640, alignSelf: 'center', height: '100%', display: 'flex', flexDirection: 'column', gap: 9, padding: 12, boxSizing: 'border-box', borderRadius: Math.max(10, S.pr || 10), background: 'linear-gradient(180deg, rgba(22,26,38,0.96), rgba(12,15,24,0.97))', boxShadow: S.pEdge && S.pEdge !== 'none' ? S.pEdge : 'inset 0 0 0 1px rgba(255,255,255,0.1)', minHeight: 0 }}>
+        {!kb && head}
+        {kb ? (
+          <>
+            <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>{hist}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+              <button type="button" className="zgk-btn" aria-label="Hide the keyboard" {...pressProps(() => { kitTap(); setKb(false); })}
+                style={{ width: 40, height: 40, flexShrink: 0, border: 'none', borderRadius: 20, cursor: 'pointer', background: 'rgba(255,255,255,0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 9.5l6 6 6-6" stroke="#FFFFFF" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+              </button>
+              {field}{sendBtn}
+            </div>
+            {!phone && <GKeyboard height={kbH} sendOn={sendOn} autoCap={autoCap} onType={(c) => setText((v) => clean(v + c))} onBack={() => setText((v) => v.slice(0, -1))} onSend={() => send()} onPhone={() => setPhone(true)} />}
+          </>
+        ) : land ? (
+          <>
+            <div style={{ flex: 1, minHeight: 0, display: 'flex', gap: 10 }}>
+              <div style={{ flex: '1.1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column' }}>{hist}</div>
+              {(phrases.length > 0 || (emotes && onEmote)) && <div style={{ flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'flex-start' }}>{quick}</div>}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>{field}{sendBtn}</div>
+          </>
+        ) : (
+          <>
+            <div style={{ flex: 1, minHeight: 90, display: 'flex', flexDirection: 'column' }}>{hist}</div>
+            {quick}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>{field}{sendBtn}</div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function GQuickPanel({ emotes = [], onEmote, phrases = [], onPhrase, onType, land, style }) {
+  injectKitCss();
+  const S = useSkin();
+  const emo = emotes.length > 0 && onEmote && (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 6 }}>
+      {emotes.map((e) => <button key={e} type="button" className="zgk-btn" aria-label={`Send ${e}`} {...pressProps(() => onEmote(e))} style={{ height: 44, border: 'none', borderRadius: 12, cursor: 'pointer', background: 'rgba(255,255,255,0.1)', fontSize: 25, lineHeight: 1, padding: 0 }}>{e}</button>)}
+    </div>
+  );
+  const phr = phrases.length > 0 && onPhrase && (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 6 }}>
+      {phrases.map((p) => <button key={p} type="button" className="zgk-btn" {...pressProps(() => { kitTap(); onPhrase(p); })} style={{ minHeight: 38, padding: '4px 8px', border: 'none', borderRadius: 11, cursor: 'pointer', background: 'rgba(255,255,255,0.13)', color: '#FFFFFF', fontFamily: FONT, fontSize: 13.5, fontWeight: 800, lineHeight: 1.15 }}>{p}</button>)}
+    </div>
+  );
+  const typeBtn = onType && <button type="button" className="zgk-btn" {...pressProps(() => { kitTap(); onType(); })} style={{ height: 38, border: 'none', borderRadius: 11, cursor: 'pointer', background: 'rgba(255,255,255,0.22)', color: '#FFFFFF', fontFamily: FONT, fontSize: 14, fontWeight: 900 }}>Type a message</button>;
+  return (
+    <div onPointerDown={(e) => e.stopPropagation()} style={{ animation: 'zgk-pop 0.2s ease-out', zIndex: 6, ...style }}>
+      <div style={{ padding: 10, borderRadius: Math.max(10, S.pr || 10), background: 'rgba(10,14,24,0.9)', boxShadow: S.pEdge && S.pEdge !== 'none' ? S.pEdge : 'inset 0 0 0 1px rgba(255,255,255,0.14)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {land && emo && phr ? <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 0.92fr) minmax(0, 1.08fr)', gap: 8, alignItems: 'start' }}>{emo}{phr}</div> : <>{emo}{phr}</>}
+        {typeBtn}
+      </div>
+    </div>
+  );
 }

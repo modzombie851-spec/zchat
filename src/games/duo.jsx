@@ -5,7 +5,7 @@ import { setWatchAllowed, useLiveBeacon, useGamePrivacy } from './live.js';
 import { EMOTES, PingChip, btnBase, Sheet, injectCss, useVoice, setKitTap } from './livekit.jsx';
 import { LIVES, GLYPHS, GLYPH_NAMES, STORY_N, ENDLESS, levelDef, makeWorld, stepWorld, buddyInput, applyEvent, snapshot, mergeSnapshot, sameLevel, syncClock, setNet, nearDial, nearMirror, turnMirror, foeRows, setFoes, tryCode, hintFor, aimTarget, clamp, missionsFor, parTime, spikeAmt, crumbleState, demoInputs, demoDuoWorld } from './duoengine.js';
 import { Snd, THEMES, buildStatic, buildMini, drawDuoMini, render, updateParts, dust, puffs, embers, glints, part, ring, glyph, drawExplorer , setDuoLite } from './duodraw.js';
-import { GC, GBtn, GPill, GPanel, GChip, GTitle, GJoy, GIcon, GHudBtn, GHudPanel, GHudSkill, GHint, GStat, GNotices, useNotices, useWatchNotices, injectKitCss, kitTap, pressProps, INK, newBudget, budgetTick, useCtlLook, useGameStage, stagePoint, GControlsPanel, GLobby, GSlot, GLobbySheet, GVolBars, GSeg , GTalkers, GWatchBar, GSkin, GChatFeed, useChatFeed , useGfx, GGfxRow, useHudOpts, GHudRows, budgetFix, GSetHead, GSetToggle, GSetRow, useHudLay, hudT, layOpen, layEnd, GLayoutRow, GHudEditor} from './gamekit.jsx';
+import { GC, GBtn, GPill, GPanel, GChip, GTitle, GJoy, GIcon, GHudBtn, GHudPanel, GHudSkill, GHint, GStat, GNotices, useNotices, useWatchNotices, injectKitCss, kitTap, pressProps, INK, newBudget, budgetTick, useCtlLook, useGameStage, stagePoint, GControlsPanel, GLobby, GSlot, GLobbySheet, GVolBars, GSeg , GTalkers, GWatchBar, GSkin, GChatFeed, useChatFeed , useGfx, GGfxRow, useHudOpts, GHudRows, budgetFix, GSetHead, GSetToggle, GSetRow, useHudLay, hudT, layOpen, layEnd, GLayoutRow, GHudEditor, GQuickPanel, GChatPanel } from './gamekit.jsx';
 import { Sfx } from './sfx.js';
 import { useTalking } from './talk.js';
 
@@ -124,7 +124,6 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
   const [nearUse, setNearUse] = useState(null);
   const atkReq = useRef(0);
   const foeSend = useRef(0);
-  const [chatText, setChatText] = useState('');
   const [feed, pushFeed] = useChatFeed();
   const [log, setLog] = useState([]);
   const [leaveAsk, setLeaveAsk] = useState(false);
@@ -612,7 +611,6 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
     pushFeed('You', t);
     setLog((l) => [...l.slice(-30), { who: 'You', text: t }]);
     if (!solo) relay.send('chat', { text: t });
-    setChatText('');
     setSheet(null);
     setQuick(false);
     Snd.fx.pop();
@@ -698,21 +696,7 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
   const miniK = W ? Math.min((land ? 120 : 84) / W.MW, (land ? 136 : 120) / W.MH) : 0;
   const mini = W && phase === 'play' ? { w: Math.max(30, Math.round(W.MW * miniK)), h: Math.max(30, Math.round(W.MH * miniK)) } : null;
   const chatSheet = sheet && sheet.k === 'chat' && (
-    <Sheet title={solo ? 'Notes' : `Talk to ${peerFirst}`} onClose={() => setSheet(null)}>
-      {log.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, margin: '12px 0 4px', maxHeight: 150, overflowY: 'auto' }}>
-          {log.slice(-8).map((m, i) => <div key={i} style={{ fontSize: 13.5, lineHeight: 1.4 }}><span style={{ fontWeight: 800, color: m.who === 'You' ? '#FFCB7A' : '#A9CCFF' }}>{m.who}</span> <span style={{ color: 'rgba(255,255,255,0.85)' }}>{m.text}</span></div>)}
-        </div>
-      )}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
-        {PHRASES.map((p) => <button key={p} type="button" className="zgk-btn" onClick={() => { tap(); sendChat(p); }} style={{ ...btnBase, height: 38, padding: '0 14px', borderRadius: 19, background: 'rgba(255,255,255,0.1)', color: '#FFFFFF', fontSize: 13.5, fontWeight: 700 }}>{p}</button>)}
-      </div>
-      <form onSubmit={(e) => { e.preventDefault(); sendChat(chatText); }} style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-        <input value={chatText} onChange={(e) => setChatText(e.target.value)} maxLength={90} placeholder="Write a message" aria-label="Message"
-          style={{ flex: 1, minWidth: 0, height: 46, borderRadius: 23, border: 'none', background: 'rgba(255,255,255,0.1)', color: '#FFFFFF', padding: '0 16px', fontSize: 16, fontFamily: FONT, outline: 'none' }} />
-        <GPill text="Send" color="green" small onPress={() => sendChat(chatText)} disabled={!chatText.trim()} />
-      </form>
-    </Sheet>
+    <GChatPanel title={solo ? 'Notes' : `Talk to ${peerFirst}`} log={log} phrases={PHRASES} emotes={solo ? null : EMOTES} onEmote={sendEmote} at={GS.at} onSend={(t) => { sendChat(t); }} onClose={() => setSheet(null)} />
   );
   useEffect(() => { if (phase === 'pick' || phase === 'lobby') { Sfx.init(); Sfx.music('lobbyDuo', true); } else Sfx.music(null, false); }, [phase]);
   useEffect(() => () => Sfx.music(null, false), []);
@@ -910,17 +894,8 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
         )}
         {(phase === 'play' || layEd) && !watch && <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', opacity: 1 - look.see }}><GJoy flat view={joyView} knobRef={knobRef} color={actKind === 'sun' ? 'orange' : 'blue'} idle={{ x: joyX, y: joyY }} R={joyR} /></div>}
         {phase === 'play' && quick && !solo && (
-          <div onPointerDown={(e) => e.stopPropagation()} style={land ? { position: 'absolute', right: right(10), top: top(54), width: 'min(300px, calc(100% - 40px))', animation: 'zgk-pop 0.2s ease-out', zIndex: 6 } : { position: 'absolute', right: right(16 + 40 + 10), bottom: bottom(armB), width: 'min(280px, calc(100% - 90px))', animation: 'zgk-pop 0.2s ease-out', zIndex: 6 }}>
-            <GPanel style={{ padding: 10 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 6 }}>
-                {EMOTES.map((e) => <button key={e} type="button" className="zgk-btn" aria-label={`Send ${e}`} {...pressProps(() => sendEmote(e))} style={{ ...btnBase, height: 42, borderRadius: 14, background: 'rgba(255,255,255,0.1)', fontSize: 24, lineHeight: 1 }}>{e}</button>)}
-              </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-                {QUICK.map((p) => <button key={p} type="button" className="zgk-btn" {...pressProps(() => { tap(); sendChat(p); })} style={{ ...btnBase, height: 32, padding: '0 11px', borderRadius: 16, background: 'rgba(255,255,255,0.12)', color: '#FFFFFF', fontSize: 12.5, fontWeight: 800 }}>{p}</button>)}
-                <button type="button" className="zgk-btn" {...pressProps(() => { tap(); setQuick(false); setSheet({ k: 'chat' }); })} style={{ ...btnBase, height: 32, padding: '0 11px', borderRadius: 16, background: 'rgba(255,255,255,0.22)', color: '#FFFFFF', fontSize: 12.5, fontWeight: 900 }}>Type a message</button>
-              </div>
-            </GPanel>
-          </div>
+          <GQuickPanel land={land} emotes={EMOTES} onEmote={sendEmote} phrases={QUICK} onPhrase={(p) => sendChat(p)} onType={() => { setQuick(false); setSheet({ k: 'chat' }); }}
+            style={{ position: 'absolute', right: right(10), top: top(54), width: land ? 'min(460px, calc(100% - 28px))' : 'min(330px, calc(100% - 28px))' }} />
         )}
         {(phase === 'play' || layEd) && !watch && (
           <div ref={hudRef('sk')} style={{ position: 'absolute', right: right(14), bottom: bottom(12), width: 210, height: 190, pointerEvents: 'none', transform: `scale(${look.size})`, transformOrigin: '100% 100%', opacity: 1 - look.see, zIndex: 2 }}>

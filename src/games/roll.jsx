@@ -3,8 +3,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { SkillFace } from './gskill.jsx';
 import { Avatar, Portal, useBackClose, hapticTap, FONT, Spinner } from '../App.jsx';
 import { useRoomLink } from './relay.jsx';
-import { EMOTES, Sheet, injectCss, useGameChat, ChatSheet } from './livekit.jsx';
-import { GBtn, GPill, GPanel, GChip, GTitle, GIcon, GHudBtn, GHudPanel, GHint, GStat, GNotices, useNotices, useWatchNotices, stagePoint, injectKitCss, kitTap, pressProps, newBudget, budgetTick, INK, useCtlLook, useGameStage, GControlsPanel, GVolBars, GLobby, GSlot, GLobbySheet, GTalkers, GWatchBar, GSkin, GChatFeed, useChatFeed, GJoinAsks , useGfx, GGfxRow, useHudOpts, GHudRows, budgetFix, GSetHead, GSetToggle, GSetRow, useHudLay, hudT, layOpen, layEnd, GLayoutRow, GHudEditor} from './gamekit.jsx';
+import { EMOTES, Sheet, injectCss, useGameChat, ChatSheet, CHAT_PHRASES } from './livekit.jsx';
+import { GBtn, GPill, GPanel, GChip, GTitle, GIcon, GHudBtn, GHudPanel, GHint, GStat, GNotices, useNotices, useWatchNotices, stagePoint, injectKitCss, kitTap, pressProps, newBudget, budgetTick, INK, useCtlLook, useGameStage, GControlsPanel, GVolBars, GLobby, GSlot, GLobbySheet, GTalkers, GWatchBar, GSkin, GChatFeed, useChatFeed, GJoinAsks , useGfx, GGfxRow, useHudOpts, GHudRows, budgetFix, GSetHead, GSetToggle, GSetRow, useHudLay, hudT, layOpen, layEnd, GLayoutRow, GHudEditor, GQuickPanel } from './gamekit.jsx';
 import { Sfx } from './sfx.js';
 import { setWatchAllowed, useLiveBeacon, useGamePrivacy, useJoinAsks } from './live.js';
 import { WORLDS, LEVEL_N, BALLS, R, levelOf, levelName, makeWorld, mkBall, stepBall, interact, applyEvent, pressedButtons, gatesToOpen, stepPlates, foePos, clamp, demoSetup, demoStep, demoStarts, clipStart, clipRun, DEMO_DT } from './rollengine.js';
@@ -717,11 +717,8 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
               </div>
             )}
             {quick && (
-              <div onPointerDown={(e) => e.stopPropagation()} style={{ position: 'absolute', right: right(10), top: top(8 + hb + 8), width: 'min(260px, calc(100% - 28px))', animation: 'zgk-pop 0.2s ease-out', zIndex: 6 }}>
-                <GPanel style={{ padding: 10, display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 6 }}>
-                  {EMOTES.map((e) => <button key={e} type="button" className="zgk-btn" aria-label={`Send ${e}`} {...pressProps(() => sendEmote(e))} style={{ height: 42, borderRadius: 14, border: 'none', background: 'rgba(255,255,255,0.1)', fontSize: 24, cursor: 'pointer' }}>{e}</button>)}
-                </GPanel>
-              </div>
+              <GQuickPanel land={land} emotes={EMOTES} onEmote={sendEmote} phrases={CHAT_PHRASES} onPhrase={(p) => { chat.send(p); setQuick(false); }} onType={() => { setQuick(false); setChatNew(0); setChatOpen(true); }}
+                style={{ position: 'absolute', right: right(10), top: top(8 + hb + 8), width: land ? 'min(460px, calc(100% - 28px))' : 'min(330px, calc(100% - 28px))' }} />
             )}
           </>
         )}
@@ -808,7 +805,7 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
             </div>
           </Sheet>
         )}
-        {chatOpen && <ChatSheet title="Talk to the room" chat={chat} onClose={() => setChatOpen(false)} />}
+        {chatOpen && <ChatSheet title="Talk to the room" chat={chat} onEmote={sendEmote} at={GS.at} onClose={() => setChatOpen(false)} />}
         {leaveAsk && (
           <Sheet title="Leave the game?" text="Your friends can keep playing without you." onClose={() => setLeaveAsk(false)}>
             <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>

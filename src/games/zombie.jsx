@@ -2,8 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Avatar, Portal, useBackClose, FONT, rtKeep, rtDrop } from '../App.jsx';
 import { m4, MeshBuilder, hexRgb } from './race3d.js';
 import { Sfx } from './sfx.js';
-import { Sheet, injectCss } from './livekit.jsx';
-import { GSetHead, GPill, GPanel, useNotices, useJoystick, GJoy, injectKitCss, kitTap, setKitTap, useCtlLook, useGameStage, GLobbySheet, GSeg, GFeed, GSkin, GChatFeed, useChatFeed, TOUCHY, weakPhone, GSettings, GSetRow, setCtlLook, GSetSlider, GSetToggle } from './gamekit.jsx';
+import { injectCss } from './livekit.jsx';
+import { GSetHead, GPill, GPanel, useNotices, useJoystick, GJoy, injectKitCss, kitTap, setKitTap, useCtlLook, useGameStage, GLobbySheet, GSeg, GFeed, GSkin, GChatFeed, useChatFeed, TOUCHY, weakPhone, GSettings, GSetRow, setCtlLook, GSetSlider, GSetToggle, GChatPanel } from './gamekit.jsx';
 import { makeSim, collide, rayBlocked, DROP, WEAPONS, WKEYS, MELEE, SHOP, SELLER, ARMOR_MAX, PLATE, START_CASH, CASH_MAX, wcls, THROW, NEST, ZT, ZKEYS, SURV, SURV_GUN, hitDamage, PETS, ACID, waveSize, LOOT, LOOT_K, LOOT_G } from './zsim.js';
 import { makeView, TIERS, ZMODEL, coreFiles, allFiles, packList } from './zview.js';
 import { resIndex, resFetch, resLock, resQueue, resFront, resItem, resOn, resSize, resHas, resUrl, resWipe, resCanKeep } from './zres.js';
@@ -40,6 +40,7 @@ const Z_KEYS = [['W A S D', 'Move'], ['Mouse', 'Look'], ['Left click', 'Shoot'],
 const PREF = { gfxo: 'zchat-zombie-gfxo', opt: 'zchat-zombie-opt', bots: 'zchat-zombie-bots', sv: 'zchat-zombie-sv', col: 'zchat-zombie-col', gun: 'zchat-zombie-gun', gfx: 'zchat-zombie-gfx', best: 'zchat-zombie-best', pet: 'zchat-zombie-pet', view: 'zchat-zombie-view', sens: 'zchat-zombie-sens', torch: 'zchat-zombie-torch' };
 const readJson = (k) => { try { return JSON.parse(localStorage.getItem(k) || '{}') || {}; } catch { return {}; } };
 const OPT0 = { adsK: 1, assist: 1, dmg: 1, vib: 1, bars: 1, xcol: 'white', fps: 60, spr: 0, adsMode: 'tap', fmode: 'ads', fmodeV: 2, qs: 1, fire: 'adv', fireC: { rifle: 'adv', smg: 'adv', shotgun: 'simple', sniper: 'adv', pistol: 'adv' } };
+const ZOMBIE_PHRASES = ['Cover me', 'Need ammo', 'Help me up', 'Boss coming', 'Follow me', 'Wait for me', 'Nice shot', 'Good game'];
 const FIRE_CLS = [['rifle', 'Rifles and machine guns'], ['smg', 'SMGs'], ['shotgun', 'Shotguns'], ['sniper', 'Snipers'], ['pistol', 'Pistols']];
 const spreadK = (g, M) => { if (g.ads) return 0.3; const c = wcls(M.w); return (c === 'sniper' ? 10 : M.w === 'xpr' ? 4 : c === 'smg' ? 0.72 : 1) * (M.speed > 1 ? 1.45 : 1) * (M.cr && !(M.sl > 0) ? 0.78 : 1) * (M.air ? 1.8 : 1); };
 const HUD_KEY = 'zchat-zombie-hud2';
@@ -617,7 +618,6 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
   useEffect(() => { if (VM.mic.err) pushNote(VM.mic.err, 'leave', 3.5); }, [VM.mic.err]);
   const [chatFeed, pushChat] = useChatFeed();
   const [chatLog, setChatLog] = useState([]);
-  const [chatText, setChatText] = useState('');
   const [picks, setPicks] = useState([]);
   const pickSeq = useRef(0);
   const pushPick = (txt, img, tone) => {
@@ -3574,7 +3574,7 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
     g.net.send({ t: 'ct', x: t });
     pushChat('You', t);
     setChatLog((l) => [...l.slice(-30), { who: 'You', t }]);
-    setChatText(''); setSheet(null);
+    setSheet(null);
   };
   const ensureRoom = () => {
     if (myRoom) return myRoom;
@@ -4465,13 +4465,7 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
         </GLobbySheet>
       )}
       {sheet === 'chat' && (
-        <Sheet title="Talk to the town" onClose={() => setSheet(null)}>
-          {chatLog.length > 0 && <div style={{ display: 'flex', flexDirection: 'column', gap: 6, margin: '12px 0 4px', maxHeight: 140, overflowY: 'auto' }}>{chatLog.slice(-8).map((m0, i) => <div key={i} style={{ fontSize: 13.5, lineHeight: 1.4 }}><span style={{ fontWeight: 800, color: m0.who === 'You' ? '#E0A85A' : '#9CD4FF' }}>{m0.who}</span> <span style={{ color: 'rgba(255,255,255,0.85)' }}>{m0.t}</span></div>)}</div>}
-          <form onSubmit={(e) => { e.preventDefault(); sendChat(chatText); }} style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-            <input autoFocus enterKeyHint="send" value={chatText} onChange={(e) => setChatText(e.target.value)} maxLength={90} placeholder="Write a message" aria-label="Message" style={{ flex: 1, minWidth: 0, height: 42, borderRadius: 21, border: 'none', padding: '0 16px', background: 'rgba(255,255,255,0.1)', color: '#FFFFFF', fontSize: 15, fontFamily: FONT, outline: 'none' }} />
-            <GPill text="Send" color="green" small onPress={() => sendChat(chatText)} disabled={!chatText.trim()} />
-          </form>
-        </Sheet>
+        <GChatPanel title="Talk to the town" log={chatLog} phrases={ZOMBIE_PHRASES} at={GS.at} onSend={(t) => { sendChat(t); }} onClose={() => setSheet(null)} />
       )}
       {sheet === 'emote' && phase === 'play' && <EmoteWheel icons={emoIcons} onPick={doEmote} onClose={() => setSheet(null)} />}
       {sheet === 'emote' && phase === 'menu' && <EmoteWheel icons={emoIcons} onPick={lobbyEmote} onClose={() => setSheet(null)} />}
