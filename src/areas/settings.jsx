@@ -1538,7 +1538,7 @@ export function NotificationsPage({ visitorsOn = false, onOpenVisitors = null, m
     setItems((cur) => cur || sn.items);
     setIFollow((cur) => (cur && cur.size ? cur : sn.iFollow));
   }, [lateSnap]);
-  const [busy, setBusy] = useState({});
+  const busy = {};
   const [done, setDone] = useState({});
   const [fresh, setFresh] = useState(0);
   const seenRef = useRef(notifSeenAt(myId));
@@ -2213,7 +2213,6 @@ async function g1SaveGroup(gid, patch) {
 
 function G1SettingsBlock({ group, isOwner, onPatchGroup }) {
   const sampleName = G1_ME.name;
-  const { theme } = useTheme();
   const [page, setPage] = useState(null);
   const [askRo, setAskRo] = useState(false);
   const [local, setLocal] = useState({});
@@ -2265,7 +2264,6 @@ function G1SettingsBlock({ group, isOwner, onPatchGroup }) {
   );
 }
 function CrEntryPriceSection({ group, isOwner, onPatchGroup }) {
-  const { theme } = useTheme();
   const [open, setOpen] = useState(false);
   const price = group && group.entry_price ? Number(group.entry_price) : null;
   if (!isOwner || !group) return null;
@@ -2788,7 +2786,7 @@ function AwayMessagePage({ me, onClose, onSaved }) {
   const { theme } = useTheme();
   const [on, setOn] = useState(!!(me && me.away_on));
   const [text, setText] = useState((me && me.away_text) || AWAY_PRESETS[0]);
-  const [busy, setBusy] = useState(false);
+  const busy = false;
   const [err, setErr] = useState('');
   const [saved, setSaved] = useState(false);
   const save = async (nextOn) => {
@@ -4549,7 +4547,7 @@ function LanguageSection() {
 }
 
 export function AppearanceSection({ uid }) {
-  const { theme, dark, themeMode, setThemeMode, accentName, setAccentName, bubbleColor, setBubbleColor, bubbleStyle, setBubbleStyle, fontScale, setFontScale, bgPatternOn, setBgPatternOn, pureBlack, setPureBlack, accentCustom, setAccentCustom } = useTheme();
+  const { theme, dark, themeMode, setThemeMode, accentName, setAccentName, bubbleColor, setBubbleColor, bubbleStyle, setBubbleStyle, setFontScale, bgPatternOn, setBgPatternOn, pureBlack, setPureBlack, accentCustom, setAccentCustom } = useTheme();
   const ownedBubbles = useOwnedBubbles(uid);
   const [allStyles, setAllStyles] = useState(false);
   const [pickAccent, setPickAccent] = useState(false);

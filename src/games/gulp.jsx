@@ -4,13 +4,14 @@ import { Avatar, Portal, useBackClose, hapticTap, FONT, Spinner } from '../App.j
 import { useGameLink, useRoomRelay, useWatchChannel, useMeshRoom } from './relay.jsx';
 import { setWatchAllowed, useLiveBeacon, useGamePrivacy } from './live.js';
 import { EMOTES, PingChip, Sheet, injectCss, useVoice } from './livekit.jsx';
-import { GBtn, GPill, GPanel, GChip, GTitle, GJoy, GIcon, GControlsPanel, GHudBtn, GHudSkill, GFeed, GRibbon, GHint, GIconCap, GStat, GNotices, useNotices, useWatchNotices, GSkillArt, useCtlLook, useGameStage, useJoystick, injectKitCss, kitTap, pressProps, maxDpr, INK, GVolBars, GLobby, GSlot, GLobbySheet, weakPhone, GTalkers, GWatchBar, GSkin, GChatFeed, useChatFeed } from './gamekit.jsx';
+import { GBtn, GPill, GPanel, GChip, GTitle, GJoy, GIcon, GControlsPanel, GHudBtn, GHudSkill, GFeed, GRibbon, GHint, GIconCap, GStat, GNotices, useNotices, useWatchNotices, GSkillArt, useCtlLook, useGameStage, useJoystick, injectKitCss, kitTap, pressProps, maxDpr, INK, GVolBars, GLobby, GSlot, GLobbySheet, weakPhone, GTalkers, GWatchBar, GSkin, GChatFeed, useChatFeed , useGfx, GGfxRow, useHudOpts, GHudRows, GSetHead, GSetToggle, GSetRow, useHudLay, hudT, layOpen, layEnd, GLayoutRow, GHudEditor} from './gamekit.jsx';
 import { Sfx } from './sfx.js';
 import { WW, WH, LIVES, STAGES, SKILLS, SKILL_KEYS, SPECIES, rOf, viewOf, stageOf, clamp, makeGame, spawnFish, hostStep, applyGuestEvent, snap, applySnap, guestFollow, setNet, followNet, movePlayer, tickPlayer, canEat, canTake, canOpen, chestGain, eatGain, botInput, useSkill, addPlayer, dropPlayer, adoptHost } from './gulpengine.js';
 import { render, makeDeco, updateParts, bubbles, floatText, burst, bits, ring, zap, drawRadar, placeName, drawBadge, drawSpecies, fmtN, PLAYER_PAL, SLOT_KEYS, warmSprites } from './gulpdraw.js';
 import { GULP_LEVELS, goalText, goalProgress, starsFor, readLevels, saveLevel, pickMission, missionProgress, missionLabel, missionShort, REWARDS } from './gulplevels.js';
 import { useTalking } from './talk.js';
 
+const GULP_KEYS = [['W A S D or Arrows', 'Swim'], ['Space or Shift', 'Dash'], ['E', 'Suck'], ['Q', 'Bubble shield'], ['R', 'Shock wave'], ['F', 'Frenzy'], ['Esc', 'Pause or leave']];
 const QUICK = ['Come here', 'Run', 'Big fish', 'Nice one', 'Watch out', 'Good game'];
 const PHRASES = ['Come here', 'Run', 'Big fish behind you', 'Nice one', 'Watch out', 'Good game', 'Rematch', 'Sorry'];
 const ROOM_MAX = 10;
@@ -146,6 +147,14 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
   const bannerTimer = useRef(0);
   const overRef = useRef(false);
   const budget = useRef({ avg: 16, low: weakPhone(), n: 0 });
+  const gfxApply = (k) => { const B = budget.current; if (k === 'fast') { B.low = 2; B.fix = true; } else if (k === 'best') { B.low = false; B.fix = true; } else { B.fix = false; B.low = weakPhone(); B.n = 0; } };
+  const [gfx, pickGfx] = useGfx('gulp', gfxApply);
+  const gfxOnce = useRef(false);
+  if (!gfxOnce.current) { gfxOnce.current = true; gfxApply(gfx); }
+  const [hudO, setHudO] = useHudOpts('gulp', { map: true, miss: true, arrows: true, shake: true });
+  const [layEd, setLayEd] = useState(false);
+  const hudLay = useHudLay('gulp');
+  const hudORef = useRef(hudO); hudORef.current = hudO;
   const sheetOpen = useRef(false);
   const levelRef = useRef(null);
   const hostRef = useRef(null);
@@ -599,7 +608,8 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
   };
   const toMenu = () => { levelRef.current = null; GR.current = null; setPaused(false); setResult(null); setPhase('menu'); Sfx.stopAll(); };
   useBackClose(true, () => {
-    if (ctl) setCtl(false);
+    if (layEd) { layEnd('gulp', false); setLayEd(false); setCtl(true); }
+    else if (ctl) setCtl(false);
     else if (quick) setQuick(false);
     else if (sheet) setSheet(null);
     else if (leaveAsk) setLeaveAsk(false);
@@ -842,7 +852,7 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
       const halfW = cw / s / 2, halfH = ch / s / 2;
       let cx = WW <= halfW * 2 ? WW / 2 : clamp(C.x, halfW, WW - halfW);
       let cy = clamp(C.y, halfH - 3, Math.max(halfH - 3, WH - halfH + 1));
-      if (C.shake > 0) { C.shake = Math.max(0, C.shake - dt); const a = C.shake * 0.4; cx += (Math.random() - 0.5) * a; cy += (Math.random() - 0.5) * a; }
+      if (C.shake > 0) { C.shake = Math.max(0, C.shake - dt); const a = hudORef.current.shake === false ? 0 : C.shake * 0.4; cx += (Math.random() - 0.5) * a; cy += (Math.random() - 0.5) * a; }
       const ox = Math.round(cw / 2 - cx * s), oy = Math.round(ch / 2 - cy * s);
       const KR = keepRef.current;
       const kNow = performance.now();
@@ -854,7 +864,7 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
         if (sk && sk.offsetWidth) { const q = lookNow.current.size || 1; const x1 = sk.offsetLeft + sk.offsetWidth, y1 = sk.offsetTop + sk.offsetHeight; KR.list.push([x1 - sk.offsetWidth * q, y1 - sk.offsetHeight * q * 0.8, x1, y1]); }
         if (!isWatch && phaseRef.current === 'play') { const jr = J.R + 12, jx = cw > ch ? 116 : 96, jy = ch - (cw > ch ? 98 : 132); KR.list.push([jx - jr, jy - jr, jx + jr, jy + jr]); }
       }
-      render(cv.getContext('2d'), G, { cw, ch, dpr, s, ox, oy, mine: isWatch ? followRef.current : mine, names: names(), bubbles: bubblesRef.current, parts: partsRef.current, hidden: H ? null : hiddenRef.current, safeTop: 28, safeBottom: 28, keep: KR.list, mics: micsRef.current });
+      render(cv.getContext('2d'), G, { cw, ch, dpr, s, ox, oy, mine: isWatch ? followRef.current : mine, names: names(), bubbles: bubblesRef.current, parts: partsRef.current, hidden: H ? null : hiddenRef.current, safeTop: 28, safeBottom: 28, keep: KR.list, mics: micsRef.current, noArrows: !hudORef.current.arrows });
       const mc = miniRef.current;
       if (mc && mc.isConnected) { const md = Math.min(2, window.devicePixelRatio || 1); const rw2 = mc.clientWidth || 100; if (mc.width !== Math.round(rw2 * md)) { mc.width = Math.round(rw2 * md); mc.height = Math.round(rw2 * md); } const x2 = mc.getContext('2d'); x2.setTransform(md, 0, 0, md, 0, 0); drawRadar(x2, G, isWatch ? followRef.current : mine, rw2, rw2, { x: cx, y: cy, hw: halfW, hh: halfH }); }
       const place = placeName(meP.x, meP.y);
@@ -868,8 +878,8 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
       if (hk !== hudKey.current && (hnow - (hudKey.at || 0) > 90 || meP.dead > 0)) { hudKey.current = hk; hudKey.at = hnow; setHud({ n: meP.n, st: meP.stage, lives: meP.lives, time: G.t, cd: { ...meP.cd }, fx: { ...meP.fx }, combo: meP.combo, dead: meP.dead, on: other ? { n: other.n, lives: other.lives, out: other.out, k: otherK } : null, goal: goal ? { label: goal.label, frac: Math.min(1, goal.cur / Math.max(1, goal.need)) } : null, place, missDone: MM ? MM.done : 0, miss: MM ? MM.list.map((m) => ({ id: m.id, text: m.text, done: !!m.doneAt, label: m.doneAt ? 'Done' : missionLabel(m, m.cur || 0), short: missionShort(m, m.cur || 0), frac: Math.min(1, (m.cur || 0) / Math.max(1, m.v)) })) : null }); }
       const ms = performance.now() - t0;
       B.avg = B.avg * 0.95 + ms * 0.05; B.n += 1;
-      if (B.n > 120 && B.avg > 14 && !B.low) { B.low = true; B.n = 0; }
-      else if (B.n > 120 && B.avg > 20 && B.low === true) B.low = 2;
+      if (!B.fix && B.n > 120 && B.avg > 14 && !B.low) { B.low = true; B.n = 0; }
+      else if (!B.fix && B.n > 120 && B.avg > 20 && B.low === true) B.low = 2;
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
@@ -896,7 +906,7 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
   const prog = nextSt ? clamp((Math.log(Math.max(2, hud.n)) - Math.log(Math.max(2, stage.n || 2))) / (Math.log(nextSt.n) - Math.log(Math.max(2, stage.n || 2))), 0, 1) : 1;
   const myColKey = isRoom ? SLOT_KEYS[roster.col[myId] || 0] : isWatch ? followK : mine;
   const myCol = (PLAYER_PAL[myColKey] || PLAYER_PAL.sun)[0];
-  const skillsOn = SKILL_KEYS.filter((k) => SKILLS[k].stage <= hud.st);
+  const skillsOn = layEd || hudLay.editing ? SKILL_KEYS : SKILL_KEYS.filter((k) => SKILLS[k].stage <= hud.st);
   const fxm = fxMaxRef.current;
   ['shield', 'double', 'magnet', 'speed', 'frenzy'].forEach((k) => { const v = (hud.fx && hud.fx[k]) || 0; if (v <= 0) fxm[k] = 0; else if (v > (fxm[k] || 0)) fxm[k] = v; });
   const fxList = [['shield', 'Shield', '#7FD4FF', 'shield'], ['double', 'Double food', '#FFD23F', null], ['magnet', 'Magnet', '#FF8FA6', 'magnet'], ['speed', 'Speed', '#9BFF7A', 'bolt'], ['frenzy', 'Frenzy', '#FF9A3C', 'flame']].filter(([k]) => hud.fx[k] > 0);
@@ -918,6 +928,24 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
   const shadow = '0 1px 2px rgba(0,0,0,0.65)';
   const strip = (dir) => `linear-gradient(${dir}deg, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.3) 60%, rgba(0,0,0,0) 100%)`;
 
+  const ctlBlock = () => (
+    <>
+      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', opacity: see }}><GJoy flat view={J.view} knobRef={J.knob} idle={{ x: land ? 116 : 96, y: Ht - (land ? 98 : 132) }} R={J.R} /></div>
+      <div ref={hudRef('sk')} style={{ position: 'absolute', right: right(14), bottom: bottom(12), width: 230, height: 200, pointerEvents: 'none', transform: `scale(${sz})`, transformOrigin: '100% 100%', opacity: see, zIndex: 2 }}>
+        {skillsOn.map((k) => {
+          const main = k === 'dash';
+          const [x, y] = skillAt(k);
+          return (
+            <div key={k} data-hud={k} data-hud-name={SKILLS[k].name} style={{ position: 'absolute', left: x, top: y, pointerEvents: 'auto', animation: 'zgk-pop 0.35s ease-out', transformOrigin: '50% 50%', ...hudT(hudLay.lay, k) }}>
+              <GHudSkill icon={SKILL_ICON[k]} art={k} main={main} size={main ? 72 : 48} label={SKILLS[k].name} cool={hud.cd[k] || 0} coolMax={SKILLS[k].cd} sound={main ? 'click' : 'pop'} onPress={() => { skillReq.current = k; }} />
+            </div>
+          );
+        })}
+      </div>
+    </>
+  );
+  const openLay = () => { setCtl(false); setQuick(false); layOpen('gulp'); setLayEd(true); };
+  const closeLay = () => { setLayEd(false); setCtl(true); };
   const socialBtns = showSide ? [
     isRoom ? <GHudBtn key="mic" icon={mesh.mic.on ? 'mic' : 'micoff'} on={mesh.mic.on} size={hb} label={mesh.mic.on ? 'Turn your mic off' : 'Turn your mic on'} onPress={mesh.toggleMic} />
       : <GHudBtn key="mic" icon={voice.micOn ? 'mic' : 'micoff'} on={voice.micOn} size={hb} label={voice.micOn ? 'Turn your mic off' : 'Turn your mic on'} onPress={voice.toggle} />,
@@ -933,8 +961,6 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
   const rowBtns = land ? [...socialBtns, ...sysBtns] : sysBtns;
   const rowW = (n) => n * hb + Math.max(0, n - 1) * 6;
   const armB = Math.round(12 + 200 * sz + 12);
-  const tlEl = hudRefs.current.tl;
-  const tlBottom = tlEl && tlEl.offsetHeight ? tlEl.offsetTop + tlEl.offsetHeight : 0;
   const barL = land ? 10 + RAD + 12 : 10 + rowW(sysBtns.length) + 10;
   const barR = land ? 10 + rowW(rowBtns.length) + 12 : 10;
   const barW = Math.max(150, W - barL - barR);
@@ -992,7 +1018,6 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
         <>
           {isDuel && <GBtn icon="chat" color="dark" size={42} fast={false} label="Chat" onPress={() => setSheet({ k: 'chat' })} />}
           {isDuel && <GBtn icon={allowWatch ? 'eye' : 'eyeoff'} color={allowWatch ? 'blue' : 'dark'} size={42} fast={false} label={allowWatch ? 'Friends can watch. Tap to stop' : 'Let friends watch'} badge={watchers.length || null} onPress={toggleAllow} />}
-          <GBtn icon={snd.mus ? 'music' : 'mute'} color={snd.mus ? 'purple' : 'dark'} size={42} fast={false} label={snd.mus ? 'Turn music off' : 'Turn music on'} onPress={toggleMus} />
           {!isWatch && <GBtn icon="gear" color="dark" size={42} fast={false} label="Settings" onPress={() => setCtl(true)} />}
         </>
       )}
@@ -1014,11 +1039,18 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <FishBadge color={mine === 'none' ? 'sun' : mine} stage={B.top ? stageOf(B.top) : 0} size={60} />
+              {!B.top && !B.eaten ? (
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 16, fontWeight: 900, color: '#FFE15A' }}>No records yet</div>
+                  <div style={{ fontSize: 12.5, fontWeight: 700, color: 'rgba(255,255,255,0.78)', lineHeight: 1.35, marginTop: 2 }}>Your best Endless swim shows here</div>
+                </div>
+              ) : (
               <div style={{ flex: 1, minWidth: 0, display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8, textAlign: 'center' }}>
-                {[['Biggest', B.top ? fmtN(B.top) : 'None yet'], ['Longest', B.time ? fmtT(B.time) : 'None'], ['Fish eaten', B.eaten ? fmtN(B.eaten) : '0']].map(([a, v]) => (
+                {[['Biggest', fmtN(B.top || 0)], ['Longest', fmtT(B.time || 0)], ['Fish eaten', fmtN(B.eaten || 0)]].map(([a, v]) => (
                   <div key={a} style={{ minWidth: 0 }}><div style={{ fontSize: 17, fontWeight: 900, color: '#FFE15A', fontVariantNumeric: 'tabular-nums', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v}</div><div style={{ fontSize: 11, fontWeight: 800, color: 'rgba(255,255,255,0.7)' }}>{a}</div></div>
                 ))}
               </div>
+              )}
             </div>
           )}
         </GPanel>
@@ -1058,10 +1090,10 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
             <>
               <div ref={hudRef('tl')} style={{ position: 'absolute', left: left(10), top: top(8), display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start', zIndex: 3, pointerEvents: 'none' }}>
                 {!land && <div style={{ display: 'flex', gap: 6, pointerEvents: 'auto' }}>{sysBtns}</div>}
-                <div style={{ position: 'relative', width: RAD, height: RAD }}>
+                {hudO.map && <div style={{ position: 'relative', width: RAD, height: RAD }}>
                   <canvas ref={miniRef} aria-hidden="true" style={{ width: RAD, height: RAD, display: 'block', borderRadius: 9 }} />
                   {hud.place && <div style={{ position: 'absolute', left: 0, right: 0, bottom: 4, textAlign: 'center', fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.88)', textShadow: '0 1px 2px rgba(0,0,0,0.9)' }}>{hud.place}</div>}
-                </div>
+                </div>}
                 {hud.goal && Lv && (
                   <div style={{ width: 172, boxSizing: 'border-box', padding: '5px 12px 6px 8px', borderRadius: 6, background: strip(90), color: '#FFFFFF', textShadow: shadow, display: 'flex', flexDirection: 'column', gap: 3 }}>
                     <span style={{ fontSize: 11.5, fontWeight: 800 }}>{hud.goal.label}</span>
@@ -1069,7 +1101,7 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
                     {Lv.L.limit ? <span style={{ fontSize: 10.5, fontWeight: 700, color: Lv.L.limit - hud.time < 15 ? '#FF8C8C' : 'rgba(255,255,255,0.75)', fontVariantNumeric: 'tabular-nums' }}>{`${fmtT(Math.max(0, Lv.L.limit - hud.time))} left`}</span> : null}
                   </div>
                 )}
-                {hud.miss && (
+                {hud.miss && hudO.miss && (
                   <div style={{ width: 172, boxSizing: 'border-box', padding: '5px 12px 6px 8px', borderRadius: 6, background: strip(90), color: '#FFFFFF', textShadow: shadow, display: 'flex', flexDirection: 'column', gap: 5 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, fontWeight: 800, color: 'rgba(255,255,255,0.62)' }}>
                       <span>Missions</span>
@@ -1135,20 +1167,7 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
                   <GWatchBar ids={['sun', 'moon']} cur={followK} nameOf={(k) => (k === 'sun' ? hostFirst : peerFirst)} colorOf={(k) => (k === 'sun' ? '#FF9A2E' : '#3E9BFF')} onPick={(k) => { if (k !== followK) { setFollowK(k); cam.current.init = false; } }} />
                 </div>
               )}
-              {!isWatch && <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', opacity: see }}><GJoy flat view={J.view} knobRef={J.knob} idle={{ x: land ? 116 : 96, y: Ht - (land ? 98 : 132) }} R={J.R} /></div>}
-              {!isWatch && (
-                <div ref={hudRef('sk')} style={{ position: 'absolute', right: right(14), bottom: bottom(12), width: 230, height: 200, pointerEvents: 'none', transform: `scale(${sz})`, transformOrigin: '100% 100%', opacity: see, zIndex: 2 }}>
-                  {skillsOn.map((k) => {
-                    const main = k === 'dash';
-                    const [x, y] = skillAt(k);
-                    return (
-                      <div key={k} style={{ position: 'absolute', left: x, top: y, pointerEvents: 'auto', animation: 'zgk-pop 0.35s ease-out' }}>
-                        <GHudSkill icon={SKILL_ICON[k]} art={k} main={main} size={main ? 72 : 48} label={SKILLS[k].name} cool={hud.cd[k] || 0} coolMax={SKILLS[k].cd} sound={main ? 'click' : 'pop'} onPress={() => { skillReq.current = k; }} />
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+              {!isWatch && ctlBlock()}
               {quick && !isSolo && (
                 <div onPointerDown={(e) => e.stopPropagation()} style={land ? { position: 'absolute', right: right(10), top: top(8 + hb + 8), width: 'min(300px, calc(100% - 40px))', animation: 'zgk-pop 0.2s ease-out', zIndex: 6 } : { position: 'absolute', right: right(16 + hb + 10), bottom: bottom(armB), width: 'min(280px, calc(100% - 90px))', animation: 'zgk-pop 0.2s ease-out', zIndex: 6 }}>
                   <div style={{ padding: 10, borderRadius: 12, background: 'rgba(10,14,24,0.86)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.14)' }}>
@@ -1174,9 +1193,11 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
             </div>
           )}
 
-          {lobbyUi}
+          {!layEd && lobbyUi}
+          {layEd && phase !== 'play' && ctlBlock()}
+          {layEd && <GHudEditor g="gulp" stageRef={wrapRef} side={side} W={W} H={Ht} at={GS.at} onClose={closeLay} />}
 
-          {pauseOn && (
+          {pauseOn && !layEd && (
             <div style={{ position: 'absolute', inset: 0, zIndex: 20, background: 'rgba(2,10,22,0.55)', display: 'flex', padding: 12, overflowY: 'auto', touchAction: 'pan-y' }}>
               <GPanel style={{ margin: 'auto', width: '100%', maxWidth: 340, padding: land ? '14px 16px' : '18px 18px', display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: land ? 10 : 12, animation: 'zgk-pop 0.3s ease-out', boxSizing: 'border-box' }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
@@ -1351,7 +1372,8 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
 
           {ctl && (
             <div onPointerDown={(e) => e.stopPropagation()} style={{ position: 'absolute', inset: 0, zIndex: 45, background: 'rgba(2,10,22,0.6)', display: 'flex', padding: 12, overflowY: 'auto', touchAction: 'pan-y' }}>
-              <div style={{ margin: 'auto', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><GControlsPanel sideways onClose={() => setCtl(false)} /></div>
+              <div style={{ margin: 'auto', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><GControlsPanel sideways onClose={() => { setCtl(false); setSnd({ sfx: Sfx.sfxOn, mus: Sfx.musicOn }); }} at={GS.at} keys={GULP_KEYS} preview={['dash', 'suck']} layout={!isWatch ? <GLayoutRow g="gulp" onOpen={openLay} /> : null}
+                tabs={[{ k: 'graphics', label: 'Graphics', body: <><GSetHead>Picture</GSetHead><GGfxRow value={gfx} onPick={pickGfx} /><GSetRow label="Camera shake" sub="Shakes the view on hits and blasts"><GSetToggle on={hudO.shake !== false} label="Camera shake" onToggle={(n) => setHudO('shake', n)} /></GSetRow></> }, { k: 'hud', label: 'HUD', body: <GHudRows opts={hudO} onSet={setHudO} rows={[['map', 'Mini map'], ['miss', 'Missions', 'Shown in endless play'], ['arrows', 'Player arrows', 'Point to friends off screen']]} /> }]} /></div>
             </div>
           )}
 

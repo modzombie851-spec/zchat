@@ -552,7 +552,7 @@ export function GiftSheet({ uid, me, to, onClose, onSent, start, onAsk }) {
   const [pick, setPick] = useState(() => (firstTab === 'item' ? start.key : null));
   const [part, setPart] = useState('set');
   const [theirs, setTheirs] = useState(() => giftTheirsMem.get(to.id) || null);
-  const [busy, setBusy] = useState(false);
+  const busy = false;
   const [err, setErr] = useState('');
   const gridRef = useRef(null);
   const gw = useWidthOf(gridRef, typeof window === 'undefined' ? 390 : Math.min(window.innerWidth, 480)) - 40;
@@ -609,7 +609,6 @@ export function GiftSheet({ uid, me, to, onClose, onSent, start, onAsk }) {
   const ask = set ? decorAsk(set, part, own) : { missing: [], what: 'set', price: 0 };
   const charmPrice = charm ? shopPrice('charm', charm) || 0 : 0;
   const cost = tab === 'coins' ? amount : tab === 'bubble' ? (bub ? BUBBLE_PRICE : 0) : tab === 'charm' ? (charm ? charmPrice : 0) : tab === 'styles' ? (sty ? shopPrice(sty.kind, sty.key) || 0 : 0) : ask.price;
-  const enough = balance >= cost && cost > 0;
   const credit = santa ? Number(santa.price) || 0 : bdayOn && bdWaiting ? Number(bdWaiting.held) || 0 : 0;
   const overBudget = !!santa && cost > santa.budget;
   const canSend = cost > 0 && !overBudget && ((bdayOn && payLater) || balance + credit >= cost);
@@ -2325,7 +2324,6 @@ export function SetShopPage({ setKey, startMode = 'set', list = null, items = nu
 }
 function ShopHeroArt({ kind, k, drop, me, pal, h, w, active }) {
   const name = (me && (me.name || me.username)) || 'You';
-  const first = String(name).split(' ')[0];
   const setKey = kind === 'drop' ? (drop && drop.kind === 'set' ? drop.item_key : null) : kind === 'set' ? k : null;
   if (setKey && DECOR_BY_KEY[setKey]) return <div data-fx-hero="1" style={{ display: 'flex', justifyContent: 'center' }}><DecorHero frameKey={setKey} plateKey={setKey} width={Math.round(Math.min(h * 1.02, w * 0.84))} photo={me.avatar} name={name} username={me.username} verified={me.verified} custom={me.custom_badge} nsk={cxNs(me)} gapColor={pal.stage} lazy /></div>;
   if (kind === 'namestyle') {
@@ -2700,7 +2698,7 @@ export function GiftUnwrapPage({ entry, me, onOpened, onClose, onThank, onWear, 
   useBackClose(true, onClose);
   const [open, setOpen] = useState(false);
   const [shown, setShown] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const busy = false;
   const [thanked, setThanked] = useState(false);
   const [fx, setFx] = useState(0);
   const g = entry.gift;
@@ -3175,7 +3173,7 @@ function useBubbleShop(uid, startKey, onClose, onOpenWallet, inline = false) {
   const wallet = useWallet(uid);
   const owned = useOwnedBubbles(uid);
   const [preview, setPreview] = useState(() => bubbleKeyOf(startKey) || bubbleKeyOf(bubbleStyle) || 'classic');
-  const [busy, setBusy] = useState(false);
+  const busy = false;
   const [ask, setAsk] = useState(null);
   const [note, setNote] = useState('');
   const noteTimer = useRef(0);

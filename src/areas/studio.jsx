@@ -699,7 +699,6 @@ function MakerRing({ pct, label }) {
   );
 }
 export function VideoStickerMaker({ file, userId, onCancel, onSaved }) {
-  const { theme } = useTheme();
   const isGif = String(file.type || '').toLowerCase() === 'image/gif' || /\.gif$/i.test(file.name || '');
   const [url, setUrl] = useState(null);
   const [nat, setNat] = useState(null);
@@ -1630,7 +1629,7 @@ export function AnimatedAvatarMaker({ file, onCancel, onConfirm }) {
       if (!clip || !clip.size || !poster) throw new Error('empty');
       if (clip.size > ANIM_FILE_MAX) { busyRef.current = false; setBusy(false); appSnack('That came out too big. Try a shorter part.'); return; }
       onConfirm({ clip, poster, ext: /mp4/i.test(clip.type) ? 'mp4' : 'webm' });
-    } catch (e) {
+    } catch {
       if (signal.stopped) return;
       busyRef.current = false;
       setBusy(false);
@@ -1713,7 +1712,6 @@ export function AnimatedAvatarMaker({ file, onCancel, onConfirm }) {
 
 export function PhotoCropEditor({ file, onCancel, onConfirm }) {
   useBackClose(true, onCancel);
-  const { theme } = useTheme();
   const [url, setUrl] = useState(null);
   const [natural, setNatural] = useState(null);
   const [zoom, setZoom] = useState(1);
@@ -8191,7 +8189,6 @@ function coverDraw(ctx, el, sw, sh, W, H) {
   ctx.drawImage(el, sx, sy, w, h, 0, 0, W, H);
 }
 export function GifMakerPage({ onClose, onSend }) {
-  const { theme } = useTheme();
   const [src, setSrc] = useState(null);
   const [nat, setNat] = useState(null);
   const [dur, setDur] = useState(0);

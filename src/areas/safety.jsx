@@ -854,7 +854,7 @@ export function ReportQueuePanel({ onClose, onOpenProfile }) {
         supabase.from('message_reports').select('*').limit(300),
         supabase.from('report_queue').select('*').limit(300),
       ]);
-    } catch (thrown) {
+    } catch {
       issues.push("Couldn't reach the server.");
     }
     if (mr.error) issues.push(friendlyError(mr.error, "Couldn't read message reports."));

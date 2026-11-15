@@ -4,7 +4,7 @@ import { SkillFace } from './gskill.jsx';
 import { Avatar, Portal, useBackClose, hapticTap, FONT, Spinner } from '../App.jsx';
 import { useRoomLink } from './relay.jsx';
 import { EMOTES, Sheet, injectCss, useGameChat, ChatSheet } from './livekit.jsx';
-import { GBtn, GPill, GPanel, GChip, GTitle, GIcon, GHudBtn, GHudPanel, GHint, GStat, GNotices, useNotices, useWatchNotices, stagePoint, injectKitCss, kitTap, pressProps, newBudget, budgetTick, INK, useCtlLook, useGameStage, GControlsPanel, GVolBars, GLobby, GSlot, GLobbySheet, GTalkers, GWatchBar, GSkin, GChatFeed, useChatFeed, GJoinAsks } from './gamekit.jsx';
+import { GBtn, GPill, GPanel, GChip, GTitle, GIcon, GHudBtn, GHudPanel, GHint, GStat, GNotices, useNotices, useWatchNotices, stagePoint, injectKitCss, kitTap, pressProps, newBudget, budgetTick, INK, useCtlLook, useGameStage, GControlsPanel, GVolBars, GLobby, GSlot, GLobbySheet, GTalkers, GWatchBar, GSkin, GChatFeed, useChatFeed, GJoinAsks , useGfx, GGfxRow, useHudOpts, GHudRows, budgetFix, GSetHead, GSetToggle, GSetRow, useHudLay, hudT, layOpen, layEnd, GLayoutRow, GHudEditor} from './gamekit.jsx';
 import { Sfx } from './sfx.js';
 import { setWatchAllowed, useLiveBeacon, useGamePrivacy, useJoinAsks } from './live.js';
 import { WORLDS, LEVEL_N, BALLS, R, levelOf, levelName, makeWorld, mkBall, stepBall, interact, applyEvent, pressedButtons, gatesToOpen, stepPlates, foePos, clamp, demoSetup, demoStep, demoStarts, clipStart, clipRun, DEMO_DT } from './rollengine.js';
@@ -12,6 +12,7 @@ import { render, drawBall, updateParts, burst, dust, popText, clearChunks, build
 import { useTalking } from './talk.js';
 import { mkNet, netPush, netRead } from './netlerp.js';
 
+const ROLL_KEYS = [['A or Left', 'Roll left'], ['D or Right', 'Roll right'], ['W or Up or Space', 'Jump, hold to go higher'], ['Esc', 'Pause or leave']];
 const BEST_KEY = (uid) => `zchat-roll-best-${uid || 'me'}`;
 const MINI_W = 168, MINI_H = 36;
 function readBest(uid) { try { return JSON.parse(localStorage.getItem(BEST_KEY(uid)) || '{}') || {}; } catch { return {}; } }
@@ -98,6 +99,13 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
   const allowWatch = gamePriv.show && gamePriv.watch;
   const look = useCtlLook('roll');
   const GS = useGameStage(look);
+  const [gfx, pickGfx] = useGfx('roll', (k) => budgetFix(rbud, k));
+  const gfxOnce = useRef(false);
+  if (!gfxOnce.current) { gfxOnce.current = true; budgetFix(rbud, gfx); }
+  const [hudO, setHudO] = useHudOpts('roll', { map: true, team: true, shake: true });
+  const [layEd, setLayEd] = useState(false);
+  const hudLay = useHudLay('roll');
+  const hudORef = useRef(hudO); hudORef.current = hudO;
   const side = GS.side, land = GS.land;
   const padRef = useRef(null);
   const touch = useRef({ mv: null, cx: 0, jp: new Set() });
@@ -291,7 +299,7 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
 
   const leave = () => { if (phase === 'play' && !solo && !watch) { setLeaveAsk(true); return; } finish(); };
   const finish = () => { Sfx.stopAll(); onClose(); };
-  useBackClose(true, () => { if (chatOpen) setChatOpen(false); else if (lvSheet) setLvSheet(false); else if (ctl) setCtl(false); else if (people) setPeople(false); else if (quick) setQuick(false); else if (leaveAsk) setLeaveAsk(false); else if (paused) setPaused(false); else if (phase === 'play' && solo) setPaused(true); else if (phase !== 'menu') { if (solo || isHost) toMenu(); else leave(); } else leave(); });
+  useBackClose(true, () => { if (layEd) { layEnd('roll', false); setLayEd(false); setCtl(true); } else if (chatOpen) setChatOpen(false); else if (lvSheet) setLvSheet(false); else if (ctl) setCtl(false); else if (people) setPeople(false); else if (quick) setQuick(false); else if (leaveAsk) setLeaveAsk(false); else if (paused) setPaused(false); else if (phase === 'play' && solo) setPaused(true); else if (phase !== 'menu') { if (solo || isHost) toMenu(); else leave(); } else leave(); });
   const toMenu = () => { setPhase('menu'); Sfx.music('lobbyRoll', true); WR.current = null; if (!solo && isHost) relay.send('menu', {}); };
 
   useEffect(() => {
@@ -479,7 +487,7 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
       let cx = clamp(C.x, halfW, Math.max(halfW, W.L.MW - halfW));
       let cy = Math.min(C.y, W.L.MH - halfH + 2.5);
       cy = Math.max(cy, Math.min(W.L.MH - halfH + 2.5, halfH - 6));
-      if (W.shake > 0) { W.shake = Math.max(0, W.shake - dt); cx += (Math.random() - 0.5) * W.shake * 0.5; cy += (Math.random() - 0.5) * W.shake * 0.5; }
+      if (W.shake > 0) { W.shake = Math.max(0, W.shake - dt); const sk = hudORef.current.shake === false ? 0 : W.shake * 0.5; cx += (Math.random() - 0.5) * sk; cy += (Math.random() - 0.5) * sk; }
       const ox = Math.round(cw / 2 - cx * s), oy = Math.round(ch * 0.5 - cy * s);
       const list = rosterRef.current.map((k, i) => ({ k, b: balls.current[k], ci: i }));
       const nm = {};
@@ -503,7 +511,6 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
 
   const sendEmote = (e) => { bubblesRef.current[kindOf()] = { text: e, t: 0, life: 1.8 }; if (!solo) relay.send('emo', { e }); setQuick(false); Sfx.play('pop', { vol: 0.5 }); };
   const pick = (i) => { if (!isHost) return; Sfx.init(); startLevel(i); };
-  const myIdx = roster.indexOf(kindOf());
   const totalStars = Object.values(best).reduce((a, b) => a + (b.stars || 0), 0);
   const nameOf = (k) => (k === kindOf() ? 'You' : names[k] || 'Friend');
   const [chatOpen, setChatOpen] = useState(false);
@@ -545,6 +552,23 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
   const selW = levelOf(sel).w;
   const selBest = best[sel];
   const canPick = isHost && !watch;
+  const ctlBlock = () => (
+    <>
+    <div ref={padRef} aria-hidden="true" data-hud="pad" data-hud-name="Roll" data-hud-zone="l" style={{ position: 'absolute', left: left(16), bottom: bottom(16), width: 156, height: 70, transform: `scale(${look.size})`, transformOrigin: '0 100%', ...hudT(hudLay.lay, 'pad'), opacity: 1 - look.see, zIndex: 2, pointerEvents: 'none', borderRadius: 35, background: 'rgba(0,0,0,0.26)', boxShadow: 'inset 0 0 0 1.5px rgba(255,255,255,0.6)', display: 'flex', overflow: 'hidden' }}>
+      {[-1, 1].map((d) => (
+        <div key={d} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: padDir === d ? 'rgba(255,255,255,0.26)' : 'transparent', transition: 'background 0.06s' }}>
+          <GIcon k={d < 0 ? 'left' : 'right'} size={28} color="#FFFFFF" line stroke={2.2} />
+        </div>
+      ))}
+      <div style={{ position: 'absolute', left: '50%', top: 14, bottom: 14, width: 1.5, marginLeft: -0.75, background: 'rgba(255,255,255,0.4)' }} />
+    </div>
+    <div aria-hidden="true" data-hud="jump" data-hud-name="Jump" data-hud-zone="r" style={{ position: 'absolute', right: right(16), bottom: bottom(14), width: 80, height: 80, transform: `scale(${look.size})`, transformOrigin: '100% 100%', ...hudT(hudLay.lay, 'jump'), opacity: 1 - look.see, zIndex: 2, pointerEvents: 'none' }}>
+      <SkillFace size={80} icon="hop" pressed={!!jumpOn} main />
+    </div>
+    </>
+  );
+  const openLay = () => { setCtl(false); setQuick(false); layOpen('roll'); setLayEd(true); };
+  const closeLay = () => { setLayEd(false); setCtl(true); };
   const lobby = phase !== 'menu' ? null : (
     <GLobby GS={GS} title="Roll Squad" onClose={finish} closeLabel={solo ? 'Leave' : 'Back to chat'}
       sub={watch ? `Watching ${hostName} and friends` : null}
@@ -658,8 +682,8 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
                 <span style={{ color: '#FFD23F' }}>{levelName(lvl)}</span>
                 <span style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtT(hud.time)}</span>
               </GHudPanel>
-              <canvas ref={miniRef} aria-hidden="true" style={{ width: MINI_W, height: MINI_H, display: 'block', borderRadius: 7, boxShadow: '0 2px 10px rgba(0,0,0,0.25)' }} />
-              {!solo && roster.map((k, i) => (
+              {hudO.map && <canvas ref={miniRef} aria-hidden="true" style={{ width: MINI_W, height: MINI_H, display: 'block', borderRadius: 7, boxShadow: '0 2px 10px rgba(0,0,0,0.25)' }} />}
+              {!solo && hudO.team && roster.map((k, i) => (
                 <GHudPanel key={k} style={{ height: 24, padding: '0 9px', display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 800, whiteSpace: 'nowrap', opacity: hud.dead.includes(k) ? 0.6 : 1 }}>
                   <span style={{ width: 10, height: 10, borderRadius: 5, background: BALLS[i % 4].body, boxShadow: `0 0 0 1.5px ${INK}` }} />
                   <span>{nameOf(k)}</span>
@@ -684,17 +708,7 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
               <>
                 <div role="group" aria-label="Touch the left side to roll and the right side to jump" onPointerDown={zoneDown} onPointerMove={zoneMove} onPointerUp={zoneUp} onPointerCancel={zoneUp} onLostPointerCapture={zoneUp} onContextMenu={(e) => e.preventDefault()}
                   style={{ position: 'absolute', inset: 0, zIndex: 1, touchAction: 'none' }} />
-                <div ref={padRef} aria-hidden="true" style={{ position: 'absolute', left: left(16), bottom: bottom(16), width: 156, height: 70, transform: `scale(${look.size})`, transformOrigin: '0 100%', opacity: 1 - look.see, zIndex: 2, pointerEvents: 'none', borderRadius: 35, background: 'rgba(0,0,0,0.26)', boxShadow: 'inset 0 0 0 1.5px rgba(255,255,255,0.6)', display: 'flex', overflow: 'hidden' }}>
-                  {[-1, 1].map((d) => (
-                    <div key={d} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: padDir === d ? 'rgba(255,255,255,0.26)' : 'transparent', transition: 'background 0.06s' }}>
-                      <GIcon k={d < 0 ? 'left' : 'right'} size={28} color="#FFFFFF" line stroke={2.2} />
-                    </div>
-                  ))}
-                  <div style={{ position: 'absolute', left: '50%', top: 14, bottom: 14, width: 1.5, marginLeft: -0.75, background: 'rgba(255,255,255,0.4)' }} />
-                </div>
-                <div aria-hidden="true" style={{ position: 'absolute', right: right(16), bottom: bottom(14), width: 80, height: 80, transform: `scale(${look.size})`, transformOrigin: '100% 100%', opacity: 1 - look.see, zIndex: 2, pointerEvents: 'none' }}>
-                  <SkillFace size={80} icon="hop" pressed={!!jumpOn} main />
-                </div>
+                {ctlBlock()}
               </>
             )}
             {!playing() && (
@@ -712,9 +726,11 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
           </>
         )}
 
-        {lobby}
+        {!layEd && lobby}
+        {layEd && phase !== 'play' && ctlBlock()}
+        {layEd && <GHudEditor g="roll" stageRef={wrapRef} side={side} W={GS.W} H={GS.H} at={GS.at} onClose={closeLay} />}
 
-        {paused && phase === 'play' && (
+        {paused && phase === 'play' && !layEd && (
           <div style={{ position: 'absolute', inset: 0, zIndex: 20, background: 'rgba(10,8,24,0.5)', display: 'flex', padding: 12, overflowY: 'auto', touchAction: 'pan-x pan-y' }}>
             <GPanel style={{ margin: 'auto', width: '100%', maxWidth: 330, padding: land ? '14px 16px' : '18px 18px', display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: land ? 10 : 12, animation: 'zgk-pop 0.3s ease-out', boxSizing: 'border-box' }}>
               <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
@@ -756,7 +772,8 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
 
         {ctl && (
           <div onPointerDown={(e) => e.stopPropagation()} style={{ position: 'absolute', inset: 0, zIndex: 45, background: 'rgba(10,8,24,0.55)', display: 'flex', padding: 12, overflowY: 'auto', touchAction: 'pan-y' }}>
-            <div style={{ margin: 'auto', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><GControlsPanel sideways onClose={() => setCtl(false)} /></div>
+            <div style={{ margin: 'auto', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><GControlsPanel sideways onClose={() => setCtl(false)} at={GS.at} keys={ROLL_KEYS} preview={['hop', 'sprint']} layout={!watch ? <GLayoutRow g="roll" onOpen={openLay} /> : null}
+              tabs={[{ k: 'graphics', label: 'Graphics', body: <><GSetHead>Picture</GSetHead><GGfxRow value={gfx} onPick={pickGfx} /><GSetRow label="Camera shake" sub="Shakes the view on hits and blasts"><GSetToggle on={hudO.shake !== false} label="Camera shake" onToggle={(n) => setHudO('shake', n)} /></GSetRow></> }, { k: 'hud', label: 'HUD', body: <GHudRows opts={hudO} onSet={setHudO} rows={[['map', 'Level map'], ['team', 'Team list', 'Shown when you play with friends']]} /> }]} /></div>
           </div>
         )}
         <GTalkers ids={talking} nameOf={nameOf} top={top(phase === 'play' && land ? 46 : 50)} />

@@ -5,7 +5,7 @@ import { Avatar, Portal, useBackClose, FONT, Spinner } from '../App.jsx';
 import { useRoomLink } from './relay.jsx';
 import { cloudOn } from './zcloud.js';
 import { EMOTES, Sheet, injectCss, useGameChat, ChatSheet } from './livekit.jsx';
-import { GBtn, GPill, GPanel, GChip, GTitle, GIcon, GHudBtn, GHudPanel, GNotices, useNotices, useWatchNotices, injectKitCss, kitTap, pressProps, maxDpr, weakPhone, INK, useCtlLook, useGameStage, GControlsPanel, GVolBars, GLobby, GSlot, GLobbySheet, GSeg, GTalkers, GJoy, useJoystick, stagePoint, TOUCHY, GWatchBar, GSkin, GChatFeed, useChatFeed, GJoinAsks, GHudSkill, GSetRow, GSetToggle } from './gamekit.jsx';
+import { GBtn, GPill, GPanel, GChip, GTitle, GIcon, GHudBtn, GHudPanel, GNotices, useNotices, useWatchNotices, injectKitCss, kitTap, pressProps, maxDpr, weakPhone, INK, useCtlLook, useGameStage, GControlsPanel, GVolBars, GLobby, GSlot, GLobbySheet, GSeg, GTalkers, GJoy, useJoystick, stagePoint, TOUCHY, GWatchBar, GSkin, GChatFeed, useChatFeed, GJoinAsks, GHudSkill, GSetRow, GSetToggle , GSetHead, useHudLay, hudT, layOpen, layEnd, GLayoutRow, GHudEditor} from './gamekit.jsx';
 import { mkNet, netPush, netRead } from './netlerp.js';
 import { Sfx } from './sfx.js';
 import { setWatchAllowed, useLiveBeacon, useGamePrivacy, useJoinAsks } from './live.js';
@@ -17,6 +17,7 @@ import { useTalking } from './talk.js';
 import { supabase } from '../supabaseClient.js';
 import { parseSBM, boneMap, newPose, sampleInto, skinPose, upperMask, recolor } from './siegechar.js';
 
+const SIEGE_KEYS = [['W A S D or Arrows', 'Move'], ['Mouse', 'Aim'], ['Left click or F', 'Attack'], ['Right click or Space or E', 'Super'], ['Q', 'Gadget'], ['Shift', 'Dash'], ['Esc', 'Pause or leave']];
 const SKF = ['ua_anim', 'ua_flamingo', 'ua_frog', 'ua_bee', 'um_flamingo', 'um_bee', 'um_panda', 'um_frog', 'ue_small', 'ue_fly', 'ue_large', 'up_health', 'up_thunder', 'up_bullets', 'up_sphere', 'up_jar'];
 const SKT = ['t_usk', 't_umech', 't_umechf', 't_uen'];
 const SKL = { job: null, d: null };
@@ -148,7 +149,7 @@ const DROP_COL = { hp: '#6BF26B', pw: '#FF7AD9', su: '#FFE15A', sh: '#9FE6FF', r
 const ATK_GI = { blaze: 'flame', pip: 'electric', boom: 'bomb', mira: 'heal', rex: 'hammer', volt: 'lightning', kai: 'rocket', ivy: 'snowflake' };
 const GAD_GI = { ring: 'firering', decoy: 'ghost', mine: 'mine', bubble: 'shield', charge: 'shield', over: 'lightning', jet: 'jetpack', nova: 'freeze' };
 const SUP_GI = { wave: 'sonic', beam: 'laser', mega: 'megabomb', bloom: 'heal', slam: 'stomp', turret: 'tesla', barrage: 'missiles', freeze: 'freeze' };
-const PREF = { hero: 'zchat-siege-hero', arena: 'zchat-siege-arena', lv: 'zchat-siege-level', bots: 'zchat-siege-bots', gfx: 'zchat-siege-gfx', end: 'zchat-siege-endless', nums: 'zchat-siege-nums', bars: 'zchat-siege-bars' };
+const PREF = { hero: 'zchat-siege-hero', arena: 'zchat-siege-arena', lv: 'zchat-siege-level', bots: 'zchat-siege-bots', gfx: 'zchat-siege-gfx', end: 'zchat-siege-endless', nums: 'zchat-siege-nums', bars: 'zchat-siege-bars', map: 'zchat-siege-map', shake: 'zchat-siege-shake' };
 const BEST_KEY = (uid, a, lv) => `zchat-siege-best-${uid || 'me'}-${a}-${lv}`;
 const readPref = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : v; } catch { return d; } };
 const savePref = (k, v) => { try { localStorage.setItem(k, String(v)); } catch {} };
@@ -394,7 +395,9 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
   const botNRef = useRef(botN); botNRef.current = botN;
   const endRef = useRef(endless); endRef.current = endless;
   const gfxRef = useRef(gfx); gfxRef.current = gfx;
-  const [hudOpt, setHudOpt] = useState(() => ({ nums: readPref(PREF.nums, '1') !== '0', bars: readPref(PREF.bars, '1') !== '0' }));
+  const [layEd, setLayEd] = useState(false);
+  const hudLay = useHudLay('siege');
+  const [hudOpt, setHudOpt] = useState(() => ({ nums: readPref(PREF.nums, '1') !== '0', bars: readPref(PREF.bars, '1') !== '0', map: readPref(PREF.map, '1') !== '0', shake: readPref(PREF.shake, '1') !== '0' }));
   const hudOptRef = useRef(hudOpt); hudOptRef.current = hudOpt;
   const setHudK = (k, v) => { kitTap(); setHudOpt((o) => ({ ...o, [k]: v })); savePref(PREF[k], v ? '1' : '0'); };
   const followRef = useRef(follow); followRef.current = follow;
@@ -1641,7 +1644,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
       const kc = 1 - Math.exp(-dt * 6);
       g.cam.tx += (cxT - g.cam.tx) * kc; g.cam.tz += (czT - g.cam.tz) * kc;
       g.shake = Math.max(0, g.shake - dt * 2.2);
-      const sh = g.shake * g.shake * 0.5;
+      const sh = hudOptRef.current.shake ? g.shake * g.shake * 0.5 : 0;
       const sx = (Math.random() - 0.5) * sh, sz = (Math.random() - 0.5) * sh;
       const Pp = 0.98;
       const cam = { pos: [g.cam.tx + sx, Math.sin(Pp) * Dz, g.cam.tz + Math.cos(Pp) * Dz + sz], at: [g.cam.tx + sx, 0, g.cam.tz + sz], fov: 0.72, shadowAt: [g.cam.tx, 0, g.cam.tz - 2] };
@@ -1749,7 +1752,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
 
   const finish = () => { Sfx.stopAll(); onClose(); };
   const leave = () => { if (phase === 'play' && !solo && !watch) { setLeaveAsk(true); return; } finish(); };
-  useBackClose(true, () => { if (chatOpen) setChatOpen(false); else if (ctl) setCtl(false); else if (optSheet) setOptSheet(false); else if (arenaSheet) setArenaSheet(false); else if (people) setPeople(false); else if (quick) setQuick(false); else if (leaveAsk) setLeaveAsk(false); else if (paused) setPaused(false); else if (phase === 'play' && solo) setPaused(true); else leave(); });
+  useBackClose(true, () => { if (layEd) { layEnd('siege', false); setLayEd(false); setCtl(true); } else if (chatOpen) setChatOpen(false); else if (ctl) setCtl(false); else if (optSheet) setOptSheet(false); else if (arenaSheet) setArenaSheet(false); else if (people) setPeople(false); else if (quick) setQuick(false); else if (leaveAsk) setLeaveAsk(false); else if (paused) setPaused(false); else if (phase === 'play' && solo) setPaused(true); else leave(); });
   const sendEmote = (e) => { setBubbles((p) => ({ ...p, [kindOf()]: { e, at: Date.now() } })); if (!solo) relay.send('emo', { e }); setQuick(false); zap('pop', 0.5); };
   useEffect(() => {
     if (!Object.keys(bubbles).length) return undefined;
@@ -1789,7 +1792,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
         <>
           {!solo && !watch && <GBtn icon="chat" color="dark" size={42} fast={false} label="Chat" badge={chatNew || null} onPress={() => { setChatNew(0); setChatOpen(true); }} />}
           {!solo && isHost && !watch && <GBtn icon={allowWatch ? 'eye' : 'eyeoff'} color={allowWatch ? 'blue' : 'dark'} size={42} fast={false} label={allowWatch ? 'Friends can watch. Tap to stop' : 'Let friends watch'} badge={watchers.length || null} onPress={toggleWatch} />}
-          {!watch && <GBtn icon="gear" color="dark" size={42} fast={false} label="Game settings" onPress={() => setOptSheet(true)} />}
+          {!watch && <GBtn icon="gear" color="dark" size={42} fast={false} label={isHost ? 'Game settings' : 'Settings'} onPress={() => (isHost ? setOptSheet(true) : setCtl(true))} />}
         </>
       )}
       side={(
@@ -1984,11 +1987,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
                 <div style={{ width: 250 }}><GSeg value={String(botN)} items={BOT_ITEMS} onPick={pickBots} label="Bot friends" /></div>
               </div>
             )}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontSize: 14.5, fontWeight: 900, flex: 1 }}>Graphics</span>
-              <div style={{ width: 200 }}><GSeg value={gfx} items={GFX} onPick={pickGfx} label="Graphics" /></div>
-            </div>
-            <GPill text="Buttons and sound" icon="gear" color="white" small wide onPress={() => { setOptSheet(false); setCtl(true); }} />
+            <GPill text="Settings" icon="gear" color="white" small wide onPress={() => { setOptSheet(false); setCtl(true); }} />
           </div>
         </GLobbySheet>
       )}
@@ -1998,6 +1997,47 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
   const waveLine = hud.st === 'fight' ? (hud.left === 1 ? '1 alien left' : `${hud.left} aliens left`) : hud.st === 'break' ? (solo && cards ? 'Waiting for your pick' : `Next wave in ${Math.max(1, hud.t)}`) : hud.st === 'won' ? 'All waves cleared' : 'Get ready';
   const superOn = !!(meHud && meHud.sup && meHud.st === 0);
   const ctrlScale = look.size;
+  const ctlBlock = (mh, sOn) => (
+    <>
+      {TOUCHY && <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', opacity: 1 - look.see, zIndex: 3 }}><GJoy flat view={J.view} knobRef={J.knob} idle={{ x: land ? 110 : 96, y: GS.H - (land ? 104 : 128) }} R={J.R} /></div>}
+      <div ref={supRef} data-hud="sup" data-hud-name="Super" role="button" aria-label={sOn ? `Super, ${E.HEROES[mh.key].sup.name}. Ready` : 'Super, charging'} onPointerDown={aimDown('sup')} onPointerMove={aimMove} onPointerUp={aimUp} onPointerCancel={aimUp} onLostPointerCapture={aimUp} onContextMenu={(e) => e.preventDefault()}
+        style={{ position: 'absolute', right: right(136), bottom: bottom(58), width: 80, height: 80, borderRadius: '50%', touchAction: 'none', zIndex: 5, opacity: sOn ? 1 : 0.85 - look.see * 0.4, transform: `scale(${ctrlScale})`, transformOrigin: '100% 100%' , ...hudT(hudLay.lay, 'sup') }}>
+        <svg width="80" height="80" viewBox="0 0 80 80" style={{ position: 'absolute', inset: 0, transform: 'rotate(-90deg)' }} aria-hidden="true">
+          <circle cx="40" cy="40" r="38.8" fill="rgba(14,17,22,0.42)" stroke={sOn ? 'rgba(255,194,61,0.98)' : 'rgba(255,255,255,0.6)'} strokeWidth="2" />
+          <circle cx="40" cy="40" r="35" fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="3.4" />
+          <circle ref={supRing} cx="40" cy="40" r="35" fill="none" stroke="#FFC23D" strokeWidth="3.4" strokeLinecap="round" strokeDasharray="220 220" strokeDashoffset="220" />
+        </svg>
+        <span ref={supKnob} style={{ position: 'absolute', left: 13, top: 13, width: 54, height: 54, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: sOn ? 'rgba(255,194,61,0.34)' : 'rgba(255,255,255,0.07)', boxShadow: sOn ? 'inset 0 0 0 1.6px rgba(255,214,120,0.95), 0 0 16px rgba(255,194,61,0.7)' : 'inset 0 0 0 1.4px rgba(255,255,255,0.4)', animation: sOn ? 'zgk-pulse 1.4s ease-in-out infinite' : 'none' }}>
+          <span style={{ opacity: sOn ? 1 : 0.55, display: 'flex', filter: 'drop-shadow(0 1px 1.5px rgba(0,0,0,0.6))' }}><GGlyph k={SUP_GI[E.HEROES[mh.key].sup.k] || 'sonic'} size={32} /></span>
+        </span>
+      </div>
+      <div ref={atkRef} data-hud="atk" data-hud-name="Attack" role="button" aria-label="Attack. Tap to aim at the closest alien, or drag to aim" onPointerDown={aimDown('atk')} onPointerMove={aimMove} onPointerUp={aimUp} onPointerCancel={aimUp} onLostPointerCapture={aimUp} onContextMenu={(e) => e.preventDefault()}
+        style={{ position: 'absolute', right: right(22), bottom: bottom(20), width: 112, height: 112, borderRadius: '50%', touchAction: 'none', zIndex: 5, opacity: 1 - look.see * 0.5, transform: `scale(${ctrlScale})`, transformOrigin: '100% 100%' , ...hudT(hudLay.lay, 'atk') }}>
+        <svg width="112" height="112" viewBox="0 0 112 112" style={{ position: 'absolute', inset: 0 }} aria-hidden="true">
+          <circle cx="56" cy="56" r="54.6" fill="rgba(14,17,22,0.36)" stroke="rgba(255,255,255,0.5)" strokeWidth="1.8" />
+          {Array.from({ length: mh.ammoMax || 3 }, (_, i) => { const n = mh.ammoMax || 3; const span = (Math.PI * 2) / n; const a0 = -Math.PI / 2 + i * span + 0.09, a1 = a0 + span - 0.18; const r = 51; const p0 = [56 + Math.cos(a0) * r, 56 + Math.sin(a0) * r], p1 = [56 + Math.cos(a1) * r, 56 + Math.sin(a1) * r]; const L = Math.round(r * (a1 - a0)); const d = `M${p0[0]} ${p0[1]} A${r} ${r} 0 0 1 ${p1[0]} ${p1[1]}`; return <g key={`${n}-${i}`}><path d={d} fill="none" stroke="rgba(255,255,255,0.16)" strokeWidth="5" strokeLinecap="round" /><path ref={(el) => { ammoRef.current[i] = el; }} data-l={L} d={d} fill="none" stroke="#FFFFFF" strokeWidth="5" strokeLinecap="round" strokeDasharray={`${L} ${L}`} strokeDashoffset="0" /></g>; })}
+        </svg>
+        <span ref={atkKnob} style={{ position: 'absolute', left: 22, top: 22, width: 68, height: 68, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: aimUi === 'atk' ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.1)', boxShadow: 'inset 0 0 0 1.6px rgba(255,255,255,0.7), 0 2px 8px rgba(0,0,0,0.25)' }}>
+          <span style={{ display: 'flex', filter: 'drop-shadow(0 1px 1.5px rgba(0,0,0,0.6))' }}><GGlyph k={ATK_GI[mh.key] || 'flame'} size={34} /></span>
+        </span>
+      </div>
+      <div data-hud="dash" data-hud-name="Dash" style={{ position: 'absolute', right: right(154), bottom: bottom(150), zIndex: 5, transform: `scale(${ctrlScale})`, transformOrigin: '100% 100%', opacity: 1 - look.see * 0.4, ...hudT(hudLay.lay, 'dash') }}>
+        <GHudSkill icon="sprint" tone="#5BC8FF" size={56} cool={mh.dashCD} coolMax={mh.dashMax} label="Dash" sound="click" onPress={() => G.current.dashQ.push(null)} />
+      </div>
+      <div data-hud="gad" data-hud-name="Gadget" style={{ position: 'absolute', right: right(40), bottom: bottom(150), zIndex: 5, transform: `scale(${ctrlScale})`, transformOrigin: '100% 100%', opacity: (mh.gad > 0 ? 1 : 0.55) - look.see * 0.4, ...hudT(hudLay.lay, 'gad') }}>
+        <GHudSkill icon={GAD_GI[E.HEROES[mh.key].gad.k] || 'shield'} tone="#5EE6D2" size={56} cool={mh.gad > 0 ? mh.gadCD : 0} coolMax={E.GADGET_CD} badge={mh.gad} disabled={mh.gad <= 0} label={`Gadget, ${E.HEROES[mh.key].gad.name}, ${mh.gad} left`} sound="click" onPress={() => G.current.gadQ.push(null)} />
+      </div>
+      {(mh.sh || mh.rf || mh.sp || mh.oc) && (
+        <div style={{ position: 'absolute', left: '50%', bottom: bottom(14), transform: 'translateX(-50%)', display: 'flex', gap: 6, zIndex: 4, pointerEvents: 'none' }}>
+          {mh.sh && <GHudPanel style={{ height: 24, padding: '0 9px', display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 900, color: '#9FE6FF' }}><GIcon k="shield" size={13} color="#9FE6FF" ink="transparent" />Shield</GHudPanel>}
+          {mh.rf && <GHudPanel style={{ height: 24, padding: '0 9px', display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 900, color: '#FFC27A' }}><GIcon k="replay" size={13} color="#FFC27A" ink="transparent" />Rapid fire</GHudPanel>}
+          {mh.sp && <GHudPanel style={{ height: 24, padding: '0 9px', display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 900, color: '#9BF29B' }}><GIcon k="dash" size={13} color="#9BF29B" ink="transparent" />Speed</GHudPanel>}
+          {mh.oc && <GHudPanel style={{ height: 24, padding: '0 9px', display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 900, color: '#FFE36A' }}><GIcon k="bolt" size={13} color="#FFE36A" ink="transparent" />Overcharge</GHudPanel>}
+        </div>
+      )}
+    </>
+  
+  );
   return (
     <Portal><GSkin k="siege">
       <div ref={GS.rootRef} style={{ position: 'fixed', left: 0, right: 0, top: 'var(--zvp-top, 0px)', height: 'calc(var(--zvp-h, 100%) + var(--zgx, 0px))', zIndex: 90, background: '#2A2620', overflow: 'hidden', touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', fontFamily: FONT, color: '#FFFFFF' }}>
@@ -2058,7 +2098,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
               <div style={{ position: 'absolute', right: right(10), top: top(8), display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 7, zIndex: 4 }}>
                 <div style={{ display: 'flex', gap: 6 }}>{rowBtns}</div>
                 <GHudPanel style={{ height: 24, padding: '0 9px', display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 900 }}><GIcon k="star" size={13} color="#FFD84E" ink="transparent" />{hud.score.toLocaleString()}</GHudPanel>
-                <canvas ref={mapRef} aria-label="Map" role="img" width="104" height="75" style={{ width: 104, height: 75, borderRadius: 8, boxShadow: '0 0 0 1.5px rgba(255,255,255,0.22), 0 4px 10px rgba(0,0,0,0.35)', pointerEvents: 'none', display: 'block', visibility: phase === 'play' ? 'visible' : 'hidden' }} />
+                <canvas ref={mapRef} aria-label="Map" role="img" width="104" height="75" style={{ width: 104, height: 75, borderRadius: 8, boxShadow: '0 0 0 1.5px rgba(255,255,255,0.22), 0 4px 10px rgba(0,0,0,0.35)', pointerEvents: 'none', display: 'block', visibility: phase === 'play' && hudOpt.map ? 'visible' : 'hidden' }} />
               </div>
               {hud.boss && (
                 <div aria-label="Boss health" style={{ position: 'absolute', left: '50%', top: top(54), transform: 'translateX(-50%)', width: 'min(46%, 360px)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, zIndex: 3, pointerEvents: 'none' }}>
@@ -2078,46 +2118,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
               {playing && meHud && meHud.st === 2 && (
                 <div style={{ position: 'absolute', left: '50%', bottom: bottom(18), transform: 'translateX(-50%)', padding: '7px 14px', borderRadius: 14, background: 'rgba(10,14,26,0.72)', fontSize: 13.5, fontWeight: 900, zIndex: 4, pointerEvents: 'none' }}>You come back when the next wave starts</div>
               )}
-              {playing && meHud && meHud.st === 0 && (
-                <>
-                  {TOUCHY && <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', opacity: 1 - look.see, zIndex: 3 }}><GJoy flat view={J.view} knobRef={J.knob} idle={{ x: land ? 110 : 96, y: GS.H - (land ? 104 : 128) }} R={J.R} /></div>}
-                  <div ref={supRef} role="button" aria-label={superOn ? `Super, ${E.HEROES[meHud.key].sup.name}. Ready` : 'Super, charging'} onPointerDown={aimDown('sup')} onPointerMove={aimMove} onPointerUp={aimUp} onPointerCancel={aimUp} onLostPointerCapture={aimUp} onContextMenu={(e) => e.preventDefault()}
-                    style={{ position: 'absolute', right: right(136), bottom: bottom(58), width: 80, height: 80, borderRadius: '50%', touchAction: 'none', zIndex: 5, opacity: superOn ? 1 : 0.85 - look.see * 0.4, transform: `scale(${ctrlScale})`, transformOrigin: '100% 100%' }}>
-                    <svg width="80" height="80" viewBox="0 0 80 80" style={{ position: 'absolute', inset: 0, transform: 'rotate(-90deg)' }} aria-hidden="true">
-                      <circle cx="40" cy="40" r="38.8" fill="rgba(14,17,22,0.42)" stroke={superOn ? 'rgba(255,194,61,0.98)' : 'rgba(255,255,255,0.6)'} strokeWidth="2" />
-                      <circle cx="40" cy="40" r="35" fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="3.4" />
-                      <circle ref={supRing} cx="40" cy="40" r="35" fill="none" stroke="#FFC23D" strokeWidth="3.4" strokeLinecap="round" strokeDasharray="220 220" strokeDashoffset="220" />
-                    </svg>
-                    <span ref={supKnob} style={{ position: 'absolute', left: 13, top: 13, width: 54, height: 54, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: superOn ? 'rgba(255,194,61,0.34)' : 'rgba(255,255,255,0.07)', boxShadow: superOn ? 'inset 0 0 0 1.6px rgba(255,214,120,0.95), 0 0 16px rgba(255,194,61,0.7)' : 'inset 0 0 0 1.4px rgba(255,255,255,0.4)', animation: superOn ? 'zgk-pulse 1.4s ease-in-out infinite' : 'none' }}>
-                      <span style={{ opacity: superOn ? 1 : 0.55, display: 'flex', filter: 'drop-shadow(0 1px 1.5px rgba(0,0,0,0.6))' }}><GGlyph k={SUP_GI[E.HEROES[meHud.key].sup.k] || 'sonic'} size={32} /></span>
-                    </span>
-                  </div>
-                  <div ref={atkRef} role="button" aria-label="Attack. Tap to aim at the closest alien, or drag to aim" onPointerDown={aimDown('atk')} onPointerMove={aimMove} onPointerUp={aimUp} onPointerCancel={aimUp} onLostPointerCapture={aimUp} onContextMenu={(e) => e.preventDefault()}
-                    style={{ position: 'absolute', right: right(22), bottom: bottom(20), width: 112, height: 112, borderRadius: '50%', touchAction: 'none', zIndex: 5, opacity: 1 - look.see * 0.5, transform: `scale(${ctrlScale})`, transformOrigin: '100% 100%' }}>
-                    <svg width="112" height="112" viewBox="0 0 112 112" style={{ position: 'absolute', inset: 0 }} aria-hidden="true">
-                      <circle cx="56" cy="56" r="54.6" fill="rgba(14,17,22,0.36)" stroke="rgba(255,255,255,0.5)" strokeWidth="1.8" />
-                      {Array.from({ length: meHud.ammoMax || 3 }, (_, i) => { const n = meHud.ammoMax || 3; const span = (Math.PI * 2) / n; const a0 = -Math.PI / 2 + i * span + 0.09, a1 = a0 + span - 0.18; const r = 51; const p0 = [56 + Math.cos(a0) * r, 56 + Math.sin(a0) * r], p1 = [56 + Math.cos(a1) * r, 56 + Math.sin(a1) * r]; const L = Math.round(r * (a1 - a0)); const d = `M${p0[0]} ${p0[1]} A${r} ${r} 0 0 1 ${p1[0]} ${p1[1]}`; return <g key={`${n}-${i}`}><path d={d} fill="none" stroke="rgba(255,255,255,0.16)" strokeWidth="5" strokeLinecap="round" /><path ref={(el) => { ammoRef.current[i] = el; }} data-l={L} d={d} fill="none" stroke="#FFFFFF" strokeWidth="5" strokeLinecap="round" strokeDasharray={`${L} ${L}`} strokeDashoffset="0" /></g>; })}
-                    </svg>
-                    <span ref={atkKnob} style={{ position: 'absolute', left: 22, top: 22, width: 68, height: 68, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: aimUi === 'atk' ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.1)', boxShadow: 'inset 0 0 0 1.6px rgba(255,255,255,0.7), 0 2px 8px rgba(0,0,0,0.25)' }}>
-                      <span style={{ display: 'flex', filter: 'drop-shadow(0 1px 1.5px rgba(0,0,0,0.6))' }}><GGlyph k={ATK_GI[meHud.key] || 'flame'} size={34} /></span>
-                    </span>
-                  </div>
-                  <div style={{ position: 'absolute', right: right(154), bottom: bottom(150), zIndex: 5, transform: `scale(${ctrlScale})`, transformOrigin: '100% 100%', opacity: 1 - look.see * 0.4 }}>
-                    <GHudSkill icon="sprint" tone="#5BC8FF" size={56} cool={meHud.dashCD} coolMax={meHud.dashMax} label="Dash" sound="click" onPress={() => G.current.dashQ.push(null)} />
-                  </div>
-                  <div style={{ position: 'absolute', right: right(40), bottom: bottom(150), zIndex: 5, transform: `scale(${ctrlScale})`, transformOrigin: '100% 100%', opacity: (meHud.gad > 0 ? 1 : 0.55) - look.see * 0.4 }}>
-                    <GHudSkill icon={GAD_GI[E.HEROES[meHud.key].gad.k] || 'shield'} tone="#5EE6D2" size={56} cool={meHud.gad > 0 ? meHud.gadCD : 0} coolMax={E.GADGET_CD} badge={meHud.gad} disabled={meHud.gad <= 0} label={`Gadget, ${E.HEROES[meHud.key].gad.name}, ${meHud.gad} left`} sound="click" onPress={() => G.current.gadQ.push(null)} />
-                  </div>
-                  {(meHud.sh || meHud.rf || meHud.sp || meHud.oc) && (
-                    <div style={{ position: 'absolute', left: '50%', bottom: bottom(14), transform: 'translateX(-50%)', display: 'flex', gap: 6, zIndex: 4, pointerEvents: 'none' }}>
-                      {meHud.sh && <GHudPanel style={{ height: 24, padding: '0 9px', display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 900, color: '#9FE6FF' }}><GIcon k="shield" size={13} color="#9FE6FF" ink="transparent" />Shield</GHudPanel>}
-                      {meHud.rf && <GHudPanel style={{ height: 24, padding: '0 9px', display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 900, color: '#FFC27A' }}><GIcon k="replay" size={13} color="#FFC27A" ink="transparent" />Rapid fire</GHudPanel>}
-                      {meHud.sp && <GHudPanel style={{ height: 24, padding: '0 9px', display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 900, color: '#9BF29B' }}><GIcon k="dash" size={13} color="#9BF29B" ink="transparent" />Speed</GHudPanel>}
-                      {meHud.oc && <GHudPanel style={{ height: 24, padding: '0 9px', display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 900, color: '#FFE36A' }}><GIcon k="bolt" size={13} color="#FFE36A" ink="transparent" />Overcharge</GHudPanel>}
-                    </div>
-                  )}
-                </>
-              )}
+              {playing && meHud && meHud.st === 0 && ctlBlock(meHud, superOn)}
               {cards && playing && phase === 'play' && (
                 <div onPointerDown={(e) => e.stopPropagation()} style={{ position: 'absolute', left: '50%', top: land ? top(64) : '24%', transform: 'translateX(-50%)', width: land ? 'min(620px, 76%)' : 'min(400px, 94%)', zIndex: 8, animation: 'zgk-pop 0.25s ease-out' }}>
                   <GPanel style={{ padding: '10px 12px 12px', display: 'flex', flexDirection: 'column', gap: 9 }}>
@@ -2174,9 +2175,11 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
             </>
           )}
 
-          {lobbyUi}
+          {!layEd && lobbyUi}
+          {layEd && phase !== 'play' && ctlBlock({ key: heroKey, st: 0, dashCD: 0, dashMax: 1, gad: 2, gadCD: 0, ammoMax: 3 }, true)}
+          {layEd && <GHudEditor g="siege" stageRef={wrapRef} side={GS.side} W={GS.W} H={GS.H} at={GS.at} onClose={() => { setLayEd(false); setCtl(true); }} />}
 
-          {paused && phase === 'play' && (
+          {paused && phase === 'play' && !layEd && (
             <div style={{ position: 'absolute', inset: 0, zIndex: 20, background: 'rgba(10,8,24,0.5)', display: 'flex', padding: 12, overflowY: 'auto', touchAction: 'pan-x pan-y' }}>
               <GPanel style={{ margin: 'auto', width: '100%', maxWidth: 320, padding: 16, display: 'flex', flexDirection: 'column', gap: 10, animation: 'zgk-pop 0.3s ease-out', boxSizing: 'border-box' }}>
                 <GTitle text="Paused" size={28} />
@@ -2248,7 +2251,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
 
           {ctl && (
             <div onPointerDown={(e) => e.stopPropagation()} style={{ position: 'absolute', inset: 0, zIndex: 45, background: 'rgba(10,8,24,0.55)', display: 'flex', padding: 12, overflowY: 'auto', touchAction: 'pan-x pan-y' }}>
-              <div style={{ margin: 'auto', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><GControlsPanel sideways onClose={() => setCtl(false)} tabs={[{ k: 'graphics', label: 'Graphics', body: <><GSetRow label="Graphics quality" sub="Fast helps older phones"><GSeg value={gfx} items={GFX} onPick={pickGfx} label="Graphics quality" /></GSetRow></> }, { k: 'hud', label: 'HUD', body: <><GSetRow label="Damage numbers"><GSetToggle on={hudOpt.nums} label="Damage numbers" onToggle={(n) => setHudK('nums', n)} /></GSetRow><GSetRow label="Enemy health bars"><GSetToggle on={hudOpt.bars} label="Enemy health bars" onToggle={(n) => setHudK('bars', n)} /></GSetRow></> }]} /></div>
+              <div style={{ margin: 'auto', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><GControlsPanel sideways onClose={() => setCtl(false)} at={GS.at} keys={SIEGE_KEYS} preview={['laser', 'shield']} layout={!watch ? <GLayoutRow g="siege" onOpen={() => { setCtl(false); setQuick(false); setOptSheet(false); layOpen('siege'); setLayEd(true); }} /> : null} tabs={[{ k: 'graphics', label: 'Graphics', body: <><GSetHead>Picture</GSetHead><GSetRow label="Graphics quality" sub="Fast helps older phones"><GSeg value={gfx} items={GFX} onPick={pickGfx} label="Graphics quality" /></GSetRow><GSetRow label="Camera shake" sub="Shakes the view on hits and blasts"><GSetToggle on={hudOpt.shake} label="Camera shake" onToggle={(n) => setHudK('shake', n)} /></GSetRow></> }, { k: 'hud', label: 'HUD', body: <><GSetRow label="Mini map"><GSetToggle on={hudOpt.map} label="Mini map" onToggle={(n) => setHudK('map', n)} /></GSetRow><GSetRow label="Damage numbers"><GSetToggle on={hudOpt.nums} label="Damage numbers" onToggle={(n) => setHudK('nums', n)} /></GSetRow><GSetRow label="Enemy health bars"><GSetToggle on={hudOpt.bars} label="Enemy health bars" onToggle={(n) => setHudK('bars', n)} /></GSetRow></> }]} /></div>
             </div>
           )}
           <GTalkers ids={talking} nameOf={nameOf} top={top(phase === 'play' ? (hud.boss ? 92 : 54) : 50)} />

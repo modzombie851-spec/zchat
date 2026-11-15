@@ -1325,7 +1325,6 @@ function rrectPath(x, l, t, w, h, r) {
   x.closePath();
 }
 export function ReactionRecorder({ url: rawUrl, trimStart, trimEnd, onClose, onSend }) {
-  const { theme } = useTheme();
   const [phase, setPhase] = useState('prep');
   const [err, setErr] = useState('');
   const [theirSound, setTheirSound] = useState(true);
@@ -2992,7 +2991,7 @@ export function CollectionPanel({ me, rewards, onClose, onEquip, onWear, isAdmin
   }, [drops]);
   const openDrop = dropOpen ? (drops || []).find((d) => d.id === dropOpen) || null : null;
   const [selected, setSelected] = useState(null);
-  const [busy, setBusy] = useState(false);
+  const busy = false;
   const [tryOn, setTryOn] = useState(null);
   const [toast, setToast] = useState('');
   const [lookMenu, setLookMenu] = useState(null);
@@ -3706,7 +3705,7 @@ export function StatusSheet({ me, onClose, onSaved }) {
   const [time, setTime] = useState('today');
   const [picked, setPicked] = useState(() => localInputValue(new Date(Math.ceil((Date.now() + 7200000) / 900000) * 900000)));
   const [who, setWho] = useState(() => (me.zstatus && STATUS_WHO.some(([k]) => k === me.zstatus.a) ? me.zstatus.a : 'everyone'));
-  const [busy, setBusy] = useState(false);
+  const busy = false;
   const [err, setErr] = useState('');
   const [pickEmoji, setPickEmoji] = useState(false);
   const listedEmoji = STATUS_EMOJIS.find((x) => x.replace(/\uFE0F/g, '') === String(emoji || '').replace(/\uFE0F/g, '')) || null;
@@ -3788,7 +3787,7 @@ export function BirthdaySheet({ userId, onClose }) {
   const [month, setMonth] = useState(bdParts && bdParts[0] ? bdParts[0] : 1);
   const [day, setDay] = useState(bdParts && bdParts[1] ? bdParts[1] : 1);
   const [show, setShow] = useState((bdMem && bdMem.show) || 'followers');
-  const [busy, setBusy] = useState(false);
+  const busy = false;
   const [err, setErr] = useState('');
   useEffect(() => {
     let alive = true;
@@ -3853,7 +3852,7 @@ export function NoteComposerSheet({ userId, mine, onClose, onSaved, country }) {
   const [text, setText] = useState(() => (mine && !(song && mine.text === song.t) ? mine.text : ''));
   const [picker, setPicker] = useState(false);
   useEffect(() => { prefetchMusic(country); return () => stopSong(); }, []);
-  const [busy, setBusy] = useState(false);
+  const busy = false;
   const [err, setErr] = useState('');
   const meRow = useMemo(() => readMeCache(userId), [userId]);
   const noteBg = theme.dark ? '#2A2A30' : '#FFFFFF';
@@ -6563,37 +6562,37 @@ function WnSegments({ total, at, onArt, dark }) {
   );
 }
 
-const WN_PHOTOS = { zombies49: '/wn49-zombies.webp', mutant49: '/wn49-mutant.webp', guns50: '/wn50-guns.webp', house50: '/wn50-house.webp', pond50: '/wn50-pond.webp', buttons50: '/wn50-buttons.webp', settings50: '/wn50-settings.webp', pack51: '/wn51-pack.webp', emote51: '/wn51-emote.webp', lobby51: '/wn51-lobby.webp', waves52: '/wn52-waves.webp', sky52: '/wn52-sky.webp', map52: '/wn52-map.webp', boss53: '/wn53-boss.webp', fire53: '/wn53-fire.webp', dog53: '/wn53-dog.webp', train53: '/wn53-train.webp', hud531: '/wn531-hud.webp', moves531: '/wn531-moves.webp', pc531: '/wn531-pc.webp', squad54: '/wn54-squad.webp', boom54: '/wn54-boom.webp', heli54: '/wn54-heli.webp', gas54: '/wn54-gas.webp' , shop55: '/wn55-shop.webp', stall55: '/wn55-stall.webp', boss55: '/wn55-boss.webp', climb55: '/wn55-climb.webp', drop55: '/wn55-drop.webp', squad55: '/wn55-squad.webp', hud55: '/wn55-hud.webp', set55: '/wn55-settings.webp', music55: '/wn55-music.webp', guns55: '/wn55-guns.webp', zj55: '/zombie-art2.webp', bolt55: '/bolt-art2.webp', torch55: '/duo-art.webp' };
+const WN_PHOTOS = { rally57: '/race-art.webp', set57: '/wn57-set.webp', lay57: '/wn57-lay.webp', bolt57: '/wn57-bolt.webp', hub57: '/wn57-hub.webp', zombies49: '/wn49-zombies.webp', mutant49: '/wn49-mutant.webp', guns50: '/wn50-guns.webp', house50: '/wn50-house.webp', pond50: '/wn50-pond.webp', buttons50: '/wn50-buttons.webp', settings50: '/wn50-settings.webp', pack51: '/wn51-pack.webp', emote51: '/wn51-emote.webp', lobby51: '/wn51-lobby.webp', waves52: '/wn52-waves.webp', sky52: '/wn52-sky.webp', map52: '/wn52-map.webp', boss53: '/wn53-boss.webp', fire53: '/wn53-fire.webp', dog53: '/wn53-dog.webp', train53: '/wn53-train.webp', hud531: '/wn531-hud.webp', moves531: '/wn531-moves.webp', pc531: '/wn531-pc.webp', squad54: '/wn54-squad.webp', boom54: '/wn54-boom.webp', heli54: '/wn54-heli.webp', gas54: '/wn54-gas.webp' , shop55: '/wn55-shop.webp', stall55: '/wn55-stall.webp', boss55: '/wn55-boss.webp', climb55: '/wn55-climb.webp', drop55: '/wn55-drop.webp', squad55: '/wn55-squad.webp', hud55: '/wn55-hud.webp', set55: '/wn55-settings.webp', music55: '/wn55-music.webp', guns55: '/wn55-guns.webp', zj55: '/zombie-art2.webp', bolt55: '/bolt-art2.webp', torch55: '/duo-art.webp' };
 const WN_HIGHLIGHTS = [
-  { k: 'hud55', art: 'hud55', go: 'zombie', cta: 'Play now', title: 'New buttons', text: 'Every button has a new metal look with clear icons, plus a gun bar with your ammo and a Reloading sign.' },
-  { k: 'shop55', art: 'shop55', go: 'zombie', cta: 'Play now', title: 'A real gun shop', text: 'Every gun, plate and grenade has a real picture with its price under it. Pick one, check its damage and range, then tap Buy.' },
-  { k: 'boss55', art: 'boss55', go: 'zombie', cta: 'Play now', title: 'Boss entrance', text: 'The camera cuts to the boss while it roars. Every zombie freezes and nobody gets hurt until the fight starts.' },
-  { k: 'climb55', art: 'climb55', go: 'zombie', cta: 'Play now', title: 'Climb on cars and crates', text: 'Jump next to a car, crate, container or sandbags to climb on top, then jump down when you like.' },
-  { k: 'drop55', art: 'drop55', go: 'zombie', cta: 'Play now', title: 'Airdrops with a parachute', text: 'The helicopter comes in low and the crate floats down under a parachute. Every crate has cash inside.' },
+  { k: 'set57', art: 'set57', go: 'games', cta: 'Open games', title: 'Full settings in every big game', text: 'Gulp, Roll Squad, Torchbound, Island Rally and Bolt War now have Graphics, HUD, Controls, Audio and Credits, like Zombie Junction.' },
+  { k: 'lay57', art: 'lay57', go: 'siege', cta: 'Play now', title: 'Move your buttons', text: 'Open Settings, then Controls, then Customize. Drag any button where your thumbs rest, make it bigger or smaller and save.' },
+  { k: 'bolt57', art: 'bolt57', go: 'siege', cta: 'Play now', title: 'Space heroes in Bolt War', text: 'Four astronauts and four mechs fight waves of aliens, with new skill sounds and a Glob Queen every five waves.' },
+  { k: 'hub57', art: 'hub57', go: 'games', cta: 'Open games', title: 'Real game pictures', text: 'Every game on the games page shows a real picture from the game, and solo games have a scene behind them.' },
 ];
 const WN_SECTIONS = [
-  { title: 'Zombie Junction', items: [
-    { art: 'shop55', title: 'New shop', text: 'Real pictures, prices and stats for every item.' },
-    { art: 'stall55', title: 'Seller stall', text: 'A crate counter with ammo and a wall of guns.' },
-    { art: 'boss55', title: 'Boss entrance', text: 'A new roar and every zombie frozen during the intro.' },
-    { art: 'music55', title: 'Danger music', text: 'Scary music while zombies come, calm music after the wave.' },
-    { art: 'climb55', title: 'Climbing', text: 'Climb on cars, crates and containers.' },
-    { art: 'drop55', title: 'Parachute airdrops', text: 'Crates float down and always have cash.' },
-    { art: 'squad55', title: 'Squad controls', text: 'Mute friends, remove players or leave the squad.' },
-    { art: 'set55', title: 'Fire modes', text: 'Simple, Advanced and Custom fire like big shooters.' },
-    { art: 'hud55', title: 'New buttons', text: 'Metal buttons, a gun bar and a Reloading sign.' },
-    { art: 'guns55', title: 'Stronger guns', text: 'Longer range for every gun and a much stronger shotgun.' },
+  { title: 'Big games', items: [
+    { art: 'set57', title: 'Game settings', text: 'Graphics, HUD, Controls, Audio and Credits in every big game.' },
+    { art: 'lay57', title: 'Custom buttons', text: 'Drag, resize and save your own button layout.' },
+    { art: 'set57', title: 'HUD options', text: 'Turn the mini map, names, race order and damage numbers on or off.' },
+    { art: 'set57', title: 'Camera shake', text: 'Switch off the shake on hits and blasts.' },
+    { art: 'set57', title: 'Keyboard keys', text: 'Every key for every big game, under Controls on a computer.' },
+    { art: 'rally57', title: 'Speed in mph', text: 'Pick km/h or mph in Island Rally.' },
   ] },
-  { title: 'New names', items: [
-    { art: 'zj55', title: 'Zombie Junction', text: 'Dead Town has a new name.' },
-    { art: 'bolt55', title: 'Bolt War', text: 'Scrap Siege has a new name and a new cover.' },
-    { art: 'torch55', title: 'Torchbound', text: 'Two Torches has a new name.' },
+  { title: 'Bolt War', items: [
+    { art: 'bolt57', title: 'Space heroes', text: 'Astronauts and mechs with their own moves.' },
+    { art: 'bolt55', title: 'Alien waves', text: 'Globs, Spitters, Poppers, Brutes and the Glob Queen.' },
+    { art: 'bolt57', title: 'New skill sounds', text: 'Rockets, shards, freezes and blasts that sound real.' },
+  ] },
+  { title: 'Games page', items: [
+    { art: 'hub57', title: 'Real game pictures', text: 'Every game shows a picture from the real game.' },
+    { art: 'hub57', title: 'Solo game scenes', text: 'Arcade, desk and garden scenes behind solo games.' },
   ] },
 ];
 const WN_NEW_COUNT = WN_SECTIONS.reduce((n, sec) => n + sec.items.length, 0);
 const WN_SUMMARY = `${WN_NEW_COUNT} new things to try.`;
 
 const WN_EARLIER = [
+  { title: 'Gun shop, boss entrance and new names', text: 'A real gun shop and seller stall, a boss entrance with danger music, climbing, parachute airdrops, squad controls, fire modes, new buttons, and the new names Zombie Junction, Bolt War and Torchbound.' },
   { title: 'Squad lobby, airdrops and real explosions', text: 'Play with up to four friends, helicopter airdrops, armor plates and C4, real explosions, nine new guns and cash you keep.' },
   { title: 'Custom buttons, real moves and mouse controls', text: 'Move, resize and fade every button, crouch, jump and slide that everyone sees, and real mouse look on a computer.' },
   { title: 'A giant boss, real gun fire and a real dog', text: 'A giant brute every fifth wave, real muzzle fire, bullet holes and fireballs, a new grenade and fire bottle, a German Shepherd, talking zombies, footsteps on every ground and trains.' },
@@ -6937,6 +6936,7 @@ export function SessionsSection({ userId }) {
   const others = (rows || []).filter((r) => r.device_id !== mine);
   const flash = (t) => { setNote(t); setTimeout(() => setNote(''), 2600); };
   const logOutOne = async (r) => {
+    if (busy) return;
     setBusy(true);
     let { error } = await supabase.rpc('zchat_revoke_device', { p_device: r.device_id });
     if (error) ({ error } = await supabase.from('user_devices').update({ revoked: true }).eq('user_id', userId).eq('device_id', r.device_id));
@@ -6948,6 +6948,7 @@ export function SessionsSection({ userId }) {
     load();
   };
   const logOutOthers = async () => {
+    if (busy) return;
     setBusy(true);
     const { error } = await supabase.auth.signOut({ scope: 'others' });
     if (error) { setBusy(false); setConfirm(null); flash(friendlyError(error, "Couldn't log out the other devices. Try again.")); return; }

@@ -36,6 +36,7 @@ import { BagScreen } from './zbag.jsx';
 import { topAt, obstAt, ledgeAhead, vaultAhead } from './zclimb.js';
 import { chuteMesh } from './zchute.js';
 
+const Z_KEYS = [['W A S D', 'Move'], ['Mouse', 'Look'], ['Left click', 'Shoot'], ['Right click', 'Aim'], ['Shift', 'Run'], ['Space', 'Jump'], ['C', 'Crouch or slide'], ['R', 'Reload'], ['Q or wheel', 'Switch gun'], ['G', 'Grenade'], ['F', 'Fire bottle'], ['V', 'Knife'], ['E', 'Help up'], ['B', 'Emotes'], ['Esc', 'Free the mouse']];
 const PREF = { gfxo: 'zchat-zombie-gfxo', opt: 'zchat-zombie-opt', bots: 'zchat-zombie-bots', sv: 'zchat-zombie-sv', col: 'zchat-zombie-col', gun: 'zchat-zombie-gun', gfx: 'zchat-zombie-gfx', best: 'zchat-zombie-best', pet: 'zchat-zombie-pet', view: 'zchat-zombie-view', sens: 'zchat-zombie-sens', torch: 'zchat-zombie-torch' };
 const readJson = (k) => { try { return JSON.parse(localStorage.getItem(k) || '{}') || {}; } catch { return {}; } };
 const OPT0 = { adsK: 1, assist: 1, dmg: 1, vib: 1, bars: 1, xcol: 'white', fps: 60, spr: 0, adsMode: 'tap', fmode: 'ads', fmodeV: 2, qs: 1, fire: 'adv', fireC: { rifle: 'adv', smg: 'adv', shotgun: 'simple', sniper: 'adv', pistol: 'adv' } };
@@ -4307,7 +4308,7 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '16px 20px', borderRadius: 16, background: 'rgba(8,10,14,0.72)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.12)' }}>
             <span style={{ fontSize: 17, fontWeight: 900, color: '#FFFFFF' }}>Click to play</span>
             <div style={{ display: 'grid', gridTemplateColumns: 'auto auto auto auto', columnGap: 12, rowGap: 6, alignItems: 'center' }}>
-              {[['W A S D', 'Move'], ['Mouse', 'Look'], ['Left click', 'Shoot'], ['Right click', 'Aim'], ['Shift', 'Run'], ['Space', 'Jump'], ['C', 'Crouch or slide'], ['R', 'Reload'], ['Q or wheel', 'Switch gun'], ['G', 'Grenade'], ['F', 'Fire bottle'], ['V', 'Knife'], ['E', 'Help up'], ['B', 'Emotes'], ['Esc', 'Free the mouse']].map(([k, v]) => (
+              {Z_KEYS.map(([k, v]) => (
                 <React.Fragment key={k}>
                   <span style={{ justifySelf: 'end', padding: '2px 7px', borderRadius: 6, background: 'rgba(255,255,255,0.12)', boxShadow: 'inset 0 -1px 0 rgba(255,255,255,0.18)', fontSize: 11.5, fontWeight: 800, color: '#FFFFFF', whiteSpace: 'nowrap' }}>{k}</span>
                   <span style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.78)', whiteSpace: 'nowrap' }}>{v}</span>
@@ -4327,7 +4328,7 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
     <>
       {sheet === 'gfx' && (
         <div onPointerDown={(e) => e.stopPropagation()} onPointerMove={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()} style={{ position: 'absolute', inset: 0, zIndex: 60, background: 'rgba(4,6,10,0.62)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 10, pointerEvents: 'auto' }}>
-          <GSettings onClose={closeSettings} first="graphics" tabs={setTabs} preview={['bullets', 'grenade']} buttons={false} controlsExtra={(
+          <GSettings onClose={closeSettings} first="graphics" tabs={setTabs} preview={['bullets', 'grenade']} buttons={false} at={GS.at} keys={Z_KEYS} controlsExtra={(
             <>
               {(TOUCHY || isAdmin) && <>
                 <GSetHead>Custom layout</GSetHead>

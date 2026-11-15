@@ -165,7 +165,7 @@ export function LimitsPage({ me, onClose, onSaved }) {
   const [strangers, setStrangers] = useState(!(me && me.limit_strangers === false));
   const [recent, setRecent] = useState(!(me && me.limit_recent === false));
   const [days, setDays] = useState(7);
-  const [busy, setBusy] = useState(false);
+  const busy = false;
   const [err, setErr] = useState('');
   const active = !!until && new Date(until).getTime() > Date.now();
   const save = async (patch) => {
@@ -843,7 +843,7 @@ function pushRecentSearch(item) {
 
 function SuggestionCard({ p, sub, myId, following, onChanged, onOpen }) {
   const { theme } = useTheme();
-  const [busy, setBusy] = useState(false);
+  const busy = false;
   const follow = async (e) => {
     e.stopPropagation();
     hapticTap();
@@ -6733,7 +6733,7 @@ export function SavedMessagesPanel({ myId, me, onClose, onChanged, onOpenChat })
   const [rows, setRows] = useState(() => savedMessagesMem.get(myId) || null);
   const [q, setQ] = useState('');
   const [note, setNote] = useState('');
-  const [busy, setBusy] = useState(false);
+  const busy = false;
   const [problem, setProblem] = useState('');
   const [lightbox, setLightbox] = useState(null);
   const savedGoneRef = useRef(new Set());

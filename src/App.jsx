@@ -6343,7 +6343,7 @@ function PrivacyPanel({ onBack }) {
 
 
 export function FollowStatusPill({ theirId, viewerId, viewerFollowsThem, theyFollowViewer, theirIsPrivate, onChanged }) {
-  const [busy, setBusy] = useState(false);
+  const busy = false;
   const [pending, setPending] = useState(false);
   useEffect(() => {
     let cancelled = false;
@@ -11030,7 +11030,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
   const animInputRef = useRef(null);
   const animBlobsRef = useRef([]);
   useEffect(() => () => { const list = animBlobsRef.current; setTimeout(() => list.forEach((u) => { try { URL.revokeObjectURL(u); } catch {} }), 8000); }, []);
-  const [saving, setSaving] = useState(false);
+  const saving = false;
   const [showEmail, setShowEmail] = useState(false);
   const cachedStats = profileStatsCache.get(profile.id) || {};
   const [followState, setFollowState] = useState(() => (iFollowIds && iFollowIds.has(profile.id) ? 'accepted' : cachedStats.followState === 'pending' || !(iFollowIds && iFollowIds.size) ? (cachedStats.followState || 'none') : 'none'));
@@ -11123,7 +11123,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
     }, headCount);
     return () => { cancelled = true; };
   }, [profile.id]);
-  const [followBusy, setFollowBusy] = useState(false);
+  const followBusy = false;
   const [username, setUsername] = useState(profile.username || '');
   const [displayName, setDisplayName] = useState(profile.name || '');
   const [socialLinks, setSocialLinks] = useState(() => readSocialLinks(profile.social_links).map((l) => ({ url: l.url, title: l.title })));
@@ -11457,7 +11457,6 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
   const shownAnim = !editing && (isSelf || !profile.hide_photo) ? (profile.avatar_anim || null) : null;
   const editAnim = editing ? (animPreview || (!avatarPreview && avatarAnim) || null) : null;
   const animOn = isSelf && animMakerOk();
-  const initial = (profile.name || '?').trim().charAt(0).toUpperCase() || '?';
   const lastSeenText = !isSelf && !isOnline && !profile.hide_activity && allowsLastSeen ? formatLastSeen(profile.last_seen) : null;
   const statusText = isOnline ? 'Online now' : lastSeenText;
   const countryName = profile.country ? (COUNTRIES.find(([c]) => c === profile.country)?.[1] || profile.country) : null;
@@ -18559,7 +18558,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-export const APP_VERSION = '57.0V';
+export const APP_VERSION = '57.1V';
 const WN_REV = 55;
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
@@ -18648,21 +18647,6 @@ function CallLogBubble({ m, isMe, onCallBack }) {
 }
 
 SPECIAL_PREFIXES.push('zcall:');
-const clPlans = { map: new Map(), want: new Set(), subs: new Set(), names: new Map(), nameWant: new Set(), timer: 0, nameTimer: 0, live: null, uid: null };
-function clPlanEmit() { clPlans.subs.forEach((fn) => { try { fn(); } catch {} }); }
-function clPlanNorm(p) { return { going: (p.going || []).map(String), cancelled: !!p.cancelled_at, sender: p.sender_id, at: p.starts_at, k: p.kind, t: p.title }; }
-async function clPlanFetch() {
-  const ids = [...clPlans.want].slice(0, 60);
-  ids.forEach((id) => clPlans.want.delete(id));
-  if (!ids.length) return;
-  const { data, error } = await supabase.rpc('zchat_cl_plans_get', { p_ids: ids });
-  if (error) { ids.forEach((id) => { if (!clPlans.map.has(String(id))) clPlans.map.set(String(id), { missing: true }); }); clPlanEmit(); return; }
-  const seen = new Set();
-  (Array.isArray(data) ? data : []).forEach((p) => { seen.add(String(p.message_id)); clPlans.map.set(String(p.message_id), clPlanNorm(p)); });
-  ids.forEach((id) => { if (!seen.has(String(id))) clPlans.map.set(String(id), { missing: true }); });
-  clPlanEmit();
-  if (clPlans.want.size) clPlanFetch();
-}
 function PlanCallPage({ chatName, isGroup, onClose, onSend }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
@@ -21441,7 +21425,6 @@ function decorScrollRoot(el) {
   }
   return null;
 }
-const decorLiveSubs = new Map();
 const decorBudget = { subs: new Map(), io: null, raf: 0, max: 0, seq: 0 };
 function decorBudgetMax() {
   if (decorBudget.max) return decorBudget.max;
@@ -22801,7 +22784,6 @@ export const SI_STICKER_PACKS = [
 ];
 export const SI_STICKER_BY = Object.fromEntries(SI_STICKER_PACKS.map((p) => [p.key, p]));
 const SI_STICKERS = SI_STICKER_PACKS.flatMap((p) => p.list.map(([id, label]) => ({ key: `ps-${p.key}-${id}`, label, file: `/ps-${p.key}-${id}.webp`, category: `ps:${p.key}`, pack: p.key, anim: true })));
-const SI_STICKER_KEYS = new Map(SI_STICKERS.map((st) => [st.key, st]));
 export function siStickerIcon(k) { return `/ps-${k}-icon.webp`; }
 export const SI_SOUND_PACKS = [
   { key: 'kalimba', label: 'Kalimba', price: 200, rarity: 'rare', accent: '#D99A5B', file: '/sp-kalimba.mp3', about: 'Warm thumb piano notes, soft and wooden.', list: [{ id: 'pebble', label: 'Pebble', kind: 'tone', at: [0.07, 1.21], peaks: [1.0, 0.9, 0.63, 0.59, 0.38, 0.3, 0.25, 0.21, 0.19, 0.17, 0.14, 0.12] }, { id: 'ripple', label: 'Ripple', kind: 'tone', at: [1.67, 1.31], peaks: [0.7, 0.94, 1.0, 0.67, 0.51, 0.41, 0.36, 0.29, 0.25, 0.21, 0.17, 0.12] }, { id: 'firefly', label: 'Firefly', kind: 'tone', at: [3.37, 1.16], peaks: [1.0, 0.94, 0.8, 0.66, 0.45, 0.21, 0.12, 0.14, 0.16, 0.14, 0.12, 0.12] }, { id: 'drift', label: 'Drift', kind: 'tone', at: [4.92, 1.46], peaks: [1.0, 1.0, 0.94, 0.77, 0.61, 0.52, 0.41, 0.35, 0.28, 0.23, 0.19, 0.12] }, { id: 'garden', label: 'Kalimba garden', kind: 'ring', at: [6.77, 2.41], peaks: [0.94, 1.0, 0.88, 0.87, 0.92, 0.76, 0.84, 1.0, 0.8, 0.68, 0.98, 0.81] }, { id: 'sunrise', label: 'Sunrise', kind: 'ring', at: [9.57, 2.41], peaks: [0.45, 0.61, 0.78, 0.75, 0.75, 0.68, 0.98, 1.0, 0.83, 0.9, 0.85, 0.55] }] },
@@ -29244,7 +29226,6 @@ function FriendEmoji({ rank, streak, size = 12 }) {
   if (!fe) return null;
   return <span role="img" aria-label={fe.t} title={fe.t} style={{ fontSize: size, lineHeight: 1, flexShrink: 0 }}>{fe.e}</span>;
 }
-const zscoreMem = new Map();
 function FriendshipIcon({ size = 20, color = 'currentColor', strokeWidth = 1.8, style }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" style={style} aria-hidden="true">
@@ -35788,22 +35769,16 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const groupTopicRef = useRef(null);
   const topicSelMemRef = useRef(new Map());
   const topicSeenRef = useRef({});
-  const [composerTall, setComposerTall] = useState(false);
   const draftLenRef = useRef(0);
   useLayoutEffect(() => {
     const el = composerRef.current;
     if (!el) return;
-    if (COMPOSER_AUTOSIZE) {
-      const tall = draft.includes('\n') || draft.length > 34;
-      setComposerTall((prev) => (prev === tall ? prev : tall));
-      return;
-    }
+    if (COMPOSER_AUTOSIZE) return;
     const shrank = draft.length < draftLenRef.current;
     draftLenRef.current = draft.length;
     if (!draft) {
       el.style.height = '38px';
       el.style.overflowY = 'hidden';
-      setComposerTall(false);
       return;
     }
     const mirror = composerMirrorRef.current;
@@ -35819,7 +35794,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const next = Math.max(38, Math.min(148, full));
     if (el.style.height !== `${next}px`) el.style.height = `${next}px`;
     el.style.overflowY = full > 148 ? 'auto' : 'hidden';
-    setComposerTall((prev) => (prev === (next > 40) ? prev : next > 40));
   }, [draft, activeProfile && activeProfile.id, activeGroup && activeGroup.id]);
   const [groupMembers, setGroupMembers] = useState([]);
   const [showCreateGroup, setShowCreateGroup] = useNavState(false);
@@ -42798,7 +42772,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     return () => rtDrop(keep);
   }, [markUid, markOff]);
   const g2HideVer = useG2Hide(markUid);
-  const g2KwVer = useG2Kw(markUid);
+  useG2Kw(markUid);
   useEffect(() => {
     const uid = markUid;
     const keep = rtKeep(() => supabase.channel(rtName(`g2-mine-${uid}`))
@@ -44698,13 +44672,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   };
   if (!CONV_LIVE_KEYS.includes('live_typing_a')) CONV_LIVE_KEYS.push('live_typing_a', 'live_typing_b');
   const cmFirst = String((activeProfile && activeProfile.name) || '').split(' ')[0] || 'They';
-  const cmTypingSection = cmLtConv ? (
-    <DetailSection title="Typing">
-      <DetailRow icon={<CmLiveTypingIcon />} label="Live typing"
-        sub={!cmLtMine ? 'You both see words as they are typed' : !cmLtTheirs ? `Waiting for ${cmFirst} to turn it on too` : cmLtHidden() ? `Your typing status is hidden, so ${cmFirst} does not see your words` : `On. You both see words as they are typed`}
-        onClick={toggleLiveTyping} right={<IgToggle on={cmLtMine} />} last />
-    </DetailSection>
-  ) : null;
 
   const cmCanPause = typeof MediaRecorder !== 'undefined' && !!MediaRecorder.prototype && typeof MediaRecorder.prototype.pause === 'function' && typeof MediaRecorder.prototype.resume === 'function';
   const [recPausePlay, setRecPausePlay] = useState(null);
@@ -50038,7 +50005,7 @@ export const FRIEND_GAME_SUBS = {
   paint: 'Grow your colour across the board', bomb: 'Do not open the bomb', gem: 'Dig up more gems', fade: 'Only three marks each',
   'sd:stack': 'Build the taller tower', 'sd:dash': 'Run further than them', 'sd:catch': 'Catch more fruit', 'sd:ctrap': 'Beat the colour trick', 'sd:odd': 'Spot more odd tiles', 'sd:hilo': 'Longer guessing streak',
   'sd:sky': 'Fly through more pipes', 'sd:snake': 'Eat more dots', 'sd:echo': 'Remember a longer pattern', 'sd:bricks': 'Break more bricks',
-  hang: 'You pick a word, they guess', num: 'Pick 1 to 100, they guess', wduel: 'Same word, fewer tries wins', qduel: 'Five questions each', math: 'Ten quick sums', rduel: 'Fastest tap wins', taps: 'Five seconds of tapping',
+  hang: 'You pick a word, they guess', num: 'Pick 1 to 100, they guess', wduel: 'Solve in fewer tries', qduel: 'Five questions each', math: 'Ten quick sums', rduel: 'Fastest tap wins', taps: 'Five seconds of tapping',
 };
 const SHIP_SIZES = [3, 3, 2, 2];
 function shipFleet(seed) {
@@ -57111,7 +57078,6 @@ function diceSummary(d) {
   if (d.v.length > 1) return `Rolled ${d.v.join(' and ')}`;
   return `Rolled a ${d.v[0]}`;
 }
-const diceRolledOnce = new Set();
 
 
 
@@ -58865,6 +58831,7 @@ function svgMarkup(node) {
 }
 const gameArtSrcs = new Map();
 const GAME_ART_FILES = { zombie: '/zombie-art3s.webp', duo: '/duo-art.webp', gulp: '/gulp-art.webp', gulpco: '/gulp-art.webp', roll: '/roll-art.webp', race: '/race-art.webp', siege: '/bolt-art2.webp' };
+['2048', 'bomb', 'bricks', 'c4', 'catch', 'chess', 'ckr', 'crm', 'ctrap', 'dash', 'dots', 'echo', 'fade', 'gem', 'golf', 'gomoku', 'hang', 'hilo', 'math', 'memory', 'num', 'odd', 'paint', 'pairs', 'pool', 'qduel', 'qrace', 'quiz', 'rduel', 'reflex', 'reversi', 'rps', 'rrace', 'sdk', 'ship', 'sky', 'snake', 'squish', 'stack', 'sudoku', 'taps', 'ttt', 'tug', 'wduel', 'word', 'xw', 'zap'].forEach((k) => { GAME_ART_FILES[k] = `/gart/${k}.webp`; });
 function gameArtSrc(kIn) {
   const key = String(kIn == null ? '' : kIn);
   if (GAME_ART_FILES[key]) return GAME_ART_FILES[key];
@@ -58890,15 +58857,15 @@ export function GameArt({ k: kIn, width = 160, height = 100, radius = 14, style 
 
 export const LIVE_GAME_KEYS = ['siege', 'race', 'roll', 'gulpco', 'duo', 'gulp', 'tug', 'qrace', 'rrace', 'zombie'];
 Object.assign(GAME_TITLES, { zombie: 'Zombie Junction', siege: 'Bolt War', race: 'Island Rally', roll: 'Roll Squad', gulpco: 'Gulp room', duo: 'Torchbound', gulp: 'Gulp', tug: 'Tug of war', qrace: 'Quiz race', rrace: 'Reaction race' });
-Object.assign(FRIEND_GAME_SUBS, { zombie: 'Live, fight zombies together on a server', siege: `Live, up to ${cloudOn() ? '20 players' : 'ten friends'} against robot waves`, race: 'Live, up to eight friends, four maps', roll: 'Live, up to four friends roll together', gulpco: 'Live, up to ten friends, join any time', duo: 'Live, endless temples together', gulp: 'Live, eat smaller fish and grow', tug: 'Live, tap faster than them', qrace: 'Live, fastest right answer', rrace: 'Live, first to tap on green' });
+Object.assign(FRIEND_GAME_SUBS, { zombie: 'Live, hold off zombies', siege: 'Live, fight alien waves', race: 'Live, race eight friends', roll: 'Live, roll with friends', gulpco: 'Live, join any time', duo: 'Live, temples for two', gulp: 'Live, eat fish and grow', tug: 'Live, out tap a friend', qrace: 'Live, fastest answer wins', rrace: 'Live, tap first on green' });
 Object.assign(GAME_ART_BG, { zombie: ['#8A8F5A', '#1E2216'], siege: ['#D9A54A', '#3A2E22'], race: ['#7FB4E0', '#3A4B63'], roll: ['#6EC6FF', '#4FA83A'], duo: ['#3B2A48', '#120C1C'], gulp: ['#1C6FA8', '#082A4C'], gulpco: ['#1C6FA8', '#082A4C'], tug: ['#F97316', '#E11D48'], qrace: ['#7C3AED', '#2563EB'], rrace: ['#10B981', '#0EA5E9'] });
 Object.assign(GAME_RULES, {
-  siege: { how: ['Pick a hero: Blaze blasts up close, Pip snipes from far away, Boom throws bombs over walls and Mira heals friends with her orb.', 'Move with the left stick. Tap the red button to shoot the closest robot, or drag it to aim.', 'Hitting robots charges your super. When the gold button glows, tap it or drag it to aim.', 'Robots come in waves from the hatches. A boss shows up every 5 waves.', 'If a friend goes down, stand next to them to revive them. Grab health, power and super drops.', 'Hide in bushes so robots lose sight of you. Talk with your mic or send emojis.'], win: 'Survive 15 waves together, or go endless and see how far you get.' },
+  siege: { how: ['Pick one of eight space heroes, four astronauts and four mechs. Each has its own attack, super and gadget.', 'Move with the left stick. Tap the big button to shoot the closest alien, or drag it to aim.', 'Hitting aliens charges your super. When the gold button glows, tap it or drag it to aim.', 'Aliens come in waves from the hatches. The Glob Queen shows up every 5 waves.', 'If a friend goes down, stand next to them to revive them. Grab health, power and super drops.', 'Hide in bushes so aliens lose sight of you. Talk with your mic or send emojis.'], win: 'Survive 15 waves together, or go endless and see how far you get.' },
   duo: { how: ['You carry the orange torch, your friend carries the blue one. Move with the joystick.', 'Orange walks through lava and fire. Blue wades through water, lights hidden stones and reads hidden codes.', 'Pull levers, hold doors on the plates, jump through glowing rings, cross spikes when they drop and keep moving on cracked floors.', 'Play the story or endless temples that are new every time. You share three hearts.', 'Talk with voice, quick messages and emojis. You can mute your friend any time.'], win: 'Stand on your own glowing doors at the same time to finish. Finish missions for stars.' },
   gulp: { how: ['You are a small fish with the number 2. Swim with the joystick.', 'Touch fish with a number the same as yours or smaller to eat them and grow. Any part of you works, even your tail. Small fish swim away when you get close.', 'Fish with bigger numbers can eat you. Hunters chase you for a moment, then give up. Dash to get away.', 'Suck pulls the fish in front of you into your mouth. Grow bigger to unlock a shield, a shock wave and frenzy.', 'Grab bubbles for a shield, double food, a magnet or speed. If you are bigger than your friend you can eat them too.'], win: 'Grow as big as you can, there is no top size. Each of you has five lives and gets one back when you grow into a new fish. Whoever keeps their lives longer wins the round.' },
   gulpco: { how: ['A fish room for up to ten friends. Anyone you invite can join or leave any time.', 'Swim with the joystick and eat fish with a number the same as yours or smaller.', 'Nobody eats anyone in the room. If a big fish gets you, you come back a bit smaller.', 'Turn your mic on to talk. Tap the people button to mute anyone.'], win: 'Grow together and see who gets the biggest.' },
   race: { how: ['Pick a ride: sports car, hatchback, jeep or tuk tuk, and one of four maps: Palm coast, Tea hills, City lights or Lion rock.', 'Your car speeds up by itself. Hold the left and right pads to steer, or turn on tilt to steer with your phone.', 'Hold Brake to slow down. Hold it while you turn to drift round corners. Drifting fills Nitro, tap Nitro for a burst of speed.', 'Hit the ramps fast for big jumps, and drive over blue boost pads for a free burst of speed.', 'In Attack race, drive through energy bottles, then fire a rocket at the car ahead, drop oil behind you, shock the cars around you or put up a shield. Rockets throw cars into the air, oil sends them spinning.', 'Talk with your mic and send emojis while you race. Empty spots can be filled with bots.'], win: 'Finish the laps first. Your best lap is saved for each map.' },
-  roll: { how: ['Hold the arrows to roll your ball. Tap jump, hold it to jump higher.', 'Land on top of enemies to bop them. Spiky ones hurt from every side.', 'Springs throw you high. Flags save where you come back after a pop.', 'Blue plates hold bridges and doors open. Stand on one so your friends can cross, then they hold the far plate for you. Alone, a plate stays on for a few seconds.', 'Team gates need a button for every player, pressed at the same time.', 'Grab coins and find the three stars hidden in every level.'], win: 'Everyone has to reach the portal to clear the level. There are nine worlds with six levels each.' },
+  roll: { how: ['Hold the arrows to roll your ball. Tap jump, hold it to jump higher.', 'Land on top of enemies to bop them. Spiky ones hurt from every side.', 'Springs throw you high. Flags save where you come back after a pop.', 'Blue plates hold bridges and doors open. Stand on one so your friends can cross, then they hold the far plate for you. Alone, a plate stays on for a few seconds.', 'Team gates need a button for every player, pressed at the same time.', 'Grab coins and find the three stars hidden in every level.'], win: 'Everyone has to reach the portal to clear the level. There are eleven worlds with six levels each.' },
   tug: { how: ['You both play at the same moment. Open the game and wait for your friend to join.', 'When the countdown ends, tap the big button as fast as you can.', 'Every tap pulls the rope toward you.'], win: 'After 15 seconds, whoever pulled the rope to their side wins.' },
   qrace: { how: ['You both play at the same moment and see the same question together.', 'Tap the right answer before your friend does.', 'A wrong answer locks you out of that question.'], win: 'Seven questions. Whoever scores more wins.' },
   rrace: { how: ['You both play at the same moment.', 'Wait for the pad to turn green, then tap it before your friend.', 'Tapping too early gives the point to them.'], win: 'First to win three rounds wins.' },

@@ -447,7 +447,6 @@ export function AddToHighlightSheet({ userId, story, onClose, onDone }) {
   const { theme } = useTheme();
   const drag = useSheetDrag(onClose);
   const [list, setList] = useState(() => { const m = highlightsMem.get(userId); return m ? [...m].reverse() : null; });
-  const [busy, setBusy] = useState(null);
   const [creating, setCreating] = useState(false);
   const [title, setTitle] = useState('');
   useEffect(() => {
@@ -457,13 +456,11 @@ export function AddToHighlightSheet({ userId, story, onClose, onDone }) {
   }, [userId]);
   const item = (hid) => ({ highlight_id: hid, user_id: userId, media_url: story.media_url, media_type: story.media_type, overlay_url: story.overlay_url || null, caption: story.caption || null });
   const addTo = async (h) => {
-    if (busy) return;
     onDone(`Added to ${h.title}`);
     const { error } = await supabase.from('highlight_items').insert(item(h.id));
     if (error) appSnack(friendlyError(error, "Couldn't add it. Try again."));
   };
   const createNew = async () => {
-    if (busy) return;
     const name = (title.trim() || 'Highlights').slice(0, 20);
     onDone(`Added to ${name}`);
     const { data: h, error } = await supabase.from('highlights').insert({ user_id: userId, title: name, cover_url: story.media_url, cover_type: story.media_type }).select().single();
@@ -484,10 +481,9 @@ export function AddToHighlightSheet({ userId, story, onClose, onDone }) {
             </div>
             {list === null && <div style={{ display: 'flex', alignItems: 'center', padding: '0 10px' }}><Spinner size={18} color={theme.muted} /></div>}
             {(list || []).map((h) => (
-              <div key={h.id} role="button" aria-label={`Highlight ${h.title}`} onClick={() => addTo(h)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, flexShrink: 0, cursor: 'pointer', width: 70, opacity: busy && busy !== h.id ? 0.5 : 1 }}>
+              <div key={h.id} role="button" aria-label={`Highlight ${h.title}`} onClick={() => addTo(h)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, flexShrink: 0, cursor: 'pointer', width: 70 }}>
                 <div style={{ width: 64, height: 64, borderRadius: '50%', overflow: 'hidden', background: theme.rowBg, border: `2px solid ${theme.border}`, position: 'relative' }}>
                   {h.cover_type === 'video' ? <VideoThumb src={h.cover_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <img src={h.cover_url} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
-                  {busy === h.id && <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Spinner size={16} color="#FFFFFF" /></div>}
                 </div>
                 <div style={{ fontSize: 12, color: theme.ink, fontWeight: 600, maxWidth: 70, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{h.title}</div>
               </div>
@@ -496,7 +492,7 @@ export function AddToHighlightSheet({ userId, story, onClose, onDone }) {
           {creating && (
             <div style={{ display: 'flex', gap: 8, padding: '6px 16px 4px' }}>
               <input autoFocus value={title} onChange={(e) => setTitle(e.target.value.slice(0, 20))} placeholder="Highlight name" aria-label="Highlight name" style={{ ...inputStyle(theme), flex: 1 }} />
-              <button type="button" onClick={createNew} disabled={busy === 'new'} style={{ padding: '0 16px', borderRadius: 12, border: 'none', background: theme.coral, color: '#FFFFFF', fontWeight: 800, fontFamily: FONT, cursor: 'pointer' }}>{busy === 'new' ? <Spinner size={14} color="#FFFFFF" /> : 'Add'}</button>
+              <button type="button" onClick={createNew} style={{ padding: '0 16px', borderRadius: 12, border: 'none', background: theme.coral, color: '#FFFFFF', fontWeight: 800, fontFamily: FONT, cursor: 'pointer' }}>Add</button>
             </div>
           )}
         </div>
@@ -654,7 +650,6 @@ export function StoryViewer({ onAddYours, groupsList, startGroup = 0, startStory
   const [likeBurst, setLikeBurst] = useState(false);
   const [burstEmoji, setBurstEmoji] = useState('');
   const [repostedIds, setRepostedIds] = useState(() => new Set(initialRepostedIds || []));
-  const [repostBusy, setRepostBusy] = useState(false);
   const [repostPop, setRepostPop] = useState(false);
   const [keyboardLift, setKeyboardLift] = useState(0);
   const [viewTop, setViewTop] = useState(0);
@@ -1213,13 +1208,12 @@ export function StoryViewer({ onAddYours, groupsList, startGroup = 0, startStory
                 <>
                   <div role="button" aria-label={isLiked ? 'Unlike story' : 'Like story'} onClick={toggleLike} style={{ padding: 6, cursor: 'pointer', position: 'relative', zIndex: 12, display: 'flex' }}><Heart size={26} color={isLiked ? '#FF3B5C' : 'white'} fill={isLiked ? '#FF3B5C' : 'none'} /></div>
                   {!shared && String(story.audience || '').indexOf('list:') !== 0 && (<div role="button" aria-label="Repost" onClick={() => {
-                    if (repostBusy) return;
                     if (repostedHere) { showFlash('Already on your story', 1600); return; }
                     setConfirmRepost(true);
                   }} style={{ padding: 6, cursor: 'pointer', position: 'relative', display: 'flex' }}>
                     {repostPop && <div style={{ position: 'absolute', inset: -4, borderRadius: '50%', border: '2px solid #34D399', animation: 'zchat-repost-ring 0.6s ease-out', pointerEvents: 'none' }} />}
                     <div style={{ transition: 'transform 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.5)', transform: repostPop ? 'rotate(180deg) scale(1.25)' : 'rotate(0deg) scale(1)', display: 'flex' }}>
-                      {repostBusy ? <Spinner size={22} color="white" /> : <Repeat size={24} color={repostedHere ? '#34D399' : 'white'} strokeWidth={repostedHere ? 2.6 : 2} />}
+                      <Repeat size={24} color={repostedHere ? '#34D399' : 'white'} strokeWidth={repostedHere ? 2.6 : 2} />
                     </div>
                     {repostedHere && <div style={{ position: 'absolute', right: 1, bottom: 2, width: 13, height: 13, borderRadius: '50%', background: '#34D399', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid black' }}><Check size={8} color="black" strokeWidth={4} /></div>}
                   </div>)}
@@ -1699,6 +1693,7 @@ function CrMembersBadge() {
 
 const storyResultMem = new Map();
 function StoryStickerView({ story, frame, isMine, myId, onBusy, onOpenResponses, owner, onAddYours }) {
+  const { theme } = useTheme();
   const sticker = validStorySticker(story.sticker);
   const placed = sticker && sticker.k !== 'moment' ? layerPosOf(sticker.pos) : null;
   const [res, setRes] = useState(() => storyResultMem.get(story.id) || null);
@@ -1789,7 +1784,7 @@ function StoryStickerView({ story, frame, isMine, myId, onBusy, onOpenResponses,
     );
   }
   const seeAll = isMine && onOpenResponses ? (
-    <div role="button" aria-label="See responses" onClick={onOpenResponses} style={{ marginTop: 10, textAlign: 'center', fontSize: 13.5, fontWeight: 800, color: '#8B5CF6', cursor: 'pointer' }}>See responses</div>
+    <div role="button" aria-label="See responses" onClick={onOpenResponses} style={{ marginTop: 10, textAlign: 'center', fontSize: 13.5, fontWeight: 800, color: theme.coral, cursor: 'pointer' }}>See responses</div>
   ) : null;
   if (sticker.k === 'poll') {
     const counts = (res && res.poll) || {};
@@ -1804,7 +1799,7 @@ function StoryStickerView({ story, frame, isMine, myId, onBusy, onOpenResponses,
           const me = String(mine.poll) === String(i);
           return (
             <div key={i} role="button" aria-label={`Vote ${o}`} onClick={() => { if (isMine) return; hapticTap(); setMine((m) => ({ ...m, poll: String(i) })); respond('poll', i, null); }}
-              style={{ position: 'relative', overflow: 'hidden', padding: '11px 14px', borderRadius: 14, background: '#F2F2F5', fontWeight: 700, fontSize: 14.5, marginTop: i ? 8 : 0, cursor: isMine ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: me ? '2px solid #8B5CF6' : '2px solid transparent' }}>
+              style={{ position: 'relative', overflow: 'hidden', padding: '11px 14px', borderRadius: 14, background: '#F2F2F5', fontWeight: 700, fontSize: 14.5, marginTop: i ? 8 : 0, cursor: isMine ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: me ? `2px solid ${theme.coral}` : '2px solid transparent' }}>
               {showPct && <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${pct}%`, background: 'rgba(139,92,246,0.22)', transition: 'width 0.4s ease' }} />}
               <span style={{ position: 'relative' }}>{o}</span>
               {showPct && <span style={{ position: 'relative', fontSize: 13, color: '#6B6B76' }}>{pct}%</span>}
@@ -1881,7 +1876,7 @@ function StoryStickerView({ story, frame, isMine, myId, onBusy, onOpenResponses,
             onKeyDown={(e) => { if (e.key === 'Enter' && answer.trim()) { e.preventDefault(); const t = answer.trim(); setTyping(false); setSent(true); setAnswer(''); respond('answer', t, null); } }}
             onBlur={() => { if (!answer.trim()) setTyping(false); }}
             style={{ flex: 1, minWidth: 0, padding: '11px 12px', borderRadius: 12, border: '1px solid #E4E4EA', outline: 'none', fontFamily: FONT, fontSize: 14.5, color: '#111', background: '#FFFFFF' }} />
-          <div role="button" aria-label="Send answer" onPointerDown={(e) => e.preventDefault()} onClick={() => { const t = answer.trim(); if (!t) return; setTyping(false); setSent(true); setAnswer(''); respond('answer', t, null); }} style={{ padding: '0 14px', borderRadius: 12, background: answer.trim() ? '#8B5CF6' : '#ECECF1', color: answer.trim() ? '#FFFFFF' : '#8A8A95', display: 'flex', alignItems: 'center', fontWeight: 800, cursor: 'pointer' }}>Send</div>
+          <div role="button" aria-label="Send answer" onPointerDown={(e) => e.preventDefault()} onClick={() => { const t = answer.trim(); if (!t) return; setTyping(false); setSent(true); setAnswer(''); respond('answer', t, null); }} style={{ padding: '0 14px', borderRadius: 12, background: answer.trim() ? theme.coral : '#ECECF1', color: answer.trim() ? '#FFFFFF' : '#8A8A95', display: 'flex', alignItems: 'center', fontWeight: 800, cursor: 'pointer' }}>Send</div>
         </div>
       ) : (
         <div role="button" aria-label="Answer the question" onClick={() => setTyping(true)} style={{ padding: '11px 14px', borderRadius: 14, background: '#F2F2F5', color: '#8A8A95', fontSize: 14.5, textAlign: 'center', cursor: 'text' }}>Type something</div>

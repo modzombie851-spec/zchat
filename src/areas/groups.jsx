@@ -381,7 +381,6 @@ function ModeratorExplainSheet({ name, onConfirm, onCancel }) {
   );
 }
 export function GroupRoleSheet({ group, member, myRank, rolesOn, announce, onClose, onProfile, onSetRole, onMuteFor, onKick, onTransfer, onTitle }) {
-  const { theme } = useTheme();
   const [step, setStep] = useState('main');
   const role = groupRoleOf(group, member);
   const above = myRank > GROUP_RANK[role];

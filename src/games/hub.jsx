@@ -5,7 +5,7 @@ import {
   useTheme, FONT, Avatar, GameArt, GAME_TITLES, FRIEND_GAME_GROUPS, FRIEND_GAME_SUBS, SOLO_GAMES, SOLO_HIDDEN, LIVE_GAME_KEYS, GAME_ART_BG, DuoGamePage, GulpGamePage, RollGamePage,
   GameInfoButton, HowToPlaySheet, SoloGame, readBest, formatGameScore, loadMyGames, gameNet, gameNetMissing, isSoloGameKey,
   useBackClose, useSheetDrag, playUiSound, hapticTap, reducedMotion, FullPage, HeaderIconButton, TrophyIcon, CrownIcon, NameBadge,
-  LoadFail, ghBotCan, ghBotLevel, GamepadIcon, GameButton, SegmentedControl, botPicUrl, LiveStatCtx, SoloFit,
+  LoadFail, ghBotCan, ghBotLevel, GamepadIcon, GameButton, SegmentedControl, botPicUrl, LiveStatCtx, SoloFit, ThemeContext, THEMES,
 } from '../App.jsx';
 import { useLiveCast, useRaceLink, CastEye, CastLayer, CastSheet, injectCastCss } from './livecast.jsx';
 import { useMyLevels, useLevels, LEVEL_GAMES, readRecent, noteRecent } from './levels.jsx';
@@ -16,6 +16,7 @@ import { unlockAudio } from './kit.jsx';
 import { GameRoomsPage, useLobbyPresence } from './rooms.jsx';
 
 const POPULAR = ['pool', 'chess', 'crm', 'zap', 'ckr', 'golf'];
+const SOLO_SCENE = { 2048: 'desk', memory: 'playroom', snake: 'course', sky: 'terrace', bricks: 'arena', word: 'study', reflex: 'arena', quiz: 'study', echo: 'arena', stack: 'playroom', dash: 'arena', catch: 'course', ctrap: 'playroom', odd: 'desk', hilo: 'parlor' };
 const RANK = ['pool', 'chess', 'crm', 'zap', 'ckr', 'golf', 'c4', 'ship', 'ttt', 'dots', 'reversi', 'gomoku', 'hang', 'wduel', 'rps'];
 const PUZZLES = ['sdk', 'xw', 'jig'];
 const NO_BOARD = ['sudoku', 'jig', 'xw', 'sdk', 'zombie'];
@@ -24,9 +25,9 @@ const BANNER_POS = { lounge: 'center 8%', study: 'center 18%', terrace: 'center 
 const SUBS = {
   pool: 'Break, pot your group, sink the black', chess: 'Classic chess, every rule', ckr: 'Jump, take and crown', golf: 'Nine holes, fewest strokes',
   c4: 'Line up four discs', ship: 'Find and sink their fleet', ttt: 'Three in a row', dots: 'Close the most boxes', reversi: 'Flip discs, own the board',
-  gomoku: 'Five stones in a line', hang: 'Pick a word, they guess', wduel: 'Same word, fewer tries wins', rps: 'Best of three',
-  tug: 'Tap faster to pull the rope', qrace: 'Same questions, fastest wins', rrace: 'First to tap on green',
-  crm: 'Flick the striker, pot your coins', zap: 'Match colour or number, go out first', squish: 'Throw water balloons, merge to 4096',
+  gomoku: 'Five stones in a line', hang: 'Pick a word, they guess', wduel: 'Solve in fewer tries', rps: 'Best of three',
+  tug: 'Tap fast to pull the rope', qrace: 'Same questions, be first', rrace: 'First to tap on green',
+  crm: 'Flick the striker, pot your coins', zap: 'Match colour or number, go out first', squish: 'Merge to reach 4096',
 };
 
 function duoKeys() {
@@ -85,11 +86,18 @@ function SectionTitle({ children, right }) {
   );
 }
 
-function Tile({ k, title, sub, badge, onClick, ratio = '4 / 3', titleSize = 16, small }) {
+const WIDE_POS = { squish: 'center 88%', rps: 'center 42%', hang: 'center 70%' };
+function SoloDark({ on, children }) {
+  const outer = React.useContext(ThemeContext);
+  const val = useMemo(() => (outer && on && !outer.dark ? { ...outer, theme: { ...outer.theme, ...THEMES.dark, coral: outer.theme.coral, accentSoft: outer.theme.accentSoft }, dark: true } : outer), [outer, on]);
+  if (!on || !outer || outer.dark) return children;
+  return <ThemeContext.Provider value={val}>{children}</ThemeContext.Provider>;
+}
+function Tile({ k, title, sub, badge, onClick, ratio = '4 / 3', titleSize = 16, small, wide }) {
   return (
     <div role="button" aria-label={title} onClick={onClick} className="zgh-tile"
-      style={{ position: 'relative', borderRadius: 22, overflow: 'hidden', aspectRatio: ratio, cursor: 'pointer', boxShadow: '0 8px 20px rgba(20,10,40,0.18), inset 0 0 0 1px rgba(255,255,255,0.06)', background: '#1B1828' }}>
-      <GameArt k={k} width="100%" height="100%" radius={0} />
+      style={{ position: 'relative', borderRadius: 22, overflow: 'hidden', aspectRatio: wide ? '2.75 / 1' : ratio, gridColumn: wide ? '1 / -1' : undefined, cursor: 'pointer', boxShadow: '0 8px 20px rgba(20,10,40,0.18), inset 0 0 0 1px rgba(255,255,255,0.06)', background: '#1B1828' }}>
+      <GameArt k={k} width="100%" height="100%" radius={0} style={wide ? { objectPosition: WIDE_POS[k] || 'center' } : undefined} />
       <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(0,0,0,0) 38%, rgba(0,0,0,0.5) 70%, rgba(0,0,0,0.74) 100%)' }} />
       <div style={{ position: 'absolute', left: small ? 9 : 12, right: small ? 8 : 10, bottom: small ? 8 : 10 }}>
         <div style={{ fontSize: small ? 12.5 : (String(title).length > 15 ? titleSize - 2 : titleSize), lineHeight: small ? '15px' : 1.2, fontWeight: 900, letterSpacing: '-0.01em', color: '#FFFFFF', textShadow: '0 1px 4px rgba(0,0,0,0.55)', ...(small ? { display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' } : { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }) }}>{title}</div>
@@ -112,15 +120,17 @@ function LevelBadge({ level }) {
   return <span style={{ display: 'inline-block', padding: '2px 7px', borderRadius: 8, background: '#F5C443', color: '#2A1D05', fontSize: 11, fontWeight: 900, whiteSpace: 'nowrap', lineHeight: '14px', boxShadow: '0 2px 6px rgba(0,0,0,0.2)' }}>{`Lv ${level}`}</span>;
 }
 
+const BANNER_ART = ['pool', 'chess', 'crm', 'zap', 'ckr', 'golf'];
 function Banner({ k, sub, level, onPlay, label }) {
   const scene = sceneKeyFor(k);
+  const real = BANNER_ART.includes(k);
   return (
     <div role="button" aria-label={`${GAME_TITLES[k]}, ${label}`} onClick={onPlay} className="zgh-tile"
-      style={{ position: 'relative', flex: '0 0 auto', width: 'min(84vw, 330px)', height: 186, borderRadius: 26, overflow: 'hidden', cursor: 'pointer', backgroundColor: '#14121C', backgroundImage: `url("${sceneUrl(scene)}")`, backgroundSize: 'cover', backgroundPosition: BANNER_POS[scene] || 'center', boxShadow: '0 12px 28px rgba(20,10,40,0.28)' }}>
+      style={{ position: 'relative', flex: '0 0 auto', width: 'min(84vw, 330px)', height: 186, borderRadius: 26, overflow: 'hidden', cursor: 'pointer', backgroundColor: '#14121C', backgroundImage: `url("${real ? `/gart/b-${k}.webp` : sceneUrl(scene)}")`, backgroundSize: 'cover', backgroundPosition: real ? 'center' : BANNER_POS[scene] || 'center', boxShadow: '0 12px 28px rgba(20,10,40,0.28)' }}>
       <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0.12) 40%, rgba(0,0,0,0.72) 100%)' }} />
-      <div style={{ position: 'absolute', top: 12, left: 12, borderRadius: 18, overflow: 'hidden', boxShadow: '0 6px 16px rgba(0,0,0,0.4), 0 0 0 2px rgba(255,255,255,0.85)' }}>
+      {!real && <div style={{ position: 'absolute', top: 12, left: 12, borderRadius: 18, overflow: 'hidden', boxShadow: '0 6px 16px rgba(0,0,0,0.4), 0 0 0 2px rgba(255,255,255,0.85)' }}>
         <GameArt k={k} width={58} height={58} radius={0} />
-      </div>
+      </div>}
       {level ? <div style={{ position: 'absolute', top: 14, right: 14 }}><LevelBadge level={level} /></div> : null}
       <div style={{ position: 'absolute', left: 14, right: 14, bottom: 13, display: 'flex', alignItems: 'flex-end', gap: 10 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -322,7 +332,7 @@ export function GamesPage({ onClose, onChallenge, onShareScore, initialGame, fri
               <div style={{ position: 'absolute', left: 14, right: 14, bottom: 12, display: 'flex', alignItems: 'flex-end', gap: 10 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span style={{ fontSize: 20, fontWeight: 900, color: '#FFFFFF' }}>Zombie Junction</span><span style={{ fontSize: 11, fontWeight: 800, color: '#1A1C12', background: '#F2A23A', borderRadius: 4, padding: '2px 6px' }}>New</span></div>
-                  <div style={{ fontSize: 12.5, fontWeight: 600, color: 'rgba(255,255,255,0.86)', lineHeight: 1.35 }}>{cloudOn() ? 'Up to 50 survivors on servers in Asia, USA and Europe hold a small town against waves of zombies.' : 'Hold a small town against waves of zombies, alone or with bot friends.'}</div>
+                  <div style={{ fontSize: 12.5, fontWeight: 600, color: 'rgba(255,255,255,0.86)', lineHeight: 1.35 }}>{cloudOn() ? 'Squads of five on servers in Asia, USA and Europe hold a small town against waves of zombies.' : 'Hold a small town against waves of zombies, alone or with bot friends.'}</div>
                 </div>
                 <GameButton small color="gold" label="Play" onClick={() => { tap(); noteRecent('zombie'); onZombie(); }} />
               </div>
@@ -390,7 +400,7 @@ export function GamesPage({ onClose, onChallenge, onShareScore, initialGame, fri
             <div style={{ position: 'absolute', left: 14, right: 14, bottom: 12, display: 'flex', alignItems: 'flex-end', gap: 10 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 19, fontWeight: 900, color: '#FFFFFF' }}>Gulp</div>
-                <div style={{ fontSize: 12.5, fontWeight: 600, color: 'rgba(255,255,255,0.8)', lineHeight: 1.35 }}>Eat smaller fish and grow into a whale. 22 levels, endless missions and rooms for up to ten friends.</div>
+                <div style={{ fontSize: 12.5, fontWeight: 600, color: 'rgba(255,255,255,0.8)', lineHeight: 1.35 }}>Eat smaller fish and grow into a whale. 45 levels, endless missions and rooms for up to ten friends.</div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
                 {onGulpRoom ? <GameButton small color="gold" label="Gulp room" onClick={() => { tap(); noteRecent('gulpco'); onGulpRoom(); }} /> : onStartLive && <GameButton small color="gold" label="Play together" onClick={() => { tap(); noteRecent('gulp'); onStartLive('gulp'); }} />}
@@ -416,7 +426,7 @@ export function GamesPage({ onClose, onChallenge, onShareScore, initialGame, fri
           )}
           <SectionTitle>Two players</SectionTitle>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
-            {duos.filter((k) => !POPULAR.includes(k)).map((k) => <Tile key={k} k={k} title={GAME_TITLES[k]} sub={winsLine(k)} badge={lv(k) ? <LevelBadge level={lv(k)} /> : null} onClick={() => openAny(k)} />)}
+            {duos.filter((k) => !POPULAR.includes(k)).map((k, i, a) => <Tile key={k} k={k} title={GAME_TITLES[k]} sub={winsLine(k)} wide={a.length % 2 === 1 && i === a.length - 1} badge={lv(k) ? <LevelBadge level={lv(k)} /> : null} onClick={() => openAny(k)} />)}
           </div>
           {onStartLive && LIVE_GAME_KEYS.length > 0 && (
             <>
@@ -440,7 +450,7 @@ export function GamesPage({ onClose, onChallenge, onShareScore, initialGame, fri
           )}
           <SectionTitle>Solo</SectionTitle>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
-            {solos.map((k) => { const b = bestOf(k); return <Tile key={k} k={k} title={GAME_TITLES[k]} sub={k === 'sudoku' ? 'Easy to expert' : b ? `Best ${formatGameScore(k, b)}` : subFor(k)} onClick={() => openSolo(k)} />; })}
+            {solos.map((k, i, a) => { const b = bestOf(k); return <Tile key={k} k={k} wide={a.length % 2 === 1 && i === a.length - 1} title={GAME_TITLES[k]} sub={k === 'sudoku' ? 'Easy to expert' : b ? `Best ${formatGameScore(k, b)}` : subFor(k)} onClick={() => openSolo(k)} />; })}
           </div>
           {onPlayBot && (
             <div role="button" aria-label="Play ZChat Bot" onClick={() => { tap(); onPlayBot(); }} className="zchat-row-press"
@@ -458,12 +468,12 @@ export function GamesPage({ onClose, onChallenge, onShareScore, initialGame, fri
       </FullPage>
       {game && (
         <FullPage title={GAME_TITLES[game]} subtitle={raceLine || (game === 'sudoku' ? 'Easy to expert' : bestOf(game) ? `Best ${formatGameScore(game, bestOf(game))}` : 'No score yet')} onBack={() => setGame(null)} zIndex={61}
-          bodyStyle={{ background: `linear-gradient(170deg, ${(GAME_ART_BG[game] || ['#3B2F63', '#1B1530'])[0]}${theme.dark ? '55' : '33'} 0%, ${(GAME_ART_BG[game] || ['#3B2F63', '#1B1530'])[1]}${theme.dark ? '33' : '1F'} 45%, transparent 85%)` }}
+          bodyStyle={SOLO_SCENE[game] ? { backgroundColor: '#0E0C16', backgroundImage: `linear-gradient(180deg, rgba(8,8,16,0.5) 0%, rgba(8,8,16,0.62) 55%, rgba(8,8,16,0.8) 100%), url("${sceneUrl(SOLO_SCENE[game])}")`, backgroundSize: 'cover', backgroundPosition: 'center top' } : { background: `linear-gradient(170deg, ${(GAME_ART_BG[game] || ['#3B2F63', '#1B1530'])[0]}${theme.dark ? '55' : '33'} 0%, ${(GAME_ART_BG[game] || ['#3B2F63', '#1B1530'])[1]}${theme.dark ? '33' : '1F'} 45%, transparent 85%)` }}
           right={<>{game !== 'squish' && <CastEye cast={soloCast} glass={false} size={36} onOpen={() => setCastOpen(true)} />}<GameInfoButton k={game} header />{onOpenLeaderboard && !NO_BOARD.includes(game) && <HeaderIconButton label="Leaderboard" onClick={() => onOpenLeaderboard(game)}><TrophyIcon size={19} /></HeaderIconButton>}{onShareScore && !NO_BOARD.includes(game) && <HeaderIconButton label="Share score" onClick={() => onShareScore(game, bestOf(game))}><ShareGlyph /></HeaderIconButton>}</>}>
           <div aria-hidden="true" ref={(n) => { soloRoot.current = n ? (n.closest('.zchat-wide-page') || n.parentElement) : null; }} style={{ display: 'none' }} />
           <SoloSplash k={game} />
           <LiveStatCtx.Provider value={soloStat}>
-            <SoloFit><SoloGame k={game} /></SoloFit>
+            <SoloDark on={!!SOLO_SCENE[game]}><SoloFit><SoloGame k={game} /></SoloFit></SoloDark>
           </LiveStatCtx.Provider>
           <ScoreToast k={game} />
           {game !== 'squish' && <CastLayer cast={soloCast} z={66} />}

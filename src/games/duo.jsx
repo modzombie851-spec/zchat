@@ -5,10 +5,12 @@ import { setWatchAllowed, useLiveBeacon, useGamePrivacy } from './live.js';
 import { EMOTES, PingChip, btnBase, Sheet, injectCss, useVoice, setKitTap } from './livekit.jsx';
 import { LIVES, GLYPHS, GLYPH_NAMES, STORY_N, ENDLESS, levelDef, makeWorld, stepWorld, buddyInput, applyEvent, snapshot, mergeSnapshot, sameLevel, syncClock, setNet, nearDial, nearMirror, turnMirror, foeRows, setFoes, tryCode, hintFor, aimTarget, clamp, missionsFor, parTime, spikeAmt, crumbleState, demoInputs, demoDuoWorld } from './duoengine.js';
 import { Snd, THEMES, buildStatic, buildMini, drawDuoMini, render, updateParts, dust, puffs, embers, glints, part, ring, glyph, drawExplorer , setDuoLite } from './duodraw.js';
-import { GC, GBtn, GPill, GPanel, GChip, GTitle, GJoy, GIcon, GHudBtn, GHudPanel, GHudSkill, GHint, GStat, GNotices, useNotices, useWatchNotices, injectKitCss, kitTap, pressProps, INK, newBudget, budgetTick, useCtlLook, useGameStage, stagePoint, GControlsPanel, GLobby, GSlot, GLobbySheet, GVolBars, GSeg , GTalkers, GWatchBar, GSkin, GChatFeed, useChatFeed } from './gamekit.jsx';
+import { GC, GBtn, GPill, GPanel, GChip, GTitle, GJoy, GIcon, GHudBtn, GHudPanel, GHudSkill, GHint, GStat, GNotices, useNotices, useWatchNotices, injectKitCss, kitTap, pressProps, INK, newBudget, budgetTick, useCtlLook, useGameStage, stagePoint, GControlsPanel, GLobby, GSlot, GLobbySheet, GVolBars, GSeg , GTalkers, GWatchBar, GSkin, GChatFeed, useChatFeed , useGfx, GGfxRow, useHudOpts, GHudRows, budgetFix, GSetHead, GSetToggle, GSetRow, useHudLay, hudT, layOpen, layEnd, GLayoutRow, GHudEditor} from './gamekit.jsx';
 import { Sfx } from './sfx.js';
 import { useTalking } from './talk.js';
 
+const DUO_KEYS = [['W A S D or Arrows', 'Move'], ['F or J or Q', 'Throw fire or frost'], ['E or Space', 'Turn a mirror or use a dial'], ['Esc', 'Leave']];
+const DUO_KEYS_SOLO = [...DUO_KEYS.slice(0, 3), ['Tab or C', 'Switch torch'], ['Esc', 'Leave']];
 const dbud = newBudget();
 const PHRASES = ['Wait for me', 'Go ahead', 'Over here', 'Hold the plate', 'Come closer, I need light', 'On three', 'Nice one', 'Sorry', 'I will get the lever', 'Follow me'];
 const QUICK = ['Wait for me', 'Go ahead', 'Over here', 'Hold the plate', 'Nice one', 'Follow me'];
@@ -120,7 +122,6 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
   const [result, setResult] = useState(null);
   const [best, setBest] = useState(() => readBest(myId));
   const [nearUse, setNearUse] = useState(null);
-  const [atkCd, setAtkCd] = useState(0);
   const atkReq = useRef(0);
   const foeSend = useRef(0);
   const [chatText, setChatText] = useState('');
@@ -161,6 +162,13 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
   const [joyView, setJoyView] = useState(null);
   const look = useCtlLook('duo');
   const GS = useGameStage(look);
+  const [gfx, pickGfx] = useGfx('duo', (k) => budgetFix(dbud, k));
+  const gfxOnce = useRef(false);
+  if (!gfxOnce.current) { gfxOnce.current = true; budgetFix(dbud, gfx); }
+  const [hudO, setHudO] = useHudOpts('duo', { map: true, names: true, shake: true });
+  const [layEd, setLayEd] = useState(false);
+  const hudLay = useHudLay('duo');
+  const hudORef = useRef(hudO); hudORef.current = hudO;
   const side = GS.side, land = GS.land;
   const sideRef = useRef(side); sideRef.current = side;
   const miniRef = useRef(null);
@@ -304,7 +312,7 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
     Snd.music(false);
     onClose();
   };
-  useBackClose(true, () => { if (ctl) setCtl(false); else if (storySheet) setStorySheet(false); else if (quick) setQuick(false); else if (sheet) setSheet(null); else if (leaveAsk) setLeaveAsk(false); else leave(); });
+  useBackClose(true, () => { if (layEd) { layEnd('duo', false); setLayEd(false); setCtl(true); } else if (ctl) setCtl(false); else if (storySheet) setStorySheet(false); else if (quick) setQuick(false); else if (sheet) setSheet(null); else if (leaveAsk) setLeaveAsk(false); else leave(); });
 
   useEffect(() => {
     const kd = (e) => {
@@ -315,6 +323,7 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
       }
       if (k === 'e' || k === ' ') { if (e.target && e.target.tagName === 'INPUT') return; useAction(); }
       if (k === 'f' || k === 'j' || k === 'q') { if (e.target && e.target.tagName === 'INPUT') return; atkReq.current = Date.now(); }
+      if ((k === 'tab' || k === 'c') && solo && phaseRef.current === 'play') { if (e.target && e.target.tagName === 'INPUT') return; e.preventDefault(); swapAt.current = Date.now(); setActive((a) => (a === 'sun' ? 'moon' : 'sun')); cam.current.init = true; }
     };
     const ku = (e) => keys.current.delete(e.key.toLowerCase());
     window.addEventListener('keydown', kd);
@@ -464,8 +473,6 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
         }
         const nu = nearMirror(W, myP) ? 'mirror' : nearDial(W, myP) ? 'dial' : null;
         if (nu !== nearRef.current) { nearRef.current = nu; setNearUse(nu); }
-        const cdv = myP.atkCd > 0.05 ? Math.ceil(myP.atkCd * 10) : 0;
-        if (cdv !== atkRef.current) { atkRef.current = cdv; setAtkCd(myP.atkCd > 0.05 ? myP.atkCd : 0); }
       }
       const C = cam.current;
       const tx = myP.x, ty = myP.y - 0.8;
@@ -476,7 +483,7 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
       const cx = W.MW <= halfW * 2 ? W.MW / 2 : clamp(C.x, halfW - 0.4, W.MW - halfW + 0.4);
       const cy = W.MH <= halfH * 2 ? W.MH / 2 : clamp(C.y, halfH - 1.4, W.MH - halfH + 1.2);
       let sx = 0, sy = 0;
-      if (W.shake > 0) { sx = (Math.random() - 0.5) * 6 * W.shake; sy = (Math.random() - 0.5) * 6 * W.shake; }
+      if (W.shake > 0 && hudORef.current.shake !== false) { sx = (Math.random() - 0.5) * 6 * W.shake; sy = (Math.random() - 0.5) * 6 * W.shake; }
       const ox = Math.round(cw / 2 - cx * s + sx), oy = Math.round(ch / 2 - cy * s + sy);
       const names = { sun: act === 'sun' || (!solo && myKind === 'sun') ? 'You' : solo ? 'Orange' : peerFirst, moon: act === 'moon' || (!solo && myKind === 'moon') ? 'You' : solo ? 'Blue' : peerFirst };
       if (solo) { names.sun = act === 'sun' ? 'You' : 'Orange'; names.moon = act === 'moon' ? 'You' : 'Blue'; }
@@ -492,7 +499,7 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
         if (!watch && playing) { const jr = joyRRef.current + 12, jx = cw > ch ? 112 : 92, jy = ch - (cw > ch ? 96 : 120); KR.list.push([jx - jr, jy - jr, jx + jr, jy + jr]); }
       }
       const aimF = !watch && playing && myP && myP.dead <= 0 && W.foes.length ? aimTarget(W, myP, myP.ax, myP.ay) : null;
-      render(ctx, W, { cw, ch, dpr, s, ox, oy, me: myP, names, bubbles: bubbles.current, stat: statRef.current.cv, them: act === 'sun' ? 'moon' : 'sun', safeTop: 30, safeBottom: 30, keep: KR.list, aim: aimF, aimCol: myP && myP.kind === 'sun' ? '#FFB347' : '#8CC8FF' });
+      render(ctx, W, { cw, ch, dpr, s, ox, oy, me: myP, names: hudORef.current.names ? names : {}, bubbles: bubbles.current, stat: statRef.current.cv, them: act === 'sun' ? 'moon' : 'sun', safeTop: 30, safeBottom: 30, keep: KR.list, aim: aimF, aimCol: myP && myP.kind === 'sun' ? '#FFB347' : '#8CC8FF' });
       const mc = miniRef.current;
       if (mc && mc.isConnected) {
         const MB = miniBase.current;
@@ -517,7 +524,6 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
     return () => cancelAnimationFrame(raf);
   }, [solo, host]);
   const nearRef = useRef(null);
-  const atkRef = useRef(0);
   const sheetOpen = useRef(false);
   sheetOpen.current = !!sheet || leaveAsk || ctl;
 
@@ -665,7 +671,6 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
   const partnerLine = watch ? `Watching ${hostFirst} and ${peerFirst}` : solo ? (active === 'sun' ? 'Practice, orange torch' : 'Practice, blue torch') : here ? (phase === 'play' ? `With ${peerFirst}` : `${peerFirst} is here`) : here === false ? `${peerFirst} is away` : 'Connecting';
   const endlessBest = best.endless || 0;
   const actKind = active;
-  const atkCol = actKind === 'sun' ? 'orange' : 'blue';
   const { top, right, bottom, left } = GS.at;
   const hb = land ? 38 : 40;
   const SW = GS.W, SH = GS.H;
@@ -858,7 +863,7 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
                   {!solo && !watch && here && <PingChip ms={net.ping} weak={net.weak} />}
                 </div>
               </GHudPanel>
-              {mini && <canvas ref={miniRef} aria-hidden="true" style={{ width: mini.w, height: mini.h, display: 'block', borderRadius: 6, boxShadow: '0 2px 10px rgba(0,0,0,0.3)' }} />}
+              {mini && hudO.map && <canvas ref={miniRef} aria-hidden="true" style={{ width: mini.w, height: mini.h, display: 'block', borderRadius: 6, boxShadow: '0 2px 10px rgba(0,0,0,0.3)' }} />}
               {!watch && watchers.length > 0 && <GHudPanel style={{ height: 24, padding: '0 9px', display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 800, whiteSpace: 'nowrap' }}><GIcon k="eye" size={13} color="#CFE6FF" ink="rgba(0,0,0,0.35)" />{watchers.length === 1 ? `${watchers[0].n} is watching` : `${watchers.length} watching`}</GHudPanel>}
             </div>
             <div ref={hudRef('tc')} style={{ position: 'absolute', left: capX, top: top(8), width: capW, display: 'flex', justifyContent: land ? 'center' : 'flex-end', zIndex: 2, pointerEvents: 'none' }}>
@@ -903,7 +908,7 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
             <GWatchBar ids={['sun', 'moon']} cur={active} nameOf={(k) => (k === 'sun' ? hostFirst : peerFirst)} colorOf={(k) => (k === 'sun' ? '#FF9A2E' : '#3E9BFF')} onPick={(k) => { if (k !== active) { setActive(k); cam.current.init = false; } }} />
           </div>
         )}
-        {phase === 'play' && !watch && <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', opacity: 1 - look.see }}><GJoy flat view={joyView} knobRef={knobRef} color={actKind === 'sun' ? 'orange' : 'blue'} idle={{ x: joyX, y: joyY }} R={joyR} /></div>}
+        {(phase === 'play' || layEd) && !watch && <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', opacity: 1 - look.see }}><GJoy flat view={joyView} knobRef={knobRef} color={actKind === 'sun' ? 'orange' : 'blue'} idle={{ x: joyX, y: joyY }} R={joyR} /></div>}
         {phase === 'play' && quick && !solo && (
           <div onPointerDown={(e) => e.stopPropagation()} style={land ? { position: 'absolute', right: right(10), top: top(54), width: 'min(300px, calc(100% - 40px))', animation: 'zgk-pop 0.2s ease-out', zIndex: 6 } : { position: 'absolute', right: right(16 + 40 + 10), bottom: bottom(armB), width: 'min(280px, calc(100% - 90px))', animation: 'zgk-pop 0.2s ease-out', zIndex: 6 }}>
             <GPanel style={{ padding: 10 }}>
@@ -917,23 +922,25 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
             </GPanel>
           </div>
         )}
-        {phase === 'play' && !watch && (
+        {(phase === 'play' || layEd) && !watch && (
           <div ref={hudRef('sk')} style={{ position: 'absolute', right: right(14), bottom: bottom(12), width: 210, height: 190, pointerEvents: 'none', transform: `scale(${look.size})`, transformOrigin: '100% 100%', opacity: 1 - look.see, zIndex: 2 }}>
-            <div style={{ position: 'absolute', left: 131, top: 111, pointerEvents: 'auto' }}>
+            <div data-hud="atk" data-hud-name="Throw" style={{ position: 'absolute', left: 131, top: 111, pointerEvents: 'auto', ...hudT(hudLay.lay, 'atk') }}>
               <GHudSkill main icon={actKind === 'sun' ? 'flame' : 'snow'} tone={actKind === 'sun' ? GC.orange[1] : GC.blue[1]} size={74} label={actKind === 'sun' ? 'Throw a fireball' : 'Throw frost'} sound="none" onPress={() => { atkReq.current = Date.now(); }} />
             </div>
-            {nearUse && <div style={{ position: 'absolute', left: 50, top: 120, pointerEvents: 'auto', animation: 'zgk-pop 0.25s ease-out' }}><GHudSkill icon="hand" tone="#FFD23F" size={56} label={nearUse === 'mirror' ? 'Turn the mirror' : 'Use the dial'} onPress={useAction} /></div>}
-            {solo && <div style={{ position: 'absolute', left: 134, top: 32, pointerEvents: 'auto' }}><GHudSkill icon="swap" tone={actKind === 'sun' ? '#8CC0FF' : '#FFB347'} size={52} label={actKind === 'sun' ? 'Switch to the blue torch' : 'Switch to the orange torch'} onPress={() => { swapAt.current = Date.now(); setActive((a) => (a === 'sun' ? 'moon' : 'sun')); cam.current.init = true; }} /></div>}
+            {(nearUse || layEd) && <div data-hud="use" data-hud-name="Use" style={{ position: 'absolute', left: 50, top: 120, pointerEvents: 'auto', animation: 'zgk-pop 0.25s ease-out', ...hudT(hudLay.lay, 'use') }}><GHudSkill icon="hand" tone="#FFD23F" size={56} label={nearUse === 'mirror' ? 'Turn the mirror' : 'Use the dial'} onPress={useAction} /></div>}
+            {solo && <div data-hud="swap" data-hud-name="Switch" style={{ position: 'absolute', left: 134, top: 32, pointerEvents: 'auto', ...hudT(hudLay.lay, 'swap') }}><GHudSkill icon="swap" tone={actKind === 'sun' ? '#8CC0FF' : '#FFB347'} size={52} label={actKind === 'sun' ? 'Switch to the blue torch' : 'Switch to the orange torch'} onPress={() => { swapAt.current = Date.now(); setActive((a) => (a === 'sun' ? 'moon' : 'sun')); cam.current.init = true; }} /></div>}
           </div>
         )}
         {ctl && (
           <div onPointerDown={(e) => e.stopPropagation()} style={{ position: 'absolute', inset: 0, zIndex: 45, background: 'rgba(8,6,14,0.6)', display: 'flex', padding: 12, overflowY: 'auto', touchAction: 'pan-x pan-y' }}>
-            <div style={{ margin: 'auto', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><GControlsPanel sideways onClose={() => setCtl(false)} /></div>
+            <div style={{ margin: 'auto', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><GControlsPanel sideways onClose={() => setCtl(false)} at={GS.at} keys={solo ? DUO_KEYS_SOLO : DUO_KEYS} preview={['flame', 'cycle']} layout={!watch ? <GLayoutRow g="duo" onOpen={() => { setCtl(false); setQuick(false); layOpen('duo'); setLayEd(true); }} /> : null}
+              tabs={[{ k: 'graphics', label: 'Graphics', body: <><GSetHead>Picture</GSetHead><GGfxRow value={gfx} onPick={pickGfx} /><GSetRow label="Camera shake" sub="Shakes the view on hits and blasts"><GSetToggle on={hudO.shake !== false} label="Camera shake" onToggle={(n) => setHudO('shake', n)} /></GSetRow></> }, { k: 'hud', label: 'HUD', body: <GHudRows opts={hudO} onSet={setHudO} rows={[['map', 'Mini map'], ['names', 'Names over players']]} /> }]} /></div>
           </div>
         )}
         {voice.err && phase === 'play' && <div style={{ position: 'absolute', left: '50%', top: '22%', transform: 'translateX(-50%)', pointerEvents: 'none', zIndex: 4 }}><GChip style={{ background: 'rgba(217,75,75,0.95)' }}>{voice.err}</GChip></div>}
 
-        {lobbyUi}
+        {!layEd && lobbyUi}
+        {layEd && <GHudEditor g="duo" stageRef={wrapRef} side={side} W={GS.W} H={GS.H} at={GS.at} onClose={() => { setLayEd(false); setCtl(true); }} />}
 
         {phase === 'won' && result && (
           <div style={{ position: 'absolute', inset: 0, zIndex: 20, background: 'rgba(5,4,10,0.5)', display: 'flex', padding: 12, overflowY: 'auto', touchAction: 'pan-x pan-y' }}>
@@ -1036,7 +1043,7 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
             </div>
           </Sheet>
         )}
-        {paused && solo && phase === 'play' && (
+        {paused && solo && phase === 'play' && !layEd && (
           <div onPointerDown={(e) => e.stopPropagation()} style={{ position: 'absolute', inset: 0, zIndex: 35, background: 'rgba(10,8,24,0.5)', display: 'flex', padding: 12, overflowY: 'auto' }}>
             <GPanel style={{ margin: 'auto', width: '100%', maxWidth: 320, padding: 16, display: 'flex', flexDirection: 'column', gap: 10, animation: 'zgk-pop 0.3s ease-out', boxSizing: 'border-box' }}>
               <GTitle text="Paused" size={28} />

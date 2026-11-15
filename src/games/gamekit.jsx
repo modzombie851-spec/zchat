@@ -60,14 +60,15 @@ export function injectKitCss() {
     '@keyframes zgk-pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.07)}}',
     '@keyframes zgk-knock{0%,100%{background-color:rgba(160,22,14,0.78)}50%{background-color:rgba(70,10,8,0.5)}}',
     '@keyframes zgk-in{from{transform:translateY(24px);opacity:0}to{transform:none;opacity:1}}',
+    '[data-hud-edit] canvas{filter:brightness(.5) saturate(.8)}',
     '@keyframes zgk-spin{to{transform:rotate(360deg)}}',
     '.zgk-btn{-webkit-tap-highlight-color:transparent;touch-action:none;user-select:none;-webkit-user-select:none;outline:none}',
     '.zgk-range{-webkit-appearance:none;appearance:none;height:6px;border-radius:3px;outline:none;margin:0;cursor:pointer;touch-action:none}',
     '.zgk-range::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:20px;height:20px;border-radius:10px;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.45)}',
     '.zgk-range::-moz-range-thumb{width:20px;height:20px;border:none;border-radius:10px;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.45)}',
     '.zgk-range:focus-visible{box-shadow:0 0 0 3px #2479E8}',
-    '.zgk-range-bs::-webkit-slider-thumb{width:13px;height:13px;border-radius:2px;transform:rotate(45deg);background:#E8FCFF;box-shadow:0 0 0 2px #34D1D6,0 1px 4px rgba(0,0,0,.5)}',
-    '.zgk-range-bs::-moz-range-thumb{width:13px;height:13px;border-radius:2px;transform:rotate(45deg);background:#E8FCFF;box-shadow:0 0 0 2px #34D1D6,0 1px 4px rgba(0,0,0,.5)}',
+    '.zgk-range-bs::-webkit-slider-thumb{width:13px;height:13px;border-radius:2px;transform:rotate(45deg);background:#E8FCFF;box-shadow:0 0 0 2px var(--zgk-acc,#34D1D6),0 1px 4px rgba(0,0,0,.5)}',
+    '.zgk-range-bs::-moz-range-thumb{width:13px;height:13px;border-radius:2px;transform:rotate(45deg);background:#E8FCFF;box-shadow:0 0 0 2px var(--zgk-acc,#34D1D6),0 1px 4px rgba(0,0,0,.5)}',
     '.zgk-btn:focus-visible{box-shadow:0 0 0 3px #fff,0 0 0 6px #2479E8!important}',
     '[data-side="1"] [style*="overflow-y: auto"]{overflow-x:auto!important;touch-action:pan-x pan-y!important}',
     '[style*="overflow-y: auto"] .zgk-btn{touch-action:pan-x pan-y}',
@@ -264,11 +265,12 @@ export function GHold({ icon, label, color = 'blue', size = 72, onDown, onUp, st
 export function GPill({ text, icon, onPress, color = 'green', height = 56, wide, disabled, style, sound = 'pop', fast = false, small }) {
   injectKitCss();
   const [down, setDown] = useState(false);
-  const tac = !!useSkin().tac;
+  const SK = useSkin();
+  const tac = !!SK.tac;
   if (tac) return <GTacBtn text={text} icon={icon} onPress={onPress} wide={wide} disabled={disabled} tone={color === 'green' || color === 'gold' || color === 'orange' ? 'acc' : color === 'red' ? 'red' : null} style={{ height: small ? 34 : 38, ...style }} />;
   const h = small ? Math.min(height, 40) : Math.min(height, 50);
   const lip = small ? 4 : 5;
-  const c = GC[color] || GC.dark;
+  const c = (color === 'dark' && SK.dark) || GC[color] || GC.dark;
   const light = color === 'gold' || color === 'white';
   const ink = color === 'gold' ? '#3A2500' : color === 'white' ? '#262B40' : '#FFFFFF';
   const fire = () => { if (disabled) return; kitTap(sound); if (onPress) onPress(); };
@@ -292,26 +294,38 @@ export function GPill({ text, icon, onPress, color = 'green', height = 56, wide,
 
 const TAC = { acc: '#F2C14E', accBg: 'rgba(242,193,78,0.15)', line: 'rgba(255,255,255,0.14)', txt: 'rgba(255,255,255,0.74)' };
 export const BS = { bg: 'linear-gradient(160deg, #1b1e3c 0%, #131633 52%, #0d0f25 100%)', rail: 'rgba(6,7,20,0.5)', row: 'rgba(255,255,255,0.045)', sub: 'rgba(214,220,240,0.56)', yel: '#F2E11B', ink: '#12131F', cyan: '#2EC5E6', teal: '#34D1D6', on: '#D6DAE5', onTxt: '#151833', off: 'rgba(6,8,22,0.38)', offTxt: 'rgba(232,236,248,0.84)', edge: 'rgba(255,255,255,0.16)', font: `'Roboto Condensed', 'sans-serif-condensed', 'Arial Narrow', ${FONT}` };
+const SetCtx = createContext(null);
+export const SETP = {
+  zombie: BS,
+  siege: { ...BS, bg: 'linear-gradient(160deg, #2f3640 0%, #20252d 55%, #12151a 100%)', rail: 'rgba(8,10,13,0.5)', yel: '#FFB23F', ink: '#1A1206', cyan: '#FFB23F', teal: '#5FE3D0', on: '#E2E6EC', onTxt: '#1E232B', off: 'rgba(8,10,13,0.4)' },
+  rally: { ...BS, bg: 'linear-gradient(160deg, #22305a 0%, #172140 55%, #0d1328 100%)', rail: 'rgba(4,8,22,0.48)', yel: '#FFC93C', ink: '#141B30', cyan: '#FFC93C', teal: '#3FB6FF', on: '#E6ECF8', onTxt: '#151E38', r: 4 },
+  gulp: { ...BS, bg: 'linear-gradient(160deg, #11507a 0%, #0b3758 55%, #062038 100%)', rail: 'rgba(2,16,32,0.42)', row: 'rgba(255,255,255,0.06)', sub: 'rgba(205,236,250,0.66)', yel: '#FFD23F', ink: '#0B2236', cyan: '#5FE0F5', teal: '#5FE0F5', on: '#E3F6FF', onTxt: '#0B2A44', off: 'rgba(2,18,36,0.38)', offTxt: 'rgba(225,244,255,0.9)', edge: 'rgba(190,235,255,0.22)', font: FONT, r: 10, round: true },
+  roll: { ...BS, bg: 'linear-gradient(160deg, #4a3a90 0%, #352870 55%, #221a4a 100%)', rail: 'rgba(16,10,40,0.38)', row: 'rgba(255,255,255,0.07)', sub: 'rgba(228,222,255,0.66)', yel: '#FFC531', ink: '#2A1F52', cyan: '#7BE05A', teal: '#7BE05A', on: '#FFFFFF', onTxt: '#33276C', off: 'rgba(16,10,40,0.34)', offTxt: 'rgba(240,236,255,0.9)', edge: 'rgba(255,255,255,0.24)', font: FONT, r: 12, round: true },
+  duo: { ...BS, bg: 'linear-gradient(160deg, #4d3a27 0%, #35281b 55%, #1e160e 100%)', rail: 'rgba(14,9,5,0.45)', row: 'rgba(255,230,180,0.06)', sub: 'rgba(251,230,184,0.64)', yel: '#F2C14E', ink: '#2A1C0C', cyan: '#F0934A', teal: '#F0934A', on: '#FBE6B8', onTxt: '#33261A', off: 'rgba(14,9,5,0.38)', offTxt: 'rgba(251,236,204,0.9)', edge: 'rgba(201,154,69,0.34)', font: FONT, r: 6, round: true },
+};
+const setPal = (g) => SETP[g] || { ...BS, font: FONT, r: 8, round: true };
+function useSetP() { const c = useContext(SetCtx); const sk = useSkin(); return c || (sk.tac ? BS : null); }
 export function GSetHead({ children }) {
-  if (!useSkin().tac) return <div style={{ fontSize: 13, fontWeight: 900, color: 'rgba(255,255,255,0.7)', padding: '12px 0 4px' }}>{children}</div>;
+  const P = useSetP();
+  if (!P) return <div style={{ fontSize: 13, fontWeight: 900, color: 'rgba(255,255,255,0.7)', padding: '12px 0 4px' }}>{children}</div>;
   return (
-    <div role="heading" aria-level={3} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 2px 7px', fontFamily: BS.font, fontSize: 15, fontWeight: 800, color: '#FFFFFF', letterSpacing: '0.01em' }}>
-      <span aria-hidden="true" style={{ width: 3, height: 15, background: BS.cyan }} />{children}
+    <div role="heading" aria-level={3} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 2px 7px', fontFamily: P.font, fontSize: 15, fontWeight: P.round ? 900 : 800, color: '#FFFFFF', letterSpacing: '0.01em' }}>
+      <span aria-hidden="true" style={{ width: 3, height: 15, borderRadius: P.round ? 2 : 0, background: P.cyan }} />{children}
     </div>
   );
 }
 export function GSeg({ value, items, onPick, disabled, height = 36, label }) {
   injectKitCss();
-  const sk = useSkin();
-  if (sk.tac) {
+  const P = useSetP();
+  if (P) {
     const cur = items.some(([k]) => k === value) || typeof value !== 'number' ? value : items.reduce((a, b) => (typeof b[0] === 'number' && Math.abs(b[0] - value) < Math.abs(a[0] - value) ? b : a))[0];
     return (
-      <div role="radiogroup" aria-label={label} style={{ display: 'inline-flex', flexWrap: 'wrap', justifyContent: 'flex-end', boxShadow: `inset 0 0 0 1px ${BS.edge}` }}>
+      <div role="radiogroup" aria-label={label} style={{ display: 'inline-flex', flexWrap: 'wrap', justifyContent: 'flex-end', borderRadius: P.r || 0, overflow: 'hidden', boxShadow: `inset 0 0 0 1px ${P.edge}` }}>
         {items.map(([k, t], i) => {
           const on = cur === k;
           return (
             <button key={k} type="button" role="radio" aria-checked={on} className="zgk-btn" disabled={!!disabled && !on} {...pressProps(() => { if (!disabled && !on) { kitTap(); onPick(k); } })}
-              style={{ minWidth: items.length > 3 ? 70 : 88, height: 30, padding: '0 12px', border: 'none', borderLeft: i ? `1px solid ${BS.edge}` : 'none', borderRadius: 0, background: on ? BS.on : BS.off, color: on ? BS.onTxt : BS.offTxt, fontFamily: BS.font, fontSize: 13, fontWeight: 700, letterSpacing: '0.01em', cursor: disabled && !on ? 'default' : 'pointer', whiteSpace: 'nowrap', opacity: disabled && !on ? 0.45 : 1 }}>
+              style={{ minWidth: items.length > 3 ? 70 : 88, height: 30, padding: '0 12px', border: 'none', borderLeft: i ? `1px solid ${P.edge}` : 'none', borderRadius: 0, background: on ? P.on : P.off, color: on ? P.onTxt : P.offTxt, fontFamily: P.font, fontSize: 13, fontWeight: P.round ? 800 : 700, letterSpacing: '0.01em', cursor: disabled && !on ? 'default' : 'pointer', whiteSpace: 'nowrap', opacity: disabled && !on ? 0.45 : 1 }}>
               {t}
             </button>
           );
@@ -332,7 +346,7 @@ export function GSeg({ value, items, onPick, disabled, height = 36, label }) {
   );
 }
 
-const PANEL_EDGE = { rally: [10, 'inset 3px 0 0 #FFC93C, inset 0 0 0 1px rgba(255,255,255,0.1)', 'rgba(10,16,34,0.88)'], siege: [6, 'inset 0 2px 0 #F2B21B, inset 0 0 0 1px rgba(255,255,255,0.09)', 'rgba(26,30,38,0.9)'], roll: [20, 'inset 0 0 0 2px rgba(255,255,255,0.22)', 'rgba(40,30,78,0.86)'], gulp: [18, 'inset 0 0 0 1px rgba(150,228,255,0.3)', 'rgba(3,34,64,0.84)'], duo: [6, 'inset 0 0 0 1px rgba(217,165,72,0.5)', 'rgba(30,22,15,0.9)'], zombie: [4, 'inset 0 -2px 0 #F28C28, inset 0 0 0 1px rgba(239,232,210,0.1)', 'rgba(22,24,15,0.9)'] };
+const PANEL_EDGE = { rally: [10, 'inset 3px 0 0 #FFC93C, inset 0 0 0 1px rgba(255,255,255,0.1)', 'rgba(10,16,34,0.88)'], siege: [6, 'inset 0 2px 0 #F2B21B, inset 0 0 0 1px rgba(255,255,255,0.09)', 'rgba(26,30,38,0.9)'], roll: [20, 'inset 0 0 0 2px rgba(255,255,255,0.22)', 'rgba(40,30,78,0.95)'], gulp: [18, 'inset 0 0 0 1px rgba(150,228,255,0.3)', 'rgba(3,34,64,0.9)'], duo: [6, 'inset 0 0 0 1px rgba(217,165,72,0.5)', 'rgba(30,22,15,0.9)'], zombie: [4, 'inset 0 -2px 0 #F28C28, inset 0 0 0 1px rgba(239,232,210,0.1)', 'rgba(22,24,15,0.9)'] };
 export function GPanel({ children, style, color }) {
   const P = PANEL_EDGE[useSkin().k];
   return (
@@ -588,12 +602,13 @@ export function GVoiceRow({ name, avatar, muted, vol = 1, onMute, onVol, me }) {
 }
 
 export function GSetRow({ label, sub, children, stack }) {
-  if (useSkin().tac) {
+  const P = useSetP();
+  if (P) {
     return (
-      <div style={{ display: 'flex', flexDirection: stack ? 'column' : 'row', alignItems: stack ? 'stretch' : 'center', gap: stack ? 8 : 14, minHeight: 44, padding: '7px 12px', marginBottom: 3, background: BS.row, boxShadow: 'inset 0 -1px 0 rgba(0,0,0,0.22)', fontFamily: BS.font }}>
+      <div style={{ display: 'flex', flexDirection: stack ? 'column' : 'row', alignItems: stack ? 'stretch' : 'center', gap: stack ? 8 : 14, minHeight: 44, padding: '7px 12px', marginBottom: P.round ? 5 : 3, borderRadius: P.r || 0, background: P.row, boxShadow: P.round ? 'none' : 'inset 0 -1px 0 rgba(0,0,0,0.22)', fontFamily: P.font }}>
         <div style={{ flex: stack ? 'none' : '1 1 40%', minWidth: 0 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: '#FFFFFF', letterSpacing: '0.01em' }}>{label}</div>
-          {sub && <div style={{ fontSize: 11.5, fontWeight: 600, color: BS.sub, marginTop: 1, lineHeight: 1.3 }}>{sub}</div>}
+          <div style={{ fontSize: 14, fontWeight: P.round ? 800 : 700, color: '#FFFFFF', letterSpacing: '0.01em' }}>{label}</div>
+          {sub && <div style={{ fontSize: 11.5, fontWeight: 600, color: P.sub, marginTop: 1, lineHeight: 1.3 }}>{sub}</div>}
         </div>
         <div style={{ flex: stack ? 'none' : '1 1 60%', minWidth: 0, display: 'flex', justifyContent: 'flex-end' }}>{children}</div>
       </div>
@@ -611,14 +626,15 @@ export function GSetRow({ label, sub, children, stack }) {
 }
 
 export function GSetToggle({ on, onToggle, label }) {
-  if (useSkin().tac) {
+  const P = useSetP();
+  if (P) {
     return (
-      <div role="radiogroup" aria-label={label} style={{ display: 'inline-flex', boxShadow: `inset 0 0 0 1px ${BS.edge}` }}>
+      <div role="radiogroup" aria-label={label} style={{ display: 'inline-flex', borderRadius: P.r || 0, overflow: 'hidden', boxShadow: `inset 0 0 0 1px ${P.edge}` }}>
         {[[true, 'On'], [false, 'Off']].map(([v, t], i) => {
           const sel = !!on === v;
           return (
             <button key={t} type="button" role="radio" aria-checked={sel} className="zgk-btn" {...pressProps(() => { if (sel) return; kitTap('toggle'); onToggle(v); })}
-              style={{ width: 76, height: 30, border: 'none', borderLeft: i ? `1px solid ${BS.edge}` : 'none', borderRadius: 0, background: sel ? BS.on : BS.off, color: sel ? BS.onTxt : BS.offTxt, fontFamily: BS.font, fontSize: 13, fontWeight: 700, cursor: sel ? 'default' : 'pointer' }}>
+              style={{ width: 76, height: 30, border: 'none', borderLeft: i ? `1px solid ${P.edge}` : 'none', borderRadius: 0, background: sel ? P.on : P.off, color: sel ? P.onTxt : P.offTxt, fontFamily: P.font, fontSize: 13, fontWeight: P.round ? 800 : 700, cursor: sel ? 'default' : 'pointer' }}>
               {t}
             </button>
           );
@@ -636,20 +652,21 @@ export function GSetToggle({ on, onToggle, label }) {
 
 export function GSetSlider({ value, min = 0, max = 1, step = 0.05, onChange, label, fmt }) {
   injectKitCss();
-  const tac = !!useSkin().tac;
+  const P = useSetP();
+  const tac = !!P;
   const f = (value - min) / (max - min || 1);
-  if (tac) {
+  if (P) {
     const dec = (String(step).split('.')[1] || '').length;
     const put = (x) => { kitTap('toggle'); onChange(Number(Math.min(max, Math.max(min, x)).toFixed(dec))); };
-    const sq = { width: 26, height: 26, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, border: 'none', borderRadius: 0, background: '#E9ECF3', cursor: 'pointer' };
+    const sq = { width: 26, height: 26, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, border: 'none', borderRadius: P.round ? 7 : 0, background: P.on, cursor: 'pointer' };
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, width: '100%', fontFamily: BS.font }}>
-        <span style={{ width: 48, height: 26, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(6,8,22,0.62)', boxShadow: `inset 0 0 0 1px ${BS.edge}`, fontSize: 13, fontWeight: 800, color: '#FFFFFF', fontVariantNumeric: 'tabular-nums' }}>{fmt ? fmt(value) : Math.round(f * 100)}</span>
-        <button type="button" aria-label={`Lower ${label}`} className="zgk-btn" style={sq} {...pressProps(() => put(value - step))}><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 6h8" stroke={BS.onTxt} strokeWidth="2.2" strokeLinecap="round" /></svg></button>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, width: '100%', fontFamily: P.font }}>
+        <span style={{ width: 48, height: 26, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: P.round ? 7 : 0, background: 'rgba(0,0,0,0.34)', boxShadow: `inset 0 0 0 1px ${P.edge}`, fontSize: 13, fontWeight: 800, color: '#FFFFFF', fontVariantNumeric: 'tabular-nums' }}>{fmt ? fmt(value) : Math.round(f * 100)}</span>
+        <button type="button" aria-label={`Lower ${label}`} className="zgk-btn" style={sq} {...pressProps(() => put(value - step))}><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 6h8" stroke={P.onTxt} strokeWidth="2.2" strokeLinecap="round" /></svg></button>
         <input type="range" className="zgk-range zgk-range-bs" aria-label={label} min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))}
           onPointerDown={(e) => e.stopPropagation()}
-          style={{ flex: 1, minWidth: 70, maxWidth: 260, height: 3, borderRadius: 0, background: `linear-gradient(90deg, ${BS.teal} 0%, ${BS.teal} ${f * 100}%, rgba(255,255,255,0.2) ${f * 100}%, rgba(255,255,255,0.2) 100%)` }} />
-        <button type="button" aria-label={`Raise ${label}`} className="zgk-btn" style={sq} {...pressProps(() => put(value + step))}><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 6h8M6 2v8" stroke={BS.onTxt} strokeWidth="2.2" strokeLinecap="round" /></svg></button>
+          style={{ flex: 1, minWidth: 70, maxWidth: 260, height: 3, borderRadius: P.round ? 2 : 0, '--zgk-acc': P.teal, background: `linear-gradient(90deg, ${P.teal} 0%, ${P.teal} ${f * 100}%, rgba(255,255,255,0.2) ${f * 100}%, rgba(255,255,255,0.2) 100%)` }} />
+        <button type="button" aria-label={`Raise ${label}`} className="zgk-btn" style={sq} {...pressProps(() => put(value + step))}><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 6h8M6 2v8" stroke={P.onTxt} strokeWidth="2.2" strokeLinecap="round" /></svg></button>
       </div>
     );
   }
@@ -665,26 +682,48 @@ export function GSetSlider({ value, min = 0, max = 1, step = 0.05, onChange, lab
 }
 
 export function GTacBtn({ text, onPress, tone, icon, wide, disabled, style }) {
-  const c = tone === 'acc' ? ['#F2C14E', '#1B1508', 'rgba(242,193,78,1)'] : tone === 'red' ? ['rgba(214,58,46,0.9)', '#FFFFFF', 'rgba(255,120,110,0.7)'] : tone === 'green' ? ['rgba(46,160,90,0.92)', '#FFFFFF', 'rgba(140,240,180,0.6)'] : ['rgba(255,255,255,0.05)', 'rgba(255,255,255,0.88)', 'rgba(255,255,255,0.2)'];
+  const P = useContext(SetCtx);
+  const c = tone === 'acc' ? (P ? [P.yel, P.ink, P.yel] : ['#F2C14E', '#1B1508', 'rgba(242,193,78,1)']) : tone === 'red' ? ['rgba(214,58,46,0.9)', '#FFFFFF', 'rgba(255,120,110,0.7)'] : tone === 'green' ? ['rgba(46,160,90,0.92)', '#FFFFFF', 'rgba(140,240,180,0.6)'] : ['rgba(255,255,255,0.05)', 'rgba(255,255,255,0.88)', 'rgba(255,255,255,0.2)'];
   return (
     <button type="button" className="zgk-btn" disabled={disabled} {...pressProps(() => { if (disabled) return; kitTap(); onPress && onPress(); })}
-      style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, width: wide ? '100%' : 'auto', height: 36, padding: '0 16px', border: `1px solid ${c[2]}`, borderRadius: 5, background: c[0], color: c[1], fontFamily: FONT, fontSize: 13, fontWeight: 800, cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.45 : 1, whiteSpace: 'nowrap', ...style }}>
+      style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, width: wide ? '100%' : 'auto', height: 36, padding: '0 16px', border: `1px solid ${c[2]}`, borderRadius: P ? (P.round ? 9 : P.r || 0) : 5, background: c[0], color: c[1], fontFamily: P ? P.font : FONT, fontSize: 13, fontWeight: 800, cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.45 : 1, whiteSpace: 'nowrap', ...style }}>
       {icon && <GIcon k={icon} size={15} color={c[1]} line halo={false} stroke={2.2} />}
       {text}
     </button>
   );
 }
-function ctlTab(g, v, sideways, pv) {
+export const phoneBox = () => typeof window !== 'undefined' && Math.min(window.innerWidth || 0, window.innerHeight || 0) < 600;
+const FINE = () => { try { return !TOUCHY || window.matchMedia('(any-pointer: fine)').matches; } catch { return !TOUCHY; } };
+function KeyCap({ k }) {
+  const P = useSetP() || BS;
+  return <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 26, height: 26, padding: '0 8px', boxSizing: 'border-box', borderRadius: P.round ? 7 : 3, background: 'rgba(255,255,255,0.12)', boxShadow: 'inset 0 -2px 0 rgba(0,0,0,0.35), inset 0 0 0 1px rgba(255,255,255,0.16)', color: '#FFFFFF', fontFamily: P.font, fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap' }}>{k}</span>;
+}
+function keysPart(keys) {
+  if (!keys || !keys.length || !FINE()) return null;
   return (
     <>
-      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 16, height: 92, padding: '6px 0 10px', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+      <GSetHead>Keyboard</GSetHead>
+      {keys.map(([ks, what]) => (
+        <GSetRow key={what} label={what}>
+          <span style={{ display: 'inline-flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 5 }}>{ks.split(' or ').map((k, i) => <React.Fragment key={k}>{i > 0 && <span style={{ alignSelf: 'center', fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.5)' }}>or</span>}<KeyCap k={k} /></React.Fragment>)}</span>
+        </GSetRow>
+      ))}
+    </>
+  );
+}
+function ctlTab(g, v, sideways, pv, layout) {
+  return (
+    <>
+      {layout}
+      <GSetHead>Buttons</GSetHead>
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 16, height: 92, padding: '6px 0 10px' }}>
         <div style={{ opacity: 1 - v.see, transform: `scale(${v.size})`, transformOrigin: 'bottom center', transition: 'transform .15s ease, opacity .15s ease' }}><GHudSkill icon={pv[0]} main size={66} label="Sample button" onPress={() => {}} /></div>
         <div style={{ opacity: 1 - v.see, transform: `scale(${v.size})`, transformOrigin: 'bottom center', transition: 'transform .15s ease, opacity .15s ease' }}><GHudSkill icon={pv[1]} size={50} label="Sample button" cool={3} coolMax={6} onPress={() => {}} /></div>
       </div>
       <GSetRow label="Button size"><GSteps value={v.size} opts={SIZES} onPick={(x) => setCtlLook({ size: x }, g)} /></GSetRow>
       <GSetRow label="See through" sub="How clear the buttons are"><GSteps value={v.see} opts={SEES} onPick={(x) => setCtlLook({ see: x }, g)} /></GSetRow>
-      {sideways && <GSetRow label="Play sideways" sub="Turns the game without your phone setting"><GSetToggle on={v.side} label="Play sideways" onToggle={(n) => setCtlLook({ side: n }, g)} /></GSetRow>}
-      <div style={{ paddingTop: 12 }}>{SKINS[g] && SKINS[g].tac ? <GTacBtn text="Reset buttons" onPress={() => setCtlLook({ size: 1, see: 0 }, g)} /> : <GPill text="Reset buttons" color="white" small onPress={() => setCtlLook({ size: 1, see: 0 }, g)} />}</div>
+      {sideways && TOUCHY && phoneBox() && <GSetRow label="Play sideways" sub="Turns the game without your phone setting"><GSetToggle on={v.side} label="Play sideways" onToggle={(n) => setCtlLook({ side: n }, g)} /></GSetRow>}
+      <div style={{ paddingTop: 12 }}><GTacBtn text="Reset buttons" onPress={() => setCtlLook({ size: 1, see: 0 }, g)} /></div>
     </>
   );
 }
@@ -705,80 +744,225 @@ function AudioTab({ extra }) {
   );
 }
 
-const SET_ICON = { graphics: 'eye', gameplay: 'play', controls: 'hand', hud: 'target', audio: 'sound', credits: 'heart' };
-
-export function GSettings({ onClose, sideways = true, tabs = [], audioExtra = null, controlsExtra = null, first, preview, buttons = true }) {
+export function GSettings({ onClose, sideways = true, tabs = [], audioExtra = null, controlsExtra = null, first, preview, buttons = true, keys = null, layout = null, at = null }) {
   injectKitCss();
   const g = useSkin().k;
   const v = useCtlLook(g);
-  const tacOn = !!(SKINS[g] && SKINS[g].tac);
-  const all = [...tabs, { k: 'controls', label: 'Controls', body: <>{controlsExtra}{buttons && tacOn ? <GSetHead>Buttons</GSetHead> : null}{buttons ? ctlTab(g, v, sideways, preview || ['dash', 'suck']) : null}</> }, { k: 'audio', label: 'Audio', body: <>{tacOn ? <GSetHead>Volume</GSetHead> : null}<AudioTab extra={audioExtra} /></> }, { k: 'credits', label: 'Credits', body: <CreditsTab /> }];
+  const P = setPal(g);
+  const all = [...tabs, { k: 'controls', label: 'Controls', body: <>{controlsExtra}{buttons ? ctlTab(g, v, sideways, preview || ['dash', 'suck'], layout) : null}{keysPart(keys)}</> }, { k: 'audio', label: 'Audio', body: <><GSetHead>Volume</GSetHead><AudioTab extra={audioExtra} /></> }, { k: 'credits', label: 'Credits', body: <CreditsTab /> }];
   const [cur, setCur] = useState(first || all[0].k);
   const tab = all.find((t) => t.k === cur) || all[0];
-  if (tacOn) {
-    return (
+  const ins = at ? { t: at.top(0), r: at.right(0), b: at.bottom(0), l: at.left(0) } : { t: 'env(safe-area-inset-top, 0px)', r: 'env(safe-area-inset-right, 0px)', b: 'env(safe-area-inset-bottom, 0px)', l: 'env(safe-area-inset-left, 0px)' };
+  return (
+    <SetCtx.Provider value={P}>
       <div role="dialog" aria-label="Settings" onPointerDown={(e) => e.stopPropagation()}
-        style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', background: BS.bg, color: '#FFFFFF', fontFamily: BS.font, overflow: 'hidden' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, height: 46, flexShrink: 0, paddingLeft: 'max(16px, env(safe-area-inset-left, 0px))', paddingRight: 'max(10px, env(safe-area-inset-right, 0px))', paddingTop: 'env(safe-area-inset-top, 0px)', borderBottom: '1px solid rgba(255,255,255,0.07)', boxSizing: 'content-box' }}>
-          <span style={{ fontSize: 21, fontWeight: 800, fontStyle: 'italic', letterSpacing: '0.04em' }}>Settings</span>
+        style={{ position: 'absolute', inset: 0, zIndex: 80, display: 'flex', flexDirection: 'column', background: P.bg, color: '#FFFFFF', fontFamily: P.font, overflow: 'hidden', animation: 'zgk-in 0.16s ease-out' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, height: 46, flexShrink: 0, paddingLeft: `max(16px, ${ins.l})`, paddingRight: `max(10px, ${ins.r})`, paddingTop: ins.t, borderBottom: '1px solid rgba(255,255,255,0.07)', boxSizing: 'content-box' }}>
+          <span style={{ fontSize: 21, fontWeight: P.round ? 900 : 800, fontStyle: P.round ? 'normal' : 'italic', letterSpacing: P.round ? '0' : '0.04em' }}>Settings</span>
           <span style={{ flex: 1 }} />
           <button type="button" aria-label="Close settings" className="zgk-btn" {...pressProps(() => { kitTap(); onClose(); })}
-            style={{ width: 34, height: 34, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, border: 'none', borderRadius: 0, background: 'rgba(255,255,255,0.06)', boxShadow: `inset 0 0 0 1px ${BS.edge}`, cursor: 'pointer' }}>
+            style={{ width: 34, height: 34, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, border: 'none', borderRadius: P.round ? 17 : 0, background: 'rgba(255,255,255,0.08)', boxShadow: `inset 0 0 0 1px ${P.edge}`, cursor: 'pointer' }}>
             <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M2 2l10 10M12 2L2 12" stroke="#FFFFFF" strokeWidth="2.2" strokeLinecap="round" /></svg>
           </button>
         </div>
         <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
           <div role="tablist" aria-label="Settings sections" aria-orientation="vertical"
-            style={{ width: 128, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 4, padding: '10px 0', paddingLeft: 'env(safe-area-inset-left, 0px)', background: BS.rail, overflowY: 'auto', scrollbarWidth: 'none', boxSizing: 'content-box' }}>
+            style={{ width: 128, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 4, padding: '10px 0', paddingLeft: ins.l, background: P.rail, overflowY: 'auto', scrollbarWidth: 'none', boxSizing: 'content-box' }}>
             {all.map((t) => {
               const on = t.k === tab.k;
               return (
                 <button key={t.k} type="button" role="tab" aria-selected={on} className="zgk-btn" {...pressProps(() => { if (on) return; kitTap(); setCur(t.k); })}
-                  style={{ flexShrink: 0, height: 40, padding: '0 14px 0 16px', border: 'none', borderRadius: 0, textAlign: 'left', cursor: 'pointer', fontFamily: BS.font, fontSize: 14, fontWeight: 800, letterSpacing: '0.01em', color: on ? BS.ink : 'rgba(214,220,240,0.7)', background: on ? BS.yel : 'transparent', clipPath: on ? 'polygon(0 0, 100% 0, 100% 100%, 10px 100%)' : 'none', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  style={{ flexShrink: 0, height: 40, padding: '0 14px 0 16px', marginRight: P.round ? 8 : 0, border: 'none', borderRadius: P.round ? '0 12px 12px 0' : 0, textAlign: 'left', cursor: 'pointer', fontFamily: P.font, fontSize: 14, fontWeight: P.round ? 900 : 800, letterSpacing: '0.01em', color: on ? P.ink : 'rgba(255,255,255,0.72)', background: on ? P.yel : 'transparent', clipPath: on && !P.round ? 'polygon(0 0, 100% 0, 100% 100%, 10px 100%)' : 'none', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {t.label}
                 </button>
               );
             })}
           </div>
           <div role="tabpanel" aria-label={tab.label}
-            style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: '4px 16px 18px 14px', paddingRight: 'max(16px, env(safe-area-inset-right, 0px))', paddingBottom: 'max(18px, env(safe-area-inset-bottom, 0px))', touchAction: 'pan-y' }}>
+            style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: '4px 16px 18px 14px', paddingRight: `max(16px, ${ins.r})`, paddingBottom: `max(18px, ${ins.b})`, touchAction: 'pan-y' }}>
             {tab.body}
           </div>
         </div>
       </div>
-    );
-  }
-  return (
-    <div role="dialog" aria-label="Settings" onPointerDown={(e) => e.stopPropagation()}
-      style={{ width: 'min(780px, 100%)', height: 'min(560px, 100%)', display: 'flex', flexDirection: 'column', borderRadius: 14, overflow: 'hidden', background: 'rgba(14,17,22,0.97)', boxShadow: '0 18px 50px rgba(0,0,0,0.55), inset 0 0 0 1px rgba(255,255,255,0.08)', color: '#FFFFFF', fontFamily: FONT, animation: 'zgk-pop 0.2s ease-out', boxSizing: 'border-box' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px 10px 16px', borderBottom: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
-        <span style={{ flex: 1, fontSize: 18, fontWeight: 900 }}>Settings</span>
-        <GHudBtn icon="close" size={36} label="Close settings" onPress={onClose} />
-      </div>
-      <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
-        <div role="tablist" aria-label="Settings sections" style={{ width: 'clamp(104px, 22%, 160px)', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 2, padding: '8px 6px', borderRight: '1px solid rgba(255,255,255,0.08)', overflowY: 'auto' }}>
-          {all.map((t) => {
-            const on = t.k === tab.k;
-            return (
-              <button key={t.k} type="button" role="tab" aria-selected={on} className="zgk-btn" {...pressProps(() => { kitTap(); setCur(t.k); })}
-                style={{ display: 'flex', alignItems: 'center', gap: 9, minHeight: 42, padding: '0 10px', border: 'none', borderRadius: 9, cursor: 'pointer', fontFamily: FONT, fontSize: 13.5, fontWeight: 800, textAlign: 'left', color: on ? '#FFFFFF' : 'rgba(255,255,255,0.6)', background: on ? 'rgba(255,255,255,0.09)' : 'transparent', boxShadow: on ? 'inset 3px 0 0 #FFC23D' : 'none' }}>
-                <GIcon k={t.icon || SET_ICON[t.k] || 'gear'} size={17} color={on ? '#FFC23D' : 'rgba(255,255,255,0.6)'} line halo={false} stroke={2.2} />
-                <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.label}</span>
-              </button>
-            );
-          })}
-        </div>
-        <div role="tabpanel" aria-label={tab.label} style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: '6px 18px 16px', touchAction: 'pan-y' }}>
-          <div style={{ fontSize: 15, fontWeight: 900, padding: '8px 0 4px', color: 'rgba(255,255,255,0.92)' }}>{tab.label}</div>
-          {tab.body}
-        </div>
-      </div>
-    </div>
+    </SetCtx.Provider>
   );
 }
 
-export function GControlsPanel({ onClose, sideways, tabs, first }) {
-  return <GSettings onClose={onClose} sideways={sideways} tabs={tabs || []} first={first} />;
+const layNow = {};
+const laySubs = new Set();
+const layKey = (g) => `zchat-hudlay-${g}`;
+function layRead(g) {
+  if (!layNow[g]) {
+    let saved = {};
+    try { const o = JSON.parse(localStorage.getItem(layKey(g)) || '{}'); if (o && typeof o === 'object') saved = o; } catch {}
+    layNow[g] = { saved, draft: null };
+  }
+  return layNow[g];
+}
+function layPing(g) { laySubs.forEach((f) => { try { f(g); } catch {} }); }
+export function layLive(g) { const L = layRead(g); return L.draft || L.saved; }
+export function useHudLay(g) {
+  const [, setT] = useState(0);
+  useEffect(() => { const f = (k) => { if (k === g) setT((t) => t + 1); }; laySubs.add(f); return () => { laySubs.delete(f); }; }, [g]);
+  const L = layRead(g);
+  return { lay: L.draft || L.saved, editing: !!L.draft };
+}
+export function hudT(lay, k) {
+  const v = lay && lay[k];
+  if (!v) return null;
+  const o = {};
+  if (v.dx || v.dy) o.translate = `${Math.round(v.dx || 0)}px ${Math.round(v.dy || 0)}px`;
+  if (v.s && Math.abs(v.s - 1) > 0.001) o.scale = String(Math.round(v.s * 100) / 100);
+  return o;
+}
+export function layOpen(g) { const L = layRead(g); L.draft = JSON.parse(JSON.stringify(L.saved || {})); layPing(g); }
+function layDraft(g, fn) { const L = layRead(g); L.draft = fn(L.draft || {}); layPing(g); }
+export function layEnd(g, save) {
+  const L = layRead(g);
+  if (save && L.draft) {
+    const out = {};
+    for (const [k, v] of Object.entries(L.draft)) if (v && (Math.round(v.dx || 0) || Math.round(v.dy || 0) || Math.abs((v.s || 1) - 1) > 0.001)) out[k] = { dx: Math.round(v.dx || 0), dy: Math.round(v.dy || 0), s: Math.round((v.s || 1) * 100) / 100 };
+    L.saved = out;
+    try { localStorage.setItem(layKey(g), JSON.stringify(out)); } catch {}
+  }
+  L.draft = null;
+  layPing(g);
+}
+export function layReset(g) { const L = layRead(g); L.saved = {}; L.draft = L.draft ? {} : null; try { localStorage.removeItem(layKey(g)); } catch {} layPing(g); }
+export function layCount(g) { return Object.keys(layRead(g).saved || {}).length; }
+
+export function GLayoutRow({ g, onOpen }) {
+  const { lay } = useHudLay(g);
+  const n = Object.keys(lay || {}).length;
+  return (
+    <>
+      <GSetHead>Button layout</GSetHead>
+      <GSetRow label="Move and resize buttons" sub={n ? `${n === 1 ? 'One button' : `${n} buttons`} moved` : 'Drag any button to where your thumbs rest'}>
+        <span style={{ display: 'inline-flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          {n > 0 && <GTacBtn text="Reset" onPress={() => layReset(g)} />}
+          <GTacBtn text="Customize" tone="acc" onPress={onOpen} />
+        </span>
+      </GSetRow>
+    </>
+  );
+}
+
+export function GHudEditor({ g, stageRef, side, W, H, onClose, at }) {
+  injectKitCss();
+  const P = setPal(g);
+  const [boxes, setBoxes] = useState([]);
+  const [sel, setSel] = useState(null);
+  const drag = useRef(null);
+  const { lay } = useHudLay(g);
+  useEffect(() => {
+    const st = stageRef.current;
+    if (st) st.setAttribute('data-hud-edit', '1');
+    let raf = 0, last = '';
+    const tick = () => {
+      raf = requestAnimationFrame(tick);
+      const root = stageRef.current;
+      if (!root) return;
+      const R = root.getBoundingClientRect();
+      const out = [];
+      root.querySelectorAll('[data-hud]').forEach((el) => {
+        const r = el.getBoundingClientRect();
+        if (r.width < 2 || r.height < 2) return;
+        const x = side ? r.top - R.top : r.left - R.left;
+        const y = side ? R.right - r.right : r.top - R.top;
+        const w = side ? r.height : r.width, h = side ? r.width : r.height;
+        out.push({ k: el.getAttribute('data-hud'), n: el.getAttribute('data-hud-name') || '', z: el.getAttribute('data-hud-zone') || '', x: Math.round(x), y: Math.round(y), w: Math.round(w), h: Math.round(h) });
+      });
+      const key = out.map((b) => `${b.k}:${b.x},${b.y},${b.w},${b.h}`).join('|');
+      if (key !== last) { last = key; setBoxes(out); }
+    };
+    raf = requestAnimationFrame(tick);
+    return () => { cancelAnimationFrame(raf); if (st) st.removeAttribute('data-hud-edit'); };
+  }, [side]);
+  const elOf = (k) => { const root = stageRef.current; return root ? root.querySelector(`[data-hud="${k}"]`) : null; };
+  const down = (e, b) => {
+    e.stopPropagation(); e.preventDefault();
+    setSel(b.k);
+    const el = elOf(b.k);
+    const v = { dx: 0, dy: 0, s: 1, ...((layLive(g) || {})[b.k] || {}) };
+    const k = el && el.offsetWidth ? b.w / (el.offsetWidth * (v.s || 1)) : 1;
+    drag.current = { id: e.pointerId, k: b.k, x0: e.clientX, y0: e.clientY, v, b, f: k > 0.05 ? k : 1 };
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+  };
+  const move = (e) => {
+    const D = drag.current;
+    if (!D || D.id !== e.pointerId) return;
+    const cx = e.clientX - D.x0, cy = e.clientY - D.y0;
+    let lx = side ? cy : cx, ly = side ? -cx : cy;
+    const x0 = D.b.z === 'r' ? W / 2 : 0, x1 = D.b.z === 'l' ? W / 2 : W;
+    lx = clampN(lx, Math.min(0, x0 - D.b.x), Math.max(0, x1 - D.b.x - D.b.w));
+    ly = clampN(ly, Math.min(0, -D.b.y), Math.max(0, H - D.b.y - D.b.h));
+    layDraft(g, (d) => ({ ...d, [D.k]: { ...D.v, dx: D.v.dx + lx / D.f, dy: D.v.dy + ly / D.f } }));
+  };
+  const up = (e) => { const D = drag.current; if (D && D.id === e.pointerId) drag.current = null; };
+  const cur = sel ? { dx: 0, dy: 0, s: 1, ...((lay || {})[sel] || {}) } : null;
+  const size = (d) => { if (!sel) return; kitTap('toggle'); layDraft(g, (o) => { const v = { dx: 0, dy: 0, s: 1, ...(o[sel] || {}) }; return { ...o, [sel]: { ...v, s: clampN(Math.round(((v.s || 1) + d) * 10) / 10, 0.6, 1.6) } }; }); };
+  const selName = sel ? ((boxes.find((b) => b.k === sel) || {}).n || 'Button') : '';
+  const bar = { display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: P.round ? 14 : 4, background: 'rgba(6,8,14,0.86)', boxShadow: `inset 0 0 0 1px ${P.edge}, 0 6px 18px rgba(0,0,0,0.45)`, pointerEvents: 'auto' };
+  return (
+    <SetCtx.Provider value={P}>
+    <div role="dialog" aria-label="Move buttons" onPointerDown={(e) => { e.stopPropagation(); if (e.target === e.currentTarget) setSel(null); }} onPointerMove={move} onPointerUp={up} onPointerCancel={up}
+      style={{ position: 'absolute', inset: 0, zIndex: 85, touchAction: 'none', fontFamily: P.font, color: '#FFFFFF', userSelect: 'none', WebkitUserSelect: 'none' }}>
+      {boxes.map((b) => {
+        const on = sel === b.k;
+        return (
+          <div key={b.k} role="button" aria-label={`Move ${b.n || 'button'}`} onPointerDown={(e) => down(e, b)}
+            style={{ position: 'absolute', left: b.x - 4, top: b.y - 4, width: b.w + 8, height: b.h + 8, boxSizing: 'border-box', borderRadius: P.round ? 14 : 4, border: `2px ${on ? 'solid' : 'dashed'} ${on ? P.yel : 'rgba(255,255,255,0.75)'}`, background: on ? 'rgba(255,210,63,0.16)' : 'rgba(255,255,255,0.06)', cursor: 'grab', touchAction: 'none' }}>
+            {b.n && <span style={{ position: 'absolute', left: '50%', top: -20, transform: 'translateX(-50%)', padding: '1px 7px', borderRadius: 8, background: on ? P.yel : 'rgba(6,8,14,0.8)', color: on ? P.ink : '#FFFFFF', fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap', pointerEvents: 'none' }}>{b.n}</span>}
+          </div>
+        );
+      })}
+      <div style={{ position: 'absolute', left: 0, right: 0, top: at ? at.top(10) : 'max(10px, env(safe-area-inset-top, 0px))', display: 'flex', justifyContent: 'center', pointerEvents: 'none', padding: '0 12px' }}>
+        <div style={bar} onPointerDown={(e) => e.stopPropagation()}>
+          {sel ? (
+            <>
+              <span style={{ fontSize: 13, fontWeight: 800, maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{selName}</span>
+              <GTacBtn text="Smaller" onPress={() => size(-0.1)} disabled={cur && cur.s <= 0.6} />
+              <span style={{ minWidth: 44, textAlign: 'center', fontSize: 13, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>{`${Math.round((cur ? cur.s : 1) * 100)}%`}</span>
+              <GTacBtn text="Bigger" onPress={() => size(0.1)} disabled={cur && cur.s >= 1.6} />
+            </>
+          ) : <span style={{ fontSize: 13, fontWeight: 800, padding: '0 4px' }}>Drag a button to move it</span>}
+          <span style={{ width: 1, alignSelf: 'stretch', background: 'rgba(255,255,255,0.16)', margin: '0 2px' }} />
+          <GTacBtn text="Reset" onPress={() => { setSel(null); layDraft(g, () => ({})); }} />
+          <GTacBtn text="Cancel" onPress={() => { layEnd(g, false); onClose(); }} />
+          <GTacBtn text="Save" tone="acc" onPress={() => { layEnd(g, true); onClose(); }} />
+        </div>
+      </div>
+    </div>
+    </SetCtx.Provider>
+  );
+}
+const clampN = (v, a, b) => (v < a ? a : v > b ? b : v);
+
+export const GFX_ITEMS = [['auto', 'Auto'], ['best', 'Best'], ['fast', 'Fast']];
+export function gfxRead(g) { try { const v = localStorage.getItem(`zchat-${g}-gfx`); return v === 'best' || v === 'fast' ? v : 'auto'; } catch { return 'auto'; } }
+export function useGfx(g, onSet) {
+  const [gfx, setG] = useState(() => gfxRead(g));
+  const pick = (k) => { setG(k); try { localStorage.setItem(`zchat-${g}-gfx`, k); } catch {} if (onSet) onSet(k); };
+  return [gfx, pick];
+}
+export function budgetFix(B, k) {
+  if (!B) return;
+  if (k === 'fast') { B.fix = 2; B.lv = 2; } else if (k === 'best') { B.fix = 0; B.lv = 0; } else { B.fix = null; B.n = 0; }
+}
+export function GGfxRow({ value, onPick }) {
+  return <GSetRow label="Graphics quality" sub="Fast helps older phones"><GSeg value={value} items={GFX_ITEMS} onPick={onPick} label="Graphics quality" /></GSetRow>;
+}
+export function useHudOpts(g, dflt) {
+  const [o, setO] = useState(() => { try { return { ...dflt, ...(JSON.parse(localStorage.getItem(`zchat-${g}-hud`) || '{}') || {}) }; } catch { return { ...dflt }; } });
+  const set = (k, v) => setO((p) => { const n = { ...p, [k]: v }; try { localStorage.setItem(`zchat-${g}-hud`, JSON.stringify(n)); } catch {} return n; });
+  return [o, set];
+}
+export function GHudRows({ opts, onSet, rows }) {
+  return <>{rows.map(([k, label, sub]) => <GSetRow key={k} label={label} sub={sub}><GSetToggle on={!!opts[k]} label={label} onToggle={(n) => onSet(k, n)} /></GSetRow>)}</>;
+}
+
+export function GControlsPanel({ onClose, sideways, tabs, first, keys, layout, at, preview, controlsExtra }) {
+  return <GSettings onClose={onClose} sideways={sideways} tabs={tabs || []} first={first} keys={keys} layout={layout} at={at} preview={preview} controlsExtra={controlsExtra} />;
 }
 
 export function useFitScale(ref, W, H, cap = 1) {
@@ -933,6 +1117,7 @@ export function maxDpr(low) {
 export const weakPhone = () => { try { return (navigator.hardwareConcurrency || 4) <= 4 || (navigator.deviceMemory || 4) <= 3; } catch { return false; } };
 export function newBudget() { return { avg: 16, n: 0, lv: weakPhone() ? 1 : 0 }; }
 export function budgetTick(B, dt) {
+  if (B.fix != null) { B.lv = B.fix; return maxDpr(B.fix); }
   if (!(dt > 0)) return maxDpr(B.lv);
   B.avg = B.avg * 0.95 + Math.min(80, dt * 1000) * 0.05;
   B.n += 1;
@@ -976,7 +1161,7 @@ function iosGap() {
 export function useGameStage(look) {
   const rootRef = useRef(null);
   const box = useStageBox(rootRef);
-  const want = !!(look && look.side) && TOUCHY;
+  const want = !!(look && look.side) && TOUCHY && Math.min(box.w, box.h) < 600;
   useEffect(() => {
     const el = rootRef.current;
     if (!el || typeof document === 'undefined') return undefined;

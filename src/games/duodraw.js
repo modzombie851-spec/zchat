@@ -128,7 +128,6 @@ function drawExplorer(c, x, y, s, o) {
   if (side) { leg(-0.03 * s + stp * 0.05 * s * side, 0); leg(0.03 * s - stp * 0.05 * s * side, 0); }
   else { leg(-0.075 * s, stp > 0 ? -0.03 * s * stp : 0); leg(0.075 * s, stp < 0 ? 0.03 * s * stp : 0); }
   const bw = side ? 0.27 * s : 0.34 * s;
-  const torchSide = side || 1;
   const hx = side ? side * 0.2 * s : (back ? -0.21 * s : 0.21 * s), hy = -0.43 * s;
   const torchBehind = back;
   const drawTorch = () => {

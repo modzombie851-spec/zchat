@@ -698,7 +698,7 @@ export function playerColorKey(p, i) { return p.color || (p.kind === 'sun' || p.
 
 const kk0 = (p, mine) => p.kind === mine;
 export function render(ctx, G, V) {
-  const { cw, ch, dpr, s, ox, oy, mine, names, bubbles: bb, parts, hidden, look } = V;
+  const { cw, ch, dpr, s, ox, oy, mine, names, bubbles: bb, parts, hidden } = V;
   const c = ctx, t = G.t;
   const me = G.pl[mine] || G.pl[G.order[0]];
   c.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -723,7 +723,6 @@ export function render(ctx, G, V) {
       const frame = Math.floor((t * (f.chase ? 14 : 7) + f.id * 0.37) % 4);
       const open = f.hunter ? (f.eat > 0.22 ? 0 : f.chase || f.warn > 0 ? 1 : f.eat > 0 ? 0.5 : 0) : 0;
       const spr = spriteFor(`n${f.sp}.${f.pv}`, S.shape, S.pal[f.pv] || S.pal[0], S, frame, open, f.puff > 0.4);
-      const sc = r / K * K;
       c.save(); c.translate(x, y);
       if (S.shape !== 'jelly') { c.rotate(f.a); if (Math.cos(f.a) < 0) c.scale(1, -1); }
       const fade = f.born != null ? clamp((t - f.born) / 0.7, 0, 1) : 1;

@@ -1201,7 +1201,6 @@ function liveStickerList() {
 }
 
 export function LiveGamePage({ initial, me, peer, myId, onClose, onSaveState, onRematch, onPeerAway }) {
-  const { theme } = useTheme();
   const [st, setSt] = useState(initial);
   const isHost = st.x === myId;
   const kind = st.g;

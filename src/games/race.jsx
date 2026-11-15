@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Avatar, Portal, useBackClose, FONT, Spinner } from '../App.jsx';
 import { useRoomLink } from './relay.jsx';
 import { EMOTES, Sheet, injectCss, useGameChat, ChatSheet } from './livekit.jsx';
-import { GBtn, GPill, GPanel, GChip, GTitle, GIcon, GHudBtn, GHudPanel, GNotices, useNotices, useWatchNotices, injectKitCss, kitTap, pressProps, maxDpr, INK, useCtlLook, useGameStage, GControlsPanel, GVolBars, GLobby, GSlot, GLobbySheet, GSwitchRow, GSeg , GTalkers, GWatchBar, GSkin, GChatFeed, useChatFeed, GJoinAsks, GSetRow } from './gamekit.jsx';
+import { GBtn, GPill, GPanel, GChip, GTitle, GIcon, GHudBtn, GHudPanel, GNotices, useNotices, useWatchNotices, injectKitCss, kitTap, pressProps, maxDpr, INK, useCtlLook, useGameStage, GControlsPanel, GVolBars, GLobby, GSlot, GLobbySheet, GSwitchRow, GSeg , GTalkers, GWatchBar, GSkin, GChatFeed, useChatFeed, GJoinAsks, GSetRow , useHudOpts, GHudRows, GSetToggle, GSetHead, TOUCHY, useHudLay, hudT, layOpen, layEnd, GLayoutRow, GHudEditor} from './gamekit.jsx';
 import { Sfx } from './sfx.js';
 import { setWatchAllowed, useLiveBeacon, useGamePrivacy, useJoinAsks } from './live.js';
 import { createRenderer, m4, MeshBuilder } from './race3d.js';
@@ -16,6 +16,7 @@ import { CARS, CAR_KEYS, COLORS, BOT_NAMES, MAX_RACERS, LAPS, SKILLS, SKILL_KEYS
 import { useTalking } from './talk.js';
 import { mkNet, netPush, netRead } from './netlerp.js';
 
+const RACE_KEYS = [['A or Left', 'Steer left'], ['D or Right', 'Steer right'], ['W or Up or B', 'Nitro'], ['S or Down or Space or Shift', 'Brake, hold while steering to drift'], ['1 2 3 4', 'Skills'], ['Esc', 'Pause or leave']];
 const CAR_PREF = 'zchat-race-car';
 const TILT_PREF = 'zchat-race-tilt';
 const MAP_PREF = 'zchat-race-map';
@@ -216,6 +217,10 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
   const allowWatch = gamePriv.show && gamePriv.watch;
   const setAllowWatch = () => {};
   const [tilt, setTilt] = useState(() => readPref(TILT_PREF, '0') === '1');
+  const [hudO, setHudO] = useHudOpts('rally', { map: true, list: true, tags: true, mph: false, shake: true });
+  const [layEd, setLayEd] = useState(false);
+  const hudLay = useHudLay('rally');
+  const hudORef = useRef(hudO); hudORef.current = hudO;
   const [thumbs, setThumbs] = useState({});
   const [bubbles, setBubbles] = useState({});
   const [failed, setFailed] = useState(false);
@@ -1365,7 +1370,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
         const backD = 7.2 + sp * 0.8, up = 2.65;
         camPos = [Cm.x - fxv * backD, Cm.y + up, Cm.z - fzv * backD];
         camAt = [Cm.x + fxv * 9, Cm.y + 1.05, Cm.z + fzv * 9];
-        if (g.shake > 0) { g.shake = Math.max(0, g.shake - dt); const s2 = g.shake * 0.35; camPos[0] += (Math.random() - 0.5) * s2; camPos[1] += (Math.random() - 0.5) * s2; }
+        if (g.shake > 0) { g.shake = Math.max(0, g.shake - dt); const s2 = hudORef.current.shake === false ? 0 : g.shake * 0.35; camPos[0] += (Math.random() - 0.5) * s2; camPos[1] += (Math.random() - 0.5) * s2; }
         fov = 0.98 + sp * 0.12 + (c.boostT > 0 ? 0.08 : 0);
         g.fovNow = (g.fovNow || fov) + (fov - (g.fovNow || fov)) * Math.min(1, dt * 3);
         fov = g.fovNow;
@@ -1402,7 +1407,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
         el.style.transform = `translate(${((q[0] * 0.5 + 0.5) * W2).toFixed(1)}px, ${((1 - (q[1] * 0.5 + 0.5)) * H2).toFixed(1)}px) translate(-50%, -100%) scale(${clamp(16 / Math.max(6, d), 0.62, 1).toFixed(2)})`;
       }
       const kmh = Math.round((mineC && playing ? mineC.v : 0) * 3.6);
-      if (speedRef.current) speedRef.current.textContent = String(kmh);
+      if (speedRef.current) speedRef.current.textContent = String(hudORef.current.mph ? Math.round(kmh * 0.6214) : kmh);
       if (gaugeRef.current) gaugeRef.current.setAttribute('stroke-dasharray', `${(clamp(kmh / 240, 0, 1) * 172).toFixed(1)} 400`);
       if (meterRef.current && mineC) {
         const m = mineC.boostT > 0 ? 1 : mineC.meter;
@@ -1455,7 +1460,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
 
   const finish = () => { const g = G.current; if (g.eng) { g.eng.stop(); g.eng = null; } if (g.siren) { g.siren.stop(); g.siren = null; } Sfx.stopAll(); onClose(); };
   const leave = () => { if ((phase === 'race' || phase === 'count') && !solo && !watch) { setLeaveAsk(true); return; } finish(); };
-  useBackClose(true, () => { if (chatOpen) setChatOpen(false); else if (ctl) setCtl(false); else if (optSheet) setOptSheet(false); else if (mapSheet) setMapSheet(false); else if (people) setPeople(false); else if (quick) setQuick(false); else if (leaveAsk) setLeaveAsk(false); else if (paused) setPaused(false); else if (phase === 'race' && solo) setPaused(true); else leave(); });
+  useBackClose(true, () => { if (layEd) { layEnd('rally', false); setLayEd(false); setCtl(true); } else if (chatOpen) setChatOpen(false); else if (ctl) setCtl(false); else if (optSheet) setOptSheet(false); else if (mapSheet) setMapSheet(false); else if (people) setPeople(false); else if (quick) setQuick(false); else if (leaveAsk) setLeaveAsk(false); else if (paused) setPaused(false); else if (phase === 'race' && solo) setPaused(true); else leave(); });
   const sendEmote = (e) => { setBubbles((p) => ({ ...p, [kindOf()]: { e, at: Date.now() } })); if (!solo) relay.send('emo', { e }); setQuick(false); Sfx.play('pop', { vol: 0.5 }); };
   useEffect(() => {
     const keysB = Object.keys(bubbles);
@@ -1472,9 +1477,10 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
     hold.current[k] = on;
     setPressed((p) => (p[k] === on ? p : { ...p, [k]: on }));
   };
+  const ZN = { l: 'Steer left', r: 'Steer right', d: 'Brake', b: 'Nitro' };
   const zone = (k, label, style, children) => (
-    <div role="button" aria-label={label} onPointerDown={press(k, true)} onPointerUp={press(k, false)} onPointerCancel={press(k, false)} onLostPointerCapture={press(k, false)} onContextMenu={(e) => e.preventDefault()}
-      style={{ position: 'absolute', display: 'flex', alignItems: 'center', justifyContent: 'center', touchAction: 'none', cursor: 'pointer', opacity: 1 - look.see, transition: 'transform 0.06s', zIndex: 4, ...style, transform: `scale(${look.size * (pressed[k] ? 0.94 : 1)})` }}>
+    <div role="button" aria-label={label} data-hud={k} data-hud-name={ZN[k] || label} onPointerDown={press(k, true)} onPointerUp={press(k, false)} onPointerCancel={press(k, false)} onLostPointerCapture={press(k, false)} onContextMenu={(e) => e.preventDefault()}
+      style={{ position: 'absolute', display: 'flex', alignItems: 'center', justifyContent: 'center', touchAction: 'none', cursor: 'pointer', opacity: 1 - look.see, transition: 'transform 0.06s', zIndex: 4, ...style, ...hudT(hudLay.lay, k), transform: `scale(${look.size * (pressed[k] ? 0.94 : 1)})` }}>
       {children}
     </div>
   );
@@ -1498,6 +1504,52 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
   const micOf = (k) => (k === kindOf() ? relay.mic.on : !!relay.mics[k]);
   const meCar = g0.cars[kindOf()];
   const attackNow = phase !== 'menu' && (skillMode(g0.mode) || !!(meCar && meCar.cop)) && !hud.busted;
+  const ctlBlock = () => (
+    <>
+      {!tilt && zone('l', 'Steer left', { left: left(16), bottom: bottom(16), width: 88, height: 88, borderRadius: 26, background: pressed.l ? 'rgba(255,255,255,0.3)' : 'rgba(14,17,22,0.42)', boxShadow: 'inset 0 0 0 1.8px rgba(255,255,255,0.62)', transformOrigin: '0 100%' }, <SteerArrow dir="l" on={false} />)}
+      {!tilt && zone('r', 'Steer right', { left: left(116), bottom: bottom(16), width: 88, height: 88, borderRadius: 26, background: pressed.r ? 'rgba(255,255,255,0.3)' : 'rgba(14,17,22,0.42)', boxShadow: 'inset 0 0 0 1.8px rgba(255,255,255,0.62)', transformOrigin: '0 100%' }, <SteerArrow dir="r" on={false} />)}
+      {zone('d', 'Brake, hold while steering to drift', { right: right(122), bottom: bottom(14), width: 70, height: 104, borderRadius: 18, background: pressed.d ? 'rgba(255,255,255,0.3)' : hud.drift ? 'rgba(255,194,61,0.3)' : 'rgba(14,17,22,0.42)', boxShadow: `inset 0 0 0 1.8px ${hud.drift ? 'rgba(255,194,61,0.98)' : 'rgba(255,255,255,0.62)'}${hud.drift ? ', 0 0 14px rgba(255,194,61,0.6)' : ''}`, flexDirection: 'column', gap: 4, transformOrigin: '100% 100%' }, (
+        <>
+          <PedalArt drift={!!hud.drift} />
+          <span style={{ fontSize: 11.5, fontWeight: 900, color: hud.drift ? '#FFD84E' : '#FFFFFF', letterSpacing: '0.02em' }}>{hud.drift ? 'Drift' : 'Brake'}</span>
+        </>
+      ))}
+      {zone('b', 'Nitro', { right: right(16), bottom: bottom(14), width: 96, height: 96, borderRadius: '50%', transformOrigin: '100% 100%' }, (
+        <>
+          <svg width="96" height="96" viewBox="0 0 96 96" style={{ position: 'absolute', inset: 0, transform: 'rotate(-90deg)' }} aria-hidden="true"><circle cx="48" cy="48" r="46.8" fill={pressed.b ? 'rgba(255,255,255,0.28)' : 'rgba(14,17,22,0.4)'} stroke="rgba(255,255,255,0.62)" strokeWidth="2.2" /><circle cx="48" cy="48" r="41" fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="4" /><circle ref={meterRef} cx="48" cy="48" r="41" fill="none" stroke="#FFC23D" strokeWidth="4" strokeLinecap="round" strokeDasharray="0 400" /></svg>
+          <span style={{ position: 'absolute', inset: 19, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <NitroIcon size={44} />
+          </span>
+        </>
+      ))}
+      {(attackNow || (layEd && skillMode(mode))) && (
+        <>
+          <div style={{ position: 'absolute', right: right(16), bottom: bottom(216), width: 270, display: 'flex', alignItems: 'center', gap: 8, zIndex: 4, pointerEvents: 'none', opacity: 1 - look.see * 0.6, transform: `scale(${look.size})`, transformOrigin: '100% 100%' }}>
+            <GIcon k="bolt" size={15} color="#5BF0C2" ink="rgba(0,0,0,0.3)" />
+            <div style={{ flex: 1, height: 11, borderRadius: 6, background: 'rgba(10,14,26,0.6)', boxShadow: 'inset 0 0 0 1.5px rgba(255,255,255,0.35)', overflow: 'hidden', position: 'relative' }}>
+              <div ref={enRef} style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '40%', borderRadius: 6, background: 'linear-gradient(90deg, #1FBF8F, #5BF0C2)' }} />
+              {[25, 50, 75].map((p) => <span key={p} style={{ position: 'absolute', left: `${p}%`, top: 2, bottom: 2, width: 1.5, background: 'rgba(10,14,26,0.5)' }} />)}
+            </div>
+            <span ref={enTxtRef} style={{ width: 26, fontSize: 12.5, fontWeight: 900, fontVariantNumeric: 'tabular-nums', textAlign: 'right', textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}>0</span>
+          </div>
+          <div data-hud="skills" data-hud-name="Skills" style={{ position: 'absolute', right: right(16), bottom: bottom(126), display: 'flex', alignItems: 'flex-end', gap: 10, zIndex: 4, transform: `scale(${look.size})`, transformOrigin: '100% 100%', opacity: 1 - look.see * 0.6, ...hudT(hudLay.lay, 'skills') }}>
+            {hudKit.map((k, i) => {
+              const S0 = SKILLS[k];
+              if (!S0) return null;
+              const cd = hud.cd[k] || 0;
+              const okEn = hud.en >= S0.cost;
+              return (
+                <div key={k} style={{ marginBottom: [0, 10, 16, 18][i] || 0 }}>
+                  <GSkill icon={raceGlyph(k)} label={`${S0.name}, uses ${S0.cost} energy`} size={62} cool={cd} coolMax={S0.cd} accent="#FFC23D" badge={S0.cost} disabled={!okEn} onPress={() => { G.current.skillQ.push(k); }} />
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </>
+  
+  );
   const hudKit = hud.kit || (meCar && meCar.kit) || kit;
   const bestLap = Number(readPref(BEST_KEY(uid, mapKey), '0'));
   const hostName = names[room && room.host] || 'The host';
@@ -1513,7 +1565,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
         <>
           {!solo && !watch && <GBtn icon="chat" color="dark" size={42} fast={false} label="Chat" badge={chatNew || null} onPress={() => { setChatNew(0); setChatOpen(true); }} />}
           {!solo && isHost && !watch && <GBtn icon={allowWatch ? 'eye' : 'eyeoff'} color={allowWatch ? 'blue' : 'dark'} size={42} fast={false} label={allowWatch ? 'Friends can watch. Tap to stop' : 'Let friends watch'} badge={watchers.length || null} onPress={toggleWatchR} />}
-          {!watch && <GBtn icon="gear" color="dark" size={42} fast={false} label="Race settings" onPress={() => setOptSheet(true)} />}
+          {!watch && <GBtn icon="gear" color="dark" size={42} fast={false} label={isHost ? 'Race settings' : 'Settings'} onPress={() => (isHost ? setOptSheet(true) : setCtl(true))} />}
         </>
       )}
       side={(
@@ -1620,12 +1672,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
             )}
             {isHost && !solo && <GSwitchRow label="Fill empty spots with bots" on={fill} onToggle={() => setFill((v) => !v)} />}
             {isHost && mode !== 'pursuit' && <GSwitchRow label="Police chase the racers" on={copsOn} onToggle={() => { kitTap(); setCopsOn((v) => { savePref(COPS_PREF, v ? '0' : '1'); return !v; }); }} />}
-            <GSwitchRow label="Tilt your phone to steer" on={tilt} onToggle={toggleTilt} />
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontSize: 14.5, fontWeight: 900, flex: 1 }}>Graphics</span>
-              <div style={{ width: 200 }}><Seg value={gfx} items={GFX} onPick={pickGfx} /></div>
-            </div>
-            <GPill text="Buttons and sound" icon="gear" color="white" small wide onPress={() => { setOptSheet(false); setCtl(true); }} />
+            <GPill text="Settings" icon="gear" color="white" small wide onPress={() => { setOptSheet(false); setCtl(true); }} />
           </div>
         </GLobbySheet>
       )}
@@ -1641,12 +1688,12 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
             {(phase === 'menu' ? [] : raceIds).map((k) => (
               <div key={k} ref={(el) => { tagRefs.current[k] = el; }} style={{ position: 'absolute', left: 0, top: 0, opacity: 0, transformOrigin: '50% 100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, willChange: 'transform' }}>
                 {bubbles[k] && <span style={{ fontSize: 26, lineHeight: 1, animation: 'zgk-pop 0.25s ease-out' }}>{bubbles[k].e}</span>}
-                <span style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 9px 3px 6px', borderRadius: 11, background: 'rgba(10,14,26,0.66)', fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap' }}>
+                {hudO.tags && <span style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 9px 3px 6px', borderRadius: 11, background: 'rgba(10,14,26,0.66)', fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap' }}>
                   {G.current.cars[k] && G.current.cars[k].cop ? <span style={{ display: 'flex', gap: 2 }}><span style={{ width: 7, height: 7, borderRadius: 4, background: '#FF3B3B' }} /><span style={{ width: 7, height: 7, borderRadius: 4, background: '#3B7BFF' }} /></span> : <span style={{ width: 9, height: 9, borderRadius: 5, background: slotColor(k), boxShadow: '0 0 0 1.5px #FFFFFF' }} />}
                   {nameOf(k)}
                   {G.current.cars[k] && G.current.cars[k].busted ? <span style={{ fontSize: 10.5, fontWeight: 900, color: '#FF8A8A' }}>Busted</span> : null}
                   {micOf(k) && !relay.muted[k] && <GIcon k="mic" size={12} color="#7BE05A" ink="rgba(0,0,0,0.3)" />}
-                </span>
+                </span>}
               </div>
             ))}
           </div>
@@ -1674,7 +1721,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
                   <GHudPanel style={{ height: 24, padding: '0 9px', display: 'flex', alignItems: 'center', fontSize: 12, fontWeight: 900, whiteSpace: 'nowrap' }}>{`Lap ${hud.lap} of ${laps}`}</GHudPanel>
                   <GHudPanel style={{ height: 24, padding: '0 9px', display: 'flex', alignItems: 'center', fontSize: 12, fontWeight: 900, fontVariantNumeric: 'tabular-nums' }}>{fmtRace(phase === 'count' ? 0 : hud.time)}</GHudPanel>
                 </div>
-                {land && listOrder.map((k) => (
+                {land && hudO.list && listOrder.map((k) => (
                   <GHudPanel key={k} style={{ height: 21, padding: '0 8px', display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap', background: k === kindOf() ? 'rgba(255,194,61,0.92)' : undefined, color: k === kindOf() ? INK : '#FFFFFF', textShadow: k === kindOf() ? 'none' : undefined, minWidth: 92 }}>
                     <span style={{ width: 10, fontVariantNumeric: 'tabular-nums' }}>{fullOrder.indexOf(k) + 1}</span>
                     <span style={{ width: 9, height: 9, borderRadius: 5, background: slotColor(k), boxShadow: '0 0 0 1.4px #FFFFFF' }} />
@@ -1685,7 +1732,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
               </div>
               <div style={{ position: 'absolute', right: right(10), top: top(8), display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 7, zIndex: 3 }}>
                 <div style={{ display: 'flex', gap: 6 }}>{rowBtns}</div>
-                <canvas ref={miniRef} aria-hidden="true" width={240} height={150} style={{ width: 120, height: 75, borderRadius: 12, background: 'rgba(10,14,26,0.45)', pointerEvents: 'none' }} />
+                {hudO.map && <canvas ref={miniRef} aria-hidden="true" width={240} height={150} style={{ width: 120, height: 75, borderRadius: 12, background: 'rgba(10,14,26,0.45)', pointerEvents: 'none' }} />}
               </div>
               {phase === 'count' && (
                 <div aria-live="polite" style={{ position: 'absolute', left: '50%', top: top(14), transform: 'translateX(-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, zIndex: 4, pointerEvents: 'none' }}>
@@ -1718,55 +1765,11 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
                   </svg>
                   <div style={{ position: 'absolute', left: 0, right: 0, bottom: 6, display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1, textShadow: '0 2px 8px rgba(0,0,0,0.55)' }}>
                     <span ref={speedRef} style={{ fontSize: 30, fontWeight: 900, fontVariantNumeric: 'tabular-nums' }}>0</span>
-                    <span style={{ fontSize: 10.5, fontWeight: 800, opacity: 0.9 }}>km/h</span>
+                    <span style={{ fontSize: 10.5, fontWeight: 800, opacity: 0.9 }}>{hudO.mph ? 'mph' : 'km/h'}</span>
                   </div>
                 </div>
               )}
-              {inRace() && phase !== 'done' && !hud.fin && (
-                <>
-                  {!tilt && zone('l', 'Steer left', { left: left(16), bottom: bottom(16), width: 88, height: 88, borderRadius: 26, background: pressed.l ? 'rgba(255,255,255,0.3)' : 'rgba(14,17,22,0.42)', boxShadow: 'inset 0 0 0 1.8px rgba(255,255,255,0.62)', transformOrigin: '0 100%' }, <SteerArrow dir="l" on={false} />)}
-                  {!tilt && zone('r', 'Steer right', { left: left(116), bottom: bottom(16), width: 88, height: 88, borderRadius: 26, background: pressed.r ? 'rgba(255,255,255,0.3)' : 'rgba(14,17,22,0.42)', boxShadow: 'inset 0 0 0 1.8px rgba(255,255,255,0.62)', transformOrigin: '0 100%' }, <SteerArrow dir="r" on={false} />)}
-                  {zone('d', 'Brake, hold while steering to drift', { right: right(122), bottom: bottom(14), width: 70, height: 104, borderRadius: 18, background: pressed.d ? 'rgba(255,255,255,0.3)' : hud.drift ? 'rgba(255,194,61,0.3)' : 'rgba(14,17,22,0.42)', boxShadow: `inset 0 0 0 1.8px ${hud.drift ? 'rgba(255,194,61,0.98)' : 'rgba(255,255,255,0.62)'}${hud.drift ? ', 0 0 14px rgba(255,194,61,0.6)' : ''}`, flexDirection: 'column', gap: 4, transformOrigin: '100% 100%' }, (
-                    <>
-                      <PedalArt drift={!!hud.drift} />
-                      <span style={{ fontSize: 11.5, fontWeight: 900, color: hud.drift ? '#FFD84E' : '#FFFFFF', letterSpacing: '0.02em' }}>{hud.drift ? 'Drift' : 'Brake'}</span>
-                    </>
-                  ))}
-                  {zone('b', 'Nitro', { right: right(16), bottom: bottom(14), width: 96, height: 96, borderRadius: '50%', transformOrigin: '100% 100%' }, (
-                    <>
-                      <svg width="96" height="96" viewBox="0 0 96 96" style={{ position: 'absolute', inset: 0, transform: 'rotate(-90deg)' }} aria-hidden="true"><circle cx="48" cy="48" r="46.8" fill={pressed.b ? 'rgba(255,255,255,0.28)' : 'rgba(14,17,22,0.4)'} stroke="rgba(255,255,255,0.62)" strokeWidth="2.2" /><circle cx="48" cy="48" r="41" fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="4" /><circle ref={meterRef} cx="48" cy="48" r="41" fill="none" stroke="#FFC23D" strokeWidth="4" strokeLinecap="round" strokeDasharray="0 400" /></svg>
-                      <span style={{ position: 'absolute', inset: 19, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <NitroIcon size={44} />
-                      </span>
-                    </>
-                  ))}
-                  {attackNow && (
-                    <>
-                      <div style={{ position: 'absolute', right: right(16), bottom: bottom(216), width: 270, display: 'flex', alignItems: 'center', gap: 8, zIndex: 4, pointerEvents: 'none', opacity: 1 - look.see * 0.6, transform: `scale(${look.size})`, transformOrigin: '100% 100%' }}>
-                        <GIcon k="bolt" size={15} color="#5BF0C2" ink="rgba(0,0,0,0.3)" />
-                        <div style={{ flex: 1, height: 11, borderRadius: 6, background: 'rgba(10,14,26,0.6)', boxShadow: 'inset 0 0 0 1.5px rgba(255,255,255,0.35)', overflow: 'hidden', position: 'relative' }}>
-                          <div ref={enRef} style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '40%', borderRadius: 6, background: 'linear-gradient(90deg, #1FBF8F, #5BF0C2)' }} />
-                          {[25, 50, 75].map((p) => <span key={p} style={{ position: 'absolute', left: `${p}%`, top: 2, bottom: 2, width: 1.5, background: 'rgba(10,14,26,0.5)' }} />)}
-                        </div>
-                        <span ref={enTxtRef} style={{ width: 26, fontSize: 12.5, fontWeight: 900, fontVariantNumeric: 'tabular-nums', textAlign: 'right', textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}>0</span>
-                      </div>
-                      <div style={{ position: 'absolute', right: right(16), bottom: bottom(126), display: 'flex', alignItems: 'flex-end', gap: 10, zIndex: 4, transform: `scale(${look.size})`, transformOrigin: '100% 100%', opacity: 1 - look.see * 0.6 }}>
-                        {hudKit.map((k, i) => {
-                          const S0 = SKILLS[k];
-                          if (!S0) return null;
-                          const cd = hud.cd[k] || 0;
-                          const okEn = hud.en >= S0.cost;
-                          return (
-                            <div key={k} style={{ marginBottom: [0, 10, 16, 18][i] || 0 }}>
-                              <GSkill icon={raceGlyph(k)} label={`${S0.name}, uses ${S0.cost} energy`} size={62} cool={cd} coolMax={S0.cd} accent="#FFC23D" badge={S0.cost} disabled={!okEn} onPress={() => { G.current.skillQ.push(k); }} />
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </>
-                  )}
-                </>
-              )}
+              {inRace() && phase !== 'done' && !hud.fin && ctlBlock()}
               {!inRace() && phase !== 'done' && (
                 <div style={{ position: 'absolute', left: 0, right: 0, bottom: bottom(14), display: 'flex', justifyContent: 'center', padding: '0 14px', zIndex: 3 }}>
                   <GWatchBar ids={raceIds} cur={camK} nameOf={nameOf} colorOf={slotColor} onPick={(k) => { setFollow(k); camKRef.current = k; setCamK(k); }} />
@@ -1782,14 +1785,16 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
             </>
           )}
 
-          {lobbyUi}
+          {!layEd && lobbyUi}
+          {layEd && phase === 'menu' && ctlBlock()}
+          {layEd && <GHudEditor g="rally" stageRef={wrapRef} side={GS.side} W={GS.W} H={GS.H} at={GS.at} onClose={() => { setLayEd(false); setCtl(true); }} />}
           {phase === 'menu' && mapSheet && (
             <MapSelect value={mapKey} canPick={isHost} mode={mode} land={land} pad={`${top(10)} ${right(14)} ${bottom(10)} ${left(14)}`}
               bestOf={(k) => Number(readPref(BEST_KEY(uid, k), '0')) || 0}
               onPick={(k) => pickMap(k)} onClose={() => setMapSheet(false)} />
           )}
 
-          {paused && phase === 'race' && (
+          {paused && phase === 'race' && !layEd && (
             <div style={{ position: 'absolute', inset: 0, zIndex: 20, background: 'rgba(10,8,24,0.5)', display: 'flex', padding: 12, overflowY: 'auto', touchAction: 'pan-x pan-y' }}>
               <GPanel style={{ margin: 'auto', width: '100%', maxWidth: 320, padding: '16px', display: 'flex', flexDirection: 'column', gap: 10, animation: 'zgk-pop 0.3s ease-out', boxSizing: 'border-box' }}>
                 <GTitle text="Paused" size={28} />
@@ -1840,7 +1845,9 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
 
           {ctl && (
             <div onPointerDown={(e) => e.stopPropagation()} style={{ position: 'absolute', inset: 0, zIndex: 45, background: 'rgba(10,8,24,0.55)', display: 'flex', padding: 12, overflowY: 'auto', touchAction: 'pan-x pan-y' }}>
-              <div style={{ margin: 'auto', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><GControlsPanel sideways onClose={() => setCtl(false)} tabs={[{ k: 'graphics', label: 'Graphics', body: <GSetRow label="Graphics quality" sub="Fast helps older phones"><GSeg value={gfx} items={GFX} onPick={pickGfx} label="Graphics quality" /></GSetRow> }]} /></div>
+              <div style={{ margin: 'auto', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><GControlsPanel sideways onClose={() => setCtl(false)} at={GS.at} keys={RACE_KEYS} preview={['nitro', 'drift']} layout={!watch ? <GLayoutRow g="rally" onOpen={() => { setCtl(false); setQuick(false); setOptSheet(false); layOpen('rally'); setLayEd(true); }} /> : null}
+                controlsExtra={TOUCHY ? <><GSetHead>Steering</GSetHead><GSetRow label="Tilt to steer" sub="Tilt your phone instead of using the arrows"><GSetToggle on={tilt} label="Tilt to steer" onToggle={(n) => { if (n !== tilt) toggleTilt(); }} /></GSetRow></> : null}
+                tabs={[{ k: 'graphics', label: 'Graphics', body: <><GSetHead>Picture</GSetHead><GSetRow label="Graphics quality" sub="Fast helps older phones"><GSeg value={gfx} items={GFX} onPick={pickGfx} label="Graphics quality" /></GSetRow><GSetRow label="Camera shake" sub="Shakes the view on hits and blasts"><GSetToggle on={hudO.shake !== false} label="Camera shake" onToggle={(n) => setHudO('shake', n)} /></GSetRow></> }, { k: 'hud', label: 'HUD', body: <><GHudRows opts={hudO} onSet={setHudO} rows={[['map', 'Mini map'], ['list', 'Race order', 'The list of places on the left'], ['tags', 'Name tags', 'Names over the cars']]} /><GSetRow label="Speed"><GSeg value={hudO.mph ? 'mph' : 'kmh'} items={[['kmh', 'km/h'], ['mph', 'mph']]} onPick={(v) => setHudO('mph', v === 'mph')} label="Speed" /></GSetRow></> }]} /></div>
             </div>
           )}
           <GTalkers ids={talking} nameOf={nameOf} top={top(phase === 'count' ? 150 : 50)} />
