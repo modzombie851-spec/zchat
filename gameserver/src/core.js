@@ -1,7 +1,7 @@
 import { makeSim } from '../../src/games/zsim.js';
 import { makeBoltHost, BOLT_REV } from '../../src/games/siegehost.js';
 
-export const CAP = { siege: 20, race: 12, roll: 8, gulp: 12, duo: 2, zombie: 5 };
+export const CAP = { siege: 20, race: 12, roll: 8, gulp: 12, duo: 2, zombie: 5, hush: 4 };
 export const REGIONS = { asia: 'apac', usa: 'enam', eu: 'weur' };
 const TICK = 1 / 15;
 export const SIM_REV = 58;

@@ -315,6 +315,7 @@ export const PageCast = zLazy(() => import('./games/livecast.jsx'), 'PageCast', 
 export const RaceInviteSheet = zLazy(() => import('./games/race.jsx'), 'RaceInviteSheet', 'race');
 export const SiegeGamePage = zLazy(() => import('./games/siege.jsx'), 'SiegeGamePage', 'siege');
 export const ZombieGamePage = zLazy(() => import('./games/zombie.jsx'), 'ZombieGamePage', 'zombie');
+export const HushGamePage = zLazy(() => import('./games/hush.jsx'), 'HushGamePage', 'hush');
 export const SiegeInviteSheet = zLazy(() => import('./games/siege.jsx'), 'SiegeInviteSheet', 'siege');
 export const G1GolfPage = zLazy(() => import('./areas/games.jsx'), 'G1GolfPage', 'games');
 export const G1SudokuBoard = zLazy(() => import('./areas/games.jsx'), 'G1SudokuBoard', 'games');
@@ -5337,6 +5338,7 @@ function DmClosedBar({ name }) {
 }
 
 const HOME_FEATS = [
+  { k: 'hush', label: 'Hush', game: 'hush', live: true },
   { k: 'zombie', label: 'Zombie Junction', game: 'zombie', live: true },
   { k: 'siege', label: 'Bolt War', game: 'siege', live: true },
   { k: 'race', label: 'Island Rally', game: 'race', live: true },
@@ -18681,7 +18683,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-export const APP_VERSION = '58.1V';
+export const APP_VERSION = '58.2V';
 const WN_REV = 55;
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
@@ -36264,6 +36266,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [racePick, setRacePick] = useState(null);
   const [siegeGame, setSiegeGame] = useState(null);
   const [zombieGame, setZombieGame] = useState(null);
+  const [hushGame, setHushGame] = useState(null);
   useEffect(() => {
     if (!cloudOn()) return;
     const v = readLive(30000);
@@ -36280,10 +36283,12 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (st.g !== 'roll') setRollGame(null);
     if (st.g !== 'race') setRaceGame(null);
     if (st.g !== 'zombie') setZombieGame(null);
+    if (st.g !== 'hush') setHushGame(null);
     if (st.g === 'siege') { setSiegeGame(st.pb && st.reg ? { rm: `pub-${st.reg}-${st.pb}`, host: null, sv: 1, reg: st.reg, pub: { reg: st.reg, n: st.pb | 0 } } : { rm, host: st.x, sv: st.sv ? 1 : 0, reg: st.reg || undefined }); return; }
     if (st.g === 'roll') { setRollGame({ rm, host: st.x }); return; }
     if (st.g === 'race') { setRaceGame({ rm, host: st.x }); return; }
     if (st.g === 'zombie') { const [reg, r] = String(st.rm || '').split(':'); if (reg && r) setZombieGame({ at: Date.now(), join: { reg, r, from: st.x } }); return; }
+    if (st.g === 'hush') { if (typeof st.rm === 'string' && st.rm) setHushGame({ at: Date.now(), join: { r: st.rm, from: st.x } }); return; }
     if (st.g === 'gulpco') { if (typeof st.rm === 'string') setGulpRoom({ rm: st.rm }); return; }
     cachedProfile(st.x).then((p) => { if (p) openChat(p, null); }, () => {});
   };
@@ -36310,7 +36315,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [rollPick, setRollPick] = useState(null);
   const [gulpRoom, setGulpRoom] = useState(null);
   const [gulpPick, setGulpPick] = useState(null);
-  if (typeof window !== 'undefined' && window.__zfake) { window.__zopenGulpRoom = (rm) => setGulpRoom({ rm }); window.__zopenZombie = (j) => setZombieGame({ at: Date.now(), join: j || null }); window.__zopenRoll = (rm, host, watch) => setRollGame({ rm, host, watch: !!watch }); window.__zopenRace = (rm, host, watch) => setRaceGame({ rm, host, watch: !!watch }); window.__zraceSolo = () => setRaceGame({ solo: true, rm: 'solo' }); window.__zsiegeSolo = () => setSiegeGame({ solo: true, rm: 'solo' }); window.__zopenSiege = (rm, host, watch, extra) => setSiegeGame({ rm, host, watch: !!watch , ...(extra || {}) }); }
+  if (typeof window !== 'undefined' && window.__zfake) { window.__zopenGulpRoom = (rm) => setGulpRoom({ rm }); window.__zopenZombie = (j) => setZombieGame({ at: Date.now(), join: j || null }); window.__zopenHush = (j) => setHushGame({ at: Date.now(), join: j || null }); window.__zopenRoll = (rm, host, watch) => setRollGame({ rm, host, watch: !!watch }); window.__zopenRace = (rm, host, watch) => setRaceGame({ rm, host, watch: !!watch }); window.__zraceSolo = () => setRaceGame({ solo: true, rm: 'solo' }); window.__zsiegeSolo = () => setSiegeGame({ solo: true, rm: 'solo' }); window.__zopenSiege = (rm, host, watch, extra) => setSiegeGame({ rm, host, watch: !!watch , ...(extra || {}) }); }
   const joinLivePlay = async (r) => {
     const info = (r && r.info) || {};
     if (!r) return;
@@ -36395,6 +36400,14 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       try { await sendGameStateTo(p, st, { quiet: false }); } catch {}
     }
   };
+  const startHushWith = async (profiles, room) => {
+    if (!room || !room.r) return;
+    for (const p of profiles || []) {
+      if (!p || p.is_bot) continue;
+      const st = { g: 'hush', id: newClientId(), x: session.user.id, o: p.id, w: null, n: 0, st: 'wait', exp: Date.now() + LIVE_INVITE_MS, sx: 0, so: 0, rm: room.r };
+      try { await sendGameStateTo(p, st, { quiet: false }); } catch {}
+    }
+  };
   const inviteAtRef = useRef(new Map());
   const inviteGate = (p, g) => {
     const k = `${g}:${p.id}`;
@@ -36439,6 +36452,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (!profile || profile.is_bot) return;
     if (kind === 'siege') { startSiegeWith([profile]); return; }
     if (kind === 'zombie') { let reg = 'asia'; try { reg = bestRegion(await pingRegions()) || 'asia'; } catch {} const room = { reg, r: `f${newClientId().replace(/[^a-z0-9]/gi, '').toLowerCase().slice(0, 9).padEnd(8, '0')}` }; setShowGames(false); setZombieGame({ at: Date.now(), join: room, host: true }); startZombieWith([profile], room); return; }
+    if (kind === 'hush') { const room = { r: `f${newClientId().replace(/[^a-z0-9]/gi, '').toLowerCase().slice(0, 9).padEnd(8, '0')}` }; setShowGames(false); setHushGame({ at: Date.now(), join: { r: room.r, from: null } }); startHushWith([profile], room); return; }
     if (kind === 'roll') { startRollWith([profile]); return; }
     if (kind === 'race') { startRaceWith([profile]); return; }
     if (kind === 'gulpco') { startGulpRoomWith([profile]); return; }
@@ -36456,6 +36470,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (st.g === 'race') { setRaceGame({ rm: st.rm || st.id, host: st.x }); return; }
     if (st.g === 'siege') { setSiegeGame(st.pb && st.reg ? { rm: `pub-${st.reg}-${st.pb}`, host: null, sv: 1, reg: st.reg, pub: { reg: st.reg, n: st.pb | 0 } } : { rm: st.rm || st.id, host: st.x, sv: st.sv ? 1 : 0, reg: st.reg || undefined }); return; }
     if (st.g === 'zombie') { const [reg, r] = String(st.rm || '').split(':'); if (reg && r) { setShowGames(false); setZombieGame({ at: Date.now(), join: { reg, r, from: st.x !== session.user.id ? st.x : null } }); } return; }
+    if (st.g === 'hush') { if (typeof st.rm === 'string' && st.rm) { setShowGames(false); setHushGame({ at: Date.now(), join: { r: st.rm, from: st.x !== session.user.id ? st.x : null } }); } return; }
     if (st.g === 'gulpco') { if (typeof st.rm === 'string') setGulpRoom({ rm: st.rm }); return; }
     setLiveGame({ state: st, messageId: msg.id, peer });
   };
@@ -44542,6 +44557,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [featGo, setFeatGo] = useState(null);
   const homeFeat = (k) => {
     if (k === 'zombie') { setZombieGame({ at: Date.now() }); return; }
+    if (k === 'hush') { setHushGame({ at: Date.now() }); return; }
     if (k === 'games' || k === 'siege' || k === 'race' || k === 'roll' || k === 'gulp' || k === 'duo') { setShowGames({ at: Date.now() }); return; }
     if (k === 'online') { setShowGames({ at: Date.now(), room: '' }); return; }
     if (k === 'ai') { setAiStudio({ mode: 'image' }); return; }
@@ -48028,7 +48044,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       {msgSearchOpen != null && (
         <SearchMessagesPage myId={session.user.id} groups={groups} hiddenIds={getHiddenMsgIds()} initialQuery={msgSearchOpen} onClose={() => setMsgSearchOpen(null)} onOpen={openSearchHit} />
       )}
-      {showWhatsNew && <PageGuard name="whats new" onClose={() => setShowWhatsNew(false)}><WhatsNewSheet me={me} onClose={() => setShowWhatsNew(false)} onTry={(g) => { if (g === 'sets') setCollectionOpen(true); else if (g === 'shop') setShopOpen(true); else if (g === 'rooms') setShowGames({ at: Date.now(), room: '' }); else if (g === 'games') setShowGames(true); else if (g === 'camera') setStoryCamera(true); else if (g === 'race') setShowGames(true); else if (g === 'siege') setSiegeGame({ solo: true, rm: 'solo' }); else if (g === 'zombie') setZombieGame({ at: Date.now() }); else if (g === 'vibes') setHomeTab('moments'); else if (g === 'map') setMapOpen(true); else if (g === 'song' && me) setProfileOf({ ...me, __song: true }); else if (g === 'ai') setAiStudio({ mode: 'image' }); else if (g === 'chars') setCharsOpen(true); else if (g === 'coins') setWalletOpen(true); else if (g === 'bubbles') setShowBubbleSheet(true); else if (g === 'drops') setCollectionOpen('__drop'); else if (g === 'folders') { setHomeTab('chats'); setFoldersOpen(true); } else if (g === 'styles') setShopOpen('tab:styles'); else if (g === 'communities') setCommunitiesOpen({}); }} /></PageGuard>}
+      {showWhatsNew && <PageGuard name="whats new" onClose={() => setShowWhatsNew(false)}><WhatsNewSheet me={me} onClose={() => setShowWhatsNew(false)} onTry={(g) => { if (g === 'sets') setCollectionOpen(true); else if (g === 'shop') setShopOpen(true); else if (g === 'rooms') setShowGames({ at: Date.now(), room: '' }); else if (g === 'games') setShowGames(true); else if (g === 'camera') setStoryCamera(true); else if (g === 'race') setShowGames(true); else if (g === 'siege') setSiegeGame({ solo: true, rm: 'solo' }); else if (g === 'zombie') setZombieGame({ at: Date.now() }); else if (g === 'hush') setHushGame({ at: Date.now() }); else if (g === 'vibes') setHomeTab('moments'); else if (g === 'map') setMapOpen(true); else if (g === 'song' && me) setProfileOf({ ...me, __song: true }); else if (g === 'ai') setAiStudio({ mode: 'image' }); else if (g === 'chars') setCharsOpen(true); else if (g === 'coins') setWalletOpen(true); else if (g === 'bubbles') setShowBubbleSheet(true); else if (g === 'drops') setCollectionOpen('__drop'); else if (g === 'folders') { setHomeTab('chats'); setFoldersOpen(true); } else if (g === 'styles') setShopOpen('tab:styles'); else if (g === 'communities') setCommunitiesOpen({}); }} /></PageGuard>}
       {showGames && (
         <GamesPage key={showGames.at || 'games'} initialGame={showGames.game || null} onClose={() => setShowGames(false)}
           friends={gameFriends}
@@ -48040,6 +48056,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onSiegeInvite={() => setSiegePick({ rm: null })}
           onSiegeSolo={() => { setShowGames(false); setSiegeGame({ solo: true, rm: 'solo' }); }}
           onZombie={() => { setShowGames(false); setZombieGame({ at: Date.now() }); }}
+          onHush={() => { setShowGames(false); setHushGame({ at: Date.now() }); }}
           onGulpRoom={() => setGulpPick({ rm: null, n: 1 })}
           onWatch={(r, p) => openWatch(r, p)}
           onJoinLive={(r) => joinLivePlay(r)}
@@ -48124,6 +48141,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       {racePick && (
         <RaceInviteSheet friends={gameFriends} already={racePick.n} side={!!racePick.side} onClose={() => setRacePick(null)}
           onInvite={(ps) => { const rm = racePick.rm; setRacePick(null); setShowGames(false); startRaceWith(ps, rm); }} />
+      )}
+      {hushGame && me && (
+        <HushGamePage key={hushGame.at} me={me} myId={session.user.id} join={hushGame.join || null} friends={gameFriends} online={onlineIds} onInvite={(ps, room) => startHushWith(ps, room)} onSearch={async (q) => { const r = await searchByUsername(q); return (r.data || []).filter((pp) => pp && pp.id !== session.user.id && !pp.is_bot && !pp.is_deleted); }} onClose={() => { setHushGame(null); setShowGames(true); }} />
       )}
       {zombieGame && me && (
         <ZombieGamePage key={zombieGame.at} me={me} myId={session.user.id} isAdmin={isZAdmin} join={zombieGame.join || null} friends={gameFriends} online={onlineIds} onInvite={(ps, room) => startZombieWith(ps, room)} onSearch={async (q) => { const r = await searchByUsername(q); return (r.data || []).filter((pp) => pp && pp.id !== session.user.id && !pp.is_bot && !pp.is_deleted); }} onKick={() => { setZombieGame(null); setShowGames(false); showSnack('Your account started a game on another device'); }} onClose={() => { setZombieGame(null); setShowGames(true); }} />
@@ -50442,6 +50462,7 @@ export function parseGameMessage(content) {
     if (st.g === 'tug' || st.g === 'qrace' || st.g === 'rrace' || st.g === 'duo' || st.g === 'gulp') return typeof st.x === 'string' && typeof st.o === 'string' ? st : null;
     if (st.g === 'roll' || st.g === 'gulpco' || st.g === 'race' || st.g === 'siege') return typeof st.x === 'string' && typeof st.o === 'string' && typeof st.rm === 'string' && st.rm.length <= 64 ? st : null;
     if (st.g === 'zombie') return typeof st.x === 'string' && typeof st.o === 'string' && typeof st.rm === 'string' && /^(asia|usa|eu):[a-z0-9]{1,13}$/.test(st.rm) ? st : null;
+    if (st.g === 'hush') return typeof st.x === 'string' && typeof st.o === 'string' && typeof st.rm === 'string' && /^[fp][a-z0-9]{1,15}$/.test(st.rm) ? st : null;
     if (G1_KEYS.includes(st.g)) return g1Valid(st) ? st : null;
     return null;
   } catch { return null; }
@@ -59179,7 +59200,7 @@ function svgMarkup(node) {
   return `<${node.type}${attrs}>${svgMarkup(node.props.children)}</${node.type}>`;
 }
 const gameArtSrcs = new Map();
-const GAME_ART_FILES = { zombie: '/zombie-art3s.webp', duo: '/duo-art.webp', gulp: '/gulp-art.webp', gulpco: '/gulp-art.webp', roll: '/roll-art.webp', race: '/race-art.webp', siege: '/bolt-art2.webp' };
+const GAME_ART_FILES = { hush: '/hush/art-v1.webp', zombie: '/zombie-art3s.webp', duo: '/duo-art.webp', gulp: '/gulp-art.webp', gulpco: '/gulp-art.webp', roll: '/roll-art.webp', race: '/race-art.webp', siege: '/bolt-art2.webp' };
 ['2048', 'bomb', 'bricks', 'c4', 'catch', 'chess', 'ckr', 'crm', 'ctrap', 'dash', 'dots', 'echo', 'fade', 'gem', 'golf', 'gomoku', 'hang', 'hilo', 'math', 'memory', 'num', 'odd', 'paint', 'pairs', 'pool', 'qduel', 'qrace', 'quiz', 'rduel', 'reflex', 'reversi', 'rps', 'rrace', 'sdk', 'ship', 'sky', 'snake', 'squish', 'stack', 'sudoku', 'taps', 'ttt', 'tug', 'wduel', 'word', 'xw', 'zap'].forEach((k) => { GAME_ART_FILES[k] = `/gart/${k}.webp`; });
 function gameArtSrc(kIn) {
   const key = String(kIn == null ? '' : kIn);
@@ -59204,10 +59225,10 @@ export function GameArt({ k: kIn, width = 160, height = 100, radius = 14, style 
   return <img src={src} alt="" aria-hidden="true" draggable={false} decoding="async" style={{ display: 'block', width, height, borderRadius: radius, flexShrink: 0, objectFit: 'cover', ...style }} />;
 }
 
-export const LIVE_GAME_KEYS = ['siege', 'race', 'roll', 'gulpco', 'duo', 'gulp', 'tug', 'qrace', 'rrace', 'zombie'];
-Object.assign(GAME_TITLES, { zombie: 'Zombie Junction', siege: 'Bolt War', race: 'Island Rally', roll: 'Roll Squad', gulpco: 'Gulp room', duo: 'Torchbound', gulp: 'Gulp', tug: 'Tug of war', qrace: 'Quiz race', rrace: 'Reaction race' });
+export const LIVE_GAME_KEYS = ['hush', 'siege', 'race', 'roll', 'gulpco', 'duo', 'gulp', 'tug', 'qrace', 'rrace', 'zombie'];
+Object.assign(GAME_TITLES, { hush: 'Hush', zombie: 'Zombie Junction', siege: 'Bolt War', race: 'Island Rally', roll: 'Roll Squad', gulpco: 'Gulp room', duo: 'Torchbound', gulp: 'Gulp', tug: 'Tug of war', qrace: 'Quiz race', rrace: 'Reaction race' });
 Object.assign(FRIEND_GAME_SUBS, { zombie: 'Live, hold off zombies', siege: 'Live, fight alien waves', race: 'Live, race eight friends', roll: 'Live, roll with friends', gulpco: 'Live, join any time', duo: 'Live, temples for two', gulp: 'Live, eat fish and grow', tug: 'Live, out tap a friend', qrace: 'Live, fastest answer wins', rrace: 'Live, tap first on green' });
-Object.assign(GAME_ART_BG, { zombie: ['#8A8F5A', '#1E2216'], siege: ['#D9A54A', '#3A2E22'], race: ['#7FB4E0', '#3A4B63'], roll: ['#6EC6FF', '#4FA83A'], duo: ['#3B2A48', '#120C1C'], gulp: ['#1C6FA8', '#082A4C'], gulpco: ['#1C6FA8', '#082A4C'], tug: ['#F97316', '#E11D48'], qrace: ['#7C3AED', '#2563EB'], rrace: ['#10B981', '#0EA5E9'] });
+Object.assign(GAME_ART_BG, { hush: ['#3A3F3B', '#07080A'], zombie: ['#8A8F5A', '#1E2216'], siege: ['#D9A54A', '#3A2E22'], race: ['#7FB4E0', '#3A4B63'], roll: ['#6EC6FF', '#4FA83A'], duo: ['#3B2A48', '#120C1C'], gulp: ['#1C6FA8', '#082A4C'], gulpco: ['#1C6FA8', '#082A4C'], tug: ['#F97316', '#E11D48'], qrace: ['#7C3AED', '#2563EB'], rrace: ['#10B981', '#0EA5E9'] });
 Object.assign(GAME_RULES, {
   siege: { how: ['Pick one of eight space heroes, four astronauts and four mechs. Each has its own attack, super and gadget.', 'Move with the left stick. Tap the big button to shoot the closest alien, or drag it to aim.', 'Hitting aliens charges your super. When the gold button glows, tap it or drag it to aim.', 'Aliens come in waves from the hatches. The Glob Queen shows up every 5 waves.', 'If a friend goes down, stand next to them to revive them. Grab health, power and super drops.', 'Hide in bushes so aliens lose sight of you. Talk with your mic or send emojis.'], win: 'Survive 15 waves together, or go endless and see how far you get.' },
   duo: { how: ['You carry the orange torch, your friend carries the blue one. Move with the joystick.', 'Orange walks through lava and fire. Blue wades through water, lights hidden stones and reads hidden codes.', 'Pull levers, hold doors on the plates, jump through glowing rings, cross spikes when they drop and keep moving on cracked floors.', 'Play the story or endless temples that are new every time. You share three hearts.', 'Talk with voice, quick messages and emojis. You can mute your friend any time.'], win: 'Stand on your own glowing doors at the same time to finish. Finish missions for stars.' },

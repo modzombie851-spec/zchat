@@ -216,7 +216,7 @@ function OnlineCard({ online, onOpen }) {
   );
 }
 
-export function GamesPage({ onClose, onChallenge, onShareScore, initialGame, friends, onPlayWith, onStartLive, onRollInvite, onRaceInvite, onRaceSolo, onSiegeInvite, onSiegeSolo, onZombie, onGulpRoom, onWatch, onJoinLive, onOpenLeaderboard, onPlayBot, myId, me, onRoomHost, onRoomGuest, initialRoom, playToo }) {
+export function GamesPage({ onClose, onChallenge, onShareScore, initialGame, friends, onPlayWith, onStartLive, onRollInvite, onRaceInvite, onRaceSolo, onSiegeInvite, onSiegeSolo, onZombie, onHush, onGulpRoom, onWatch, onJoinLive, onOpenLeaderboard, onPlayBot, myId, me, onRoomHost, onRoomGuest, initialRoom, playToo }) {
   const jw = useJoinWait(castMe.id);
   injectHubCss();
   injectCastCss();
@@ -327,6 +327,19 @@ export function GamesPage({ onClose, onChallenge, onShareScore, initialGame, fri
                 ); })}
               </div>
             </>
+          )}
+          {onHush && (
+            <div style={{ position: 'relative', borderRadius: 22, overflow: 'hidden', margin: '6px 0 10px', boxShadow: '0 10px 24px rgba(0,0,0,0.3)', background: '#07080A' }}>
+              <GameArt k="hush" width="100%" height={188} radius={0} style={{ width: '100%' }} />
+              <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(7,8,10,0) 28%, rgba(7,8,10,0.6) 58%, rgba(7,8,10,0.95) 100%)' }} />
+              <div style={{ position: 'absolute', left: 14, right: 14, bottom: 12, display: 'flex', alignItems: 'flex-end', gap: 10 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span style={{ fontSize: 20, fontWeight: 900, color: '#FFFFFF' }}>Hush</span><span style={{ fontSize: 11, fontWeight: 800, color: '#07080A', background: '#E9E4DA', borderRadius: 4, padding: '2px 6px' }}>New</span></div>
+                  <div style={{ fontSize: 12.5, fontWeight: 600, color: 'rgba(233,228,218,0.88)', lineHeight: 1.35 }}>A blind thing hunts by sound in a dark hospital. Find 3 keys and get out, alone or with up to 3 friends.</div>
+                </div>
+                <GameButton small color="white" label="Play" onClick={() => { tap(); noteRecent('hush'); onHush(); }} />
+              </div>
+            </div>
           )}
           {onZombie && (
             <div style={{ position: 'relative', borderRadius: 22, overflow: 'hidden', margin: '6px 0 10px', boxShadow: '0 10px 24px rgba(0,0,0,0.22)' }}>

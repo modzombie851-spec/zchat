@@ -2,6 +2,20 @@
 
 Third party work used in the ZChat games. The same list shows in every game under Settings, Credits.
 
+## Hush
+
+- Hospital walls, doors, beds, tables and props, Free Modular 3D hospital environment by Madduck (free asset pack): https://madduck.itch.io/modular-3d-hospital-environment
+- Flashlight, keys, padlocks, knife and radio, Retro Horror Kit by 3Dexter (CC0): https://3dexter.itch.io/retrohorrorkit
+- The monster, Parasite by Mixamo (Mixamo license): https://www.mixamo.com
+- Roars, screams, breathing, drips and the hospital hum, Horror Sound Effects Library by Little Robot Sound Factory, www.littlerobotsoundfactory.com (CC BY 3.0): https://opengameart.org/content/horror-sound-effects-library
+- Jump scare hits, Horror Hit Soundpack 1 by psychhead (CC0): https://opengameart.org/content/horror-hit-soundpack-1
+- Stingers, Dark Ambiences by Ogrebane (CC0): https://opengameart.org/content/dark-ambiences
+- Whispers, Voices of Madness by Eugene Loza (CC0): https://opengameart.org/node/141912
+- Ghost moans, Ghost Monster Voice Moaning and Growling by qubodup (CC0): https://opengameart.org/content/ghost-monster-voice-moaning-growling
+- Doors, keys, cloth and impacts, RPG Audio and Impact Sounds by Kenney (CC0): https://kenney.nl/assets
+- Footsteps on tile, Footsteps on different surfaces by congusbongus (CC BY 3.0): https://opengameart.org/content/footsteps-on-different-surfaces
+- Menu music, Horror Main Menu on Pixabay (Pixabay license): https://pixabay.com/music/
+
 ## Town models
 From Sketchfab, CC BY 4.0 unless marked
 

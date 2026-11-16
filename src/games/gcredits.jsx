@@ -2,6 +2,21 @@ const SK = 'https://sketchfab.com/3d-models/';
 
 const GROUPS = [
   {
+    t: 'Hush',
+    items: [
+      ['Hospital walls, doors, beds, tables and props, Free Modular 3D hospital environment', 'Madduck', 'https://madduck.itch.io/modular-3d-hospital-environment', 'Free asset pack'],
+      ['Flashlight, keys, padlocks, knife and radio, Retro Horror Kit', '3Dexter', 'https://3dexter.itch.io/retrohorrorkit', 'CC0'],
+      ['The monster, Parasite', 'Mixamo by Adobe', 'https://www.mixamo.com', 'Mixamo license'],
+      ['Roars, screams, breathing, drips and the hospital hum, Horror Sound Effects Library', 'Little Robot Sound Factory, www.littlerobotsoundfactory.com', 'https://opengameart.org/content/horror-sound-effects-library', 'CC BY 3.0'],
+      ['Jump scare hits, Horror Hit Soundpack 1', 'psychhead', 'https://opengameart.org/content/horror-hit-soundpack-1', 'CC0'],
+      ['Stingers, Dark Ambiences', 'Ogrebane', 'https://opengameart.org/content/dark-ambiences', 'CC0'],
+      ['Whispers, Voices of Madness', 'Eugene Loza', 'https://opengameart.org/node/141912', 'CC0'],
+      ['Ghost moans, Ghost Monster Voice Moaning and Growling', 'qubodup', 'https://opengameart.org/content/ghost-monster-voice-moaning-growling', 'CC0'],
+      ['Doors, keys, cloth and impacts, RPG Audio and Impact Sounds', 'Kenney', 'https://kenney.nl/assets', 'CC0'],
+      ['Menu music, Horror Main Menu', 'Pixabay artist', 'https://pixabay.com/music/', 'Pixabay license'],
+    ],
+  },
+  {
     t: 'Town models',
     note: 'From Sketchfab, CC BY 4.0 unless marked',
     items: [

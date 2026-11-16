@@ -19,6 +19,7 @@ export const GC = {
 
 const SKIN0 = { k: '', shape: 'round', face: ['rgba(74,80,116,0.92)', 'rgba(40,44,72,0.92)'], lip: 'rgba(8,8,22,0.75)', edge: INK, ico: '#FFFFFF', gloss: 0.42, panel: 'linear-gradient(90deg, rgba(0,0,0,0.46), rgba(0,0,0,0.26))', pr: 8, pEdge: 'none', note: 'rgba(10,12,18,0.82)', nr: 17, feed: 'rgba(8,10,18,0.6)', name: '#FFD27A' };
 export const SKINS = {
+  hush: { ...SKIN0, k: 'hush' },
   rally: { k: 'rally', dark: ['#3A4566', '#232B45', '#0E1426'], shape: 'sq', face: ['#323C5A', '#161D33'], lip: '#060912', lipEdge: '#060912', edge: 'rgba(255,255,255,0.82)', ico: '#FFFFFF', gloss: 0.16, panel: 'linear-gradient(180deg, rgba(16,24,48,0.84), rgba(8,13,30,0.84))', pr: 5, pEdge: 'inset 3px 0 0 #FFC93C', note: 'rgba(10,16,34,0.92)', nr: 6, feed: 'rgba(10,16,34,0.66)', name: '#FFC93C', joyRing: 'rgba(255,255,255,0.6)', joyKnob: 'rgba(255,255,255,0.45)' },
   siege: { k: 'siege', dark: ['#6E7884', '#434B57', '#1E232B'], shape: 'plate', btnShape: 'plate', face: ['#7C8794', '#434C59'], lip: '#16191F', edge: '#0E1116', ico: '#F4F6F8', gloss: 0.26, rivets: true, panel: 'linear-gradient(180deg, rgba(50,57,68,0.9), rgba(25,29,37,0.9))', pr: 3, pEdge: 'inset 0 2px 0 #F2B21B, inset 0 0 0 1px rgba(255,255,255,0.07)', note: 'rgba(28,32,40,0.95)', nr: 3, feed: 'rgba(24,28,36,0.72)', name: '#F2B21B', joyRing: 'rgba(242,178,27,0.75)', joyKnob: 'rgba(196,204,214,0.5)' },
   roll: { k: 'roll', shape: 'round', face: ['#FFFFFF', '#E2E8F6'], lip: '#8090C8', edge: '#3A3352', ico: '#3A3352', gloss: 0, panel: 'rgba(54,40,100,0.6)', pr: 16, pEdge: 'inset 0 0 0 2px rgba(255,255,255,0.36)', note: 'rgba(54,40,100,0.88)', nr: 18, feed: 'rgba(54,40,100,0.6)', name: '#FFE27A' },
@@ -298,6 +299,7 @@ const TAC = { acc: '#F2C14E', accBg: 'rgba(242,193,78,0.15)', line: 'rgba(255,25
 export const BS = { bg: 'linear-gradient(160deg, #1b1e3c 0%, #131633 52%, #0d0f25 100%)', rail: 'rgba(6,7,20,0.5)', row: 'rgba(255,255,255,0.045)', sub: 'rgba(214,220,240,0.56)', yel: '#F2E11B', ink: '#12131F', cyan: '#2EC5E6', teal: '#34D1D6', on: '#D6DAE5', onTxt: '#151833', off: 'rgba(6,8,22,0.38)', offTxt: 'rgba(232,236,248,0.84)', edge: 'rgba(255,255,255,0.16)', font: `'Roboto Condensed', 'sans-serif-condensed', 'Arial Narrow', ${FONT}` };
 const SetCtx = createContext(null);
 export const SETP = {
+  hush: { ...BS, bg: 'linear-gradient(160deg, #2B302C 0%, #161918 55%, #07080A 100%)', rail: 'rgba(0,0,0,0.42)', row: 'rgba(233,228,218,0.05)', sub: 'rgba(233,228,218,0.6)', yel: '#F1D9A6', ink: '#07080A', cyan: '#F1D9A6', teal: '#4CD07A', on: '#E9E4DA', onTxt: '#07080A', off: 'rgba(0,0,0,0.4)' },
   zombie: BS,
   siege: { ...BS, bg: 'linear-gradient(160deg, #2f3640 0%, #20252d 55%, #12151a 100%)', rail: 'rgba(8,10,13,0.5)', yel: '#FFB23F', ink: '#1A1206', cyan: '#FFB23F', teal: '#5FE3D0', on: '#E2E6EC', onTxt: '#1E232B', off: 'rgba(8,10,13,0.4)' },
   rally: { ...BS, bg: 'linear-gradient(160deg, #22305a 0%, #172140 55%, #0d1328 100%)', rail: 'rgba(4,8,22,0.48)', yel: '#FFC93C', ink: '#141B30', cyan: '#FFC93C', teal: '#3FB6FF', on: '#E6ECF8', onTxt: '#151E38', r: 4 },
