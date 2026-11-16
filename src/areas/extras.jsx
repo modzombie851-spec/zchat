@@ -6562,23 +6562,26 @@ function WnSegments({ total, at, onArt, dark }) {
   );
 }
 
-const WN_PHOTOS = { team576: '/wn576-team.webp', nyx576: '/wn576-nyx.webp', chat574: '/wn574-chat.webp', cards574: '/wn574-cards.webp', shop573: '/wn573-shop.webp', try573: '/wn573-try.webp', cmt573: '/wn573-comments.webp', rally57: '/race-art.webp', set57: '/wn57-set.webp', lay57: '/wn57-lay.webp', bolt57: '/wn57-bolt.webp', hub57: '/wn57-hub.webp', zombies49: '/wn49-zombies.webp', mutant49: '/wn49-mutant.webp', guns50: '/wn50-guns.webp', house50: '/wn50-house.webp', pond50: '/wn50-pond.webp', buttons50: '/wn50-buttons.webp', settings50: '/wn50-settings.webp', pack51: '/wn51-pack.webp', emote51: '/wn51-emote.webp', lobby51: '/wn51-lobby.webp', waves52: '/wn52-waves.webp', sky52: '/wn52-sky.webp', map52: '/wn52-map.webp', boss53: '/wn53-boss.webp', fire53: '/wn53-fire.webp', dog53: '/wn53-dog.webp', train53: '/wn53-train.webp', hud531: '/wn531-hud.webp', moves531: '/wn531-moves.webp', pc531: '/wn531-pc.webp', squad54: '/wn54-squad.webp', boom54: '/wn54-boom.webp', heli54: '/wn54-heli.webp', gas54: '/wn54-gas.webp' , shop55: '/wn55-shop.webp', stall55: '/wn55-stall.webp', boss55: '/wn55-boss.webp', climb55: '/wn55-climb.webp', drop55: '/wn55-drop.webp', squad55: '/wn55-squad.webp', hud55: '/wn55-hud.webp', set55: '/wn55-settings.webp', music55: '/wn55-music.webp', guns55: '/wn55-guns.webp', zj55: '/zombie-art2.webp', bolt55: '/bolt-art2.webp', torch55: '/duo-art.webp' };
+const WN_PHOTOS = { team577: '/wn577-team.webp', heroes577: '/wn577-heroes.webp', chat574: '/wn574-chat.webp', cards574: '/wn574-cards.webp', shop573: '/wn573-shop.webp', try573: '/wn573-try.webp', cmt573: '/wn573-comments.webp', rally57: '/race-art.webp', set57: '/wn57-set.webp', lay57: '/wn57-lay.webp', bolt57: '/wn57-bolt.webp', hub57: '/wn57-hub.webp', zombies49: '/wn49-zombies.webp', mutant49: '/wn49-mutant.webp', guns50: '/wn50-guns.webp', house50: '/wn50-house.webp', pond50: '/wn50-pond.webp', buttons50: '/wn50-buttons.webp', settings50: '/wn50-settings.webp', pack51: '/wn51-pack.webp', emote51: '/wn51-emote.webp', lobby51: '/wn51-lobby.webp', waves52: '/wn52-waves.webp', sky52: '/wn52-sky.webp', map52: '/wn52-map.webp', boss53: '/wn53-boss.webp', fire53: '/wn53-fire.webp', dog53: '/wn53-dog.webp', train53: '/wn53-train.webp', hud531: '/wn531-hud.webp', moves531: '/wn531-moves.webp', pc531: '/wn531-pc.webp', squad54: '/wn54-squad.webp', boom54: '/wn54-boom.webp', heli54: '/wn54-heli.webp', gas54: '/wn54-gas.webp' , shop55: '/wn55-shop.webp', stall55: '/wn55-stall.webp', boss55: '/wn55-boss.webp', climb55: '/wn55-climb.webp', drop55: '/wn55-drop.webp', squad55: '/wn55-squad.webp', hud55: '/wn55-hud.webp', set55: '/wn55-settings.webp', music55: '/wn55-music.webp', guns55: '/wn55-guns.webp', zj55: '/zombie-art2.webp', bolt55: '/bolt-art2.webp', torch55: '/duo-art.webp' };
 const WN_HIGHLIGHTS = [
-  { k: 'team576', art: 'team576', go: 'siege', cta: 'Play Bolt War', title: 'Team battle in Bolt War', text: 'Two teams fight across Nebula Valley, a big new map with three lanes, towers, rovers and a jungle full of aliens. Break the enemy core to win. Play 1v1 up to 5v5, and bots fill every open spot.' },
-  { k: 'nyx576', art: 'nyx576', go: 'siege', cta: 'Play Bolt War', title: 'Meet Nyx', text: 'A new assassin with twin blades. Shadow strike blinks her through enemies, and Fade turns her invisible for a moment. She plays in Waves and Team battle.' },
+  { k: 'team577', art: 'team577', go: 'siege', cta: 'Play Bolt War', title: 'Team battle in Bolt War', text: 'Two teams fight across Nebula Valley with three lanes, towers, bolt bots and wild monsters in the jungle. Break the enemy core to win. Play 1v1 up to 5v5, and bots fill every open spot.' },
+  { k: 'heroes577', art: 'heroes577', go: 'siege', cta: 'Play Bolt War', title: 'Three new heroes', text: 'Arlo the knight holds the front line, Wren fires fast crossbow bolts and Nyx the hooded assassin strikes from the shadows. Ivy has a new look too.' },
 ];
 const WN_SECTIONS = [
   { title: 'Team battle', items: [
-    { art: 'team576', title: 'Nebula Valley', text: 'Three lanes, a river, jungle aliens and a base for each team.' },
-    { art: 'team576', title: 'The Hive Ship', text: 'A boss in the river. Beat it and it pushes the middle lane for your team.' },
-    { art: 'team576', title: 'Battle skills', text: 'Pick Blink, Mend, Hunter, Guard, Sprint or Shock before you play.' },
-    { art: 'team576', title: 'Portals and pads', text: 'Jump from your base to a lane, or cross the map through the river portals.' },
-    { art: 'team576', title: 'Jungle buffs', text: 'Big aliens give Fury for more damage and Flow for faster supers.' },
-    { art: 'team576', title: 'Levels and powers', text: 'Reach level 12 in each battle and pick a new power every second level.' },
-    { art: 'team576', title: 'A fair start', text: 'Hero levels from scrap do not count here, so every player starts equal.' },
+    { art: 'team577', title: 'Nebula Valley', text: 'Three lanes, a river, jungle monsters and a base for each team.' },
+    { art: 'team577', title: 'The Hive Ship', text: 'A boss in the river. Beat it and it pushes the middle lane for your team.' },
+    { art: 'team577', title: 'Battle skills', text: 'Pick Warp gate, Repair drone, Cutter, Dome, Rocket boots or Magnet before you play.' },
+    { art: 'team577', title: 'Level 20 and a power every level', text: 'Pick a new power at every level, and replace your choices up to 3 times a battle.' },
+    { art: 'team577', title: 'Bot difficulty', text: 'Play against Easy, Normal or Hard bots.' },
+    { art: 'team577', title: 'A fair fight', text: 'Everyone starts equal, players are split by power and anyone who falls behind levels up faster.' },
+    { art: 'team577', title: 'Painted skill buttons', text: 'A painted button for every skill, your team in blue and enemies in red at the top left.' },
+    { art: 'team577', title: 'Its own music', text: 'New lobby and battle music made for Team battle.' },
   ] },
   { title: 'Heroes', items: [
-    { art: 'nyx576', title: 'Nyx', text: 'A fast assassin who hides with Fade and strikes from the shadows.' },
+    { art: 'heroes577', title: 'Arlo', text: 'A tank knight. Shield bash stuns enemies and Guard up protects his friends.' },
+    { art: 'heroes577', title: 'Wren', text: 'A marksman with a crossbow. Volley pushes enemies back and her snare trap bites.' },
+    { art: 'heroes577', title: 'Nyx', text: 'A hooded assassin who hides with Fade and strikes from the shadows.' },
   ] },
 ];
 const WN_NEW_COUNT = WN_SECTIONS.reduce((n, sec) => n + sec.items.length, 0);

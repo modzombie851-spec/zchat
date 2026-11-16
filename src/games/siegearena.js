@@ -1949,10 +1949,10 @@ function kitPut(m, M, x, y, z, yaw, s, mt = MAT.matte, tint = 1) {
     v.push(x + (px * c + pz * sn) * s, y + py * s, z + (-px * sn + pz * c) * s, nx * c + nz * sn, ny, -nx * sn + nz * c, Math.min(1, C[j] * tint), Math.min(1, C[j + 1] * tint), Math.min(1, C[j + 2] * tint), mt);
   }
 }
-function riftRock(ctx, m, x, y, z, R, big) {
+function riftRock(ctx, m, x, y, z, R, big, mul = 1) {
   const kit = ctx.kit;
   const k = big ? (R() < 0.5 ? 'ud_rockl2' : 'ud_rockl') : KROCK[Math.floor(R() * 3) % 3];
-  if (kit && kit[k]) { kitPut(m, kit[k], x, y - 0.1, z, R() * 6.283, KROCK_S[k] * (big ? 1.25 : 0.85 + R() * 0.3), MAT.stone, 0.78 + R() * 0.3); return; }
+  if (kit && kit[k]) { kitPut(m, kit[k], x, y - 0.1, z, R() * 6.283, KROCK_S[k] * (big ? 1.25 : 0.85 + R() * 0.3) * mul, MAT.stone, 0.78 + R() * 0.3); return; }
   const s0 = (big ? 1.3 : 0.95) * (0.85 + R() * 0.3);
   rockC(m, x, y - 0.1, z, s0, s0 * 0.75, s0, Math.floor(R() * 1e6), [RF.rockA, RF.rockB], null);
 }
@@ -1966,14 +1966,17 @@ function riftTree(ctx, m, x, y, z, R) {
 function riftWall(ctx, c, r) {
   const { A, K, F } = ctx;
   const R = rng(r * 977 + c * 131 + 7);
-  let open = 0, ox = 0, oz = 0;
+  let open = 0, ox = 0, oz = 0, diag = 0, dx = 0, dz = 0;
   for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const v = cellAt(A, c + dc, r + dr); if (v !== C_WALL) { open += 1; ox += dc; oz += dr; } }
+  for (const [dc, dr] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) { const v = cellAt(A, c + dc, r + dr); if (v !== C_WALL) { diag += 1; dx += dc; dz += dr; } }
   if (Math.min(c, r, A.W - 1 - c, A.H - 1 - r) === 0) return;
   const x0 = c * TILE, z0 = r * TILE;
-  if (open > 0) {
-    if (R() > 0.62) return;
-    const x = x0 + 1 + ox * 0.35 + (R() - 0.5) * 0.4, z = z0 + 1 + oz * 0.35 + (R() - 0.5) * 0.4;
-    riftRock(ctx, K.m('props', x, z), x, riftY(x, z, F), z, R, false);
+  if (open > 0 || diag > 0) {
+    const ux = open ? ox : dx, uz = open ? oz : dz, L = Math.hypot(ux, uz) || 1;
+    const narrow = open > 0 && Math.abs(ox) + Math.abs(oz) === 1 && cellAt(A, c + ox * 2, r + oz * 2) === C_WALL;
+    const off = narrow ? -0.25 : 0.42;
+    const x = x0 + TILE / 2 + (ux / L) * off + (R() - 0.5) * 0.22, z = z0 + TILE / 2 + (uz / L) * off + (R() - 0.5) * 0.22;
+    riftRock(ctx, K.m('props', x, z), x, riftY(x, z, F), z, R, false, narrow ? 0.78 : open ? 1.12 : 1.05);
     return;
   }
   if (R() > 0.16) return;
@@ -1981,13 +1984,7 @@ function riftWall(ctx, c, r) {
   const m = K.m(R() < 0.5 ? 'props' : 'fine', x, z);
   if (R() < 0.72) riftTree(ctx, m, x, riftY(x, z, F), z, R); else riftRock(ctx, m, x, riftY(x, z, F), z, R, true);
 }
-function riftSpark(ctx, c, r) {
-  const { K, kit } = ctx;
-  const R = rng(r * 4111 + c * 37 + 3);
-  if (!kit || R() > 0.07) return;
-  const x = c * TILE + 0.4 + R() * 1.2, z = r * TILE + 0.4 + R() * 1.2;
-  if (kit.ud_grass2 && R() < 0.5) kitPut(K.m('fine', x, z), kit.ud_grass2, x, -0.2, z, R() * 6.283, 0.8 + R() * 0.3, MAT.matte, 0.9);
-}
+function riftSpark() {}
 function riftBush(m, x, z, seed, ctx) {
   const kit = ctx && ctx.kit;
   const R = rng(seed * 7 + 3);

@@ -53,11 +53,15 @@ From Sketchfab, CC BY 4.0
 
 - Survivors, zombies and their animations, by Mixamo by Adobe (Mixamo license): https://www.mixamo.com
 - Bolt War heroes, mechs, aliens, power ups, rovers, towers, the Hive Ship and the Nebula Valley trees, rocks and buildings, Ultimate Space Kit by Quaternius (CC0): https://quaternius.com
+- Bolt War heroes Arlo, Wren, Nyx and Ivy, KayKit Character Pack Adventurers by Kay Lousberg (CC0): https://kaylousberg.itch.io/kaykit-adventurers
+- Bolt War bolt bots, Animated Mech Pack by Quaternius (CC0): https://opengameart.org/content/animated-mech-pack
+- Bolt War jungle monsters, Textured Cute Monster Pack by Quaternius (CC0): https://opengameart.org/content/textured-cute-monster-pack
 
 ## Icons
-From game icons, CC BY 3.0
+CC BY 3.0
 
 - Skill and button icons, by Lorc, Delapouite, Skoll, Zeromancer, Carl Olsen and Sbed (CC BY 3.0): https://game-icons.net
+- Bolt War painted skill buttons, Painterly Spell Icons by J. W. Bjerk (eleazzaar), www.jwbjerk.com/art, found on OpenGameArt.org (CC BY 3.0): https://opengameart.org/content/painterly-spell-icons-part-1
 
 ## Sounds
 
@@ -73,6 +77,8 @@ From game icons, CC BY 3.0
 
 - Bolt War fight music, Dance Dance by The Mountain on Pixabay (Pixabay license): https://pixabay.com/music/
 - Bolt War lobby music, Urban Hip Hop Beat by vaitsez on Pixabay (Pixabay license): https://pixabay.com/music/
+- Bolt War team battle music, Space Battle by MintoDog (CC0): https://opengameart.org/content/space-battle
+- Bolt War team battle lobby music, Singularity by Vitalezzz (CC0): https://opengameart.org/node/154014
 
 ## Textures and effects
 

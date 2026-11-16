@@ -74,34 +74,48 @@ export const HEROES = {
     sup: { k: 'blink', rng: 7.5, rad: 2.3, dmg: 1700, w: 1.15, need: 2900, name: 'Shadow strike', text: 'Blinks forward and cuts everything on the way.' },
     gad: { k: 'vanish', t: 3.2, name: 'Fade', text: 'Turns invisible and runs faster for a moment.' },
   },
+  arlo: {
+    name: 'Arlo', role: 'Tank', text: 'A knight with a sword and a big shield. Hard to take down.', hp: 6100, spd: 5.0, col: '#5B8DEF', want: 2.4, stats: [5, 3, 1, 2],
+    atk: { k: 'smash', rng: 2.9, arc: 1.3, dmg: 1050, kb: 6, reload: 1.3, cd: 0.45 },
+    sup: { k: 'slam', rad: 4.3, dmg: 1350, stun: 1.5, kb: 5, need: 3000, name: 'Shield bash', text: 'Slams his shield down and stuns enemies around him.' },
+    gad: { k: 'bubble', rad: 5, shield: 1300, t: 4, name: 'Guard up', text: 'Raises his shield to protect him and friends near him.' },
+  },
+  wren: {
+    name: 'Wren', role: 'Marksman', text: 'Quick crossbow bolts from a safe distance.', hp: 2800, spd: 5.6, col: '#3FBF7F', want: 9.5, stats: [2, 4, 4, 4],
+    atk: { k: 'bolt', rng: 14, spd: 36, dmg: 800, w: 0.34, reload: 1.15, cd: 0.36 },
+    sup: { k: 'wave', n: 9, arc: 0.7, rng: 11, spd: 30, dmg: 520, w: 0.36, kb: 8, need: 3200, name: 'Volley', text: 'Fires a wide fan of bolts that pushes enemies back.' },
+    gad: { k: 'mine', rad: 2.4, dmg: 1300, t: 14, name: 'Snare trap', text: 'A hidden trap that bites the first enemy to step on it.' },
+  },
 };
-export const HERO_KEYS = ['blaze', 'pip', 'boom', 'mira', 'rex', 'volt', 'kai', 'ivy', 'nyx'];
+export const HERO_KEYS = ['blaze', 'pip', 'boom', 'mira', 'rex', 'volt', 'kai', 'ivy', 'nyx', 'arlo', 'wren'];
 export const MAX_LEVEL = 10;
 export const levelCost = (lv) => 80 * lv;
 export const levelMods = (lv) => { const L = clamp(lv | 0, 1, MAX_LEVEL); return { hp: 1 + 0.06 * (L - 1), dmg: 1 + 0.05 * (L - 1) }; };
 export const CARDS = {
-  tough: { name: 'Tough', text: 'More health', icon: 'heart', go: (m) => { m.hp *= 1.15; } },
-  power: { name: 'Power', text: 'More damage', icon: 'flame', go: (m) => { m.dmg *= 1.12; } },
-  reload: { name: 'Quick reload', text: 'Ammo comes back faster', icon: 'replay', go: (m) => { m.reload *= 1.2; } },
-  swift: { name: 'Swift', text: 'Move faster', icon: 'dash', go: (m) => { m.spd *= 1.08; } },
-  charge: { name: 'Super charge', text: 'Super fills faster', icon: 'bolt', go: (m) => { m.supRate *= 1.22; } },
-  ammo: { name: 'Extra ammo', text: 'One more shot in your bar', icon: 'plus', go: (m) => { m.ammo = Math.min(5, m.ammo + 1); }, max: 2 },
-  life: { name: 'Lifesteal', text: 'Heal a little when you hit aliens', icon: 'heart', go: (m) => { m.life += 0.06; } },
-  regen: { name: 'Regen', text: 'Heal faster out of a fight', icon: 'plus', go: (m) => { m.regen *= 1.6; } },
-  armor: { name: 'Armor', text: 'Take less damage', icon: 'shield', go: (m) => { m.armor = Math.min(0.45, m.armor + 0.1); } },
-  dash: { name: 'Dash master', text: 'Dash comes back faster', icon: 'dash', go: (m) => { m.dashCd *= 0.72; } },
-  gadget: { name: 'Gadget master', text: 'One more gadget use', icon: 'magnet', go: (m, h) => { h.gad += 1; } },
-  lucky: { name: 'Lucky', text: 'Power ups work better', icon: 'crown', go: (m) => { m.luck += 0.4; } },
+  tough: { name: 'Tough', text: 'More health', icon: 'heart', go: (m) => { m.hp *= 1.15; }, max: 5 },
+  power: { name: 'Power', text: 'More damage', icon: 'flame', go: (m) => { m.dmg *= 1.12; }, max: 5 },
+  reload: { name: 'Quick reload', text: 'Ammo comes back faster', icon: 'replay', go: (m) => { m.reload *= 1.2; }, max: 4 },
+  swift: { name: 'Swift', text: 'Move faster', icon: 'dash', go: (m) => { m.spd *= 1.08; }, max: 3 },
+  charge: { name: 'Super charge', text: 'Super fills faster', icon: 'bolt', go: (m) => { m.supRate *= 1.22; }, max: 4 },
+  ammo: { name: 'Extra ammo', text: 'One more shot in your bar', icon: 'plus', go: (m) => { m.ammo = Math.min(5, m.ammo + 1); }, max: 2, can: (m) => m.ammo < 5 },
+  life: { name: 'Lifesteal', text: 'Heal a little when you hit aliens', icon: 'heart', go: (m) => { m.life += 0.06; }, max: 4 },
+  regen: { name: 'Regen', text: 'Heal faster out of a fight', icon: 'plus', go: (m) => { m.regen *= 1.6; }, max: 3 },
+  armor: { name: 'Armor', text: 'Take less damage', icon: 'shield', go: (m) => { m.armor = Math.min(0.45, m.armor + 0.1); }, max: 4, can: (m) => m.armor < 0.449 },
+  dash: { name: 'Dash master', text: 'Dash comes back faster', icon: 'dash', go: (m) => { m.dashCd *= 0.72; }, max: 3 },
+  gadget: { name: 'Gadget master', text: 'One more gadget use', icon: 'magnet', go: (m, h) => { h.gad += 1; m.gadRe = (m.gadRe || 1) * 1.35; }, max: 2 },
+  lucky: { name: 'Lucky', text: 'Power ups work better', icon: 'crown', go: (m) => { m.luck += 0.4; }, max: 3 },
   blaze: { hero: 'blaze', name: 'Wide spread', text: 'Two more pellets each shot', icon: 'flame', go: (m) => { m.extra += 2; }, max: 2 },
   pip: { hero: 'pip', name: 'Piercing shot', text: 'Shots go through aliens', icon: 'bolt', go: (m) => { m.pierce += 1; }, max: 2 },
   boom: { hero: 'boom', name: 'Big bombs', text: 'Bigger blasts', icon: 'bomb', go: (m) => { m.rad *= 1.22; }, max: 2 },
-  mira: { hero: 'mira', name: 'Warm heart', text: 'Heals friends more', icon: 'heart', go: (m) => { m.heal *= 1.35; } },
+  mira: { hero: 'mira', name: 'Warm heart', text: 'Heals friends more', icon: 'heart', go: (m) => { m.heal *= 1.35; }, max: 3 },
   rex: { hero: 'rex', name: 'Heavy axe', text: 'Longer stuns', icon: 'hammer', go: (m) => { m.stun *= 1.4; }, max: 2 },
   volt: { hero: 'volt', name: 'Long arc', text: 'Zaps hit one more alien', icon: 'bolt', go: (m) => { m.extra += 1; }, max: 3 },
   kai: { hero: 'kai', name: 'Cluster rockets', text: 'Rockets blast a bigger area', icon: 'rocket', go: (m) => { m.rad *= 1.25; }, max: 2 },
   ivy: { hero: 'ivy', name: 'Deep chill', text: 'Slows last longer', icon: 'snow', go: (m) => { m.slow *= 1.4; }, max: 2 },
   nyx: { hero: 'nyx', name: 'Long shadow', text: 'Fade lasts longer and her blades hit harder', icon: 'dash', go: (m) => { m.fade = (m.fade || 1) * 1.35; m.dmg *= 1.06; }, max: 2 },
-  crit: { name: 'Lucky shot', text: 'Some shots hit twice as hard', icon: 'star', go: (m) => { m.crit = Math.min(0.36, (m.crit || 0) + 0.12); }, max: 3 },
+  arlo: { hero: 'arlo', name: 'Iron wall', text: 'His shield guards more and his bash stuns longer', icon: 'shield', go: (m) => { m.heal *= 1.3; m.stun *= 1.25; }, max: 2 },
+  wren: { hero: 'wren', name: 'Sharp bolts', text: 'Bolts go through the first enemy', icon: 'bolt', go: (m) => { m.pierce += 1; }, max: 2 },
+  crit: { name: 'Lucky shot', text: 'Some shots hit twice as hard', icon: 'star', go: (m) => { m.crit = Math.min(0.36, (m.crit || 0) + 0.12); }, max: 3, can: (m) => (m.crit || 0) < 0.359 },
   chain: { name: 'Chain blast', text: 'Aliens you take down explode', icon: 'bomb', go: (m) => { m.chain = (m.chain || 0) + 1; }, max: 2 },
   rush: { name: 'Kill rush', text: 'Run faster for a moment after a takedown', icon: 'dash', go: (m) => { m.rush = (m.rush || 0) + 1; }, max: 2 },
   magnet: { name: 'Magnet', text: 'Grab power ups from farther away', icon: 'magnet', go: (m) => { m.magnet = (m.magnet || 0) + 1.3; }, max: 2 },
@@ -111,13 +125,21 @@ export const CARDS = {
 export const CARD_KEYS = Object.keys(CARDS);
 export const cardWave = (n) => n > 0 && n % 2 === 0;
 export const TEAM_SKIP_CARDS = new Set(['lucky', 'magnet', 'medic']);
-export function cardChoices(h, rnd, skip) {
-  const have = {};
-  for (const k of h.cards || []) have[k] = (have[k] || 0) + 1;
-  const pool = CARD_KEYS.filter((k) => { const C = CARDS[k]; if (skip && skip.has(k)) return false; if (C.hero && C.hero !== h.key) return false; return !C.max || (have[k] || 0) < C.max; });
+export function cardOk(h, k, skip) {
+  const C = CARDS[k];
+  if (!C || !h || (skip && skip.has(k)) || (C.hero && C.hero !== h.key)) return false;
+  const n = (h.cards || []).filter((x) => x === k).length;
+  if (C.max && n >= C.max) return false;
+  return !C.can || C.can(h.mods || baseMods(), h);
+}
+export function cardChoices(h, rnd, skip, avoid) {
+  const pool = CARD_KEYS.filter((k) => cardOk(h, k, skip));
+  let src = avoid && avoid.length ? pool.filter((k) => !avoid.includes(k)) : pool;
+  if (src.length < Math.min(3, pool.length)) src = pool;
   const out = [];
-  if (pool.includes(h.key) && rnd() < 0.55) out.push(h.key);
-  while (out.length < 3 && out.length < pool.length) { const k = pool[Math.floor(rnd() * pool.length)]; if (!out.includes(k)) out.push(k); }
+  if (src.includes(h.key) && rnd() < 0.55) out.push(h.key);
+  while (out.length < 3 && out.length < src.length) { const k = src[Math.floor(rnd() * src.length)]; if (!out.includes(k)) out.push(k); }
+  for (const k of pool) if (out.length < 3 && !out.includes(k)) out.push(k);
   return out;
 }
 export function applyCard(h, k) {
@@ -140,9 +162,9 @@ export const ROBOTS = {
   bomber: { name: 'Popper', hp: 620, spd: 5.1, r: 0.56, dmg: 1250, rad: 2.7, fuse: 0.7, pts: 15, drop: 0.06 },
   tank: { name: 'Brute', hp: 3800, spd: 2.25, r: 0.98, dmg: 270, rng: 9, cd: 2.7, burst: 3, bspd: 11.5, shield: 0.25, pts: 40, drop: 0.3 },
   boss: { name: 'Glob Queen', hp: 30000, spd: 2.1, r: 1.75, dmg: 1300, pts: 400, drop: 1 },
-  mel: { name: 'Rover', hp: 2900, spd: 3.3, r: 0.6, dmg: 210, rng: 1.6, cd: 1.0, pts: 0, drop: 0 },
-  rng: { name: 'Dish rover', hp: 1850, spd: 3.3, r: 0.55, dmg: 240, rng: 6.5, cd: 1.4, pts: 0, drop: 0 },
-  sie: { name: 'Big rover', hp: 5200, spd: 3.0, r: 0.75, dmg: 430, rng: 7.5, cd: 2.0, pts: 0, drop: 0 },
+  mel: { name: 'Bolt bot', hp: 2900, spd: 3.3, r: 0.6, dmg: 210, rng: 1.6, cd: 1.0, pts: 0, drop: 0 },
+  rng: { name: 'Blaster bot', hp: 1850, spd: 3.3, r: 0.55, dmg: 240, rng: 6.5, cd: 1.4, pts: 0, drop: 0 },
+  sie: { name: 'Heavy bot', hp: 5200, spd: 3.0, r: 0.75, dmg: 430, rng: 7.5, cd: 2.0, pts: 0, drop: 0 },
   tow: { name: 'Tower', hp: 24000, spd: 0, r: 1.15, dmg: 950, rng: 8.6, cd: 1.0, pts: 0, drop: 0 },
   gua: { name: 'Guardian', hp: 34000, spd: 0, r: 1.35, dmg: 1150, rng: 9.2, cd: 1.0, pts: 0, drop: 0 },
   cor: { name: 'Core', hp: 30000, spd: 0, r: 2.4, dmg: 0, rng: 0, cd: 9, pts: 0, drop: 0 },
@@ -440,13 +462,13 @@ const NOH = [];
 export const foeHeroes = (W, h) => (W.pvp && h ? heroList(W).filter((o) => o.st === 0 && o.tm !== h.tm) : NOH);
 export function pvpHit(W, att, t, d, dirx, dirz, o = {}) {
   if (!t || t.st !== 0 || !att || t.tm === att.tm || !(d > 0)) return 0;
-  const dd = Math.round(d * 0.8);
+  const dd = Math.round(d * 0.8 * (att.bot && W.bdm ? W.bdm : 1));
   if (W.local && W.local.has(t.id)) {
     const got = hurtHero(W, t, dd, att.id);
     if (got > 0 && W.local.has(att.id) && att.stats) att.stats.hd = (att.stats.hd || 0) + got;
     if (got > 0 || t.st === 2) {
       if (o.stun) t.stunT = Math.max(t.stunT || 0, Math.min(1.2, o.stun * 0.55));
-      if (o.slow) { t.slowK = Math.max(t.slowT > 0 ? t.slowK || 0 : 0, clamp(o.slow[0] * 0.8, 0, 0.6)); t.slowT = Math.max(t.slowT || 0, o.slow[1] * 0.7); }
+      if (o.slow && !(t.sprT > 0)) { t.slowK = Math.max(t.slowT > 0 ? t.slowK || 0 : 0, clamp(o.slow[0] * 0.8, 0, 0.6)); t.slowT = Math.max(t.slowT || 0, o.slow[1] * 0.7); }
       if (o.kb) { t.kbx = (t.kbx || 0) + (dirx || 0) * o.kb * 0.7; t.kbz = (t.kbz || 0) + (dirz || 0) * o.kb * 0.7; }
     }
     return got;
@@ -460,7 +482,7 @@ export function hurtHero(W, h, d, src) {
   if (!h || h.st !== 0 || !(d > 0)) return 0;
   if (h.dashT > 0 || h.jump) { emit(W, { k: 'dodge', id: h.id, x: h.x, z: h.z }); return 0; }
   if (W.pvp && (h.spawnT || 0) > 0) return 0;
-  let dd = Math.round(d * (1 - (h.mods ? h.mods.armor : 0)));
+  let dd = Math.round(d * (1 - (h.mods ? h.mods.armor : 0)) * (W.domeCut ? W.domeCut(W, h) : 1));
   if (h.shield > 0) { const a = Math.min(h.shield, dd); h.shield -= a; dd -= a; emit(W, { k: 'shieldHit', id: h.id, x: h.x, z: h.z, d: a }); if (dd <= 0) return 0; }
   h.hp -= dd; h.regen = 0; h.flash = 0.12; h.lastBy = src; h.lastHurt = W.t;
   if (W.pvp && typeof src === 'string' && W.heroes[src]) (h.dmgBy || (h.dmgBy = {}))[src] = W.t;
@@ -860,8 +882,9 @@ export function creditSup(W, s, got) {
 export const seenBy = (W, t, tm) => {
   if (!W.pvp) return true;
   const clk = (t.clkT || 0) > 0;
-  if (!clk && (!t.hid || W.t - (t.seen || -9) < 1.2)) return true;
-  const R = clk ? 2.2 : 3.6;
+  const bt = t.bot && W.bseen ? W.bseen : 0;
+  if (!clk && (!t.hid || W.t - (t.seen || -9) < Math.max(1.2, bt))) return true;
+  const R = (clk ? 2.2 : 3.6) + (bt > 1.2 ? 1.4 : 0);
   return heroList(W).some((o) => o.st === 0 && o.tm === tm && Math.hypot(o.x - t.x, o.z - t.z) < R);
 };
 export function autoAim(W, h, rng, needLos = true) {

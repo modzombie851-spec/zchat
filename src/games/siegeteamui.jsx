@@ -1,5 +1,5 @@
 import React from 'react';
-import { GPill, GHudPanel, kitTap, pressProps, INK, GLobbySheet, GSeg } from './gamekit.jsx';
+import { GPill, GHudPanel, GIcon, kitTap, pressProps, INK, GLobbySheet, GSeg } from './gamekit.jsx';
 import { GGlyph } from './gskill.jsx';
 import { FONT } from '../App.jsx';
 import * as E from './siegeengine.js';
@@ -24,7 +24,30 @@ export const TLOOK = {
 const TINTS = [new Float32Array([0.62, 0.86, 1.45, 0.553]), new Float32Array([1.45, 0.66, 0.62, 0.553]), new Float32Array([1.12, 0.84, 1.42, 0.553])];
 const TINTF = new Float32Array([1.9, 1.9, 1.9, 0.553]);
 const TINTI = new Float32Array([0.75, 0.95, 1.4, 0.553]);
-export const unitCol = (b, my) => (b.flash > 0 ? TINTF : b.stun > 0 || b.stunV ? TINTI : TINTS[b.tm == null || b.tm < 0 ? 2 : b.tm === my ? 0 : 1]);
+const TINTSOFT = [new Float32Array([0.74, 0.92, 1.38, 0.553]), new Float32Array([1.38, 0.74, 0.7, 0.553]), new Float32Array([1.08, 0.9, 1.3, 0.553])];
+export const unitCol = (b, my, soft) => (b.flash > 0 ? TINTF : b.stun > 0 || b.stunV ? TINTI : (soft ? TINTSOFT : TINTS)[b.tm == null || b.tm < 0 ? 2 : b.tm === my ? 0 : 1]);
+
+export const SKI = {'blaze.atk': 0, 'blaze.sup': 1, 'blaze.gad': 2, 'pip.atk': 3, 'pip.sup': 4, 'pip.gad': 5, 'boom.atk': 6, 'boom.sup': 7, 'boom.gad': 8, 'mira.atk': 9, 'mira.sup': 10, 'mira.gad': 11, 'rex.atk': 12, 'rex.sup': 13, 'rex.gad': 14, 'volt.atk': 15, 'volt.sup': 16, 'volt.gad': 17, 'kai.atk': 18, 'kai.sup': 19, 'kai.gad': 20, 'ivy.atk': 21, 'ivy.sup': 22, 'ivy.gad': 23, 'nyx.atk': 24, 'nyx.sup': 25, 'nyx.gad': 26, 'arlo.atk': 27, 'arlo.sup': 28, 'arlo.gad': 29, 'tusk.atk': 30, 'tusk.sup': 31, 'tusk.gad': 32, 'wren.atk': 33, 'wren.sup': 34, 'wren.gad': 35, 'sk.blink': 36, 'sk.mend': 37, 'sk.hunter': 38, 'sk.guard': 39, 'sk.sprint': 40, 'sk.shock': 41, 'dash': 42, 'home': 43};
+export const SKI_URL = '/bolt/skill-icons-v1.webp';
+export const heroIc = (key, slot) => (SKI[`${key}.${slot}`] != null ? `${key}.${slot}` : null);
+export function SkIcon({ k, size = 40, dim, style }) {
+  const i = SKI[k];
+  if (i == null) return null;
+  return <span aria-hidden="true" style={{ display: 'block', width: size, height: size, borderRadius: '50%', flexShrink: 0, backgroundImage: `url(${SKI_URL})`, backgroundSize: `${8 * size}px ${6 * size}px`, backgroundPosition: `${-(i % 8) * size}px ${-Math.floor(i / 8) * size}px`, boxShadow: 'inset 0 0 0 1.5px rgba(255,255,255,0.3), inset 0 -5px 9px rgba(0,0,0,0.35)', filter: dim ? 'grayscale(0.75) brightness(0.55)' : 'none', ...style }} />;
+}
+export function PaintSkill({ ic, size = 56, cool = 0, coolMax = 0, badge, disabled, label, onPress, ring = '#E9C46A', glow }) {
+  const f = coolMax > 0 && cool > 0.05 ? Math.min(1, cool / coolMax) : 0;
+  const off = disabled || f > 0;
+  return (
+    <button type="button" className="zgk-btn" aria-label={label} onPointerDown={(e) => { e.stopPropagation(); if (e.cancelable) e.preventDefault(); if (off) return; kitTap('click'); if (onPress) onPress(); }}
+      style={{ position: 'relative', width: size, height: size, borderRadius: '50%', border: 'none', padding: 0, cursor: off ? 'default' : 'pointer', touchAction: 'none', background: 'radial-gradient(circle at 50% 35%, #2A3247, #0D111C 75%)', boxShadow: `0 0 0 2px ${off ? 'rgba(200,205,215,0.55)' : ring}, 0 0 0 4px rgba(10,12,20,0.55), 0 4px 10px rgba(0,0,0,0.45)${glow && !off ? `, 0 0 14px ${glow}` : ''}` }}>
+      <SkIcon k={ic} size={size - 6} dim={off} style={{ position: 'absolute', left: 3, top: 3 }} />
+      {f > 0 && <span aria-hidden="true" style={{ position: 'absolute', left: 3, top: 3, width: size - 6, height: size - 6, borderRadius: '50%', background: `conic-gradient(rgba(4,6,12,0.62) ${(f * 360).toFixed(1)}deg, rgba(0,0,0,0) 0deg)` }} />}
+      {f > 0 && <span aria-hidden="true" style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: Math.round(size * 0.34), fontWeight: 900, color: '#FFFFFF', textShadow: '0 1px 3px #000, 0 0 2px #000', fontFamily: FONT }}>{Math.ceil(cool)}</span>}
+      {badge != null && <span aria-hidden="true" style={{ position: 'absolute', right: -4, top: -4, minWidth: 19, height: 19, padding: '0 4px', borderRadius: 10, background: '#141A29', boxShadow: '0 0 0 1.5px rgba(255,255,255,0.75)', fontSize: 11, fontWeight: 900, color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: FONT }}>{badge}</span>}
+    </button>
+  );
+}
 
 export function riftUnpack(buf, img) {
   const dv = new DataView(buf);
@@ -76,14 +99,37 @@ export function TeamScore({ hud, onPress }) {
   const a = t.sc[t.my === 1 ? 1 : 0], b = t.sc[t.my === 1 ? 0 : 1];
   return (
     <button type="button" className="zgk-btn" aria-label={`Your team ${a}, enemy team ${b}. Open the scoreboard`} {...pressProps(() => { kitTap(); onPress(); })}
-      style={{ pointerEvents: 'auto', display: 'flex', alignItems: 'stretch', height: 34, padding: 0, border: 'none', borderRadius: 10, overflow: 'hidden', cursor: 'pointer', fontFamily: FONT, color: '#FFFFFF', boxShadow: '0 3px 10px rgba(0,0,0,0.35), 0 0 0 1.5px rgba(255,255,255,0.18)', background: 'rgba(10,14,26,0.82)' }}>
-      <span style={{ minWidth: 44, padding: '0 10px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(180deg, ${TCOL[0]}, #1F5FD0)`, fontSize: 20, fontWeight: 900, textShadow: `0 2px 0 ${INK}` }}>{a}</span>
-      <span style={{ minWidth: 58, padding: '0 8px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', lineHeight: 1.05 }}>
-        <span style={{ fontSize: 14, fontWeight: 900, fontVariantNumeric: 'tabular-nums' }}>{mmss(t.t)}</span>
-        <span style={{ fontSize: 9.5, fontWeight: 800, color: 'rgba(255,255,255,0.65)' }}>{`${t.k} ${t.d} ${t.a}`}</span>
+      style={{ pointerEvents: 'auto', display: 'flex', alignItems: 'stretch', height: 30, padding: 0, border: 'none', borderRadius: 9, overflow: 'hidden', cursor: 'pointer', fontFamily: FONT, color: '#FFFFFF', boxShadow: '0 3px 8px rgba(0,0,0,0.3), 0 0 0 1.5px rgba(255,255,255,0.16)', background: 'rgba(10,14,26,0.78)' }}>
+      <span style={{ minWidth: 34, padding: '0 8px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(180deg, ${TCOL[0]}, #1F5FD0)`, fontSize: 17, fontWeight: 900, textShadow: `0 2px 0 ${INK}` }}>{a}</span>
+      <span style={{ minWidth: 50, padding: '0 7px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', lineHeight: 1.05 }}>
+        <span style={{ fontSize: 12.5, fontWeight: 900, fontVariantNumeric: 'tabular-nums' }}>{mmss(t.t)}</span>
+        <span style={{ fontSize: 9, fontWeight: 800, color: 'rgba(255,255,255,0.65)', fontVariantNumeric: 'tabular-nums' }}>{`${t.k} ${t.d} ${t.a}`}</span>
       </span>
-      <span style={{ minWidth: 44, padding: '0 10px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(180deg, ${TCOL[1]}, #C42639)`, fontSize: 20, fontWeight: 900, textShadow: `0 2px 0 ${INK}` }}>{b}</span>
+      <span style={{ minWidth: 34, padding: '0 8px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(180deg, ${TCOL[1]}, #C42639)`, fontSize: 17, fontWeight: 900, textShadow: `0 2px 0 ${INK}` }}>{b}</span>
     </button>
+  );
+}
+
+export function TeamRoster({ hud, myK, nameOf, thumbs }) {
+  const t = hud.tm;
+  if (!t || !t.ros || t.ros.length < 2) return null;
+  const mine = t.ros.filter((r) => r.tm === t.my), foes = t.ros.filter((r) => r.tm !== t.my);
+  const row = (r, ally) => (
+    <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 4, height: 17, opacity: r.st === 2 ? 0.62 : 1 }}>
+      <span style={{ width: 15, height: 15, borderRadius: 8, flexShrink: 0, overflow: 'hidden', display: 'block', background: ally ? '#1E3F7A' : '#7A1E2A', boxShadow: `0 0 0 1.2px ${ally ? '#5AA2FF' : '#FF5C6C'}` }}>{thumbs && thumbs[r.key] ? <img src={thumbs[r.key]} alt="" style={{ width: 15, height: 15, objectFit: 'cover', display: 'block', filter: r.st === 2 ? 'grayscale(1)' : 'none' }} /> : null}</span>
+      <span style={{ width: 13, fontSize: 9.5, fontWeight: 900, color: '#FFE15A', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{r.tl}</span>
+      <span style={{ width: 60, fontSize: 10.5, fontWeight: 900, color: ally ? '#8EC5FF' : '#FF8E99', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textShadow: '0 1px 2px rgba(0,0,0,0.8)' }}>{r.id === myK ? 'You' : nameOf(r.id)}</span>
+      {r.st === 2 ? <span style={{ width: 26, fontSize: 9.5, fontWeight: 900, color: '#FFFFFF', fontVariantNumeric: 'tabular-nums' }}>{`${Math.max(1, Math.ceil(r.resp))}s`}</span>
+        : r.f != null ? <span style={{ width: 26, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.18)', overflow: 'hidden', display: 'block' }}><span style={{ display: 'block', height: '100%', width: `${Math.round(r.f * 100)}%`, background: ally ? '#4FA3FF' : '#FF5C6C' }} /></span>
+          : <span style={{ width: 26 }} />}
+    </div>
+  );
+  return (
+    <div aria-label="Players" style={{ display: 'flex', flexDirection: 'column', gap: 1, padding: '4px 6px 5px', borderRadius: 9, background: 'rgba(8,12,22,0.5)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.08)', pointerEvents: 'none' }}>
+      {mine.map((r) => row(r, true))}
+      <span style={{ height: 1, margin: '2px 0', background: 'rgba(255,255,255,0.14)', display: 'block' }} />
+      {foes.map((r) => row(r, false))}
+    </div>
   );
 }
 
@@ -127,7 +173,7 @@ export const TXT_COL = ['#AFCBFF', '#FFB3BB'];
 export function KillFeed({ items }) {
   if (!items.length) return null;
   return (
-    <div aria-live="polite" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, pointerEvents: 'none' }}>
+    <div aria-live="polite" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, pointerEvents: 'none' }}>
       {items.map((it) => (
         <span key={it.id} style={{ display: 'flex', alignItems: 'center', gap: 5, height: 22, padding: '0 9px', borderRadius: 11, background: it.good ? 'rgba(20,50,110,0.74)' : 'rgba(110,22,30,0.74)', fontSize: 11.5, fontWeight: 800, whiteSpace: 'nowrap', animation: 'zgk-pop 0.22s ease-out' }}>
           {it.parts.map(([t, c], i) => <span key={i} style={{ color: c || 'rgba(255,255,255,0.85)', fontWeight: c ? 900 : 800 }}>{t}</span>)}
@@ -147,8 +193,8 @@ export function SkillPick({ value, onPick, disabled, compact }) {
           const K = T.SKILLS[k];
           return (
             <button key={k} type="button" role="radio" aria-checked={on} aria-label={K.name} className="zgk-btn" disabled={disabled && !on} {...pressProps(() => { if (!disabled && !on) { kitTap(); onPick(k); } })}
-              style={{ width: compact ? 36 : 40, height: compact ? 36 : 40, borderRadius: '50%', border: 'none', padding: 0, cursor: disabled ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? `radial-gradient(circle at 40% 30%, ${K.col}, #1A2236 85%)` : 'rgba(20,26,40,0.85)', boxShadow: on ? `0 0 0 2.5px #FFD45A, 0 0 10px ${K.col}88` : 'inset 0 0 0 1.5px rgba(255,255,255,0.22)', opacity: disabled && !on ? 0.5 : 1 }}>
-              <GGlyph k={K.icon} size={compact ? 20 : 22} color={on ? '#FFFFFF' : K.col} />
+              style={{ width: compact ? 36 : 40, height: compact ? 36 : 40, borderRadius: '50%', border: 'none', padding: 0, cursor: disabled ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0D111C', boxShadow: on ? `0 0 0 2.5px #FFD45A, 0 0 12px ${K.col}AA` : '0 0 0 1.5px rgba(255,255,255,0.22)', opacity: disabled && !on ? 0.5 : 1 }}>
+              {SKI[`sk.${k}`] != null ? <SkIcon k={`sk.${k}`} size={compact ? 32 : 36} dim={!on} /> : <GGlyph k={K.icon} size={compact ? 20 : 22} color={on ? '#FFFFFF' : K.col} />}
             </button>
           );
         })}
@@ -171,6 +217,7 @@ export function TeamSlots({ list, ts, thumbs, myK, onSwap, canSwap, botsOn, host
             <span key={p.id} style={{ height: 26, display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 800, minWidth: 0 }}>
               <span style={{ width: 22, height: 22, borderRadius: 11, overflow: 'hidden', flexShrink: 0, background: '#141A2C', boxShadow: `0 0 0 1.5px ${p.id === myK ? '#FFD45A' : TCOL[tm]}` }}>{thumbs[p.h] ? <img src={thumbs[p.h]} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} /> : null}</span>
               <span style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: p.id === myK ? '#FFE15A' : '#FFFFFF' }}>{p.id === myK ? 'You' : p.n}{p.id === hostId ? ', host' : ''}</span>
+              {p.pw ? <span aria-label={`Power ${p.pw}`} style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 2, fontSize: 10.5, fontWeight: 900, color: '#FFD45A' }}><GIcon k="bolt" size={11} color="#FFD45A" ink="transparent" />{p.pw}</span> : null}
             </span>
           );
         })}
@@ -219,11 +266,20 @@ export function TeamBoard({ GS, rows, myK, myTeam, thumbs, nameOf, score, onClos
   );
 }
 
-export function TeamSettings({ ts, onTs, disabled }) {
+export const BL_ITEMS = [['0', 'Easy'], ['1', 'Normal'], ['2', 'Hard']];
+export function TeamSettings({ ts, onTs, disabled, bl, onBl }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-      <span style={{ fontSize: 14, fontWeight: 900, width: 82 }}>Team size</span>
-      <div style={{ flex: 1 }}><GSeg value={String(ts)} items={TS_ITEMS} onPick={(v) => onTs(Number(v))} disabled={disabled} label="Team size" /></div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span style={{ fontSize: 14, fontWeight: 900, width: 82 }}>Team size</span>
+        <div style={{ flex: 1 }}><GSeg value={String(ts)} items={TS_ITEMS} onPick={(v) => onTs(Number(v))} disabled={disabled} label="Team size" /></div>
+      </div>
+      {onBl && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 14, fontWeight: 900, width: 82 }}>Bot difficulty</span>
+          <div style={{ flex: 1 }}><GSeg value={String(bl)} items={BL_ITEMS} onPick={(v) => onBl(Number(v))} disabled={disabled} label="Bot difficulty" /></div>
+        </div>
+      )}
     </div>
   );
 }
@@ -245,10 +301,11 @@ export function TeamMapCard({ img, ts, isHost, onPress }) {
 export function TeamHowTo() {
   const rows = [
     ['vortex', 'Break the towers in a lane, then the guardian, then the enemy core to win.'],
-    ['sprint', 'Rovers walk every lane. Stay behind them when you push a tower.'],
+    ['sprint', 'Bolt bots walk every lane. Stay behind them when you push a tower.'],
     ['dash', 'Stand on a pad in your base to jump to your lane. The river portals link the two sides.'],
-    ['flame', 'Big aliens in the jungle give Fury and Flow buffs. The Hive Ship pushes for the team that takes it.'],
-    ['revive', 'Tap Home to go back to your base and heal. Level up to pick new powers.'],
+    ['flame', 'Wild monsters live in the jungle. The big ones give Fury and Flow buffs. The Hive Ship pushes for the team that takes it.'],
+    ['revive', 'Tap Home to go back to your base and heal. Every level up gives you a new power, up to level 20.'],
+    ['shield', 'Fair fight. Everyone starts at level 1 with the same stats, and players are split by power.'],
   ];
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -337,6 +394,8 @@ export function teamHudOf(W, myK) {
     my: myTm, sc: S.score.slice(), t: S.t, k: kd.k, d: kd.d, a: kd.a, tl, xp: me ? me.xp || 0 : 0, need: T.xpNeed(tl),
     buffs, ship, resp: me && me.st === 2 ? me.respT || 0 : 0, rec: me && me.recT > 0 ? 1 - me.recT / 4.5 : -1,
     sk: me ? me.sk : 'blink', skCD: me ? Math.ceil((me.skCD || 0) * 10) / 10 : 0, skMax: me && T.SKILLS[me.sk] ? T.SKILLS[me.sk].cd : 1,
+    gate: me && me.gate ? Math.max(0, me.gate.t - W.t) : 0, bl: S.bl,
+    ros: W.order.map((k) => { const h = W.heroes[k]; const vis = h.tm === myTm || (h.st === 0 && E.seenBy(W, h, myTm)); return { id: k, tm: h.tm, key: h.key, tl: h.tl || 1, st: h.st, resp: h.respT || 0, f: h.st === 0 && vis ? Math.max(0, Math.min(1, h.hp / Math.max(1, h.max))) : null }; }),
   };
 }
 
