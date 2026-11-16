@@ -6562,29 +6562,34 @@ function WnSegments({ total, at, onArt, dark }) {
   );
 }
 
-const WN_PHOTOS = { pvp578: '/wn578-pvp.webp', mars578: '/wn578-mars.webp', chat574: '/wn574-chat.webp', cards574: '/wn574-cards.webp', shop573: '/wn573-shop.webp', try573: '/wn573-try.webp', cmt573: '/wn573-comments.webp', rally57: '/race-art.webp', set57: '/wn57-set.webp', lay57: '/wn57-lay.webp', bolt57: '/wn57-bolt.webp', hub57: '/wn57-hub.webp', zombies49: '/wn49-zombies.webp', mutant49: '/wn49-mutant.webp', guns50: '/wn50-guns.webp', house50: '/wn50-house.webp', pond50: '/wn50-pond.webp', buttons50: '/wn50-buttons.webp', settings50: '/wn50-settings.webp', pack51: '/wn51-pack.webp', emote51: '/wn51-emote.webp', lobby51: '/wn51-lobby.webp', waves52: '/wn52-waves.webp', sky52: '/wn52-sky.webp', map52: '/wn52-map.webp', boss53: '/wn53-boss.webp', fire53: '/wn53-fire.webp', dog53: '/wn53-dog.webp', train53: '/wn53-train.webp', hud531: '/wn531-hud.webp', moves531: '/wn531-moves.webp', pc531: '/wn531-pc.webp', squad54: '/wn54-squad.webp', boom54: '/wn54-boom.webp', heli54: '/wn54-heli.webp', gas54: '/wn54-gas.webp' , shop55: '/wn55-shop.webp', stall55: '/wn55-stall.webp', boss55: '/wn55-boss.webp', climb55: '/wn55-climb.webp', drop55: '/wn55-drop.webp', squad55: '/wn55-squad.webp', hud55: '/wn55-hud.webp', set55: '/wn55-settings.webp', music55: '/wn55-music.webp', guns55: '/wn55-guns.webp', zj55: '/zombie-art2.webp', bolt55: '/bolt-art2.webp', torch55: '/duo-art.webp' };
+const WN_PHOTOS = { lobby579: '/wn579-lobby.webp', city579: '/wn579-city.webp', fort579: '/wn579-fort.webp', pvp578: '/wn578-pvp.webp', mars578: '/wn578-mars.webp', chat574: '/wn574-chat.webp', cards574: '/wn574-cards.webp', shop573: '/wn573-shop.webp', try573: '/wn573-try.webp', cmt573: '/wn573-comments.webp', rally57: '/race-art.webp', set57: '/wn57-set.webp', lay57: '/wn57-lay.webp', bolt57: '/wn57-bolt.webp', hub57: '/wn57-hub.webp', zombies49: '/wn49-zombies.webp', mutant49: '/wn49-mutant.webp', guns50: '/wn50-guns.webp', house50: '/wn50-house.webp', pond50: '/wn50-pond.webp', buttons50: '/wn50-buttons.webp', settings50: '/wn50-settings.webp', pack51: '/wn51-pack.webp', emote51: '/wn51-emote.webp', lobby51: '/wn51-lobby.webp', waves52: '/wn52-waves.webp', sky52: '/wn52-sky.webp', map52: '/wn52-map.webp', boss53: '/wn53-boss.webp', fire53: '/wn53-fire.webp', dog53: '/wn53-dog.webp', train53: '/wn53-train.webp', hud531: '/wn531-hud.webp', moves531: '/wn531-moves.webp', pc531: '/wn531-pc.webp', squad54: '/wn54-squad.webp', boom54: '/wn54-boom.webp', heli54: '/wn54-heli.webp', gas54: '/wn54-gas.webp' , shop55: '/wn55-shop.webp', stall55: '/wn55-stall.webp', boss55: '/wn55-boss.webp', climb55: '/wn55-climb.webp', drop55: '/wn55-drop.webp', squad55: '/wn55-squad.webp', hud55: '/wn55-hud.webp', set55: '/wn55-settings.webp', music55: '/wn55-music.webp', guns55: '/wn55-guns.webp', zj55: '/zombie-art2.webp', bolt55: '/bolt-art2.webp', torch55: '/duo-art.webp' };
 const WN_HIGHLIGHTS = [
-  { k: 'pvp578', art: 'pvp578', go: 'siege', cta: 'Play Bolt War', title: 'Team deathmatch and Hardpoint', text: 'Two new team modes in Bolt War. Get the most takedowns in Team deathmatch, or hold the zone in Hardpoint. Play 1v1 up to 5v5, and bots fill every open spot.' },
-  { k: 'mars578', art: 'mars578', go: 'siege', cta: 'Play Bolt War', title: 'Mars outpost', text: 'A new map with habitats, landers, cargo yards and a mine. Three zones sit down the middle, and monsters around the edges give you XP for new powers.' },
+  { k: 'lobby579', art: 'lobby579', go: 'siege', cta: 'Play Bolt War', title: 'A new match lobby', text: 'Pick the mode, map, time and score limit, see both teams face off, invite friends who are online and talk before the match starts.' },
+  { k: 'city579', art: 'city579', go: 'siege', cta: 'Play Bolt War', title: 'Downtown and Old fort', text: 'Two new maps in Bolt War. Fight across the streets of Downtown or inside the walls of Old fort. Each mode starts on its own map.' },
 ];
 const WN_SECTIONS = [
-  { title: 'Team modes', items: [
-    { art: 'pvp578', title: 'Team deathmatch', text: 'Every takedown is a point. The first team to the goal wins.' },
-    { art: 'pvp578', title: 'Hardpoint', text: 'Stand in the zone to score. It moves every minute, and an arrow shows you where.' },
-    { art: 'pvp578', title: 'Overtime', text: 'If the time runs out on a tie, the next point wins.' },
-    { art: 'pvp578', title: 'MVP', text: 'The best player of the match gets a badge on the scoreboard.' },
+  { title: 'Match lobby', items: [
+    { art: 'lobby579', title: 'Match settings', text: 'Set the mode, map, time limit, score limit, team size and bots.' },
+    { art: 'lobby579', title: 'Invite friends', text: 'See who is online and add them to your match with one tap.' },
+    { art: 'lobby579', title: 'Talk in the lobby', text: 'Chat, mic and voice buttons right next to Start match.' },
+    { art: 'lobby579', title: 'Hero card', text: 'Open Loadout to see your hero stats and upgrade them.' },
   ] },
-  { title: 'Mars outpost', items: [
-    { art: 'mars578', title: 'A new map', text: 'A mine, a landing pad and a cargo depot, with cover to fight around.' },
-    { art: 'mars578', title: 'A wider view', text: 'The camera sits higher so you see more of the fight.' },
-    { art: 'mars578', title: 'A cleaner screen', text: 'A small map at the top left with the kill feed under it. Your team is blue and enemies are red.' },
-    { art: 'mars578', title: 'New skill icons', text: 'Fresh painted icons for every skill and button.' },
+  { title: 'New maps', items: [
+    { art: 'city579', title: 'Downtown', text: 'Streets, cars, shops and crossings, with a plaza in the middle.' },
+    { art: 'fort579', title: 'Old fort', text: 'Castle walls, towers, banners and a great hall.' },
+    { art: 'fort579', title: 'Pick your map', text: 'Team deathmatch starts on Downtown and Hardpoint on Mars outpost. Change it any time.' },
+  ] },
+  { title: 'In the match', items: [
+    { art: 'city579', title: 'Green heal numbers', text: 'Life steal, healing and health regen pop up as green numbers.' },
+    { art: 'city579', title: 'Scoreboard button', text: 'Check the score any time from the button at the top.' },
+    { art: 'lobby579', title: 'Match results', text: 'A new results screen with the MVP, both teams and your rewards.' },
   ] },
 ];
 const WN_NEW_COUNT = WN_SECTIONS.reduce((n, sec) => n + sec.items.length, 0);
 const WN_SUMMARY = `${WN_NEW_COUNT} new things to try.`;
 
 const WN_EARLIER = [
+  { title: 'Team deathmatch, Hardpoint and Mars outpost', text: 'Two team modes for 1v1 up to 5v5, a new map on Mars, overtime, an MVP badge and new skill icons.' },
   { title: 'Battle skills, level 20 and three new heroes', text: 'Battle skills, a new power at every level, bot difficulty, and the new heroes Arlo, Wren and Nyx.' },
   { title: 'Game chat that turns with you and new upgrade cards', text: 'A big chat panel with a sideways keyboard in every game, and Bolt War cards that show real numbers.' },
   { title: 'A new Shop, try on and a comment filter', text: 'Rarity cards and a Daily shop, try items on before you buy, and rude comments on your posts hidden from others.' },

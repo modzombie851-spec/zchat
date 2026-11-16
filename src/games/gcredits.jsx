@@ -81,9 +81,15 @@ const GROUPS = [
       ['Bolt War heroes, mechs, aliens, power ups, rovers, towers, the Hive Ship and the Nebula Valley trees, rocks and buildings, Ultimate Space Kit', 'Quaternius', 'https://quaternius.com', 'CC0'],
       ['Bolt War heroes Arlo, Wren, Nyx and Ivy, KayKit Character Pack Adventurers', 'Kay Lousberg', 'https://kaylousberg.itch.io/kaykit-adventurers', 'CC0'],
       ['Bolt War Mars outpost habitats, landers, trucks, cargo, cliffs and the mine, KayKit Space Base Bits', 'Kay Lousberg', 'https://kaylousberg.itch.io/space-base-bits', 'CC0'],
+      ['Bolt War Downtown buildings, roads, cars and street props, KayKit City Builder Bits', 'Kay Lousberg', 'https://kaylousberg.itch.io/city-builder-bits', 'CC0'],
+      ['Bolt War Old fort walls, towers, banners, barrels and props, KayKit Dungeon Remastered', 'Kay Lousberg', 'https://kaylousberg.itch.io/kaykit-dungeon-remastered', 'CC0'],
       ['Bolt War bolt bots, Animated Mech Pack', 'Quaternius', 'https://opengameart.org/content/animated-mech-pack', 'CC0'],
       ['Bolt War monsters, Textured Cute Monster Pack', 'Quaternius', 'https://opengameart.org/content/textured-cute-monster-pack', 'CC0'],
     ],
+  },
+  {
+    t: 'Fonts',
+    items: [['Bolt War lobby font, Barlow Condensed', 'The Barlow Project Authors, Jeremy Tribby', 'https://github.com/jpt/barlow', 'SIL OFL 1.1']],
   },
   {
     t: 'Icons',

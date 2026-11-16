@@ -503,6 +503,14 @@ export function healHero(W, h, n, by) {
   emit(W, { k: 'heal', id: h.id, n: add, x: h.x, z: h.z, by });
   return add;
 }
+export function softHeal(W, h, n, dt) {
+  if (n > 0) h.rgA = (h.rgA || 0) + n;
+  if (!(h.rgA > 0)) return;
+  h.rgT = (h.rgT || 0) + dt;
+  if (h.rgT < 0.7) return;
+  if (h.rgA >= 1) emit(W, { k: 'heal', id: h.id, n: Math.round(h.rgA), x: h.x, z: h.z, by: h.id, q: 1 });
+  h.rgA = 0; h.rgT = 0;
+}
 export function reviveHero(W, h, frac, by) {
   if (!h || h.st === 0) return;
   h.st = 0; h.hp = Math.round(h.max * frac); h.rv = 0; h.downT = 0; h.regen = 0;
@@ -874,7 +882,7 @@ export function creditSup(W, s, got) {
   if (!got) return;
   const h = W.heroes[s.own];
   if (!h || !(W.local && W.local.has(h.id))) return;
-  if (h.mods && h.mods.life > 0 && h.st === 0) h.hp = Math.min(h.max, h.hp + got * h.mods.life);
+  if (h.mods && h.mods.life > 0 && h.st === 0) healHero(W, h, got * h.mods.life, h.id);
   if (s.sup) return;
   const H = HEROES[h.key];
   h.sup = Math.min(1, h.sup + (got / H.sup.need) * (h.mods ? h.mods.supRate : 1) * (h.buffs && h.buffs.flow ? 1.35 : 1));
@@ -1177,7 +1185,8 @@ export function stepHero(W, h, inp, dt) {
   const rel = H.atk.reload / (M.reload * (h.rfT > 0 ? 2 : 1) * (h.ocT > 0 ? 1.5 : 1));
   h.ammo = Math.min(M.ammo, h.ammo + dt / rel);
   h.regen += dt;
-  if (h.regen > 3 && h.hp < h.max) { h.hp = Math.min(h.max, h.hp + h.max * 0.12 * dt * M.regen); }
+  if (h.regen > 3 && h.hp < h.max) { const add = Math.min(h.max - h.hp, h.max * 0.12 * dt * M.regen); h.hp += add; softHeal(W, h, add, 0); }
+  softHeal(W, h, 0, dt);
   if (h.dashT > 0) {
     const s0 = Math.min(dt, h.dashT);
     h.dashT -= dt;

@@ -113,8 +113,7 @@ export function buildRift() {
 }
 E.ARENA_BUILD.rift = buildRift;
 
-export const BW = 32, BH = 24;
-const BCODE = { '#': E.C_WALL, r: E.C_WALL, M: E.C_WALL, G: E.C_WALL, L: E.C_WALL, Z: E.C_WALL, T: E.C_CRATE, x: E.C_CRATE, c: E.C_WATER, s: E.C_WATER, '=': C_LANE, B: C_BASE, p: C_LANE };
+const BCODE = { q: E.C_WATER, K: E.C_CRATE, '#': E.C_WALL, r: E.C_WALL, M: E.C_WALL, G: E.C_WALL, L: E.C_WALL, Z: E.C_WALL, W: E.C_WALL, H: E.C_WALL, P: E.C_WALL, T: E.C_CRATE, x: E.C_CRATE, k: E.C_CRATE, d: E.C_CRATE, c: E.C_WATER, s: E.C_WATER, f: E.C_WATER, '=': C_LANE, B: C_BASE, p: C_LANE, '-': C_LANE, g: C_FLOOR };
 const BASE_RECTS = [
   ['=', 1, 8, 5, 8], ['B', 1, 9, 4, 6], ['=', 5, 11, 9, 2], ['=', 6, 5, 8, 1], ['=', 6, 18, 8, 1],
   ['p', 14, 3, 2, 4], ['p', 14, 10, 2, 4], ['p', 14, 17, 2, 4],
@@ -133,28 +132,62 @@ const BASE_CAMPS = [
   { k: 'fury', p: [4.6, 5.0], units: [['tank', 0, 0]], buff: 'fury', resp: 80 },
   { k: 'flow', p: [4.6, 19.0], units: [['tank', 0, 0]], buff: 'flow', resp: 80 },
 ];
-export const ZONES = [{ n: 'Mine', p: [16, 5] }, { n: 'Pad', p: [16, 12] }, { n: 'Depot', p: [16, 19] }];
+const CITY_RECTS = [
+  ['-', 4, 11, 10, 2], ['-', 4, 3, 10, 2], ['-', 4, 19, 10, 2], ['-', 8, 3, 2, 18], ['=', 1, 8, 4, 8], ['B', 1, 9, 3, 6], ['p', 14, 3, 2, 4], ['p', 14, 10, 2, 4], ['p', 14, 17, 2, 4], ['g', 1, 1, 6, 2], ['g', 1, 21, 6, 2], ['H', 2, 5, 2, 2], ['H', 5, 5, 2, 2], ['H', 11, 6, 2, 2], ['H', 2, 16, 2, 2], ['H', 5, 16, 2, 2], ['H', 11, 15, 2, 2], ['P', 1, 1, 1, 1], ['P', 6, 1, 1, 1], ['P', 1, 21, 1, 1], ['P', 6, 22, 1, 1], ['K', 6, 11, 2, 1], ['K', 11, 10, 2, 1], ['K', 10, 4, 2, 1], ['K', 5, 20, 2, 1], ['d', 4, 7, 1, 1], ['d', 4, 15, 1, 1], ['k', 13, 8, 1, 1], ['k', 13, 14, 1, 1], ['k', 10, 16, 1, 1], ['f', 6, 9, 1, 1], ['f', 10, 9, 1, 1], ['f', 6, 14, 1, 1], ['f', 12, 21, 1, 1], ['f', 12, 1, 1, 1],
+];
+const FORT_RECTS = [
+  ['=', 1, 8, 5, 8], ['=', 5, 11, 9, 2], ['=', 7, 5, 7, 1], ['=', 7, 18, 7, 1], ['B', 1, 9, 4, 6], ['p', 14, 3, 2, 4], ['p', 14, 10, 2, 4], ['p', 14, 17, 2, 4], ['W', 1, 7, 4, 1], ['W', 1, 16, 4, 1], ['W', 6, 1, 1, 4], ['W', 6, 8, 1, 2], ['W', 6, 14, 1, 2], ['W', 6, 19, 1, 4], ['W', 10, 1, 2, 1], ['W', 10, 22, 2, 1], ['P', 12, 8, 1, 1], ['P', 12, 15, 1, 1], ['P', 9, 3, 1, 1], ['P', 9, 20, 1, 1], ['k', 10, 7, 1, 1], ['k', 13, 1, 1, 1], ['k', 10, 16, 1, 1], ['k', 2, 3, 1, 1], ['d', 3, 4, 1, 1], ['d', 13, 22, 1, 1], ['d', 2, 20, 1, 1], ['d', 3, 19, 1, 1], ['q', 8, 11, 1, 2], ['f', 11, 10, 1, 1], ['f', 11, 13, 1, 1], ['r', 13, 6, 1, 1], ['r', 13, 17, 1, 1], ['r', 1, 1, 2, 1], ['r', 1, 22, 2, 1],
+];
+const CITY_CAMPS = [
+  { k: 'pair', p: [3.5, 2.0], units: [['grunt', -0.7, 0], ['grunt', 0.7, 0.4]], resp: 50 },
+  { k: 'spit', p: [3.5, 22.0], units: [['shooter', -0.7, 0], ['shooter', 0.7, -0.4]], resp: 50 },
+  { k: 'fury', p: [10.5, 8.6], units: [['tank', 0, 0]], buff: 'fury', resp: 80 },
+  { k: 'flow', p: [10.5, 14.4], units: [['tank', 0, 0]], buff: 'flow', resp: 80 },
+];
+const FORT_CAMPS = [
+  { k: 'pair', p: [4.0, 2.6], units: [['grunt', -0.7, 0], ['grunt', 0.7, 0.4]], resp: 50 },
+  { k: 'spit', p: [4.0, 21.4], units: [['shooter', -0.7, 0], ['shooter', 0.7, -0.4]], resp: 50 },
+  { k: 'fury', p: [9.0, 8.6], units: [['tank', 0, 0]], buff: 'fury', resp: 80 },
+  { k: 'flow', p: [9.0, 15.4], units: [['tank', 0, 0]], buff: 'flow', resp: 80 },
+];
+export const MAPS = {
+  city: { name: 'Downtown', text: 'Streets, cars and shops. Great for Team deathmatch', bg: 'linear-gradient(135deg, #5B6470, #2E343C)', W: 32, H: 24, rects: CITY_RECTS, camps: CITY_CAMPS, fount: [2.5, 12], fr: 5.6,
+    zones: [{ n: 'Plaza', p: [16, 5] }, { n: 'Avenue', p: [16, 12] }, { n: 'Market', p: [16, 19] }],
+    roam: [[16, 5], [16, 12], [16, 19], [9.5, 8], [22.5, 16], [9.5, 16], [22.5, 8], [11, 12], [21, 12], [13, 9], [19, 15], [13, 15], [19, 9]] },
+  fort: { name: 'Old fort', text: 'Castle walls, towers and a great hall', bg: 'linear-gradient(135deg, #8C7A5C, #3E352A)', W: 32, H: 24, rects: FORT_RECTS, camps: FORT_CAMPS, fount: [3, 12], fr: 6.0,
+    zones: [{ n: 'Armory', p: [16, 5] }, { n: 'Hall', p: [16, 12] }, { n: 'Chapel', p: [16, 19] }],
+    roam: [[16, 5], [16, 12], [16, 19], [9, 5.5], [23, 18.5], [9, 18.5], [23, 5.5], [10, 12], [22, 12], [12, 10], [20, 14], [12.5, 14.5], [19.5, 9.5]] },
+  base: { name: 'Mars outpost', text: 'A base on Mars with a mine and a landing pad. Great for Hardpoint', bg: 'linear-gradient(135deg, #B9542A, #6E3A2A)', W: 32, H: 24, rects: BASE_RECTS, camps: BASE_CAMPS, fount: [3, 12], fr: 6.2,
+    zones: [{ n: 'Mine', p: [16, 5] }, { n: 'Pad', p: [16, 12] }, { n: 'Depot', p: [16, 19] }],
+    roam: [[16, 5], [16, 12], [16, 19], [10, 3.2], [9, 12], [9, 19.5], [23, 4.5], [23, 12], [22, 20.8], [12.5, 8], [19.5, 16]] },
+};
+export const MAP_KEYS = ['city', 'base', 'fort'];
+export const MAP_DEF = { tdm: 'city', hp: 'base' };
+export const validMap = (k) => (MAPS[k] ? k : 'base');
 export const ZONE_R = 3.4;
 const ZONE_ORDER = [1, 0, 2];
-export function buildBase() {
+export function buildKitMap(key) {
+  const D = MAPS[validMap(key)], BW = D.W, BH = D.H;
   const cells = new Uint8Array(BW * BH).fill(C_FLOOR);
   const deco = new Uint8Array(BW * BH).fill(46);
-  const put = (c, r, ch) => { for (const [cc, rr] of [[c, r], [BW - 1 - c, BH - 1 - r]]) { cells[rr * BW + cc] = BCODE[ch] != null ? BCODE[ch] : C_FLOOR; deco[rr * BW + cc] = ch.charCodeAt(0); } };
+  const under = new Uint8Array(BW * BH).fill(46);
+  const put = (c, r, ch) => { const code = ch.charCodeAt(0), fl = BCODE[ch] == null || BCODE[ch] === C_FLOOR || BCODE[ch] === C_LANE || BCODE[ch] === C_BASE; for (const [cc, rr] of [[c, r], [BW - 1 - c, BH - 1 - r]]) { cells[rr * BW + cc] = BCODE[ch] != null ? BCODE[ch] : C_FLOOR; deco[rr * BW + cc] = code; if (fl) under[rr * BW + cc] = code; } };
   for (let i = 0; i < BW; i++) put(i, 0, '#');
   for (let r = 0; r < BH; r++) put(0, r, '#');
-  for (const [ch, c0, r0, w, h] of BASE_RECTS) for (let r = r0; r < r0 + h; r++) for (let c = c0; c < c0 + w; c++) put(c, r, ch);
-  const A = { key: 'base', name: E.ARENAS.base.name, theme: 'base', W: BW, H: BH, cells, deco, pads: [], homes: [], bushes: [], wx: BW * TILE, wz: BH * TILE, flows: new Map() };
+  for (const [ch, c0, r0, w, h] of D.rects) for (let r = r0; r < r0 + h; r++) for (let c = c0; c < c0 + w; c++) put(c, r, ch);
+  const A = { key: validMap(key), name: D.name, theme: validMap(key), W: BW, H: BH, cells, deco, under, pads: [], homes: [], bushes: [], wx: BW * TILE, wz: BH * TILE, flows: new Map() };
   A.clusters = [];
   const side = (tm, p) => WU(tm === 0 ? p : [BW - p[0], BH - p[1]]);
   A.team = {
-    towers: [], guards: [], cores: [], pads: [], portals: [], fr: 6.2,
-    founts: [0, 1].map((tm) => ({ tm, ...side(tm, [3, 12]) })),
-    camps: [0, 1].flatMap((tm) => BASE_CAMPS.map((cp) => ({ ...cp, side: tm, key: `${cp.k}${tm}`, ...side(tm, cp.p), units: cp.units.map((u) => [u[0], tm === 0 ? u[1] : -u[1], tm === 0 ? u[2] : -u[2]]) }))),
-    zones: ZONES.map((zn, i) => ({ i, n: zn.n, ...WU(zn.p) })),
+    towers: [], guards: [], cores: [], pads: [], portals: [], fr: D.fr || 6.2,
+    founts: [0, 1].map((tm) => ({ tm, ...side(tm, D.fount) })),
+    camps: [0, 1].flatMap((tm) => D.camps.map((cp) => ({ ...cp, side: tm, key: `${cp.k}${tm}`, ...side(tm, cp.p), units: cp.units.map((u) => [u[0], tm === 0 ? u[1] : -u[1], tm === 0 ? u[2] : -u[2]]) }))),
+    zones: D.zones.map((zn, i) => ({ i, n: zn.n, ...WU(zn.p) })),
+    roam: D.roam,
   };
   return A;
 }
-E.ARENA_BUILD.base = buildBase;
+for (const k of MAP_KEYS) { E.ARENAS[k] = { name: MAPS[k].name, theme: k }; E.ARENA_BUILD[k] = () => buildKitMap(k); }
 
 const R = E.ROBOTS;
 const STILL = E.STILL_TYPES;
@@ -200,7 +233,7 @@ export function zoneNow(W) {
   if (!S || S.gm !== 'hp' || !Z) return null;
   return Z[ZONE_ORDER[S.zk % ZONE_ORDER.length]];
 }
-export const zoneByK = (k) => ZONES[ZONE_ORDER[Math.max(0, k | 0) % ZONE_ORDER.length]];
+export const zoneByK = (W, k) => { const Z = W && W.A && W.A.team && W.A.team.zones; return Z ? Z[ZONE_ORDER[Math.max(0, k | 0) % ZONE_ORDER.length]] : null; };
 export function zoneNext(W) {
   const S = W.tm, Z = W.A.team && W.A.team.zones;
   if (!S || S.gm !== 'hp' || !Z) return null;
@@ -214,7 +247,7 @@ export function setupTeamWorld(W, cfg) {
   W.teamStep = gm ? stepPvp : stepTeam; W.onKill = onKill; W.onHit = onHit; W.onNet = onNet; W.respawnFor = gm ? respawnPvp : respawnFor;
   const bl = cfg && cfg.bl != null ? clamp(cfg.bl | 0, 0, 2) : 1;
   const size = cfg && cfg.ts ? clamp(cfg.ts | 0, 1, 5) : 3;
-  W.tm = { t: 0, score: [0, 0], waveN: 0, waveT: 14, shipT: SHIP_AT, shipTeam: -1, camps: {}, dead: new Set(), kd: {}, struct: [], protT: 0, flows: new Map(), over: null, fb: false, an: [], size, bl, gm, goal: gm ? goalFor(gm, size) : 0, tlim: TIME_LIM, od: 0, zk: 0, zon: false, zt: ZONE_WAIT, zh: -1, zacc: 0 };
+  W.tm = { t: 0, score: [0, 0], waveN: 0, waveT: 14, shipT: SHIP_AT, shipTeam: -1, camps: {}, dead: new Set(), kd: {}, struct: [], protT: 0, flows: new Map(), over: null, fb: false, an: [], size, bl, gm, goal: gm ? (cfg && cfg.goal > 0 ? clamp(cfg.goal | 0, 5, 500) : goalFor(gm, size)) : 0, tlim: cfg && cfg.tl > 0 ? clamp(cfg.tl | 0, 3, 20) * 60 : TIME_LIM, od: 0, zk: 0, zon: false, zt: ZONE_WAIT, zh: -1, zacc: 0 };
   W.bdm = BOT_LV[bl].dmg; W.bseen = BOT_LV[bl].seen; W.domes = []; W.domeCut = domeCut;
   if (gm) {
     W.nextId = 100;
@@ -273,8 +306,18 @@ function flowTo(W, x, z) {
   if (S.flows.size > 80) S.flows.delete(S.flows.keys().next().value);
   return F;
 }
+function walkClear(A, x0, z0, x1, z1, wide) {
+  const dx = x1 - x0, dz = z1 - z0, L = Math.hypot(dx, dz);
+  if (L < 0.01) return true;
+  const ux = dx / L, uz = dz / L, n = Math.ceil(L / 0.5);
+  for (let i = 1; i <= n; i++) {
+    const t = Math.min(L, i * 0.5), x = x0 + ux * t, z = z0 + uz * t;
+    if (E.solidAt(A, x, z) || E.solidAt(A, x - uz * wide, z + ux * wide) || E.solidAt(A, x + uz * wide, z - ux * wide)) return false;
+  }
+  return true;
+}
 function moveTo(W, b, x, z, spd, dt) {
-  const clear = Math.hypot(x - b.x, z - b.z) < 3 || E.losClear(W.A, b.x, b.z, x, z, b.r * 0.9);
+  const clear = Math.hypot(x - b.x, z - b.z) < 3 || walkClear(W.A, b.x, b.z, x, z, b.r * 0.9);
   E.moveRobot(W, b, x, z, spd, dt, clear ? null : flowTo(W, x, z));
 }
 function resolveT(W, tg) {
@@ -854,7 +897,7 @@ export function stepLocal(W, h, dt, inp) {
   if (h.st !== 0) return;
   const F = T.founts[h.tm], EF = T.founts[1 - h.tm], FR = T.fr || FOUNT_R;
   h.inBase = dist(h, F) < FR + 3;
-  if (dist(h, F) < FR) { h.hp = Math.min(h.max, h.hp + h.max * 0.16 * dt); h.ammo = Math.min(h.mods.ammo, h.ammo + dt * 2); h.regen = 4; }
+  if (dist(h, F) < FR) { const add = Math.min(h.max - h.hp, h.max * 0.16 * dt); h.hp += add; E.softHeal(W, h, add, 0); h.ammo = Math.min(h.mods.ammo, h.ammo + dt * 2); h.regen = 4; }
   const Z = zoneNow(W);
   if (Z && W.tm.zon && W.tm.zh === h.tm && (h.tl || 1) < TL_MAX && Math.hypot(h.x - Z.x, h.z - Z.z) < ZONE_R) { h.zxp = (h.zxp || 0) + dt * 3; if (h.zxp >= 6) { h.zxp -= 6; addXP(W, h, 6); } }
   if (dist(h, EF) < FR + 0.8) { h.fountAcc = (h.fountAcc || 0) + dt; if (h.fountAcc > 0.25) { h.fountAcc = 0; h.spawnT = 0; E.hurtHero(W, h, 550, 'fount'); E.emit(W, { k: 'fzap', id: h.id, x: EF.x, z: EF.z, tx: h.x, tz: h.z }); } }
@@ -1041,7 +1084,6 @@ export function assignRoles(list, size) {
   list.forEach((h, i) => { const r = order[i % order.length]; h.jg = r === 3; h.ln = r === 3 ? 0 : r; });
 }
 
-const ROAM = [[16, 5], [16, 12], [16, 19], [10, 3.2], [9, 12], [9, 19.5], [23, 4.5], [23, 12], [22, 20.8], [12.5, 8], [19.5, 16]];
 function pvpGoal(W, h, B, foes, hpF) {
   const S = W.tm;
   if (S.gm === 'hp') {
@@ -1065,6 +1107,7 @@ function pvpGoal(W, h, B, foes, hpF) {
   }
   if (!B.rp || B.rpT <= 0 || dist(B.rp, h) < 3) {
     B.rpT = 9 + W.rnd() * 6;
+    const BW = W.A.W, ROAM = W.A.team.roam || [[BW / 2, W.A.H / 2]];
     const far = (p) => (h.tm === 0 ? p[0] : BW - p[0]);
     const L = ROAM.map((p) => ({ p, w: 0.4 + far(p) / BW + W.rnd() * 0.9 })).sort((a, b) => b.w - a.w);
     const q = L[0].p;
@@ -1182,7 +1225,7 @@ export function teamBot(W, h, dt) {
   if (gx != null) {
     const d = Math.hypot(gx - h.x, gz - h.z);
     if (d > 0.4) {
-      const clear = d < 3 || E.losClear(W.A, h.x, h.z, gx, gz, 0.5);
+      const clear = d < 1.6 || walkClear(W.A, h.x, h.z, gx, gz, 0.5);
       let dx = gx - h.x, dz = gz - h.z;
       if (!clear) { const st = E.flowStep(W.A, flowTo(W, gx, gz), h.x, h.z); if (st) { dx = st[0] - h.x; dz = st[1] - h.z; } }
       const L = Math.hypot(dx, dz) || 1;

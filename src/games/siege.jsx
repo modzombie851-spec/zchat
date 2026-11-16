@@ -5,7 +5,7 @@ import { Avatar, Portal, useBackClose, FONT, Spinner } from '../App.jsx';
 import { useRoomLink } from './relay.jsx';
 import { cloudOn } from './zcloud.js';
 import { EMOTES, Sheet, injectCss, useGameChat, ChatSheet, CHAT_PHRASES } from './livekit.jsx';
-import { GBtn, GPill, GPanel, GChip, GTitle, GIcon, GHudBtn, GHudPanel, GNotices, useNotices, useWatchNotices, injectKitCss, kitTap, pressProps, maxDpr, weakPhone, INK, useCtlLook, useGameStage, GControlsPanel, GVolBars, GLobby, GSlot, GLobbySheet, GSeg, GTalkers, GJoy, useJoystick, stagePoint, TOUCHY, GWatchBar, GSkin, GChatFeed, useChatFeed, GJoinAsks, GHudSkill, GSetRow, GSetToggle , GSetHead, useHudLay, hudT, layOpen, layEnd, GLayoutRow, GHudEditor, GQuickPanel } from './gamekit.jsx';
+import { GBtn, GPill, GPanel, GTitle, GIcon, GHudBtn, GHudPanel, GNotices, useNotices, useWatchNotices, injectKitCss, kitTap, pressProps, maxDpr, weakPhone, INK, useCtlLook, useGameStage, GControlsPanel, GVolBars, GLobbySheet, GSeg, GTalkers, GJoy, useJoystick, stagePoint, TOUCHY, GWatchBar, GSkin, GChatFeed, useChatFeed, GJoinAsks, GHudSkill, GSetRow, GSetToggle , GSetHead, useHudLay, hudT, layOpen, layEnd, GLayoutRow, GHudEditor, GQuickPanel } from './gamekit.jsx';
 import { mkNet, netPush, netRead } from './netlerp.js';
 import { Sfx } from './sfx.js';
 import { setWatchAllowed, useLiveBeacon, useGamePrivacy, useJoinAsks } from './live.js';
@@ -17,9 +17,10 @@ import { useTalking } from './talk.js';
 import { supabase } from '../supabaseClient.js';
 import { parseSBM, boneMap, newPose, sampleInto, skinPose, upperMask, recolor } from './siegechar.js';
 import * as T from './siegeteam.js';
-import { TCOL, TNAME, TXT_COL, ModePick, TLOOK, unitCol, riftUnpack, TeamScore, TeamMe, KillFeed, SkillPick, TeamSlots, TeamBoard, TeamSettings, TeamMapCard, TeamHowTo, RespawnBox, drawTeamMini, teamMiniBase, teamHudOf, teamRows, ZoneChip, SkIcon, PaintSkill, heroIc } from './siegeteamui.jsx';
+import { SiegeLobby, SiegeLoadout, SiegeResult, SiegeBoard } from './siegelobby.jsx';
+import { TNAME, TXT_COL, LineIcon, TLOOK, unitCol, riftUnpack, TeamScore, TeamMe, KillFeed, TeamHowTo, RespawnBox, drawTeamMini, teamMiniBase, teamHudOf, teamRows, ZoneChip, SkIcon, PaintSkill, heroIc } from './siegeteamui.jsx';
 
-const SIEGE_KEYS = [['W A S D or Arrows', 'Move'], ['Mouse', 'Aim'], ['Left click or F', 'Attack'], ['Right click or Space or E', 'Super'], ['Q', 'Gadget'], ['Shift', 'Dash'], ['R', 'Battle skill in team battle'], ['B', 'Go home in team battle'], ['Tab', 'Scoreboard in team battle'], ['Esc', 'Pause or leave']];
+const SIEGE_KEYS = [['W A S D or Arrows', 'Move'], ['Mouse', 'Aim'], ['Left click or F', 'Attack'], ['Right click or Space or E', 'Super'], ['Q', 'Gadget'], ['Shift', 'Dash'], ['R', 'Battle skill in team matches'], ['Tab', 'Scoreboard in team matches'], ['Esc', 'Pause or leave']];
 const KK = ['kk_nyx', 'kk_ivy', 'kk_arlo', 'kk_wren'];
 const SKF = ['ua_anim', 'ua_flamingo', 'ua_frog', 'ua_bee', 'um_flamingo', 'um_bee', 'um_panda', 'um_frog', 'kk_anim', ...KK, 'ue_small', 'ue_fly', 'ue_large', 'up_health', 'up_thunder', 'up_bullets', 'up_sphere', 'up_jar'];
 const SKT = ['t_usk', 't_umech', 't_umechf', 't_uen', 't_krogue', 't_kmage', 't_kknight'];
@@ -189,18 +190,7 @@ const SLOT_COLS = ['#FFC23D', '#4DA3FF', '#FF6FA8', '#7BE05A', '#B88CFF', '#FF8A
 const SNAP_MS = 110, RE_MS = 80;
 const BOT_STEPS = [0, 1, 3, 5, 9];
 const ARENA_BG = { yard: 'linear-gradient(135deg, #8A7A60, #4A3F31)', ruins: 'linear-gradient(135deg, #5F7C33, #2E421D)', frost: 'linear-gradient(135deg, #DDE5EB, #7E8C98)', lava: 'linear-gradient(135deg, #8A3A1E, #252323)', docks: 'linear-gradient(135deg, #3E8C96, #75726B)' };
-const RANGE_TXT = ['', 'Very short', 'Short', 'Medium', 'Long', 'Very long'];
-const SPEED_TXT = ['', 'Slow', 'Steady', 'Normal', 'Quick', 'Very quick'];
 const shotDmg = (H) => (H.atk.n ? H.atk.n * H.atk.dmg : H.atk.dmg);
-function StatRow({ label, f, text, col }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-      <span style={{ width: 62, fontSize: 12.5, fontWeight: 900, flexShrink: 0 }}>{label}</span>
-      <span style={{ flex: 1, height: 9, borderRadius: 5, background: 'rgba(255,255,255,0.12)', overflow: 'hidden', display: 'block' }}><span style={{ display: 'block', height: '100%', width: `${Math.round(clamp(f, 0.04, 1) * 100)}%`, background: col, borderRadius: 5 }} /></span>
-      <span style={{ width: 92, textAlign: 'right', fontSize: 12.5, fontWeight: 900, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{text}</span>
-    </div>
-  );
-}
 const snapBots = (n) => BOT_STEPS.reduce((b, v) => (Math.abs(v - n) < Math.abs(b - n) ? v : b), 0);
 const sendMsFor = (n) => (n <= 4 ? 100 : n <= 7 ? 125 : 150);
 const GFX = [['auto', 'Auto'], ['best', 'Best'], ['fast', 'Fast']];
@@ -360,7 +350,11 @@ function zap(kind, vol = 1, rate = 1) {
   } catch {}
 }
 
-const RIFT = { job: null, d: null };
+const KIT_SRC = { base: ['/bolt/base-pack-v1.bin', '/bolt/t_kspace.webp'], city: ['/bolt/city-pack-v1.bin', '/bolt/t_kcity.webp'], fort: ['/bolt/fort-pack-v1.bin', '/bolt/t_kfort.webp'] };
+const KITS = {};
+const UNITS = { job: null, d: null };
+const kitOf = (k) => (KITS[k] && KITS[k].d ? KITS[k].d : null);
+const isMap = (k) => !!T.MAPS[k];
 function unitsUnpack(buf) {
   const dv = new DataView(buf);
   if (dv.getUint32(0, true) !== 0x31505554) return null;
@@ -376,21 +370,27 @@ function unitsUnpack(buf) {
   return Promise.all(t.map(([k, b]) => { const url = URL.createObjectURL(new Blob([b], { type: 'image/webp' })); return skImg(url).then((im) => [k, im], () => [k, null]).finally(() => URL.revokeObjectURL(url)); }))
     .then((list) => ({ m, t: Object.fromEntries(list.filter((x) => x[1])) }));
 }
-function loadRift() {
-  if (RIFT.d) return Promise.resolve(RIFT.d);
-  if (RIFT.job) return RIFT.job;
-  const units = fetch('/bolt/team-units-v1.bin').then((r) => (r.ok ? r.arrayBuffer() : null)).then((b) => (b ? unitsUnpack(b) : null)).catch(() => null);
-  RIFT.job = Promise.all([fetch('/bolt/base-pack-v1.bin').then((r) => { if (!r.ok) throw new Error('base'); return r.arrayBuffer(); }), skImg('/bolt/t_kspace.webp'), units])
-    .then(([buf, im, u]) => { const d = riftUnpack(buf, im); if (!d) throw new Error('rift'); d.u = u; RIFT.d = d; return d; })
-    .catch(() => { RIFT.job = null; return null; });
-  return RIFT.job;
+function loadUnits() {
+  if (UNITS.d) return Promise.resolve(UNITS.d);
+  if (!UNITS.job) UNITS.job = fetch('/bolt/team-units-v1.bin').then((r) => (r.ok ? r.arrayBuffer() : null)).then((b) => (b ? unitsUnpack(b) : null)).then((u) => { UNITS.d = u; if (!u) UNITS.job = null; return u; }).catch(() => { UNITS.job = null; return null; });
+  return UNITS.job;
 }
-function riftUpload(R, d) {
+function loadKit(k) {
+  const src = KIT_SRC[k];
+  if (!src) return Promise.resolve(null);
+  loadUnits();
+  const S = KITS[k] || (KITS[k] = { job: null, d: null });
+  if (S.d) return Promise.resolve(S.d);
+  if (!S.job) S.job = Promise.all([fetch(src[0]).then((r) => { if (!r.ok) throw new Error('kit'); return r.arrayBuffer(); }), skImg(src[1])])
+    .then(([buf, im]) => { const d = riftUnpack(buf, im); if (!d) throw new Error('kit'); S.d = d; return d; })
+    .catch(() => { S.job = null; return null; });
+  return S.job;
+}
+function riftUpload(R, u) {
   const out = { mesh: {}, still: {}, um: {}, ut: {} };
-  for (const [k, M] of Object.entries(d.m)) { try { out.mesh[k] = R.tskin(M); out.still[k] = stillSkin(M); } catch {} }
-  if (d.u) {
-    for (const [k, M] of Object.entries(d.u.m)) { try { if (M.verts) out.um[k] = R.tskin(M); } catch {} }
-    for (const [k, im] of Object.entries(d.u.t)) { try { out.ut[k] = R.texture(im); } catch {} }
+  if (u) {
+    for (const [k, M] of Object.entries(u.m)) { try { if (M.verts) out.um[k] = R.tskin(M); } catch {} }
+    for (const [k, im] of Object.entries(u.t)) { try { out.ut[k] = R.texture(im); } catch {} }
   }
   return out;
 }
@@ -451,13 +451,13 @@ function arenaThumb(key) {
   if (THUMB.arenas[key]) return THUMB.arenas[key];
   let url = '';
   try {
-    const rift = key === 'base';
-    if (rift && !RIFT.d) return '';
+    const rift = isMap(key);
+    if (rift && !kitOf(key)) return '';
     const cv = document.createElement('canvas'); cv.width = rift ? 640 : 320; cv.height = rift ? 360 : 180;
     const R = createRenderer(cv, { keep: true, shadowSize: 1024 });
     if (!R) return '';
     const A = E.makeArena(key);
-    const M = arenaMeshes(A, rift ? RIFT.d.kit : null);
+    const M = arenaMeshes(A, rift ? kitOf(key).kit : null);
     const env = arenaEnv(A); env.shadowRange = rift ? 60 : 46;
     const items = M.parts.filter((p) => p.kind !== 'fine').map((p) => ({ mesh: R.mesh(p.data), cast: p.cast, bs: p.bs }));
     for (const b of M.bushes) items.push({ mesh: R.mesh(b.data), cast: true });
@@ -470,22 +470,9 @@ function arenaThumb(key) {
   return url;
 }
 
-function HeroCard({ k, on, img, onPress, size = 64, label, lv, locked }) {
-  const H = E.HEROES[k];
-  return (
-    <button type="button" className="zgk-btn" aria-pressed={on} aria-label={label || `${H.name}, ${H.role}${locked ? ', taken' : ''}`} {...pressProps(onPress)}
-      style={{ position: 'relative', width: size, flexShrink: 0, opacity: locked ? 0.42 : 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: FONT, color: '#FFFFFF' }}>
-      <span style={{ width: size, height: size, borderRadius: 14, overflow: 'hidden', display: 'block', background: `radial-gradient(circle at 50% 35%, ${H.col}55, #141A2C 75%)`, boxShadow: on ? `0 0 0 3px #FFD45A, 0 4px 12px rgba(0,0,0,0.4)` : 'inset 0 0 0 1.5px rgba(255,255,255,0.16)' }}>
-        {img ? <img src={img} alt="" draggable={false} style={{ width: '100%', height: '100%', display: 'block', objectFit: 'cover' }} /> : null}
-      </span>
-      {lv > 1 && <span aria-hidden="true" style={{ position: 'absolute', right: -3, top: -3, minWidth: 18, height: 18, padding: '0 4px', boxSizing: 'border-box', borderRadius: 9, background: 'linear-gradient(180deg, #FFE27A, #F5B321)', color: '#2A1D05', fontSize: 10.5, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 0 0 1.5px ${INK}` }}>{lv}</span>}
-      <span style={{ fontSize: 11.5, fontWeight: 900, color: on ? '#FFE15A' : '#FFFFFF', textShadow: '0 1px 3px rgba(0,0,0,0.5)' }}>{locked ? 'Taken' : H.name}</span>
-    </button>
-  );
-}
 
 
-export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite, watch = false }) {
+export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite, onInviteOne = null, friends = null, online = null, watch = false }) {
   injectCss(); injectKitCss();
   const uid = solo ? 'me' : myId;
   const isHost = solo || (room && room.host === myId);
@@ -511,12 +498,18 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
   const blRef = useRef(bl); blRef.current = bl;
   const [gm, setGm] = useState(() => T.validGm(readPref('zchat-siege-gm', 'tdm')));
   const gmRef = useRef(gm); gmRef.current = gm;
+  const [tmap, setTmap] = useState(() => { const g0 = T.validGm(readPref('zchat-siege-gm', 'tdm')); return T.validMap(readPref(`zchat-siege-map-${g0}`, T.MAP_DEF[g0])); });
+  const tmapRef = useRef(tmap); tmapRef.current = tmap;
+  const [tlim, setTlim] = useState(() => clamp(Number(readPref('zchat-siege-tlim', '8')) | 0 || 8, 3, 20));
+  const tlimRef = useRef(tlim); tlimRef.current = tlim;
+  const [glim, setGlim] = useState(() => ({ tdm: Number(readPref('zchat-siege-goal-tdm', '0')) | 0, hp: Number(readPref('zchat-siege-goal-hp', '0')) | 0 }));
+  const glimRef = useRef(glim); glimRef.current = glim;
   const [sideOf, setSideOf] = useState({});
   const [skOf, setSkOf] = useState({});
   const [tfeed, setTfeed] = useState([]);
   const [board, setBoard] = useState(false);
   const [mapSheet, setMapSheet] = useState(false);
-  const [riftOk, setRiftOk] = useState(() => !!RIFT.d);
+  const [kitN, setKitN] = useState(0);
   const [gfx, setGfx] = useState(() => { const v = readPref(PREF.gfx, 'auto'); return v === 'best' || v === 'fast' ? v : 'auto'; });
   const [roster, setRoster] = useState(solo ? ['me'] : [room && room.host].filter(Boolean));
   const [names, setNames] = useState({});
@@ -540,6 +533,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
   const camKRef = useRef(null);
   const [thumbs, setThumbs] = useState({});
   const [aThumbs, setAThumbs] = useState({});
+  const [thumbAll, setThumbAll] = useState(false);
   const [bubbles, setBubbles] = useState({});
   const [aimUi, setAimUi] = useState(null);
   const [prog, setProg] = useState(() => PROG.data);
@@ -548,7 +542,8 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
   const [upMsg, setUpMsg] = useState('');
   const [cards, setCards] = useState(null);
   const [kill, setKill] = useState(null);
-  const [heroSheet, setHeroSheet] = useState(false);
+  const [lobView, setLobView] = useState('map');
+  const lobViewRef = useRef(lobView); lobViewRef.current = lobView;
   const cardsRef = useRef(cards); cardsRef.current = cards;
   const pickRef = useRef(null);
   const gamePriv = useGamePrivacy();
@@ -693,8 +688,9 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
   const ensureArena = (key) => {
     const st = RR.current;
     if (!st) return false;
-    const k = key === 'base' ? 'base' : validArena(key);
-    const kit = k === 'base' && RIFT.d ? RIFT.d.kit : null;
+    const k = isMap(key) ? key : validArena(key);
+    const kd = isMap(k) ? kitOf(k) : null;
+    const kit = kd ? kd.kit : null;
     if (st.arena && st.arena.key === k && st.arena.kit === !!kit) return true;
     if (st.arena) for (const it of st.arena.items) st.R.drop(it.mesh);
     st.arena = null; st.mini = null;
@@ -724,7 +720,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
     RR.current = { R, arena: null, heroM: {}, robM: {}, fx };
     const st0 = RR.current;
     loadSk().then((d) => { if (!d || RR.current !== st0) return; try { st0.sk = skUpload(R, d); } catch { st0.sk = null; } });
-    const t = setTimeout(() => { try { ensureArena(modeRef.current === 'team' && RIFT.d ? 'base' : arenaRef.current); setReady(true); } catch { setFailed(true); } }, 50);
+    const t = setTimeout(() => { try { ensureArena(modeRef.current === 'team' ? tmapRef.current : arenaRef.current); setReady(true); } catch { setFailed(true); } }, 50);
     return () => {
       clearTimeout(t);
       RR.current = null;
@@ -732,22 +728,22 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
       setTimeout(() => { if (!cv.isConnected) R.lose(); }, 0);
     };
   }, []);
-  const wantArena = mode === 'team' ? 'base' : arena;
+  const wantArena = mode === 'team' ? tmap : arena;
   useEffect(() => {
-    if (wantArena !== 'base' || riftOk) return undefined;
+    if (!isMap(wantArena) || kitOf(wantArena)) return undefined;
     let on = true;
-    loadRift().then((d) => { if (on && d) setRiftOk(true); });
+    loadKit(wantArena).then((d) => { if (on && d) setKitN((n) => n + 1); });
     return () => { on = false; };
-  }, [wantArena, riftOk]);
+  }, [wantArena]);
   useEffect(() => {
     const st = RR.current;
     if (!st || !st.arena || phaseRef.current !== 'menu') return undefined;
-    if (wantArena === 'base' && !riftOk) { setReady(false); return undefined; }
-    if (st.arena.key === wantArena && (wantArena !== 'base' || st.arena.kit)) { setReady(true); return undefined; }
+    if (isMap(wantArena) && !kitOf(wantArena)) { setReady(false); return undefined; }
+    if (st.arena.key === wantArena && (!isMap(wantArena) || st.arena.kit)) { setReady(true); return undefined; }
     setReady(false);
     const t = setTimeout(() => { try { ensureArena(wantArena); setReady(true); } catch { setFailed(true); } }, 40);
     return () => clearTimeout(t);
-  }, [wantArena, riftOk]);
+  }, [wantArena, kitN]);
   useEffect(() => { let on = true; const t = setTimeout(() => { if (on) setThumbs((p) => (Object.keys(p || {}).length ? p : heroThumbs())); }, 6000); loadSk().then((d) => { if (!on || !d) return; const th = skThumbs(d); if (Object.keys(th).length) setThumbs(th); }); return () => { on = false; clearTimeout(t); }; }, []);
   useEffect(() => { if (watch) return undefined; let on = true; loadProg().then((d) => { if (on && d) setProg(d); }); return () => { on = false; }; }, []);
   const upgrade = (k) => {
@@ -770,7 +766,14 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
       }, () => { setUpBusy(false); setUpMsg('Could not upgrade right now. Try again'); });
     } catch { setUpBusy(false); }
   };
-  useEffect(() => { if (aThumbs[wantArena] || phase !== 'menu' || (wantArena === 'base' && !riftOk)) return undefined; const t = setTimeout(() => { const u = arenaThumb(wantArena); if (u) setAThumbs((p) => ({ ...p, [wantArena]: u })); }, 900); return () => clearTimeout(t); }, [wantArena, phase, riftOk]);
+  useEffect(() => { if (aThumbs[wantArena] || phase !== 'menu' || (isMap(wantArena) && !kitOf(wantArena))) return undefined; const t = setTimeout(() => { const u = arenaThumb(wantArena); if (u) setAThumbs((p) => ({ ...p, [wantArena]: u })); }, 900); return () => clearTimeout(t); }, [wantArena, phase, kitN]);
+  useEffect(() => {
+    if (!thumbAll || phase !== 'menu') return undefined;
+    const k = T.MAP_KEYS.find((q) => !aThumbs[q] && kitOf(q));
+    if (!k) return undefined;
+    const t = setTimeout(() => { const u = arenaThumb(k); if (u) setAThumbs((p) => ({ ...p, [k]: u })); }, 150);
+    return () => clearTimeout(t);
+  }, [thumbAll, phase, kitN, aThumbs]);
   useEffect(() => { if (!arenaSheet) return undefined; const t = setTimeout(() => { const o = {}; for (const k of E.ARENA_KEYS) o[k] = arenaThumb(k); setAThumbs(o); }, 60); return () => clearTimeout(t); }, [arenaSheet]);
 
   const freshRoster = () => {
@@ -787,14 +790,15 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
     const g = G.current;
     const team = cfg.md === 'team';
     CARD_TEAM.on = team;
-    const ak = team ? 'base' : validArena(cfg.arena);
+    const ak = team ? T.validMap(cfg.map) : validArena(cfg.arena);
     if (!team && ak !== arenaRef.current) setArena(ak);
     if (team !== (modeRef.current === 'team')) setMode(team ? 'team' : 'waves');
-    if (team && !RIFT.d) loadRift().then((d) => { if (d) setRiftOk(true); });
+    if (team && !kitOf(ak)) loadKit(ak).then((d) => { if (d) setKitN((n) => n + 1); });
+    if (team) loadUnits();
     try { ensureArena(ak); } catch {}
     const W = E.newWorld(ak, team ? 'normal' : validLv(cfg.lv), cfg.seed | 0 || 1, team ? { mode: 'team' } : { endless: !!cfg.en });
     W.host = isHost; W.local = new Set(); W.nowMs = performance.now();
-    if (team) T.setupTeamWorld(W, { ts: cfg.ts, bl: cfg.bl, gm: cfg.gm });
+    if (team) T.setupTeamWorld(W, { ts: cfg.ts, bl: cfg.bl, gm: cfg.gm, tl: cfg.tl, goal: cfg.goal });
     const slot = [0, 0];
     cfg.ids.forEach((k, i) => {
       const key = validHero(cfg.heroes && cfg.heroes[k]);
@@ -876,7 +880,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
         tms[id] = tm;
       }
     }
-    const cfg = { md: 'team', gm: gmRef.current, ts: ts0, bl: blRef.current, tms, sks, cols, rid: `${Date.now().toString(36)}${Math.floor(Math.random() * 1e4)}`, ids, heroes, bots, arena: 'base', lv: 'normal', en: 0, seed: (Math.random() * 1e9) | 0 };
+    const cfg = { md: 'team', gm: gmRef.current, map: tmapRef.current, tl: tlimRef.current, goal: glimRef.current[gmRef.current] || 0, ts: ts0, bl: blRef.current, tms, sks, cols, rid: `${Date.now().toString(36)}${Math.floor(Math.random() * 1e4)}`, ids, heroes, bots, arena: 'base', lv: 'normal', en: 0, seed: (Math.random() * 1e9) | 0 };
     if (!solo) { setRoster(humans); relay.send('go', cfg); }
     beginGame(cfg);
   };
@@ -926,7 +930,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
     const draw = !res.lost && res.team === 2;
     const gmK = W && W.tm ? W.tm.gm : null;
     const rows = Array.isArray(res.rows) && res.rows.length ? res.rows : W ? teamRows(W) : [];
-    setResult({ team: true, won, draw, gm: gmK, lost: !!res.lost, myTeam, win: res.team, sc: Array.isArray(res.sc) ? res.sc : W && W.tm ? W.tm.score : [0, 0], rows, mins: W && W.tm ? Math.round(W.tm.t / 60) : 0, scrap: null, wave: 0, score: 0, list: [] });
+    setResult({ team: true, mk: W && W.A ? W.A.key : null, won, draw, gm: gmK, lost: !!res.lost, myTeam, win: res.team, sc: Array.isArray(res.sc) ? res.sc : W && W.tm ? W.tm.score : [0, 0], rows, mins: W && W.tm ? Math.round(W.tm.t / 60) : 0, scrap: null, wave: 0, score: 0, list: [] });
     if (inGame() && progRef.current && !res.lost && W && W.tm) {
       const kd = W.tm.kd[kindOf()] || { k: 0, a: 0 };
       const mins = W.tm.t / 60;
@@ -1155,7 +1159,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
       for (const k of ids) cols[k] = clamp(Number(m.cols && m.cols[k]) | 0, 0, 3);
       const out = { rid: m.rid, ids, heroes, cols, bots, arena: validArena(m.arena), lv: validLv(m.lv), en: m.en ? 1 : 0, seed: num(m.seed, 1) | 0 };
       if (m.md === 'team') {
-        out.md = 'team'; out.gm = T.validGm(m.gm); out.arena = 'base'; out.lv = 'normal'; out.en = 0; out.ts = clamp(m.ts | 0, 1, 5); out.bl = m.bl == null ? 1 : clamp(m.bl | 0, 0, 2); out.tms = {}; out.sks = {};
+        out.md = 'team'; out.gm = T.validGm(m.gm); out.map = T.validMap(m.map); out.tl = clamp(m.tl | 0, 0, 20); out.goal = clamp(m.goal | 0, 0, 500); out.arena = out.map; out.lv = 'normal'; out.en = 0; out.ts = clamp(m.ts | 0, 1, 5); out.bl = m.bl == null ? 1 : clamp(m.bl | 0, 0, 2); out.tms = {}; out.sks = {};
         for (const k of ids) { out.tms[k] = m.tms && m.tms[k] === 1 ? 1 : 0; out.sks[k] = m.sks && T.SKILLS[m.sks[k]] ? m.sks[k] : 'shock'; }
         if (m.tls && typeof m.tls === 'object') { out.tls = {}; for (const k of ids) out.tls[k] = clamp(m.tls[k] | 0, 1, T.TL_MAX); }
       }
@@ -1179,8 +1183,11 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
         if (typeof m.lv === 'string' && E.LEVELS[m.lv]) setLv(m.lv);
         if (typeof m.bn === 'number') setBotN(snapBots(clamp(m.bn | 0, 0, 9)));
         if (typeof m.en === 'number') setEndless(!!m.en);
-        if (m.md === 'team' || m.md === 'waves') { setMode(m.md); if (m.md === 'team') loadRift().then((d) => { if (d) setRiftOk(true); }); }
+        if (m.md === 'team' || m.md === 'waves') setMode(m.md);
+        if (typeof m.tmap === 'string' && T.MAPS[m.tmap]) setTmap(m.tmap);
         if (typeof m.gm === 'string') setGm(T.validGm(m.gm));
+        if (typeof m.tl === 'number') setTlim(clamp(m.tl | 0, 3, 20));
+        if (typeof m.gl === 'number' && typeof m.gm === 'string') { const gk = T.validGm(m.gm); setGlim((p) => (p[gk] === (m.gl | 0) ? p : { ...p, [gk]: Math.max(0, m.gl | 0) })); }
         if (typeof m.ts === 'number') setTs(clamp(m.ts | 0, 1, 5));
         if (m.tm && typeof m.tm === 'object') setSideOf((p) => { const n = {}; for (const [k, v] of Object.entries(m.tm)) n[k] = v === 1 ? 1 : 0; return JSON.stringify(n) === JSON.stringify(p) ? p : n; });
         const cfg = cleanCfg(m.cfg);
@@ -1320,13 +1327,13 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
       const cfg = playing && W && !g.over ? { rid: g.rid, ids: g.ids, heroes: Object.fromEntries(g.ids.map((k) => [k, W.heroes[k] ? W.heroes[k].key : 'blaze'])), bots: g.bots.map((k) => ({ id: k, n: g.botMeta[k] ? g.botMeta[k].n : 'Bot' })), arena: W.A.key, lv: W.lv, en: W.endless ? 1 : 0, seed: W.seed } : null;
       const sides = sidesFor(next);
       if (!playing && JSON.stringify(sides) !== JSON.stringify(sideOfRef.current)) setSideOf(sides);
-      if (cfg && W && W.mode === 'team') { cfg.md = 'team'; cfg.gm = W.tm && W.tm.gm ? W.tm.gm : 'tdm'; cfg.ts = W.tm ? W.tm.size : 3; cfg.bl = W.tm ? W.tm.bl : 1; cfg.tms = Object.fromEntries(g.ids.map((k) => [k, W.heroes[k] ? W.heroes[k].tm : 0])); cfg.sks = Object.fromEntries(g.ids.map((k) => [k, W.heroes[k] ? W.heroes[k].sk : 'shock'])); cfg.cols = Object.fromEntries(g.ids.map((k) => [k, W.heroes[k] ? W.heroes[k].hc | 0 : 0])); cfg.tls = Object.fromEntries(g.ids.map((k) => [k, W.heroes[k] ? W.heroes[k].tl || 1 : 1])); }
-      relay.send('roster', { ids: next, nm, hk, ar: arenaRef.current, lv: lvRef.current, bn: botNRef.current, en: endRef.current ? 1 : 0, md: modeRef.current, gm: gmRef.current, ts: tsRef.current, tm: playing ? sideOfRef.current : sides, cfg });
+      if (cfg && W && W.mode === 'team') { cfg.md = 'team'; cfg.gm = W.tm && W.tm.gm ? W.tm.gm : 'tdm'; cfg.map = W.A.key; cfg.tl = W.tm ? Math.round(W.tm.tlim / 60) : 8; cfg.goal = W.tm ? W.tm.goal : 0; cfg.ts = W.tm ? W.tm.size : 3; cfg.bl = W.tm ? W.tm.bl : 1; cfg.tms = Object.fromEntries(g.ids.map((k) => [k, W.heroes[k] ? W.heroes[k].tm : 0])); cfg.sks = Object.fromEntries(g.ids.map((k) => [k, W.heroes[k] ? W.heroes[k].sk : 'shock'])); cfg.cols = Object.fromEntries(g.ids.map((k) => [k, W.heroes[k] ? W.heroes[k].hc | 0 : 0])); cfg.tls = Object.fromEntries(g.ids.map((k) => [k, W.heroes[k] ? W.heroes[k].tl || 1 : 1])); }
+      relay.send('roster', { ids: next, nm, hk, ar: arenaRef.current, lv: lvRef.current, bn: botNRef.current, en: endRef.current ? 1 : 0, md: modeRef.current, gm: gmRef.current, tmap: tmapRef.current, tl: tlimRef.current, gl: glimRef.current[gmRef.current] || 0, ts: tsRef.current, tm: playing ? sideOfRef.current : sides, cfg });
     };
     tick();
     const iv = setInterval(tick, 1500);
     return () => clearInterval(iv);
-  }, [relay.peers, allowWatch, arena, lv, botN, endless, heroKey, mode, gm, ts, sideOf]);
+  }, [relay.peers, allowWatch, arena, lv, botN, endless, heroKey, mode, gm, tmap, tlim, glim, ts, sideOf]);
   useEffect(() => {
     if (solo || !room || isHost) return undefined;
     const w = relay.peers.filter((p) => metaRef.current[p] && metaRef.current[p].w);
@@ -1370,7 +1377,10 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
   const pickMode = (k) => { if (!isHost || (k !== 'team' && k !== 'waves')) return; kitTap(); setMode(k); savePref(PREF.mode, k); };
   const pickTs = (n) => { if (!isHost) return; const v = clamp(n | 0, 1, 5); kitTap(); setTs(v); savePref(PREF.ts, v); };
   const pickBl = (n) => { if (!isHost) return; const v = clamp(n | 0, 0, 2); kitTap(); setBl(v); savePref('zchat-siege-bl', v); };
-  const pickPlay = (k) => { if (!isHost) return; if (k === 'waves') { pickMode('waves'); return; } const v = T.validGm(k); setGm(v); savePref('zchat-siege-gm', v); pickMode('team'); };
+  const pickPlay = (k) => { if (!isHost) return; if (k === 'waves') { pickMode('waves'); return; } const v = T.validGm(k); setGm(v); savePref('zchat-siege-gm', v); setTmap(T.validMap(readPref(`zchat-siege-map-${v}`, T.MAP_DEF[v]))); pickMode('team'); };
+  const pickMap = (k) => { if (!isHost || !T.MAPS[k]) return; kitTap(); setTmap(k); savePref(`zchat-siege-map-${gmRef.current}`, k); };
+  const pickTlim = (n) => { if (!isHost) return; const v = clamp(n | 0, 3, 20); kitTap(); setTlim(v); savePref('zchat-siege-tlim', v); };
+  const pickGlim = (n) => { if (!isHost) return; const v = Math.max(0, n | 0); kitTap(); setGlim((p) => ({ ...p, [gmRef.current]: v })); savePref(`zchat-siege-goal-${gmRef.current}`, v); };
   const pickSkill = (k) => { if (!T.SKILLS[k]) return; setSkill(k); savePref(PREF.sk, k); if (!solo) relay.send('hero', { k: heroKey, c: heroCol, sk: k }); };
   const switchSide = () => {
     kitTap();
@@ -1561,7 +1571,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
           } else if (a === 'ship') { showBanner('The Hive Ship is here', 'Beat it and it fights for your team', 'gold', 2.8); zap('alert', 0.7); }
           else if (a === 'shiptake') { const ours = e.b === myTm; showBanner(ours ? 'We took the Hive Ship' : 'They took the Hive Ship', ours ? 'It pushes the middle lane for us' : 'Guard the middle lane', ours ? 'green' : 'red', 2.6); zap(ours ? 'combo' : 'alert', 0.65); }
           else if (a === 'river') { const ours = e.b === myTm; feedAdd({ good: ours, parts: [[ours ? 'Your team' : 'Enemy team', TXT_COL[ours ? 0 : 1]], ['cleared the river aliens']] }); if (ours) pushNote('River aliens cleared. XP for the whole team', 'join'); }
-          else if (a === 'zone' || a === 'zmove') { const zn = T.zoneByK(e.b); showBanner(a === 'zone' ? 'The zone is open' : 'The zone moved', `Hold the ${zn.n.toLowerCase()}`, 'gold', 2.2); zap(a === 'zone' ? 'alert' : 'cp', 0.6); }
+          else if (a === 'zone' || a === 'zmove') { const zn = T.zoneByK(W, e.b) || { n: 'zone' }; showBanner(a === 'zone' ? 'The zone is open' : 'The zone moved', `Hold the ${zn.n.toLowerCase()}`, 'gold', 2.2); zap(a === 'zone' ? 'alert' : 'cp', 0.6); }
           else if (a === 'zhold') { const ours = e.b === myTm; feedAdd({ good: ours, parts: [[ours ? 'Your team' : 'Enemy team', TXT_COL[ours ? 0 : 1]], ['took the zone']] }); zap(ours ? 'pick' : 'alert', 0.4); }
           else if (a === 'od') { showBanner('Overtime', W.tm && W.tm.gm === 'hp' ? 'The next point wins' : 'The next kill wins', 'gold', 2.4); zap('alert', 0.7); }
           else if (a === 'wave' && !g.waveTold) { g.waveTold = 1; showBanner('Bolt bots are coming', 'They walk every lane', 'blue', 2.2); zap('cp', 0.5); }
@@ -1758,8 +1768,9 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
         sparks(e.x, 0.9, e.z, 3, 8, 5);
         if (mine) { popSum('me', e.x, e.z, e.d, '#FF5A4E', (v) => v >= 900); zap('hurt', 0.8); g.shake = Math.max(g.shake, 0.18); g.hurtT = 0.4; }
       } else if (k === 'heal') {
-        for (let i = 0; i < 6; i++) P3({ x: e.x + R0(-0.4, 0.4), y: R0(0.4, 1.4), z: e.z + R0(-0.4, 0.4), vy: R0(0.8, 1.8), max: R0(0.5, 0.9), s0: 0.3, s1: 0.06, a0: 0.9, type: 3 });
-        if (e.id === myK || e.by === myK) { popSum(`h${e.id}`, e.x, e.z, e.n, '#6BF26B', false, '+'); if (e.id === myK) zap('heal', 0.5); }
+        if (!e.q) for (let i = 0; i < 6; i++) P3({ x: e.x + R0(-0.4, 0.4), y: R0(0.4, 1.4), z: e.z + R0(-0.4, 0.4), vy: R0(0.8, 1.8), max: R0(0.5, 0.9), s0: 0.3, s1: 0.06, a0: 0.9, type: 3 });
+        const hh = W.heroes[e.id];
+        if (e.id === myK || e.by === myK || (hh && W.heroes[myK] && hh.tm === W.heroes[myK].tm && hh.tm != null && !e.q)) { popSum(`h${e.id}`, hh ? hh.x : e.x, hh ? hh.z : e.z, e.n, '#5BF26E', false, '+'); if (e.id === myK && !e.q) zap('heal', 0.5); }
       } else if (k === 'down') {
         if (e.id === myK) {
           zap('pdie', 0.7);
@@ -1894,8 +1905,8 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
         if (solo && cardsRef.current && W.wave.st === 'break' && !W.over) W.wave.t += step;
         if (step > 0) { const subs = Math.max(1, Math.ceil(step / 0.034)); for (let i = 0; i < subs; i++) E.stepWorld(W, step / subs); }
         if (W.mode === 'team') {
-          if (RIFT.d && st.arena.key === 'base' && !st.arena.kit && !g.riftRebuild) { g.riftRebuild = true; setTimeout(() => { try { ensureArena('base'); } catch {} }, 0); }
-          if (!st.rk && RIFT.d && st.sk) { try { st.rk = riftUpload(st.R, RIFT.d); } catch { st.rk = { mesh: {}, still: {} }; } }
+          if (isMap(st.arena.key) && kitOf(st.arena.key) && !st.arena.kit && !g.riftRebuild) { g.riftRebuild = true; const ak0 = st.arena.key; setTimeout(() => { try { ensureArena(ak0); } catch {} }, 0); }
+          if (!st.rk && UNITS.d && st.sk) { try { st.rk = riftUpload(st.R, UNITS.d); } catch { st.rk = { mesh: {}, still: {}, um: {}, ut: {} }; } }
         } else if (W.wave.n > g.waveSeen) {
           g.waveSeen = W.wave.n;
           const spec = E.waveSpec(W.wave.n, 1, W.lv, 1);
@@ -2004,9 +2015,19 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
 
       if (ph === 'menu' || !W) {
         g.menuT += step;
-        const hc = A.homes.length ? A.homes : A.team ? [{ x: 15.5, z: 97 }] : [{ x: A.wx / 2, z: A.wz - 3 }];
+        if (lobViewRef.current !== 'hero' || watch) {
+          const mx = A.wx / 2, mz = A.wz / 2, Rr = Math.max(A.wx, A.wz) * 0.62, an = g.menuT * 0.035 + 0.6;
+          const cam = { pos: [mx + Math.sin(an) * Rr, Rr * 0.6, mz + Math.cos(an) * Rr], at: [mx, 0, mz], fov: 0.72, shadowAt: [mx, 0, mz] };
+          g.cam = cam;
+          const VP = st.R.render({ env: st.arena.env, cam, items, parts });
+          g.VP = VP; g.invVP = null;
+          if (ov) { const c2 = ov.getContext('2d'); c2.setTransform(1, 0, 0, 1, 0, 0); c2.clearRect(0, 0, ov.width, ov.height); }
+          return;
+        }
+        const F0 = A.team && A.team.founts && A.team.founts[0];
+        const hc = A.homes.length ? A.homes : F0 ? [{ x: F0.x, z: F0.z + 1 }] : [{ x: A.wx / 2, z: A.wz - 3 }];
         const cx = hc.reduce((s, p) => s + p.x, 0) / hc.length, cz = hc.reduce((s, p) => s + p.z, 0) / hc.length - 1;
-        const list = solo ? ['me'] : rosterRef.current.slice(0, 4);
+        const list = [myK];
         list.forEach((k, i) => {
           const key = k === myK ? heroRef.current : validHero(heroOfRef.current[k] || (metaRef.current[k] && metaRef.current[k].h));
           const off = [[0, 0], [-1.6, -0.9], [1.6, -0.9], [0, -1.8]][i] || [0, 0];
@@ -2021,7 +2042,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
         const sw = Math.sin(g.menuT * 0.15) * 0.5;
         const wide = cw > ch * 1.15;
         const lz = st.sk ? 1 : 0;
-        const cam = wide ? { pos: [cx - 1.25 + sw, 3.5 - lz * 0.4, cz + 7.6], at: [cx - 1.25, 0.66 - lz * 1.05, cz - 0.3], fov: 0.62, shadowAt: [cx, 0, cz - 1] } : { pos: [cx + sw, 5.2, cz + 10], at: [cx, 0.2, cz + 1.4], fov: 0.66, shadowAt: [cx, 0, cz - 1] };
+        const cam = wide ? { pos: [cx + sw, 3.3 - lz * 0.4, cz + 7.2], at: [cx, 0.7 - lz * 1.0, cz - 0.3], fov: 0.62, shadowAt: [cx, 0, cz - 1] } : { pos: [cx + sw, 5.2, cz + 10], at: [cx, 0.2, cz + 1.4], fov: 0.66, shadowAt: [cx, 0, cz - 1] };
         g.cam = cam;
         const VP = st.R.render({ env: st.arena.env, cam, items, parts });
         g.VP = VP; g.invVP = null;
@@ -2074,7 +2095,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
           const yaw = b.type === 'cor' ? 0 : b.yaw;
           const atk = (b.atkT2 || 0) > 0 || b.atkV;
           const bump = !still && b.type !== 'shp' ? Math.abs(Math.sin((b.walk || 0) * 3.2)) * 0.03 * clamp((b.mv || 0) / 2, 0, 1) : 0;
-          const UL = ULOOK[b.type], UM = UL && rk && rk.um && rk.um[UL.m] && RIFT.d && RIFT.d.u && RIFT.d.u.m[UL.m];
+          const UL = ULOOK[b.type], UM = UL && rk && rk.um && rk.um[UL.m] && UNITS.d && UNITS.d.m[UL.m];
           if (UM && rk.ut[UL.t]) {
             const UP = unitPose(b, UM, atk ? UL.atk : b.flash > 0 ? 'hit' : null, step);
             items.push({ mesh: rk.um[UL.m], model: scl(m4.pose(b.x, rise, b.z, b.yaw), UL.h, UL.h, UL.h), skin: UP.S, tex: rk.ut[UL.t], col: b.flash > 0 ? COLRF : unitCol(b, myTm, true), cast: true });
@@ -2098,8 +2119,8 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
           if (b.flash > 0 && !still) sparks(b.x, 0.6, b.z, 1, b.tm === myTm ? 6 : 8, 3);
           continue;
         }
-        const CL = team && st.rk && st.rk.um && RIFT.d && RIFT.d.u ? campLook(W, b) : null;
-        const CM = CL && st.rk.um[CL.m] && RIFT.d.u.m[CL.m];
+        const CL = team && st.rk && st.rk.um && UNITS.d ? campLook(W, b) : null;
+        const CM = CL && st.rk.um[CL.m] && UNITS.d.m[CL.m];
         if (CM && st.rk.ut['t_' + CL.m]) {
           const act = (b.wind || 0) > 0 || (b.burst || 0) > 0 || (b.atkT2 || 0) > 0 || b.atkV ? 'atk' : b.flash > 0 ? 'hit' : null;
           const UP = unitPose(b, CM, act, step);
@@ -2411,14 +2432,15 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
           const p = proj(h.x, 2.05, h.z);
           if (!p) continue;
           if (team && h.st === 0) {
-            const w = isMe ? 50 : 44, x0 = p[0] - w / 2 + 6;
-            bar(x0, p[1], w, 6.5, clamp(h.hp / h.max, 0, 1), isMe ? '#5BE35B' : h.tm === myTm ? '#3D9BFF' : '#FF4A3D');
+            const w = 52, x0 = p[0] - w / 2 + 7;
+            bar(x0, p[1], w, 9.5, clamp(h.hp / h.max, 0, 1), isMe ? '#5BE35B' : h.tm === myTm ? '#3D9BFF' : '#FF4A3D');
             if ((h.shield || 0) > 0) { rr(x0, p[1] - 3, w * clamp(h.shield / h.max, 0, 1), 2.5, 1); c2.fillStyle = '#E8F4FF'; c2.fill(); }
-            c2.fillStyle = 'rgba(12,10,26,0.9)'; c2.beginPath(); c2.arc(x0 - 8, p[1] + 3.2, 7, 0, Math.PI * 2); c2.fill();
+            txt(h.hp >= 100000 ? fmtK(h.hp) : String(Math.ceil(h.hp)), x0 + w / 2, p[1] + 5, 8.5, '#FFFFFF');
+            c2.fillStyle = 'rgba(12,10,26,0.9)'; c2.beginPath(); c2.arc(x0 - 8.5, p[1] + 4.7, 7.5, 0, Math.PI * 2); c2.fill();
             c2.strokeStyle = h.tm === myTm ? '#3D8BFF' : '#FF4D5E'; c2.lineWidth = 1.6; c2.stroke();
-            txt(String(h.tl || 1), x0 - 8, p[1] + 3.6, 8.5, '#FFE15A');
-            if (!isMe) txt(nameOf(id), p[0] + 6, p[1] - 7, 9.5, h.tm === myTm ? '#9FCBFF' : '#FF8A95');
-            if (isMe) for (let i = 0; i < 3; i++) { const f = clamp(h.ammo - i, 0, 1); bar(x0 + i * (w / 3 + 0.5), p[1] + 10, w / 3 - 3, 3.5, f, f >= 1 ? '#FF9F1A' : '#B06A14'); }
+            txt(String(h.tl || 1), x0 - 8.5, p[1] + 5.1, 8.5, '#FFE15A');
+            if (!isMe) txt(nameOf(id), p[0] + 7, p[1] - 7.5, 9.5, h.tm === myTm ? '#9FCBFF' : '#FF8A95');
+            if (isMe) for (let i = 0; i < 3; i++) { const f = clamp(h.ammo - i, 0, 1); bar(x0 + i * (w / 3 + 0.5), p[1] + 13, w / 3 - 3, 3.5, f, f >= 1 ? '#FF9F1A' : '#B06A14'); }
             if (isMe && (h.recT || 0) > 0) { const f = clamp(1 - h.recT / 4.5, 0, 1); bar(p[0] - 40, p[1] + 24, 80, 6, f, '#9F8CFF'); txt('Going home', p[0], p[1] + 38, 11, '#E4DCFF'); }
             continue;
           }
@@ -2554,6 +2576,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
   const hb = 38;
   const playing = inGame() && phase === 'play';
   const rowBtns = [
+    playing && hud.tm && <GHudBtn key="board" size={hb} label="Scoreboard" onPress={() => { setQuick(false); setBoard(true); }}><LineIcon k="board" size={Math.round(hb * 0.52)} /></GHudBtn>,
     talkOn && <GHudBtn key="mic" icon={relay.mic.on ? 'mic' : 'micoff'} on={relay.mic.on} size={hb} label={relay.mic.on ? 'Turn your mic off' : 'Turn your mic on'} onPress={relay.toggleMic} />,
     !solo && <GHudBtn key="ppl" icon="people" on={people} size={hb} label="Players and voice" badge={roster.length > 1 ? roster.length : null} onPress={() => { setQuick(false); setPeople(true); }} />,
     talkOn && <GHudBtn key="chat" icon="chat" size={hb} label="Chat" badge={chatNew || null} onPress={() => { setQuick(false); setChatNew(0); setChatOpen(true); }} />,
@@ -2569,129 +2592,40 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
   const g0 = G.current;
   const ids0 = phase === 'menu' ? [] : g0.ids;
 
-  const soloTeamPanel = solo && mode === 'team' && !watch ? (
-            <GPanel style={{ padding: '8px 10px 10px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <span style={{ fontSize: 13.5, fontWeight: 900 }}>Teams</span>
-              <TeamSlots list={[{ id: 'me', tm: sideOf.me === 1 ? 1 : 0, n: 'You', h: heroKey, pw: myPw }]} ts={ts} thumbs={thumbs} myK="me" canSwap onSwap={switchSide} botsOn />
-            </GPanel>
-  ) : null;
-  const squadPanel = !solo ? (
-            <GPanel style={{ padding: '8px 10px 10px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 13.5, fontWeight: 900, flex: 1 }}>{mode === 'team' ? 'Teams' : watch ? 'Squad' : `Squad ${roster.length} of ${E.SQUAD_MAX}`}</span>
-                {watchers.length > 0 && <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 800, color: '#CFE6FF' }}><GIcon k="eye" size={14} color="#CFE6FF" />{`${watchers.length} watching`}</span>}
-              </div>
-              {mode === 'team' ? (
-                <>
-                  <TeamSlots list={roster.map((k) => ({ id: k, tm: sideOf[k] === 1 ? 1 : 0, n: k === kindOf() ? 'You' : names[k] || 'Friend', h: k === kindOf() ? heroKey : validHero(heroOf[k]), pw: powerOf(k) }))} ts={Math.max(ts, Math.ceil(roster.length / 2))} thumbs={thumbs} myK={kindOf()} hostId={room && room.host} canSwap={!watch} onSwap={switchSide} botsOn />
-                  {isHost && onInvite && !watch && roster.length < Math.min(E.SQUAD_MAX, 10) && <GPill text="Invite" icon="plus" color="gold" small wide onPress={() => onInvite(roster.length, GS.side)} />}
-                </>
-              ) : E.SQUAD_MAX > 10 ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
-                    {roster.slice(0, 9).map((k, i) => { const isMe = k === kindOf(); const hk = isMe ? heroKey : validHero(heroOf[k]); return <span key={k} title={isMe ? 'You' : names[k] || 'Friend'} style={{ width: 30, height: 30, marginLeft: i ? -7 : 0, borderRadius: 15, overflow: 'hidden', flexShrink: 0, background: '#141A2C', boxShadow: `0 0 0 2px ${heroTint(hk, isMe ? heroCol : colOf[k] | 0)}` }}>{thumbs[hk] ? <img src={thumbs[hk]} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} /> : null}</span>; })}
-                    {roster.length > 9 && <span style={{ marginLeft: 6, fontSize: 12.5, fontWeight: 900 }}>{`+${roster.length - 9}`}</span>}
-                  </div>
-                  <span style={{ flex: 1, fontSize: 11.5, fontWeight: 700, color: 'rgba(255,255,255,0.7)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{botN > 0 && isHost ? (Math.min(botN, E.SQUAD_MAX - roster.length) === 1 ? 'A bot fills 1 spot' : `Bots fill ${Math.min(botN, E.SQUAD_MAX - roster.length)} spots`) : ''}</span>
-                  {isHost && onInvite && !watch && roster.length < E.SQUAD_MAX && <GPill text="Invite" icon="plus" color="gold" small onPress={() => onInvite(roster.length, GS.side)} />}
-                </div>
-              ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', justifyItems: 'center', rowGap: 4 }}>
-                  {Array.from({ length: E.SQUAD_MAX }, (_, i) => {
-                    const k = roster[i];
-                    if (!k) return <GSlot key={`e${i}`} size={34} empty name={isHost && onInvite && !watch ? 'Invite' : botN > i - roster.length && isHost ? 'Bot' : 'Open'} label="Invite a friend" onPress={isHost && onInvite && !watch ? () => onInvite(roster.length, GS.side) : null} />;
-                    const isMe = k === kindOf();
-                    const hk = isMe ? heroKey : validHero(heroOf[k]);
-                    return <GSlot key={k} size={34} art={thumbs[hk] ? <img src={thumbs[hk]} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} /> : <span style={{ width: 26, height: 26, borderRadius: 13, background: SLOT_COLS[i] }} />} name={isMe ? 'You' : names[k] || 'Friend'} ring={SLOT_COLS[i]} talk={micOf(k)} muted={!!relay.muted[k]} label={isMe ? 'You' : `${names[k] || 'Friend'}, voice and volume`} onPress={!isMe && !watch ? () => setPeople(true) : null} />;
-                  })}
-                </div>
-              )}
-              {!watch && (
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <GPill text={relay.mic.on ? 'Mic off' : 'Talk with mic'} icon={relay.mic.on ? 'micoff' : 'mic'} color={relay.mic.on ? 'white' : 'blue'} small wide onPress={relay.toggleMic} style={{ flex: 1 }} />
-                  <GPill text="Voice" icon="people" color="white" small onPress={() => setPeople(true)} />
-                </div>
-              )}
-              {!watch && relay.mic.err && <div style={{ fontSize: 12, fontWeight: 800, color: '#FF9C9C' }}>{relay.mic.err}</div>}
-            </GPanel>
-  ) : null;
+  const inRoomSet = new Set(roster);
+  const tsEff = Math.max(ts, Math.ceil((solo ? 1 : roster.length) / 2));
+  const lobSlot = (k) => ({ id: k, name: k === kindOf() ? 'You' : names[k] || 'Friend', hero: k === kindOf() ? heroKey : validHero(heroOf[k]), pw: powerOf(k), me: k === kindOf(), host: !solo && room && k === room.host, talk: !solo && micOf(k) && !relay.muted[k] });
+  const teamList = (tm) => { const L0 = (solo ? ['me'] : roster).filter((k) => (k === 'me' ? (sideOf.me === 1 ? 1 : 0) : sideOf[k] === 1 ? 1 : 0) === tm).map(lobSlot); while (L0.length < tsEff) L0.push({ empty: true, bot: true }); return L0; };
+  const squadList = (() => { const L0 = (solo ? ['me'] : roster).map(lobSlot); const nb = Math.min(botN, E.SQUAD_MAX - L0.length); for (let i = 0; i < nb; i++) L0.push({ empty: true, bot: true }); return L0; })();
+  const goalItems = gm === 'hp' ? [[0, 'Normal', '150 points'], [100, '100 points'], [200, '200 points'], [250, '250 points']] : [[0, 'Normal', `${T.goalFor('tdm', tsEff)} takedowns for ${tsEff}v${tsEff}`], [10, '10 takedowns'], [20, '20 takedowns'], [30, '30 takedowns'], [50, '50 takedowns'], [75, '75 takedowns']];
+  const glimNow = glim[gm] || 0;
+  const goalText = glimNow > 0 ? (gm === 'hp' ? `${glimNow} points` : `${glimNow} takedowns`) : gm === 'hp' ? '150 points' : `${T.goalFor('tdm', tsEff)} takedowns`;
+  const canInvite = !watch && !!onInviteOne && (solo || isHost);
+  const lobbyL = {
+    GS, solo, watch, isHost, title: watch ? 'Watching' : solo ? 'Bot match' : 'Private match', sub: watch ? `Watching ${hostName} and friends` : null,
+    mode, gm, onPlay: pickPlay, map: tmap, onMap: pickMap, mapThumbs: aThumbs, onMapSheet: () => { setThumbAll(true); for (const k of T.MAP_KEYS) if (!kitOf(k)) loadKit(k).then((d) => { if (d) setKitN((n) => n + 1); }); },
+    arenaName: E.ARENAS[arena] ? E.ARENAS[arena].name : 'Arena', lvName: E.LEVELS[lv].name, wavesText: endless ? 'Endless' : `${E.WIN_WAVE} waves`, botText: botN > 0 ? `${botN} bots` : 'Off', onArena: () => setArenaSheet(true), botN, onBots: pickBots, botItems: BOT_ITEMS.map(([v, t]) => [Number(v), t === 'Off' ? 'Off' : `${t} bots`]),
+    ts: tsEff, onTs: pickTs, bl, onBl: pickBl, tlim, onTlim: pickTlim, glim: glimNow, onGlim: pickGlim, goalText, goalItems,
+    cap: mode === 'team' ? tsEff : E.SQUAD_MAX, blue: teamList(0), red: teamList(1), squad: squadList, myTm: sideOf[solo ? 'me' : kindOf()] === 1 ? 1 : 0,
+    onSwap: !watch ? switchSide : null, thumbs, heroKey, heroLine: `${H0.name}, level ${prog ? prog.levels[heroKey] || 1 : 1}`,
+    friends: (friends || []).filter((p) => p && p.id && !p.is_bot).map((p) => ({ id: p.id, name: p.name || 'Friend', avatar: p.avatar, on: !!(online && online.has && online.has(p.id)) })), inRoom: inRoomSet,
+    onInvite: canInvite ? (p) => { kitTap(); onInviteOne(p); pushNote(`Invite sent to ${p.name || 'your friend'}`, 'join'); } : null,
+    onInviteSlot: canInvite && !solo && onInvite ? () => onInvite(roster.length, GS.side) : null,
+    roomList: (solo ? [{ id: 'me', name: 'You', hero: heroKey, me: true }] : roster.map((k) => ({ ...lobSlot(k), muted: !!relay.muted[k] }))).concat(watchers.map((k) => ({ id: k, name: names[k] || 'Friend', watch: true }))),
+    onChat: !solo && !watch ? () => { setChatNew(0); setChatOpen(true); } : null, chatN: chatNew, onMic: !solo && !watch ? relay.toggleMic : null, micOn: relay.mic.on, micErr: !watch ? relay.mic.err : null,
+    onPeople: !solo ? () => setPeople(true) : null, onWatch: !solo && isHost && !watch ? toggleWatch : null, allowWatch, watchers: watchers.length,
+    onSettings: () => setCtl(true), onLoadout: () => { kitTap(); setLobView('hero'); }, howTo: mode === 'team' ? <TeamHowTo gm={gm} /> : <div style={{ fontSize: 13, fontWeight: 700, lineHeight: 1.5, color: 'rgba(255,255,255,0.85)' }}>{`Fight ${E.WIN_WAVE} waves of aliens with your squad. A boss comes every 5 waves. Every few waves you pick a power, and friends who fall can be revived.`}</div>,
+    ready: ready && !failed, failed, readyText: `Loading ${mode === 'team' ? (T.MAPS[tmap] ? T.MAPS[tmap].name : 'map') : E.ARENAS[arena].name}`, onStart: startGame,
+    waitText: mode === 'team' ? `${hostName} starts the match` : `${hostName} starts the fight`, onClose: finish, closeLabel: solo ? 'Leave' : 'Back to chat',
+    scrap: prog ? prog.scrap : null, best: mode !== 'team' ? best : 0,
+  };
+  const loadD = {
+    GS, heroKey, thumbs, levels: prog ? prog.levels : null, scrap: prog ? prog.scrap : null, onPick: pickHero, taken: (k) => !solo && heroKey !== k && takenBy(k) >= E.heroCap(),
+    col: heroCol, onCol: pickCol, tint: heroTint, team: mode === 'team', skill, onSkill: pickSkill, shotDmg, onUpgrade: () => upgrade(heroKey), upBusy, upMsg, onBack: () => { kitTap(); setLobView('map'); },
+  };
   const lobbyUi = phase !== 'menu' ? null : (
-    <GLobby GS={GS} title="Bolt War" onClose={finish} closeLabel={solo ? 'Leave' : 'Back to chat'} tint="rgba(8,10,22,0.62)"
-      sub={watch ? `Watching ${hostName} and friends` : null}
-      badge={best && mode !== 'team' ? <GChip style={{ height: 34, gap: 6 }}><GIcon k="crown" size={14} color="#FFD84E" />{`Best wave ${best}`}</GChip> : null}
-      tools={(
-        <>
-          {!solo && !watch && <GBtn icon="chat" color="dark" size={42} fast={false} label="Chat" badge={chatNew || null} onPress={() => { setChatNew(0); setChatOpen(true); }} />}
-          {!solo && isHost && !watch && <GBtn icon={allowWatch ? 'eye' : 'eyeoff'} color={allowWatch ? 'blue' : 'dark'} size={42} fast={false} label={allowWatch ? 'Friends can watch. Tap to stop' : 'Let friends watch'} badge={watchers.length || null} onPress={toggleWatch} />}
-          {!watch && <GBtn icon="gear" color="dark" size={42} fast={false} label={isHost ? 'Game settings' : 'Settings'} onPress={() => (isHost ? setOptSheet(true) : setCtl(true))} />}
-        </>
-      )}
-      side={(
-        <>
-          {!watch && (
-            <GPanel style={{ padding: '8px 10px 10px', display: 'flex', flexDirection: 'column', gap: 7 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 13.5, fontWeight: 900 }}>Your hero</span>
-                <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 800, color: H0.col, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{`${H0.name}, ${H0.role}`}</span>
-                {prog && <span style={{ display: 'flex', alignItems: 'center', gap: 4, height: 24, padding: '0 9px', borderRadius: 12, background: 'rgba(10,14,26,0.6)', fontSize: 11.5, fontWeight: 900, color: '#FFE15A', flexShrink: 0 }}><GIcon k="star" size={12} color="#FFE15A" ink="transparent" />{`${prog.scrap} scrap`}</span>}
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${E.HERO_KEYS.length > 8 ? 5 : 4}, minmax(0, 1fr))`, gap: 6, justifyItems: 'center' }}>{E.HERO_KEYS.map((k) => <HeroCard key={k} k={k} on={heroKey === k} img={thumbs[k]} size={land ? 54 : 52} lv={prog ? prog.levels[k] : 0} locked={!solo && heroKey !== k && takenBy(k) >= E.heroCap()} onPress={() => pickHero(k)} />)}</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 12, fontWeight: 800, color: 'rgba(255,255,255,0.75)' }}>Colour</span>
-                {[0, 1, 2, 3].map((c) => <button key={c} type="button" className="zgk-btn" aria-label={`Colour ${c + 1}`} aria-pressed={heroCol === c} {...pressProps(() => pickCol(c))} style={{ width: 24, height: 24, borderRadius: 4, border: 'none', cursor: 'pointer', background: heroTint(heroKey, c), boxShadow: heroCol === c ? '0 0 0 2px #1B1430, 0 0 0 4px #F2B21B' : 'inset 0 0 0 1px rgba(0,0,0,0.3)' }} />)}
-                {!solo && takenBy(heroKey) > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.6)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>A friend has this hero too</span>}
-              </div>
-              {mode === 'team' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                  <span style={{ fontSize: 12, fontWeight: 800, color: 'rgba(255,255,255,0.75)' }}>Battle skill</span>
-                  <SkillPick value={skill} onPick={pickSkill} compact={!land} />
-                </div>
-              )}
-              <button type="button" className="zgk-btn" aria-label={`${H0.name} details and upgrades`} {...pressProps(() => { kitTap(); setUpMsg(''); setHeroSheet(true); })}
-                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 7px', border: 'none', borderRadius: 12, background: 'rgba(255,255,255,0.07)', cursor: 'pointer', color: '#FFFFFF', fontFamily: FONT, textAlign: 'left' }}>
-                <span style={{ width: 34, height: 34, borderRadius: 17, flexShrink: 0, background: 'rgba(20,24,30,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: 'inset 0 0 0 1.5px rgba(255,194,61,0.9)' }}><GGlyph k={SUP_GI[E.HEROES[heroKey].sup.k] || 'sonic'} size={22} /></span>
-                <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
-                  <span style={{ fontSize: 12.5, fontWeight: 900 }}>{prog ? `Level ${prog.levels[heroKey] || 1}` : H0.sup.name}</span>
-                  <span style={{ fontSize: 11.5, fontWeight: 700, color: 'rgba(255,255,255,0.75)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{`Super ${H0.sup.name}, gadget ${H0.gad.name}`}</span>
-                </span>
-                <span style={{ height: 26, padding: '0 10px', borderRadius: 13, background: 'linear-gradient(180deg, #FFE27A, #F5B321)', color: '#2A1D05', fontSize: 11.5, fontWeight: 900, display: 'flex', alignItems: 'center', flexShrink: 0 }}>{prog ? 'Upgrade' : 'Details'}</span>
-              </button>
-            </GPanel>
-          )}
-          {mode !== 'team' && squadPanel}
-        </>
-      )}
-      main={(
-        <>
-        {mode === 'team' && (soloTeamPanel || squadPanel)}
-        <GPanel style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 9 }}>
-          <div style={{ width: '100%' }}><ModePick value={mode === 'team' ? gm : 'waves'} onPick={pickPlay} disabled={!isHost || watch} /></div>
-          {mode === 'team' ? <TeamMapCard img={aThumbs.base} gm={gm} ts={Math.max(ts, Math.ceil((solo ? 1 : roster.length) / 2))} isHost={isHost && !watch} onPress={() => setMapSheet(true)} /> : <button type="button" className="zgk-btn" aria-label={isHost && !watch ? `Arena ${E.ARENAS[arena].name}. Change arena` : `Arena ${E.ARENAS[arena].name}`} {...pressProps(() => { kitTap(); setArenaSheet(true); })}
-            style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 5, border: 'none', borderRadius: 12, background: 'rgba(255,255,255,0.07)', cursor: 'pointer', color: '#FFFFFF', fontFamily: FONT, textAlign: 'left' }}>
-            <span style={{ width: 92, aspectRatio: '16 / 9', borderRadius: 8, overflow: 'hidden', display: 'block', background: ARENA_BG[arena] || ARENA_BG.yard, flexShrink: 0 }}>{aThumbs[arena] ? <img src={aThumbs[arena]} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} /> : null}</span>
-            <span style={{ flex: 1, minWidth: 0 }}>
-              <span style={{ display: 'block', fontSize: 15, fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{E.ARENAS[arena].name}</span>
-              <span style={{ display: 'block', fontSize: 11.5, fontWeight: 700, color: 'rgba(255,255,255,0.72)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{`${E.LEVELS[lv].name}, ${endless ? 'endless waves' : `${E.WIN_WAVE} waves`}`}</span>
-            </span>
-            <span style={{ height: 26, padding: '0 10px', borderRadius: 13, background: isHost && !watch ? 'linear-gradient(180deg, #FFE27A, #F5B321)' : 'rgba(10,14,26,0.7)', color: isHost && !watch ? '#2A1D05' : '#FFFFFF', fontSize: 11.5, fontWeight: 900, display: 'flex', alignItems: 'center', flexShrink: 0 }}>{isHost && !watch ? 'Change' : 'See arenas'}</span>
-          </button>}
-          {failed ? <div style={{ fontSize: 12.5, fontWeight: 800, lineHeight: 1.4, color: '#FFB4B4' }}>This phone could not start the 3D game. Try closing other apps, then open it again.</div>
-            : watch ? <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 44, fontSize: 13.5, fontWeight: 800 }}><Spinner size={16} color="#FFFFFF" />{`${hostName} starts soon`}</div>
-            : isHost ? <GPill text={ready ? (mode === 'team' ? 'Start the match' : 'Start the fight') : `Building ${mode === 'team' ? E.ARENAS.base.name : E.ARENAS[arena].name}`} icon="play" color="gold" wide disabled={!ready} onPress={startGame} />
-            : <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 44, fontSize: 13.5, fontWeight: 800 }}><Spinner size={16} color="#FFFFFF" />{mode === 'team' ? `${hostName} sets the teams and starts` : `${hostName} picks the arena and starts`}</div>}
-        </GPanel>
-        </>
-      )}>
-      {mapSheet && (
-        <GLobbySheet GS={GS} title={E.ARENAS.base.name} width={560} onClose={() => setMapSheet(false)}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {aThumbs.base ? <img src={aThumbs.base} alt="" style={{ width: '100%', aspectRatio: '16 / 9', objectFit: 'cover', borderRadius: 12, display: 'block' }} /> : null}
-            <TeamHowTo gm={gm} />
-            {isHost && !watch && <TeamSettings ts={ts} onTs={pickTs} bl={bl} onBl={pickBl} />}
-            <GPill text="Done" color="gold" wide onPress={() => setMapSheet(false)} />
-          </div>
-        </GLobbySheet>
-      )}
+    <>
+      {lobView === 'hero' && !watch ? <SiegeLoadout D={loadD} /> : <SiegeLobby L={lobbyL} />}
       {arenaSheet && (
         <GLobbySheet GS={GS} title="Arena" width={600} onClose={() => setArenaSheet(false)}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
@@ -2724,70 +2658,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
           </div>
         </GLobbySheet>
       )}
-      {heroSheet && (
-        <GLobbySheet GS={GS} title={`${H0.name}, ${H0.role}`} width={560} onClose={() => setHeroSheet(false)}>
-          {(() => {
-            const lvl = prog ? prog.levels[heroKey] || 1 : 1;
-            const lm = E.levelMods(lvl), ln = E.levelMods(Math.min(E.MAX_LEVEL, lvl + 1));
-            const hpNow = Math.round(H0.hp * lm.hp), hpNext = Math.round(H0.hp * ln.hp);
-            const dNow = Math.round(shotDmg(H0) * lm.dmg), dNext = Math.round(shotDmg(H0) * ln.dmg);
-            const top = lvl >= E.MAX_LEVEL;
-            const cost = E.levelCost(lvl);
-            const short = prog ? Math.max(0, cost - prog.scrap) : 0;
-            return (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                  <span style={{ width: 84, height: 84, borderRadius: 18, overflow: 'hidden', flexShrink: 0, background: `radial-gradient(circle at 50% 35%, ${H0.col}66, #141A2C 75%)`, boxShadow: `0 0 0 2.5px ${H0.col}` }}>{thumbs[heroKey] ? <img src={thumbs[heroKey]} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} /> : null}</span>
-                  <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <span style={{ fontSize: 13.5, fontWeight: 700, lineHeight: 1.35, color: 'rgba(255,255,255,0.88)' }}>{H0.text}</span>
-                    <span style={{ fontSize: 12.5, fontWeight: 900, color: '#FFE15A' }}>{prog ? `Level ${lvl} of ${E.MAX_LEVEL}` : `Level ${lvl}`}</span>
-                    <span style={{ display: 'flex', gap: 3 }}>{Array.from({ length: E.MAX_LEVEL }, (_, i) => <span key={i} style={{ flex: 1, height: 6, borderRadius: 3, background: i < lvl ? '#FFD45A' : 'rgba(255,255,255,0.14)' }} />)}</span>
-                  </div>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-                  <StatRow label="Health" f={hpNow / 7000} text={hpNow.toLocaleString()} col="linear-gradient(90deg, #4FD86A, #2BB04A)" />
-                  <StatRow label="Damage" f={dNow / 2000} text={`${dNow.toLocaleString()} a shot`} col="linear-gradient(90deg, #FF8A5C, #E5483B)" />
-                  <StatRow label="Range" f={H0.stats[2] / 5} text={RANGE_TXT[H0.stats[2]]} col="linear-gradient(90deg, #6FB8FF, #2563C4)" />
-                  <StatRow label="Speed" f={H0.stats[3] / 5} text={SPEED_TXT[H0.stats[3]]} col="linear-gradient(90deg, #C08BFF, #8045E6)" />
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {[[<GGlyph key="a" k={ATK_GI[heroKey]} size={20} />, 'Attack', H0.text, 'rgba(20,24,30,0.85)'], [<GGlyph key="s" k={SUP_GI[H0.sup.k] || 'sonic'} size={22} />, `Super, ${H0.sup.name}`, H0.sup.text, 'rgba(20,24,30,0.85)'], [<GGlyph key="g" k={GAD_GI[H0.gad.k]} size={20} />, `Gadget, ${H0.gad.name}`, `${H0.gad.text} ${E.GADGETS} uses each game.`, 'radial-gradient(circle at 40% 30%, #5EE6D2, #18B3A0 80%)']].map(([ic, t, d, bg]) => (
-                    <div key={t} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 8px', borderRadius: 12, background: 'rgba(255,255,255,0.06)' }}>
-                      <span style={{ width: 34, height: 34, borderRadius: 17, flexShrink: 0, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 0 0 2px ${INK}` }}>{ic}</span>
-                      <span style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}><span style={{ fontSize: 13, fontWeight: 900 }}>{t}</span><span style={{ fontSize: 11.5, fontWeight: 700, color: 'rgba(255,255,255,0.75)', lineHeight: 1.3 }}>{d}</span></span>
-                    </div>
-                  ))}
-                </div>
-                {prog ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 7, padding: '9px 10px', borderRadius: 14, background: 'rgba(255,214,90,0.1)', boxShadow: 'inset 0 0 0 1.5px rgba(255,214,90,0.35)' }}>
-                    <span style={{ fontSize: 12.5, fontWeight: 800, lineHeight: 1.35 }}>{top ? `${H0.name} is at the top level.` : `Level ${lvl + 1} gives ${hpNext.toLocaleString()} health and ${dNext.toLocaleString()} damage a shot.`}</span>
-                    {!top && <GPill text={upBusy ? 'Upgrading' : short ? `Upgrade for ${cost} scrap` : `Upgrade for ${cost} scrap`} icon="up" color={short ? 'white' : 'gold'} wide disabled={upBusy || short > 0} onPress={() => upgrade(heroKey)} />}
-                    <span style={{ fontSize: 11.5, fontWeight: 700, color: 'rgba(255,255,255,0.72)' }}>{short && !top ? `You have ${prog.scrap} scrap. Play games to earn ${short} more.` : `You have ${prog.scrap} scrap. Each game gives scrap for the waves you reach.`}</span>
-                    {upMsg && <span style={{ fontSize: 12, fontWeight: 800, color: '#FFB49A' }}>{upMsg}</span>}
-                  </div>
-                ) : <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.7)', lineHeight: 1.4 }}>Hero levels show up here once they load. Check your connection and open this again.</div>}
-                <GPill text="Done" color="dark" small wide onPress={() => setHeroSheet(false)} />
-              </div>
-            );
-          })()}
-        </GLobbySheet>
-      )}
-      {optSheet && (
-        <GLobbySheet GS={GS} title="Game settings" width={520} onClose={() => setOptSheet(false)}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            {isHost && mode === 'team' && <TeamSettings ts={ts} onTs={pickTs} bl={bl} onBl={pickBl} />}
-            {isHost && mode === 'team' && <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.7)', lineHeight: 1.4 }}>Bots fill every open spot on both teams. Hero levels do not count here, so every player starts equal.</div>}
-            {isHost && mode !== 'team' && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ fontSize: 14.5, fontWeight: 900, flex: 1 }}>{solo ? 'Bot friends' : 'Bots fill empty spots'}</span>
-                <div style={{ width: 250 }}><GSeg value={String(botN)} items={BOT_ITEMS} onPick={pickBots} label="Bot friends" /></div>
-              </div>
-            )}
-            <GPill text="Settings" icon="gear" color="white" small wide onPress={() => { setOptSheet(false); setCtl(true); }} />
-          </div>
-        </GLobbySheet>
-      )}
-    </GLobby>
+    </>
   );
 
 const powersBtn = (() => {
@@ -2869,7 +2740,7 @@ const powersBtn = (() => {
           <canvas ref={ovRef} aria-hidden="true" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block', pointerEvents: 'none', zIndex: 1 }} />
           <div ref={hurtRef} aria-hidden="true" style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 2, opacity: 0, background: 'radial-gradient(ellipse at center, rgba(255,0,0,0) 55%, rgba(220,20,20,0.55) 100%)' }} />
 
-          {(phase === 'play' || phase === 'done') && (
+          {phase === 'play' && (
             <>
               {teamOn && (
                 <div style={{ position: 'absolute', left: left(10), top: top(8), display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start', zIndex: 3, pointerEvents: 'none' }}>
@@ -3006,89 +2877,25 @@ const powersBtn = (() => {
             </div>
           )}
 
-          {phase === 'done' && result && result.team && (
-            <div style={{ position: 'absolute', inset: 0, zIndex: 20, background: 'rgba(10,8,24,0.55)', display: 'flex', padding: 12, overflowY: 'auto', touchAction: 'pan-x pan-y' }}>
-              <GPanel style={{ margin: 'auto', width: '100%', maxWidth: land ? 760 : 440, padding: land ? '12px 14px' : 16, display: 'flex', flexDirection: 'column', gap: 10, animation: 'zgk-pop 0.35s ease-out', boxSizing: 'border-box' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 180 }}>
-                    <GTitle text={result.lost ? 'Connection lost' : result.draw ? 'Draw' : !inGame() ? `${TNAME[result.win] || 'Blue'} team won` : result.won ? 'Victory' : 'Defeat'} size={land ? 28 : 30} color={result.won ? '#FFE15A' : '#FFFFFF'} />
-                    <div style={{ fontSize: 13, fontWeight: 800, color: 'rgba(255,255,255,0.88)' }}>{result.lost ? 'The host stopped sending the game' : `${inGame() ? `Your team ${result.sc[result.myTeam]}, enemy ${result.sc[1 - result.myTeam]}` : `Blue ${result.sc[0]}, Red ${result.sc[1]}`}. ${result.mins > 0 ? `${result.mins} min` : 'Under a minute'}`}</div>
-                  </div>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    {inGame() && <GChip style={{ height: 30, gap: 6 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: TCOL[result.myTeam] }} />{`You played ${TNAME[result.myTeam].toLowerCase()} side`}</GChip>}
-                    {result.scrap != null && result.scrap > 0 && <GChip style={{ height: 30, gap: 6 }}><GIcon k="plus" size={13} color="#7BF27B" ink="transparent" />{`${result.scrap} scrap`}</GChip>}
-                  </div>
-                </div>
-                {!result.lost && result.rows.length > 0 && <TeamBoard GS={GS} rows={result.rows} myK={kindOf()} myTeam={result.myTeam} thumbs={thumbs} nameOf={nameOf} score={result.sc} />}
-                {isHost ? (
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <GPill text="Play again" icon="replay" color="green" small wide onPress={() => { toMenu(true); setTimeout(startGame, 60); }} style={{ flex: 1 }} />
-                    <GPill text="Lobby" color="white" small wide onPress={() => toMenu(false)} style={{ flex: 1 }} />
-                    <GPill text={solo ? 'Leave' : 'Back to chat'} color="dark" small wide onPress={finish} style={{ flex: 1 }} />
-                  </div>
-                ) : (
-                  <>
-                    <div style={{ fontSize: 13.5, fontWeight: 800, color: 'rgba(255,255,255,0.75)' }}>{`${hostName} picks what is next`}</div>
-                    <GPill text="Back to chat" color="dark" small wide onPress={finish} />
-                  </>
-                )}
-              </GPanel>
-            </div>
-          )}
-          {phase === 'done' && result && !result.team && (() => {
-            const two = land && result.list.length > 5;
-            const chips = (
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <GChip style={{ height: 30, gap: 6 }}><GIcon k="star" size={13} color="#FFD84E" ink="transparent" />{`Score ${result.score.toLocaleString()}`}</GChip>
-                {result.best > 0 && <GChip style={{ height: 30, gap: 6 }}><GIcon k="crown" size={13} color="#FFD84E" ink="transparent" />{result.newBest ? `New best, wave ${result.best}` : `Best wave ${result.best}`}</GChip>}
-                {result.scrap != null && result.scrap > 0 && <GChip style={{ height: 30, gap: 6 }}><GIcon k="plus" size={13} color="#7BF27B" ink="transparent" />{`${result.scrap} scrap`}</GChip>}
-              </div>
-            );
-            const head = <div style={{ display: 'flex', gap: 8, padding: '0 9px', fontSize: 11, fontWeight: 900, color: 'rgba(255,255,255,0.6)' }}><span style={{ flex: 1 }}>Hero</span><span style={{ width: 44, textAlign: 'right' }}>Aliens</span><span style={{ width: 48, textAlign: 'right' }}>Damage</span><span style={{ width: 46, textAlign: 'right' }}>Revives</span></div>;
-            return (
-              <div style={{ position: 'absolute', inset: 0, zIndex: 20, background: 'rgba(10,8,24,0.5)', display: 'flex', padding: 12, overflowY: 'auto', touchAction: 'pan-x pan-y' }}>
-                <GPanel style={{ margin: 'auto', width: '100%', maxWidth: two ? 700 : 420, padding: two ? '12px 14px' : 16, display: 'flex', flexDirection: 'column', gap: two ? 8 : 10, animation: 'zgk-pop 0.35s ease-out', boxSizing: 'border-box' }}>
-                  {two ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 180 }}>
-                        <GTitle text={result.won ? 'Victory' : result.lost ? 'Connection lost' : 'Game over'} size={26} color={result.won ? '#FFE15A' : '#FFFFFF'} />
-                        <div style={{ fontSize: 13, fontWeight: 800, color: 'rgba(255,255,255,0.88)' }}>{result.won ? `Your squad beat all ${result.wave} waves` : result.lost ? 'The host stopped sending the game' : `Your squad reached wave ${result.wave}`}</div>
-                      </div>
-                      {chips}
-                    </div>
-                  ) : (
-                    <>
-                      <GTitle text={result.won ? 'Victory' : result.lost ? 'Connection lost' : 'Game over'} size={30} color={result.won ? '#FFE15A' : '#FFFFFF'} />
-                      <div style={{ fontSize: 14, fontWeight: 800, color: 'rgba(255,255,255,0.88)' }}>{result.won ? `Your squad beat all ${result.wave} waves` : result.lost ? 'The host stopped sending the game' : `Your squad reached wave ${result.wave}`}</div>
-                      {chips}
-                    </>
-                  )}
-                  {result.list.length > 0 && (
-                    <div style={{ display: 'grid', gridTemplateColumns: two ? 'repeat(2, minmax(0, 1fr))' : '1fr', columnGap: 12, rowGap: 4 }}>
-                      {head}
-                      {two && head}
-                      {result.list.map(([k, kills, dmg, rev, , hk], i) => (
-                        <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: two ? '4px 9px' : '6px 9px', borderRadius: 12, background: k === kindOf() ? 'rgba(255,194,61,0.2)' : 'rgba(255,255,255,0.06)', minWidth: 0 }}>
-                          {thumbs[validHero(hk)] ? <img src={thumbs[validHero(hk)]} alt="" style={{ width: 24, height: 24, borderRadius: 12, objectFit: 'cover', boxShadow: `0 0 0 1.5px ${SLOT_COLS[i % SLOT_COLS.length]}` }} /> : <span style={{ width: 12, height: 12, borderRadius: 6, background: SLOT_COLS[i % SLOT_COLS.length] }} />}
-                          <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nameOf(k)}</span>
-                          <span style={{ width: 44, textAlign: 'right', fontSize: 13, fontWeight: 900, fontVariantNumeric: 'tabular-nums' }}>{kills | 0}</span>
-                          <span style={{ width: 48, textAlign: 'right', fontSize: 13, fontWeight: 900, fontVariantNumeric: 'tabular-nums' }}>{fmtK(dmg | 0)}</span>
-                          <span style={{ width: 46, textAlign: 'right', fontSize: 13, fontWeight: 900, fontVariantNumeric: 'tabular-nums' }}>{rev | 0}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {isHost ? (
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <GPill text="Play again" icon="replay" color="green" small wide onPress={() => { toMenu(true); setTimeout(startGame, 60); }} style={{ flex: 1 }} />
-                      <GPill text="Lobby" color="white" small wide onPress={() => toMenu(false)} style={{ flex: 1 }} />
-                      {two && <GPill text={solo ? 'Leave' : 'Back to chat'} color="dark" small wide onPress={finish} style={{ flex: 1 }} />}
-                    </div>
-                  ) : <div style={{ fontSize: 13.5, fontWeight: 800, color: 'rgba(255,255,255,0.75)' }}>{`${hostName} picks what is next`}</div>}
-                  {(!two || !isHost) && <GPill text={solo ? 'Leave' : 'Back to chat'} color="dark" small wide onPress={finish} />}
-                </GPanel>
-              </div>
-            );
+          {phase === 'done' && result && (() => {
+            const waves = !result.team;
+            const mk = result.mk && T.MAPS[result.mk] ? T.MAPS[result.mk].name : '';
+            const R = waves ? {
+              GS, waves: true, rel: false, my: 0, sc: [0, 0], lost: result.lost,
+              tone: result.lost ? 'off' : result.won ? 'win' : 'lose',
+              title: result.won ? 'Victory' : result.lost ? 'Connection lost' : 'Game over',
+              sub: result.won ? `Your squad beat all ${result.wave} waves` : result.lost ? 'The host stopped sending the game' : `Your squad reached wave ${result.wave}`,
+              wave: result.wave, best: result.best, newBest: result.newBest, score: result.score || 0,
+              rows: result.list.map(([k, kills, dmg, rev, , hk]) => ({ id: k, key: validHero(hk), tm: 0, k: kills | 0, dmg: dmg | 0, rev: rev | 0, d: 0, a: 0, tl: 1 })),
+            } : {
+              GS, rel: inGame(), my: result.myTeam, sc: result.sc, lost: result.lost,
+              tone: result.lost ? 'off' : result.draw ? 'draw' : !inGame() ? 'draw' : result.won ? 'win' : 'lose',
+              title: result.lost ? 'Connection lost' : result.draw ? 'Draw' : !inGame() ? `${TNAME[result.win] || 'Blue'} team won` : result.won ? 'Victory' : 'Defeat',
+              sub: result.lost ? 'The host stopped sending the game' : result.draw ? 'Both teams ended on the same score' : !inGame() ? '' : result.won ? (result.gm === 'hp' ? 'Your team held the zones' : 'Your team got the most takedowns') : (result.gm === 'hp' ? 'The enemy held the zones' : 'The enemy got more takedowns'),
+              info: result.lost ? '' : `${T.GM_NAME[result.gm] || 'Team match'}${mk ? ` on ${mk}` : ''}, ${result.mins > 0 ? `${result.mins} min` : 'under a minute'}`,
+              rows: result.rows,
+            };
+            return <SiegeResult R={{ ...R, myK: kindOf(), thumbs, nameOf, scrap: result.scrap, host: isHost, hostName, solo, onAgain: () => { toMenu(true); setTimeout(startGame, 60); }, onLobby: () => toMenu(false), onLeave: finish }} />;
           })()}
 
           {ctl && (
@@ -3151,7 +2958,7 @@ const powersBtn = (() => {
               </GLobbySheet>
             );
           })()}
-          {board && teamOn && G.current.W && <TeamBoard GS={GS} rows={teamRows(G.current.W)} myK={kindOf()} myTeam={hud.tm.my} thumbs={thumbs} nameOf={nameOf} score={hud.tm.sc} onClose={() => setBoard(false)} />}
+          {board && teamOn && G.current.W && <SiegeBoard B={{ GS, rows: teamRows(G.current.W), my: hud.tm.my, sc: hud.tm.sc, myK: kindOf(), thumbs, nameOf, info: `${T.GM_NAME[G.current.W.tm.gm] || ''}${G.current.W.A && G.current.W.A.name ? ` on ${G.current.W.A.name}` : ''}`, onClose: () => setBoard(false) }} />}
           {leaveAsk && (
             <Sheet title="Leave the game?" text="Your squad can keep fighting without you." onClose={() => setLeaveAsk(false)}>
               <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>

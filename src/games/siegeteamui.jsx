@@ -10,6 +10,29 @@ export const TCOL = T.TEAM_COL;
 export const TNAME = ['Blue', 'Red'];
 export const TS_ITEMS = [1, 2, 3, 4, 5].map((n) => [String(n), `${n}v${n}`]);
 export const MODE_ITEMS = [['waves', 'Waves'], ['tdm', 'Team deathmatch'], ['hp', 'Hardpoint']];
+const LI = {
+  board: 'M5 5.5h3v13H5zM10.5 9h3v9.5h-3zM16 12h3v6.5h-3z',
+  chat: 'M4 5.5h16v10H9.5L5.5 19v-3.5H4z',
+  mic: 'M12 3.5a3 3 0 0 1 3 3v5a3 3 0 0 1-6 0v-5a3 3 0 0 1 3-3zM6.5 11a5.5 5.5 0 0 0 11 0M12 16.5v3.5',
+  micoff: 'M12 3.5a3 3 0 0 1 3 3v5a3 3 0 0 1-6 0v-5a3 3 0 0 1 3-3zM6.5 11a5.5 5.5 0 0 0 11 0M12 16.5v3.5M4.5 4.5l15 15',
+  sound: 'M4 9.5h3.5L12 5.5v13l-4.5-4H4zM15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11',
+  mute: 'M4 9.5h3.5L12 5.5v13l-4.5-4H4zM16 9.5l5 5M21 9.5l-5 5',
+  back: 'M15 5l-7 7 7 7',
+  people: 'M9 11a3.2 3.2 0 1 0 0-6.4A3.2 3.2 0 0 0 9 11zM3.5 19c.6-3.3 2.8-5.2 5.5-5.2s4.9 1.9 5.5 5.2M16 10.5a2.6 2.6 0 1 0 0-5.2M16.5 13.8c2.2.2 3.7 1.9 4.1 4.7',
+  gear: 'M12 8.6a3.4 3.4 0 1 0 0 6.8 3.4 3.4 0 0 0 0-6.8zM12 3v2.4M12 18.6V21M3 12h2.4M18.6 12H21M5.6 5.6l1.7 1.7M16.7 16.7l1.7 1.7M5.6 18.4l1.7-1.7M16.7 7.3l1.7-1.7',
+  info: 'M12 3.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17zM12 10.5v6M12 7.2v.6',
+  plus: 'M12 5v14M5 12h14',
+  swap: 'M6 8.5h12l-3.5-3.5M18 15.5H6l3.5 3.5',
+  eye: 'M2.5 12s3.5-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12zM12 9.2a2.8 2.8 0 1 0 0 5.6 2.8 2.8 0 0 0 0-5.6z',
+  up: 'M12 19V6M6 11.5L12 5.5l6 6',
+};
+const LI_FILL = new Set(['board']);
+export function LineIcon({ k, size = 20, color = '#FFFFFF', w = 2 }) {
+  const d = LI[k];
+  if (!d) return null;
+  const fill = LI_FILL.has(k);
+  return <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" style={{ display: 'block', flexShrink: 0 }}><path d={d} fill={fill ? color : 'none'} stroke={fill ? 'none' : color} strokeWidth={w} strokeLinecap="round" strokeLinejoin="round" /></svg>;
+}
 export function ModePick({ value, onPick, disabled }) {
   return (
     <div role="radiogroup" aria-label="Game mode" style={{ display: 'flex', flexWrap: 'wrap', gap: 4, padding: 4, borderRadius: 13, background: 'rgba(0,0,0,0.45)', boxShadow: `inset 0 2px 5px rgba(0,0,0,0.5), 0 0 0 2px ${INK}` }}>
@@ -394,16 +417,23 @@ export function drawTeamMini(m2, A, W, myK, mini, flip, MW, MH = MW) {
   }
 }
 
-const MINI_DECO = { 35: 'rgba(84,44,28,0.96)', 114: 'rgba(120,64,38,0.96)', 77: 'rgba(222,226,230,0.96)', 71: 'rgba(222,226,230,0.96)', 76: 'rgba(200,204,210,0.96)', 90: 'rgba(200,204,210,0.96)', 84: 'rgba(214,96,78,0.96)', 120: 'rgba(214,96,78,0.96)', 99: 'rgba(120,150,200,0.9)', 115: 'rgba(120,150,200,0.9)', 61: 'rgba(150,146,142,0.9)', 112: 'rgba(110,108,108,0.92)' };
+const MINI_BG = { base: 'rgba(166,86,48,0.9)', city: 'rgba(150,154,160,0.92)', fort: 'rgba(92,138,62,0.92)' };
+const MINI_MAP = {
+  city: { 35: 'rgba(96,100,108,0.96)', 61: 'rgba(206,208,212,0.9)', 112: 'rgba(206,208,212,0.9)', 80: 'rgba(60,150,70,0.95)', 100: 'rgba(60,140,80,0.95)' },
+  fort: { 35: 'rgba(66,68,74,0.96)', 61: 'rgba(200,190,172,0.92)', 112: 'rgba(200,190,172,0.92)', 80: 'rgba(150,152,158,0.95)', 100: 'rgba(156,98,58,0.95)', 102: 'rgba(156,98,58,0.95)', 107: 'rgba(176,124,80,0.95)', 113: 'rgba(156,98,58,0.95)', 114: 'rgba(120,112,104,0.95)' },
+};
+const MINI_DECO = { 72: 'rgba(214,150,120,0.96)', 75: 'rgba(90,150,225,0.95)', 100: 'rgba(60,140,80,0.95)', 107: 'rgba(196,156,104,0.95)', 102: 'rgba(120,150,200,0.9)', 113: 'rgba(120,150,200,0.9)', 80: 'rgba(60,150,70,0.95)', 45: 'rgba(70,74,80,0.95)', 103: 'rgba(96,160,80,0.92)', 87: 'rgba(70,72,78,0.96)', 35: 'rgba(84,44,28,0.96)', 114: 'rgba(120,64,38,0.96)', 77: 'rgba(222,226,230,0.96)', 71: 'rgba(222,226,230,0.96)', 76: 'rgba(200,204,210,0.96)', 90: 'rgba(200,204,210,0.96)', 84: 'rgba(214,96,78,0.96)', 120: 'rgba(214,96,78,0.96)', 99: 'rgba(120,150,200,0.9)', 115: 'rgba(120,150,200,0.9)', 61: 'rgba(150,146,142,0.9)', 112: 'rgba(110,108,108,0.92)' };
 export function teamMiniBase(A, myTm = 0) {
   const oc = document.createElement('canvas');
   oc.width = A.W * 4; oc.height = A.H * 4;
   const o2 = oc.getContext('2d');
   if (A.deco) {
-    o2.fillStyle = 'rgba(166,86,48,0.9)'; o2.fillRect(0, 0, oc.width, oc.height);
+    const MM = MINI_MAP[A.key];
+    o2.fillStyle = MINI_BG[A.key] || MINI_BG.base; o2.fillRect(0, 0, oc.width, oc.height);
     for (let r = 0; r < A.H; r++) for (let c = 0; c < A.W; c++) {
-      const ch = A.deco[r * A.W + c];
-      const col = ch === 66 ? (c < A.W / 2 === (myTm === 0) ? 'rgba(61,139,255,0.75)' : 'rgba(255,77,94,0.75)') : MINI_DECO[ch];
+      const dc = A.deco[r * A.W + c];
+      const ch = MINI_DECO[dc] || (MM && MM[dc]) || dc === 66 ? dc : A.under ? A.under[r * A.W + c] : dc;
+      const col = ch === 66 ? (c < A.W / 2 === (myTm === 0) ? 'rgba(61,139,255,0.75)' : 'rgba(255,77,94,0.75)') : (MM && MM[ch]) || MINI_DECO[ch];
       if (col) { o2.fillStyle = col; o2.fillRect(c * 4, r * 4, 4, 4); }
     }
     return oc;

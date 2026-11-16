@@ -18581,7 +18581,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-export const APP_VERSION = '57.8V';
+export const APP_VERSION = '57.9V';
 const WN_REV = 55;
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
@@ -47890,7 +47890,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       {siegeGame && me && (
         <SiegeGamePage key={siegeGame.rm} solo={!!siegeGame.solo} room={siegeGame.solo ? null : siegeGame} me={me} myId={session.user.id} watch={!!siegeGame.watch}
           onClose={() => { const back = !!siegeGame.watch || !!siegeGame.solo; setSiegeGame(null); if (back) setShowGames(true); }}
-          onInvite={!siegeGame.solo && siegeGame.host === session.user.id ? (n, side) => setSiegePick({ rm: siegeGame.rm, n, side: !!side }) : null} />
+          onInvite={!siegeGame.solo && siegeGame.host === session.user.id ? (n, side) => setSiegePick({ rm: siegeGame.rm, n, side: !!side }) : null}
+          friends={gameFriends} online={onlineIds} onInviteOne={!siegeGame.watch && (siegeGame.solo || siegeGame.host === session.user.id) ? (p) => startSiegeWith([p], siegeGame.solo ? null : siegeGame.rm) : null} />
       )}
       {siegePick && (
         <SiegeInviteSheet friends={gameFriends} already={siegePick.n} side={!!siegePick.side} onClose={() => setSiegePick(null)}
