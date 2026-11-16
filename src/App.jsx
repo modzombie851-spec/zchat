@@ -18581,7 +18581,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-export const APP_VERSION = '57.4V';
+export const APP_VERSION = '57.6V';
 const WN_REV = 55;
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
@@ -20569,7 +20569,7 @@ function appHidden() {
 }
 export function ensureAudioCtx() {
   try {
-    if (!uiAudioCtx) {
+    if (!uiAudioCtx || uiAudioCtx.state === 'closed') {
       const Ctx = window.AudioContext || window.webkitAudioContext;
       if (!Ctx) return null;
       uiAudioCtx = new Ctx();
@@ -20650,6 +20650,16 @@ function unlockAudioNow() {
   } catch {}
 }
 let audioUnlockOn = false;
+const uiAudioWake = { away: 0, back: 0, clock: 0, stale: false, tries: 0 };
+function freshUiAudio() {
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (!Ctx) return null;
+  const old = uiAudioCtx;
+  try { uiAudioCtx = new Ctx(); } catch { uiAudioCtx = old; return old; }
+  try { if (old && old.state !== 'closed') old.close().catch(() => {}); } catch {}
+  unlockAudioNow();
+  return uiAudioCtx;
+}
 function installAudioUnlock() {
   if (audioUnlockOn || typeof document === 'undefined') return;
   audioUnlockOn = true;
@@ -20657,7 +20667,16 @@ function installAudioUnlock() {
   const run = () => {
     if (soundsOff()) return;
     if (!uiAudioCtx && !ensureAudioCtx()) return;
-    unlockAudioNow();
+    const ctx = uiAudioCtx;
+    if (uiAudioWake.stale || ctx.state === 'closed' || ctx.state === 'interrupted') {
+      uiAudioWake.stale = false;
+      const el = (Date.now() - uiAudioWake.back) / 1000;
+      const frozen = ctx.state === 'running' && el > 0.3 && ctx.currentTime - uiAudioWake.clock < el * 0.4;
+      const stuck = ctx.state !== 'running' && uiAudioWake.tries > 0;
+      if (ctx.state === 'closed' || ctx.state === 'interrupted' || frozen || stuck) { uiAudioWake.tries = 0; freshUiAudio(); }
+      else unlockAudioNow();
+      setTimeout(() => { const c = uiAudioCtx; if (c && c.state !== 'running' && !appHidden()) { uiAudioWake.stale = true; uiAudioWake.tries += 1; } else uiAudioWake.tries = 0; }, 450);
+    } else unlockAudioNow();
     if (!spriteBufs.ui) loadSprite('ui');
   };
   const go = () => {
@@ -20668,10 +20687,22 @@ function installAudioUnlock() {
     if (window.requestIdleCallback) window.requestIdleCallback(fire, { timeout: 1200 }); else setTimeout(fire, 300);
   };
   ['touchend', 'click', 'keydown'].forEach((ev) => document.addEventListener(ev, go, { capture: true, passive: true }));
-  document.addEventListener('visibilitychange', () => {
+  const back = () => {
     const ctx = uiAudioCtx;
-    if (ctx && !appHidden() && ctx.state !== 'running' && ctx.state !== 'closed') ctx.resume().catch(() => {});
-  });
+    if (!ctx || appHidden()) return;
+    if (uiAudioWake.away && Date.now() - uiAudioWake.away > 600) { uiAudioWake.stale = true; uiAudioWake.back = Date.now(); uiAudioWake.clock = ctx.state === 'closed' ? 0 : ctx.currentTime; uiAudioWake.away = 0; }
+    if (ctx.state !== 'running' && ctx.state !== 'closed') ctx.resume().catch(() => {});
+  };
+  document.addEventListener('visibilitychange', () => { if (appHidden()) uiAudioWake.away = Date.now(); else back(); });
+  window.addEventListener('pagehide', () => { uiAudioWake.away = Date.now(); });
+  window.addEventListener('pageshow', back);
+  try {
+    const installed = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+    if (installed && !isAppleMobile() && !soundsOff()) {
+      const early = () => { try { const c = ensureAudioCtx(); if (c && c.state === 'running' && !spriteBufs.ui) loadSprite('ui'); } catch {} };
+      if (window.requestIdleCallback) window.requestIdleCallback(early, { timeout: 2500 }); else setTimeout(early, 1500);
+    }
+  } catch {}
   const warm = () => { try { if (!soundsOff() && !dataSaverOn()) fetchSpriteBytes('ui'); } catch {} };
   if (window.requestIdleCallback) window.requestIdleCallback(warm, { timeout: 4000 }); else setTimeout(warm, 2500);
 }

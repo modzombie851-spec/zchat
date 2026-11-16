@@ -1,5 +1,5 @@
 import { MeshBuilder, hexRgb } from './race3d.js';
-import { TILE, C_WALL, C_CRATE, C_BUSH, C_WATER, C_PAD, C_HOME } from './siegeengine.js';
+import { TILE, C_WALL, C_CRATE, C_BUSH, C_WATER, C_PAD, C_HOME, C_RIVER, C_BASE } from './siegeengine.js';
 import { MAT as MB, hsh, sq, ball, withT, tube, rot, disc } from './siegemesh.js';
 
 const MAT = { ...MB, soil: -0.1, stone: -0.2, snow: -0.3, woodX: -0.4, woodZ: -0.45, plate: -0.5, asphalt: -0.6, basalt: -0.7, sand: -0.8, leaf: -0.9 };
@@ -128,6 +128,8 @@ const solidC = (v) => v === C_WALL || v === C_CRATE;
 function makeFields(A) {
   const S = 0.5, nx = A.W * 4, nz = A.H * 4, N = (nx + 1) * (nz + 1);
   const solid = new Float32Array(N).fill(9), water = new Float32Array(N).fill(9), bush = new Float32Array(N).fill(9), shore = new Float32Array(N).fill(9), path = new Float32Array(N).fill(9);
+  const inner = A.lanes ? new Float32Array(N).fill(9) : null;
+  const river = A.lanes ? new Float32Array(N).fill(9) : null;
   for (let i = 0; i <= nz; i++) for (let j = 0; j <= nx; j++) {
     const x = j * S, z = i * S, k = i * (nx + 1) + j;
     const c0 = Math.floor(x / TILE), r0 = Math.floor(z / TILE);
@@ -137,13 +139,16 @@ function makeFields(A) {
       const d = Math.hypot(dx, dz);
       if (solidC(v)) { if (d < solid[k]) solid[k] = d; } else if (v === C_WATER) { if (d < water[k]) water[k] = d; } else if (v === C_BUSH && d < bush[k]) bush[k] = d;
       if (v !== C_WATER && d < shore[k]) shore[k] = d;
+      if (inner && !solidC(v) && d < inner[k]) inner[k] = d;
+      if (river && v === C_RIVER && d < river[k]) river[k] = d;
     }
   }
   const lines = pathLines(A);
+  const PM = A.lanes ? 6 : 2.5;
   for (const L of lines) for (let s = 0; s < L.length - 1; s++) {
     const a = L[s], b = L[s + 1];
-    const j0 = Math.max(0, Math.floor((Math.min(a[0], b[0]) - 2.5) / S)), j1 = Math.min(nx, Math.ceil((Math.max(a[0], b[0]) + 2.5) / S));
-    const i0 = Math.max(0, Math.floor((Math.min(a[1], b[1]) - 2.5) / S)), i1 = Math.min(nz, Math.ceil((Math.max(a[1], b[1]) + 2.5) / S));
+    const j0 = Math.max(0, Math.floor((Math.min(a[0], b[0]) - PM) / S)), j1 = Math.min(nx, Math.ceil((Math.max(a[0], b[0]) + PM) / S));
+    const i0 = Math.max(0, Math.floor((Math.min(a[1], b[1]) - PM) / S)), i1 = Math.min(nz, Math.ceil((Math.max(a[1], b[1]) + PM) / S));
     const ux = b[0] - a[0], uz = b[1] - a[1], L2 = ux * ux + uz * uz || 1;
     for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) {
       const x = j * S, z = i * S;
@@ -154,9 +159,10 @@ function makeFields(A) {
     }
   }
   const at = (F, x, z) => { const j = Math.max(0, Math.min(nx, Math.round(x / S))), i = Math.max(0, Math.min(nz, Math.round(z / S))); return F[i * (nx + 1) + j]; };
-  return { S, nx, nz, solid, water, bush, shore, path, lines, at };
+  return { S, nx, nz, solid, water, bush, shore, path, inner, river, lines, at };
 }
 function pathLines(A) {
+  if (A.lanes) return A.lanes.map((L) => { const out = []; for (let i = 0; i < L.length - 1; i++) { const a = L[i], b = L[i + 1], n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 2)); for (let k = 0; k < n; k++) out.push([a[0] + ((b[0] - a[0]) * k) / n, a[1] + ((b[1] - a[1]) * k) / n]); } out.push(L[L.length - 1]); return out; });
   const W = A.W, H = A.H;
   const walk = (c, r) => c >= 0 && r >= 0 && c < W && r < H && !solidC(A.cells[r * W + c]) && A.cells[r * W + c] !== C_WATER;
   const hm = A.homes.length ? A.homes : [{ c: W >> 1, r: H - 2 }];
@@ -290,7 +296,7 @@ function jungleGround(F, x, z, k) {
 
 function buildGround(ctx) {
   const { A, F, K, T } = ctx;
-  const S = 0.5, CH = 12;
+  const S = T.groundS || 0.5, CH = 12;
   for (let cz = 0; cz < A.wz; cz += CH) for (let cx = 0; cx < A.wx; cx += CH) {
     const m = K.m('ground', cx + 0.1, cz + 0.1);
     const nx = Math.round(Math.min(CH, A.wx - cx) / S), nz = Math.round(Math.min(CH, A.wz - cz) / S);
@@ -299,20 +305,28 @@ function buildGround(ctx) {
       const row = [], crow = [];
       for (let j = 0; j <= nx; j++) {
         const x = cx + j * S, z = cz + i * S;
-        const k = Math.round(z / S) * (F.nx + 1) + Math.round(x / S);
-        row.push([x, T.groundY ? T.groundY(x, z) : 0, z]);
+        const k = Math.round(z / F.S) * (F.nx + 1) + Math.round(x / F.S);
+        row.push([x, T.groundY ? T.groundY(x, z, F) : 0, z]);
         crow.push(T.ground(F, x, z, k));
       }
       P.push(row); CC.push(crow);
     }
+    const nrmAt = (i, j) => {
+      if (!T.groundY) return [0, 1, 0];
+      const x = P[i][j][0], z = P[i][j][2];
+      const hx0 = T.groundY(x - S, z, F), hx1 = T.groundY(x + S, z, F), hz0 = T.groundY(x, z - S, F), hz1 = T.groundY(x, z + S, F);
+      return nrm([(hx0 - hx1) / (2 * S), 1, (hz0 - hz1) / (2 * S)]);
+    };
+    const NN = T.groundY ? P.map((row, i) => row.map((_, j) => nrmAt(i, j))) : null;
+    const up = [0, 1, 0];
     for (let i = 0; i < nz; i++) for (let j = 0; j < nx; j++) {
       const x = cx + (j + 0.5) * S, z = cz + (i + 0.5) * S;
       if (cellAt(A, Math.floor(x / TILE), Math.floor(z / TILE)) === C_WATER) continue;
       const a = P[i][j], b = P[i + 1][j], c = P[i + 1][j + 1], d = P[i][j + 1];
-      const n = [0, 1, 0];
+      const na = NN ? NN[i][j] : up, nb = NN ? NN[i + 1][j] : up, nc = NN ? NN[i + 1][j + 1] : up, nd = NN ? NN[i][j + 1] : up;
       const mt = T.groundMat;
-      pv(m, a, n, CC[i][j], mt); pv(m, b, n, CC[i + 1][j], mt); pv(m, c, n, CC[i + 1][j + 1], mt);
-      pv(m, a, n, CC[i][j], mt); pv(m, c, n, CC[i + 1][j + 1], mt); pv(m, d, n, CC[i][j + 1], mt);
+      pv(m, a, na, CC[i][j], mt); pv(m, b, nb, CC[i + 1][j], mt); pv(m, c, nc, CC[i + 1][j + 1], mt);
+      pv(m, a, na, CC[i][j], mt); pv(m, c, nc, CC[i + 1][j + 1], mt); pv(m, d, nd, CC[i][j + 1], mt);
     }
   }
   const M = ctx.M, MS = ctx.MS, OS = 1.5;
@@ -1877,6 +1891,172 @@ const THEMES = {
   },
 };
 
+
+const RF = {
+  grassD: hx('#33592F'), grass: hx('#467038'), grassL: hx('#5E8A43'),
+  vio: hx('#4A3F72'), vioL: hx('#62539A'),
+  path: hx('#B49A79'), pathL: hx('#CDB595'), pathD: hx('#8C745A'),
+  plate: hx('#7A8592'), plateD: hx('#5E6772'), seam: hx('#353C46'),
+  bed: hx('#123341'), bank: hx('#2C4250'), water: hx('#2A8FB0'), waterL: hx('#45B5CF'), foam: hx('#A9E4EE'),
+  cliff: hx('#3E3448'), cliffL: hx('#544766'), top: hx('#2B4A32'), topL: hx('#3A5F3B'),
+  rockA: hx('#5A4A62'), rockB: hx('#73607C'),
+};
+const RIFT_H = 1.35;
+function riftY(x, z, F) {
+  if (!F || !F.inner) return 0;
+  const d = Math.min(3, F.at(F.inner, x, z));
+  if (d <= 0.05) { const rv = F.river ? F.at(F.river, x, z) : 9; return rv < 2 ? -0.16 * (1 - ss(0, 1.6, rv)) : 0; }
+  return RIFT_H * ss(0.15, 1.6, d) * (0.85 + 0.3 * vn(x * 0.35, z * 0.35, 71));
+}
+function riftGround(F, x, z, k) {
+  const A = F.A;
+  const v = A ? cellAt(A, Math.floor(x / TILE), Math.floor(z / TILE)) : 0;
+  const nA = fbm(x * 0.06, z * 0.06, 11, 3), nB = fbm(x * 0.25, z * 0.25, 23, 3), nC = vn(x * 1.3, z * 1.3, 37);
+  let g = lc(RF.grassD, RF.grass, sat(nB * 1.4 - 0.15));
+  g = lc(g, RF.grassL, ss(0.6, 0.82, nC) * 0.35);
+  g = lc(g, lc(RF.vio, RF.vioL, nC), ss(0.6, 0.78, nA) * 0.5);
+  if (k != null) {
+    const pw = 4.1 + (nB - 0.5) * 1.2;
+    const p = 1 - ss(pw - 1.3, pw + 0.3, F.path[k]);
+    g = lc(g, lc(RF.pathD, lc(RF.path, RF.pathL, nC), sat(nB * 1.3)), p);
+    if (F.inner) {
+      const h = ss(0.05, 1.6, Math.min(3, F.inner[k]));
+      if (h > 0) g = lc(g, lc(lc(RF.cliff, RF.cliffL, nB), lc(RF.top, RF.topL, nC), ss(0.55, 1, h)), ss(0, 0.25, h));
+    }
+  }
+  if (v === C_BASE) g = lc(RF.plateD, RF.plate, sat(nB * 1.2));
+  if (k != null && F.river) {
+    const rv = F.river[k];
+    if (rv < 2) {
+      const wv = 1 - ss(0, 1.5 + (nB - 0.5) * 0.8, rv);
+      const wc = lc(lc(RF.water, RF.waterL, vn(x * 0.45 + 3, z * 0.45, 91)), RF.foam, ss(0.55, 0.95, 1 - wv) * 0.5);
+      g = lc(g, wc, wv);
+    }
+  }
+  return mc(g, 0.92 + nC * 0.12);
+}
+const KROCK = ['ud_rockl', 'ud_rock', 'ud_rock2', 'ud_rockl2'];
+const KROCK_S = { ud_rockl: 1.15, ud_rock: 2.0, ud_rock2: 2.2, ud_rockl2: 2.4 };
+const KTREE = ['ud_tswirl', 'ud_tspiral', 'ud_tlight', 'ud_tspike', 'ud_tlava', 'ud_tblob', 'ud_tfloat'];
+const KTREE_S = { ud_tblob: 3.4, ud_tswirl: 4.0, ud_tspiral: 3.6, ud_tlight: 2.6, ud_tspike: 3.7, ud_tlava: 2.3, ud_tfloat: 3.8 };
+function kitPut(m, M, x, y, z, yaw, s, mt = MAT.matte, tint = 1) {
+  const c = Math.cos(yaw), sn = Math.sin(yaw);
+  const P = M.P, N = M.N, C = M.C, I = M.I, v = m.v;
+  for (let i = 0; i < I.length; i++) {
+    const j = I[i] * 3;
+    const px = P[j], py = P[j + 1], pz = P[j + 2];
+    const nx = N[j], ny = N[j + 1], nz = N[j + 2];
+    v.push(x + (px * c + pz * sn) * s, y + py * s, z + (-px * sn + pz * c) * s, nx * c + nz * sn, ny, -nx * sn + nz * c, Math.min(1, C[j] * tint), Math.min(1, C[j + 1] * tint), Math.min(1, C[j + 2] * tint), mt);
+  }
+}
+function riftRock(ctx, m, x, y, z, R, big) {
+  const kit = ctx.kit;
+  const k = big ? (R() < 0.5 ? 'ud_rockl2' : 'ud_rockl') : KROCK[Math.floor(R() * 3) % 3];
+  if (kit && kit[k]) { kitPut(m, kit[k], x, y - 0.1, z, R() * 6.283, KROCK_S[k] * (big ? 1.25 : 0.85 + R() * 0.3), MAT.stone, 0.78 + R() * 0.3); return; }
+  const s0 = (big ? 1.3 : 0.95) * (0.85 + R() * 0.3);
+  rockC(m, x, y - 0.1, z, s0, s0 * 0.75, s0, Math.floor(R() * 1e6), [RF.rockA, RF.rockB], null);
+}
+function riftTree(ctx, m, x, y, z, R) {
+  const kit = ctx.kit;
+  const k = KTREE[Math.floor(R() * KTREE.length) % KTREE.length];
+  if (kit && kit[k]) { kitPut(m, kit[k], x, y - 0.05, z, R() * 6.283, KTREE_S[k] * (0.85 + R() * 0.35)); return; }
+  tubeC(m, [[x, y, z], [x, y + 1.6, z]], [0.25, 0.18], 6, () => RF.vio, MAT.matte);
+  blobC(m, [x, y + 2.4, z], [1.1, 0.9, 1.1], 8, 5, 0.15, Math.floor(R() * 1e6), () => RF.vioL, MAT.matte);
+}
+function riftWall(ctx, c, r) {
+  const { A, K, F } = ctx;
+  const R = rng(r * 977 + c * 131 + 7);
+  let open = 0, ox = 0, oz = 0;
+  for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const v = cellAt(A, c + dc, r + dr); if (v !== C_WALL) { open += 1; ox += dc; oz += dr; } }
+  if (Math.min(c, r, A.W - 1 - c, A.H - 1 - r) === 0) return;
+  const x0 = c * TILE, z0 = r * TILE;
+  if (open > 0) {
+    if (R() > 0.62) return;
+    const x = x0 + 1 + ox * 0.35 + (R() - 0.5) * 0.4, z = z0 + 1 + oz * 0.35 + (R() - 0.5) * 0.4;
+    riftRock(ctx, K.m('props', x, z), x, riftY(x, z, F), z, R, false);
+    return;
+  }
+  if (R() > 0.16) return;
+  const x = x0 + 0.5 + R(), z = z0 + 0.5 + R();
+  const m = K.m(R() < 0.5 ? 'props' : 'fine', x, z);
+  if (R() < 0.72) riftTree(ctx, m, x, riftY(x, z, F), z, R); else riftRock(ctx, m, x, riftY(x, z, F), z, R, true);
+}
+function riftSpark(ctx, c, r) {
+  const { K, kit } = ctx;
+  const R = rng(r * 4111 + c * 37 + 3);
+  if (!kit || R() > 0.07) return;
+  const x = c * TILE + 0.4 + R() * 1.2, z = r * TILE + 0.4 + R() * 1.2;
+  if (kit.ud_grass2 && R() < 0.5) kitPut(K.m('fine', x, z), kit.ud_grass2, x, -0.2, z, R() * 6.283, 0.8 + R() * 0.3, MAT.matte, 0.9);
+}
+function riftBush(m, x, z, seed, ctx) {
+  const kit = ctx && ctx.kit;
+  const R = rng(seed * 7 + 3);
+  if (kit && kit.ud_bush) {
+    const a = R() * 6.283;
+    kitPut(m, kit.ud_bush, x + (R() - 0.5) * 0.4, -0.05, z + (R() - 0.5) * 0.4, a, 1.7 + R() * 0.3, MAT.matte);
+    kitPut(m, kit.ud_bush, x + (R() - 0.5) * 0.4, -0.05, z + (R() - 0.5) * 0.4, a + 1.4 + R() * 0.6, 1.35 + R() * 0.3, MAT.matte, 0.85);
+    return;
+  }
+  blobC(m, [x, 0.55, z], [1.05, 0.6, 1.05], 8, 5, 0.25, seed, () => RF.vioL, MAT.matte);
+}
+function riftClutter(ctx, c, r) {
+  const { A, K, kit, F } = ctx;
+  const v = cellAt(A, c, r);
+  if (v === C_WALL || v === C_BUSH || v === C_RIVER || v === C_BASE || !kit) return;
+  const R = rng(r * 313 + c * 71 + 19);
+  if (R() > 0.055) return;
+  const x = c * TILE + 0.4 + R() * 1.2, z = r * TILE + 0.4 + R() * 1.2;
+  if (F.at(F.path, x, z) < 4.6) return;
+  const k = R() < 0.6 ? 'ud_grass' : 'ud_plant';
+  if (kit[k]) kitPut(K.m('fine', x, z), kit[k], x, -0.05, z, R() * 6.283, 1 + R() * 0.3, MAT.matte);
+}
+function riftBases(ctx) {
+  const { A, K, kit } = ctx;
+  for (const tm of [0, 1]) {
+    const sx = tm === 0 ? 1 : -1;
+    const ox = tm === 0 ? 0 : A.wx, oz = tm === 0 ? A.wz : 0;
+    for (let i = 0; i < 15; i++) for (let j = 0; j < 15; j++) {
+      const c = tm === 0 ? 2 + i : A.W - 3 - i, r = tm === 0 ? A.H - 3 - j : 2 + j;
+      if (cellAt(A, c, r) !== C_BASE) continue;
+      const x0 = c * TILE + 0.06, z0 = r * TILE + 0.06, x1 = x0 + TILE - 0.12, z1 = z0 + TILE - 0.12;
+      const col = mc(RF.plate, 0.92 + hsh(c, r, 5) * 0.16);
+      quadC(K.m('deco', x0 + 1, z0 + 1), [x0, 0.025, z0], [x0, 0.025, z1], [x1, 0.025, z1], [x1, 0.025, z0], col, col, col, col, MAT.plate);
+    }
+    if (!kit) continue;
+    const R = rng(4242 + tm);
+    const spots = [[-6.5, 8, 'ud_base', 0.4], [-5.5, 22, 'ud_hlong', 0], [-5, 34, 'ud_panel', 1.571], [9, -6, 'ud_hcyl', 0], [21, -6.5, 'ud_solar', 0.2], [33, -5.5, 'ud_hlong', 1.571], [-4.5, -4.5, 'ud_hcyl', 0.5], [-7, 46, 'ud_panel', 1.4]];
+    const SC = { ud_hlong: 3.4, ud_solar: 3.2, ud_panel: 2.2, ud_base: 5.2, ud_hcyl: 3.4 };
+    for (const [px, pz, k, yaw] of spots) {
+      if (!kit[k]) continue;
+      const x = ox + sx * px, z = oz - sx * pz;
+      kitPut(K.m('outer', x, z), kit[k], x, ctx.outerY(x, z) - 0.1, z, yaw + (tm === 0 ? 0 : Math.PI) + (R() - 0.5) * 0.1, SC[k], MAT.paint, 0.95);
+    }
+  }
+}
+function riftOuter(ctx) {
+  const { A, K, kit } = ctx;
+  const R = rng(9137);
+  for (let z = -16; z < A.wz + 16; z += 7) for (let x = -16; x < A.wx + 16; x += 7) {
+    if (x > 1 && x < A.wx - 1 && z > 1 && z < A.wz - 1) continue;
+    const px = x + (R() - 0.5) * 4, pz = z + (R() - 0.5) * 4;
+    const y = ctx.outerY(px, pz);
+    const roll = R();
+    if (roll < 0.36) { const m = K.m('outer', px, pz); if (kit) { const k = KTREE[Math.floor(R() * 5) % 5]; if (kit[k]) kitPut(m, kit[k], px, y - 0.05, pz, R() * 6.283, KTREE_S[k] * (1.1 + R() * 0.5)); } else riftTree(ctx, m, px, y, pz, R); }
+    else if (roll < 0.58 && kit) { const k = KROCK[Math.floor(R() * 4) % 4]; if (kit[k]) kitPut(K.m('outer', px, pz), kit[k], px, y - 0.1, pz, R() * 6.283, KROCK_S[k] * (1.3 + R() * 0.6), MAT.stone, 0.8 + R() * 0.2); }
+  }
+}
+THEMES.rift = {
+  ground: riftGround,
+  groundY: riftY,
+  groundMat: MAT.soil,
+  groundS: 1,
+  outerGround: (x, z) => mc(lc(RF.top, RF.cliffL, vn(x * 0.1, z * 0.1, 5) * 0.7), 0.9),
+  outerH: (x, z, d) => RIFT_H + ss(1.5, 16, d) * (1.2 + 3.2 * fbm(x * 0.045, z * 0.045, 25, 3)),
+  plazaFn: riftBases,
+  wall: riftWall, bush: riftBush, water: jungleWater, river: riftSpark, crates: () => {}, clutter: riftClutter, pad: () => {}, home: () => {}, outer: riftOuter,
+  env: { sunDir: [-0.38, 0.82, -0.42], sunCol: [2.05, 1.9, 1.75], skyCol: [0.36, 0.38, 0.5], gndCol: [0.14, 0.16, 0.2], fog: '#8C93B8', horizon: '#B9B6D8', zenith: '#4C5FA8', fogDen: 0.0032, exposure: 1.02, shadowRange: 30, cloud: [1, 0.95, 1], clouds: 0.5 },
+};
+
 function crateGroups(A) {
   const seen = new Uint8Array(A.W * A.H), out = [];
   for (let i = 0; i < A.W * A.H; i++) {
@@ -1891,11 +2071,12 @@ function crateGroups(A) {
   return out;
 }
 
-export function arenaMeshes(A) {
+export function arenaMeshes(A, kit) {
   const T = THEMES[A.theme] || THEMES.ruins;
   const F = makeFields(A);
+  F.A = A;
   const K = chunker(12);
-  const ctx = { A, T, F, K, M: 30, MS: 14 };
+  const ctx = { A, T, F, K, M: 30, MS: 14, kit: kit || null };
   ctx.outerY = (x, z) => { const d = Math.max(-x, x - A.wx, -z, z - A.wz); return d <= 0 ? 0 : T.outerH(x, z, d); };
   buildGround(ctx);
   if (T.plazaFn) T.plazaFn(ctx); else plaza(ctx);
@@ -1903,6 +2084,7 @@ export function arenaMeshes(A) {
     const v = A.cells[r * A.W + c];
     if (v === C_WALL) T.wall(ctx, c, r);
     else if (v === C_WATER) T.water(ctx, c, r);
+    else if (v === C_RIVER && T.river) T.river(ctx, c, r);
     T.clutter(ctx, c, r);
   }
   for (const g of crateGroups(A)) T.crates(ctx, g);
@@ -1913,7 +2095,7 @@ export function arenaMeshes(A) {
   const bushes = A.clusters.map((list) => {
     const m = new MeshBuilder();
     let sx = 0, sz = 0;
-    for (const { c, r } of list) { const x = (c + 0.5) * TILE, z = (r + 0.5) * TILE; T.bush(m, x, z, r * 131 + c * 17 + 5); sx += x; sz += z; }
+    for (const { c, r } of list) { const x = (c + 0.5) * TILE, z = (r + 0.5) * TILE; T.bush(m, x, z, r * 131 + c * 17 + 5, ctx); sx += x; sz += z; }
     const cx = sx / list.length, cz = sz / list.length;
     let rad = 0; for (const { c, r } of list) rad = Math.max(rad, Math.hypot((c + 0.5) * TILE - cx, (r + 0.5) * TILE - cz));
     return { data: m.build(), bs: [cx, 0.9, cz, rad + 2], cells: list.map(({ c, r }) => r * A.W + c) };

@@ -16,8 +16,10 @@ import { arenaMeshes, arenaEnv } from './siegearena.js';
 import { useTalking } from './talk.js';
 import { supabase } from '../supabaseClient.js';
 import { parseSBM, boneMap, newPose, sampleInto, skinPose, upperMask, recolor } from './siegechar.js';
+import * as T from './siegeteam.js';
+import { TCOL, TNAME, TXT_COL, MODE_ITEMS, TLOOK, unitCol, riftUnpack, TeamScore, TeamShip, TeamMe, KillFeed, SkillPick, TeamSlots, TeamBoard, TeamSettings, TeamMapCard, TeamHowTo, RespawnBox, drawTeamMini, teamMiniBase, teamHudOf, teamRows } from './siegeteamui.jsx';
 
-const SIEGE_KEYS = [['W A S D or Arrows', 'Move'], ['Mouse', 'Aim'], ['Left click or F', 'Attack'], ['Right click or Space or E', 'Super'], ['Q', 'Gadget'], ['Shift', 'Dash'], ['Esc', 'Pause or leave']];
+const SIEGE_KEYS = [['W A S D or Arrows', 'Move'], ['Mouse', 'Aim'], ['Left click or F', 'Attack'], ['Right click or Space or E', 'Super'], ['Q', 'Gadget'], ['Shift', 'Dash'], ['R', 'Battle skill in team battle'], ['B', 'Go home in team battle'], ['Tab', 'Scoreboard in team battle'], ['Esc', 'Pause or leave']];
 const SKF = ['ua_anim', 'ua_flamingo', 'ua_frog', 'ua_bee', 'um_flamingo', 'um_bee', 'um_panda', 'um_frog', 'ue_small', 'ue_fly', 'ue_large', 'up_health', 'up_thunder', 'up_bullets', 'up_sphere', 'up_jar'];
 const SKT = ['t_usk', 't_umech', 't_umechf', 't_uen'];
 const SKL = { job: null, d: null };
@@ -40,6 +42,7 @@ const HLOOK = {
   volt: { kind: 'a', body: 'ua_bee', tex: 't_usk', band: [34, 60, 46, 0.4], suit: 0.4, atk: 'weapon', sup: 'punch', gad: 'yes' },
   kai: { kind: 'm', body: 'um_bee', tex: 't_umech', band: [32, 56, 42, 0.45], sc: 0.95, atk: 'shoot', sup: 'big', gad: 'jump' },
   ivy: { kind: 'a', body: 'ua_flamingo', tex: 't_usk', band: [300, 352, 325, 0.25], suit: 0.3, atk: 'weapon', sup: 'punch', gad: 'yes', lift: 1.08 },
+  nyx: { kind: 'a', body: 'ua_bee', tex: 't_usk', band: [34, 60, 46, 0.4], suit: 0.5, dark: 0.55, atk: 'punch', sup: 'punch', gad: 'yes', lift: 0.92 },
 };
 const ALIEN_BAND = [78, 112, 94, 0.4];
 const RLOOK = {
@@ -52,6 +55,7 @@ const RLOOK = {
 const PLOOK = { hp: { m: 'up_health', s: 0.62 }, pw: { m: 'up_sphere', s: 0.62 }, su: { m: 'up_thunder', s: 0.66 }, sh: { m: 'up_jar', s: 0.6, hue: 190 }, rf: { m: 'up_bullets', s: 0.58 }, sp: { m: 'up_jar', s: 0.6, hue: 105 } };
 const COLD = new Float32Array([1.15, 0.92, 0.7, 0]), COLN = new Float32Array([1, 1, 1, 0.14]), COLF = new Float32Array([1.9, 1.9, 1.9, 0.14]), COLG = new Float32Array([1, 1, 1, 0.22]);
 const COLR = new Float32Array([1, 1, 1, 0.553]), COLRF = new Float32Array([1.9, 1.9, 1.9, 0.553]), COLRI = new Float32Array([0.75, 0.95, 1.4, 0.553]);
+const COLK = new Float32Array([0.42, 0.34, 0.78, 0.14]), COLP = new Float32Array([1.05, 0.85, 1.5, 0.553]);
 const hueOfHex = (hex) => { const n = parseInt(hex.slice(1), 16); const r = ((n >> 16) & 255) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255; const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn; if (d < 1e-6) return 0; let h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; h *= 60; return h < 0 ? h + 360 : h; };
 function stillSkin(M) { const P = newPose(M.nb); P.q.set(M.restQ); P.t.set(M.restT); skinPose(M, P); return P.S; }
 function skUpload(R, d, heroesOnly) {
@@ -78,7 +82,7 @@ function skHeroTex(S, key, c) {
   if (S.htex[k]) return S.htex[k];
   const L = HLOOK[key];
   const sh = HUE[c | 0] || 0;
-  S.htex[k] = S.R.texture(recolor(S.d.t[L.tex], 512, L.band, L.keep ? null : hueOfHex(E.HEROES[key].col), sh, L.lift || 1, { sat: L.sat, suit: L.suit }));
+  S.htex[k] = S.R.texture(recolor(S.d.t[L.tex], 512, L.band, L.keep ? null : hueOfHex(E.HEROES[key].col), sh, L.lift || 1, { sat: L.sat, suit: L.suit, dark: L.dark }));
   return S.htex[k];
 }
 function skPoseHero(S, h, key, o, dt) {
@@ -146,10 +150,10 @@ function skThumbs(d) {
 const DROP_TINT_HEX = { hp: '#6CFFD4', pw: '#FF7AD9', su: '#FFD24A', sh: '#7FE9FF', rf: '#FFB067', sp: '#7BF27B' };
 const DROP_TEXT = { hp: 'Health', pw: 'Power up', su: 'Super charged', sh: 'Shield', rf: 'Rapid fire', sp: 'Speed' };
 const DROP_COL = { hp: '#6BF26B', pw: '#FF7AD9', su: '#FFE15A', sh: '#9FE6FF', rf: '#FFB067', sp: '#9BF29B' };
-const ATK_GI = { blaze: 'flame', pip: 'electric', boom: 'bomb', mira: 'heal', rex: 'hammer', volt: 'lightning', kai: 'rocket', ivy: 'snowflake' };
-const GAD_GI = { ring: 'firering', decoy: 'ghost', mine: 'mine', bubble: 'shield', charge: 'shield', over: 'lightning', jet: 'jetpack', nova: 'freeze' };
-const SUP_GI = { wave: 'sonic', beam: 'laser', mega: 'megabomb', bloom: 'heal', slam: 'stomp', turret: 'tesla', barrage: 'missiles', freeze: 'freeze' };
-const PREF = { hero: 'zchat-siege-hero', arena: 'zchat-siege-arena', lv: 'zchat-siege-level', bots: 'zchat-siege-bots', gfx: 'zchat-siege-gfx', end: 'zchat-siege-endless', nums: 'zchat-siege-nums', bars: 'zchat-siege-bars', map: 'zchat-siege-map', shake: 'zchat-siege-shake' };
+const ATK_GI = { blaze: 'flame', pip: 'electric', boom: 'bomb', mira: 'heal', rex: 'hammer', volt: 'lightning', kai: 'rocket', ivy: 'snowflake', nyx: 'knife' };
+const GAD_GI = { ring: 'firering', decoy: 'ghost', mine: 'mine', bubble: 'shield', charge: 'shield', over: 'lightning', jet: 'jetpack', nova: 'freeze', vanish: 'ghost' };
+const SUP_GI = { wave: 'sonic', beam: 'laser', mega: 'megabomb', bloom: 'heal', slam: 'stomp', turret: 'tesla', barrage: 'missiles', freeze: 'freeze', blink: 'vortex' };
+const PREF = { mode: 'zchat-siege-mode', ts: 'zchat-siege-ts', sk: 'zchat-siege-skill', hero: 'zchat-siege-hero', arena: 'zchat-siege-arena', lv: 'zchat-siege-level', bots: 'zchat-siege-bots', gfx: 'zchat-siege-gfx', end: 'zchat-siege-endless', nums: 'zchat-siege-nums', bars: 'zchat-siege-bars', map: 'zchat-siege-map', shake: 'zchat-siege-shake' };
 const BEST_KEY = (uid, a, lv) => `zchat-siege-best-${uid || 'me'}-${a}-${lv}`;
 const readPref = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : v; } catch { return d; } };
 const savePref = (k, v) => { try { localStorage.setItem(k, String(v)); } catch {} };
@@ -172,7 +176,7 @@ function tintMesh(data, shift) {
   return out;
 }
 const heroTint = (k, c) => { const H = E.HEROES[k]; if (!H || !c) return H ? H.col : '#FFFFFF'; const n = parseInt(H.col.slice(1), 16); const [h, sv, v] = hsv(((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255); const o = rgb((h + HUE[c]) % 360, sv, v); return `#${o.map((q) => Math.round(q * 255).toString(16).padStart(2, '0')).join('')}`; };
-const validArena = (k) => (E.ARENAS[k] ? k : 'yard');
+const validArena = (k) => (E.ARENA_KEYS.includes(k) ? k : 'yard');
 const validLv = (k) => (E.LEVELS[k] ? k : 'normal');
 const BOT_NAMES = ['Ash', 'Bo', 'Cleo', 'Dex', 'Eli', 'Fay', 'Gus', 'Hana', 'Ivo'];
 const STREAK = 20;
@@ -215,8 +219,8 @@ function loadProg() {
     } catch { res(null); }
   });
 }
-const modsPack = (h) => { const M = h.mods; return [Math.round(M.dmg * 100), M.extra | 0, M.pierce | 0, Math.round(M.rad * 100), Math.round(M.heal * 100), Math.round(M.stun * 100), Math.round(M.slow * 100)]; };
-const modsTake = (h, k) => { if (!Array.isArray(k) || k.length < 7 || !h.mods) return; const M = h.mods; M.dmg = clamp(num(k[0], 100) / 100, 0.5, 3); M.extra = clamp(k[1] | 0, 0, 4); M.pierce = clamp(k[2] | 0, 0, 3); M.rad = clamp(num(k[3], 100) / 100, 0.5, 2.5); M.heal = clamp(num(k[4], 100) / 100, 0.5, 3); M.stun = clamp(num(k[5], 100) / 100, 0.5, 3); M.slow = clamp(num(k[6], 100) / 100, 0.5, 3); };
+const modsPack = (h) => { const M = h.mods; const o = [Math.round(M.dmg * 100), M.extra | 0, M.pierce | 0, Math.round(M.rad * 100), Math.round(M.heal * 100), Math.round(M.stun * 100), Math.round(M.slow * 100)]; o.push(h.buffs && h.buffs.fury ? 1 : 0, Math.round((M.fade || 1) * 100)); return o; };
+const modsTake = (h, k) => { if (!Array.isArray(k) || k.length < 7 || !h.mods) return; const M = h.mods; M.dmg = clamp(num(k[0], 100) / 100, 0.5, 4); M.extra = clamp(k[1] | 0, 0, 4); M.pierce = clamp(k[2] | 0, 0, 3); M.rad = clamp(num(k[3], 100) / 100, 0.5, 2.5); M.heal = clamp(num(k[4], 100) / 100, 0.5, 3); M.stun = clamp(num(k[5], 100) / 100, 0.5, 3); M.slow = clamp(num(k[6], 100) / 100, 0.5, 3); if (k.length >= 9) { (h.buffs || (h.buffs = {})).fury = k[7] ? 1 : 0; M.fade = clamp(num(k[8], 100) / 100, 1, 2); } };
 const fmtK = (n) => (n >= 10000 ? `${Math.round(n / 1000)}k` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(Math.round(n)));
 const fmtN = (n) => Math.round(n || 0).toLocaleString();
 const fmtP = (n) => `${Math.round((n || 0) * 100)}%`;
@@ -249,7 +253,8 @@ const CARD_FX = {
   guard: ['Your super also gives you a shield', (s) => ['Shield', fmtN(s.max * (s.m.supShield || 0)), fmtN(s.max * ((s.m.supShield || 0) + 0.2))]],
   medic: ['Help friends up 60% faster', (s) => ['Revive', fmtP(s.m.revive || 1), fmtP((s.m.revive || 1) * 1.6)]],
 };
-const cardLine = (k) => (CARD_FX[k] ? CARD_FX[k][0] : (E.CARDS[k] && E.CARDS[k].text) || '');
+const CARD_TEAM = { on: false };
+const cardLine = (k) => { const t = CARD_FX[k] ? CARD_FX[k][0] : (E.CARDS[k] && E.CARDS[k].text) || ''; return CARD_TEAM.on ? t.replace(/Aliens/g, 'Enemies').replace(/aliens/g, 'enemies').replace(/an alien/g, 'an enemy').replace(/alien/g, 'enemy') : t; };
 const ABILITY_CARDS = new Set(['life', 'crit', 'chain', 'rush', 'magnet', 'guard', 'medic']);
 const CARD_TIER = {
   hero: { label: 'Hero power', a: '#FFD84D', b: '#EE8A12', c: '#7A3F00', glow: 'rgba(255,196,60,0.7)', pip: '#FFD84D' },
@@ -318,7 +323,7 @@ function UpgradeCard({ k, i, snap, land, short, keyHint, onPick }) {
   );
 }
 const srgb = (h) => { const n = parseInt(h.slice(1), 16); return [(n >> 16) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255]; };
-const TINT = { ice: srgb('#9FE6FF'), card: srgb('#C8A070'), white: [1, 1, 1], gold: srgb('#FFD24A'), red: srgb('#FF3B2E'), mint: srgb('#6CFFD4'), me: srgb('#6BF26B'), ally: srgb('#4DA3FF'), foe: srgb('#FF4A3D'), dark: [0, 0, 0], cyan: srgb('#7FE9FF') };
+const TINT = { blueT: srgb('#3D8BFF'), redT: srgb('#FF4D5E'), violet: srgb('#B88CFF'), ice: srgb('#9FE6FF'), card: srgb('#C8A070'), white: [1, 1, 1], gold: srgb('#FFD24A'), red: srgb('#FF3B2E'), mint: srgb('#6CFFD4'), me: srgb('#6BF26B'), ally: srgb('#4DA3FF'), foe: srgb('#FF4A3D'), dark: [0, 0, 0], cyan: srgb('#7FE9FF') };
 const DROP_TINT = Object.fromEntries(Object.entries(DROP_TINT_HEX).map(([k, v]) => [k, srgb(v)]));
 const mul = m4.mul;
 function scl(M, sx, sy, sz) { const o = new Float32Array(M); for (let i = 0; i < 3; i++) { o[i] *= sx; o[4 + i] *= sy; o[8 + i] *= sz; } return o; }
@@ -350,6 +355,24 @@ function zap(kind, vol = 1, rate = 1) {
   } catch {}
 }
 
+const RIFT = { job: null, d: null };
+function loadRift() {
+  if (RIFT.d) return Promise.resolve(RIFT.d);
+  if (RIFT.job) return RIFT.job;
+  RIFT.job = Promise.all([fetch('/bolt/rift-pack-v1.bin').then((r) => { if (!r.ok) throw new Error('rift'); return r.arrayBuffer(); }), skImg('/bolt/t_usk.webp')])
+    .then(([buf, im]) => { const d = riftUnpack(buf, im); if (!d) throw new Error('rift'); RIFT.d = d; return d; })
+    .catch(() => { RIFT.job = null; return null; });
+  return RIFT.job;
+}
+function riftUpload(R, d) {
+  const out = { mesh: {}, still: {} };
+  for (const [k, M] of Object.entries(d.m)) { try { out.mesh[k] = R.tskin(M); out.still[k] = stillSkin(M); } catch {} }
+  return out;
+}
+const SKILL_ZAP = { blink: 'dash', mend: 'heal', hunter: 'bolt', guard: 'shield', sprint: 'over', shock: 'shock' };
+const TEAM_BOT_SK = ['shock', 'mend', 'hunter', 'guard', 'sprint', 'blink'];
+const TOW_NAME = { tow: 'tower', gua: 'guardian', cor: 'core' };
+
 const THUMB = { heroes: null, arenas: {} };
 function heroThumbs() {
   if (THUMB.heroes) return THUMB.heroes;
@@ -378,15 +401,17 @@ function arenaThumb(key) {
   if (THUMB.arenas[key]) return THUMB.arenas[key];
   let url = '';
   try {
+    const rift = key === 'rift';
+    if (rift && !RIFT.d) return '';
     const cv = document.createElement('canvas'); cv.width = 320; cv.height = 180;
     const R = createRenderer(cv, { keep: true, shadowSize: 1024 });
     if (!R) return '';
     const A = E.makeArena(key);
-    const M = arenaMeshes(A);
-    const env = arenaEnv(A); env.shadowRange = 46;
+    const M = arenaMeshes(A, rift ? RIFT.d.kit : null);
+    const env = arenaEnv(A); env.shadowRange = rift ? 90 : 46;
     const items = M.parts.filter((p) => p.kind !== 'fine').map((p) => ({ mesh: R.mesh(p.data), cast: p.cast, bs: p.bs }));
     for (const b of M.bushes) items.push({ mesh: R.mesh(b.data), cast: true });
-    const tx = A.wx / 2, tz = A.wz / 2 + 2, D = 62, P = 1.08;
+    const tx = A.wx / 2, tz = A.wz / 2 + (rift ? 6 : 2), D = rift ? 118 : 62, P = rift ? 1.12 : 1.08;
     R.render({ env, cam: { pos: [tx, Math.sin(P) * D, tz + Math.cos(P) * D], at: [tx, 0, tz], fov: 0.72, shadowAt: [tx, 0, tz] }, items, parts: [] });
     url = cv.toDataURL('image/jpeg', 0.86);
     R.dispose(); R.lose();
@@ -418,7 +443,8 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
   const myFirst = String((me && me.name) || 'You').split(' ')[0];
   const [heroKey, setHeroKey] = useState(() => validHero(readPref(PREF.hero, 'blaze')));
   const [heroCol, setHeroCol] = useState(() => clamp(Number(readPref('zchat-siege-hcol', 0)) | 0, 0, 3));
-  const meta = { n: myFirst, a: me && me.avatar, w: watch ? 1 : 0, h: heroKey, hc: heroCol };
+  const [skill, setSkill] = useState(() => { const v = readPref(PREF.sk, 'shock'); return T.SKILLS[v] ? v : 'shock'; });
+  const meta = { n: myFirst, a: me && me.avatar, w: watch ? 1 : 0, h: heroKey, hc: heroCol, sk: skill };
   const relay = useRoomLink({ id: solo || !room ? null : `siege-${room.rm}`, myId, enabled: !solo && !!room, meta, fast: ['hs', 'es'], audio: !watch, cloud: 'siege' });
   const [phase, setPhase] = useState('menu');
   const [ready, setReady] = useState(false);
@@ -427,6 +453,14 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
   const [lv, setLv] = useState(() => (isHost ? validLv(readPref(PREF.lv, 'normal')) : 'normal'));
   const [botN, setBotN] = useState(() => snapBots(clamp(Math.round(num(readPref(PREF.bots, '3'), 3)), 0, 9)));
   const [endless, setEndless] = useState(() => isHost && readPref(PREF.end, '0') === '1');
+  const [mode, setMode] = useState(() => (isHost && readPref(PREF.mode, 'waves') === 'team' ? 'team' : 'waves'));
+  const [ts, setTs] = useState(() => clamp(Number(readPref(PREF.ts, '3')) | 0 || 3, 1, 5));
+  const [sideOf, setSideOf] = useState({});
+  const [skOf, setSkOf] = useState({});
+  const [tfeed, setTfeed] = useState([]);
+  const [board, setBoard] = useState(false);
+  const [mapSheet, setMapSheet] = useState(false);
+  const [riftOk, setRiftOk] = useState(() => !!RIFT.d);
   const [gfx, setGfx] = useState(() => { const v = readPref(PREF.gfx, 'auto'); return v === 'best' || v === 'fast' ? v : 'auto'; });
   const [roster, setRoster] = useState(solo ? ['me'] : [room && room.host].filter(Boolean));
   const [names, setNames] = useState({});
@@ -482,7 +516,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
   const hurtRef = useRef(null);
   const mapRef = useRef(null);
   const RR = useRef(null);
-  const G = useRef({ W: null, rid: '', ids: [], bots: [], botMeta: {}, parts: [], nums: [], budget: { avg: 16, n: 0, tier: 0 }, sendAt: 0, snapAt: 0, reAt: 0, seq: 0, hsq: 0, lastSeq: -1, lastSnapAt: 0, cam: null, shake: 0, aim: { on: false }, fireQ: [], hudAt: 0, waveSeen: 0, stSeen: '', claimed: new Set(), beams: [], menuT: 0, mouse: null, hurtT: 0, over: false, overAt: 0, keyMove: [0, 0] });
+  const G = useRef({ W: null, rid: '', ids: [], bots: [], botMeta: {}, parts: [], nums: [], budget: { avg: 16, n: 0, tier: 0 }, sendAt: 0, snapAt: 0, reAt: 0, seq: 0, hsq: 0, lastSeq: -1, lastSnapAt: 0, cam: null, shake: 0, aim: { on: false }, fireQ: [], skQ: [], recQ: [], tbeams: [], flip: false, hudAt: 0, waveSeen: 0, stSeen: '', claimed: new Set(), beams: [], menuT: 0, mouse: null, hurtT: 0, over: false, overAt: 0, keyMove: [0, 0] });
   const keys = useRef(new Set());
   const phaseRef = useRef(phase); phaseRef.current = phase;
   const pausedRef = useRef(paused); pausedRef.current = paused;
@@ -495,6 +529,12 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
   const botNRef = useRef(botN); botNRef.current = botN;
   const endRef = useRef(endless); endRef.current = endless;
   const gfxRef = useRef(gfx); gfxRef.current = gfx;
+  const modeRef = useRef(mode); modeRef.current = mode;
+  const tsRef = useRef(ts); tsRef.current = ts;
+  const skillRef = useRef(skill); skillRef.current = skill;
+  const sideOfRef = useRef(sideOf); sideOfRef.current = sideOf;
+  const skOfRef = useRef(skOf); skOfRef.current = skOf;
+  const wantSide = useRef({});
   const [layEd, setLayEd] = useState(false);
   const hudLay = useHudLay('siege');
   const [hudOpt, setHudOpt] = useState(() => ({ nums: readPref(PREF.nums, '1') !== '0', bars: readPref(PREF.bars, '1') !== '0', map: readPref(PREF.map, '1') !== '0', shake: readPref(PREF.shake, '1') !== '0' }));
@@ -506,7 +546,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
   const joinOrder = useRef([]);
   const rosterSeen = useRef({ list: null, at: Date.now(), bye: new Set() });
   const sheetOpen = useRef(false);
-  sheetOpen.current = !!(paused || leaveAsk || ctl || optSheet || arenaSheet || people || quick);
+  sheetOpen.current = !!(paused || leaveAsk || ctl || optSheet || arenaSheet || people || quick || board || mapSheet || powSheet);
   const kindOf = () => (solo ? 'me' : myId);
   const levelOf = (k) => (progRef.current && progRef.current.levels && progRef.current.levels[k]) || 1;
   const inGame = () => !watch && G.current.ids.includes(kindOf());
@@ -597,18 +637,20 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
   const ensureArena = (key) => {
     const st = RR.current;
     if (!st) return false;
-    const k = validArena(key);
-    if (st.arena && st.arena.key === k) return true;
+    const k = key === 'rift' ? 'rift' : validArena(key);
+    const kit = k === 'rift' && RIFT.d ? RIFT.d.kit : null;
+    if (st.arena && st.arena.key === k && st.arena.kit === !!kit) return true;
     if (st.arena) for (const it of st.arena.items) st.R.drop(it.mesh);
+    st.arena = null; st.mini = null;
     const A = E.makeArena(k);
-    const M = arenaMeshes(A);
+    const M = arenaMeshes(A, kit);
     const items = M.parts.map((p) => ({ mesh: st.R.mesh(p.data), cast: p.cast, bs: p.bs, fine: p.kind === 'fine' }));
     const bushes = M.bushes.map((b) => ({ mesh: st.R.mesh(b.data), bs: b.bs, cells: b.cells, cast: true }));
     for (const b of bushes) items.push(b);
     const env = arenaEnv(A);
     env.baseFog = env.fogDen;
     if (G.current.budget.tier >= 2) { env.shadows = false; env.detail = 0; }
-    st.arena = { key: k, A, items, bushes, env };
+    st.arena = { key: k, A, items, bushes, env, kit: !!kit };
     return true;
   };
 
@@ -626,7 +668,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
     RR.current = { R, arena: null, heroM: {}, robM: {}, fx };
     const st0 = RR.current;
     loadSk().then((d) => { if (!d || RR.current !== st0) return; try { st0.sk = skUpload(R, d); } catch { st0.sk = null; } });
-    const t = setTimeout(() => { try { ensureArena(arenaRef.current); setReady(true); } catch { setFailed(true); } }, 50);
+    const t = setTimeout(() => { try { ensureArena(modeRef.current === 'team' && RIFT.d ? 'rift' : arenaRef.current); setReady(true); } catch { setFailed(true); } }, 50);
     return () => {
       clearTimeout(t);
       RR.current = null;
@@ -634,13 +676,22 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
       setTimeout(() => { if (!cv.isConnected) R.lose(); }, 0);
     };
   }, []);
+  const wantArena = mode === 'team' ? 'rift' : arena;
+  useEffect(() => {
+    if (wantArena !== 'rift' || riftOk) return undefined;
+    let on = true;
+    loadRift().then((d) => { if (on && d) setRiftOk(true); });
+    return () => { on = false; };
+  }, [wantArena, riftOk]);
   useEffect(() => {
     const st = RR.current;
-    if (!st || !st.arena || st.arena.key === arena || phaseRef.current !== 'menu') return undefined;
+    if (!st || !st.arena || phaseRef.current !== 'menu') return undefined;
+    if (wantArena === 'rift' && !riftOk) { setReady(false); return undefined; }
+    if (st.arena.key === wantArena && (wantArena !== 'rift' || st.arena.kit)) { setReady(true); return undefined; }
     setReady(false);
-    const t = setTimeout(() => { try { ensureArena(arena); setReady(true); } catch { setFailed(true); } }, 40);
+    const t = setTimeout(() => { try { ensureArena(wantArena); setReady(true); } catch { setFailed(true); } }, 40);
     return () => clearTimeout(t);
-  }, [arena]);
+  }, [wantArena, riftOk]);
   useEffect(() => { let on = true; const t = setTimeout(() => { if (on) setThumbs((p) => (Object.keys(p || {}).length ? p : heroThumbs())); }, 6000); loadSk().then((d) => { if (!on || !d) return; const th = skThumbs(d); if (Object.keys(th).length) setThumbs(th); }); return () => { on = false; clearTimeout(t); }; }, []);
   useEffect(() => { if (watch) return undefined; let on = true; loadProg().then((d) => { if (on && d) setProg(d); }); return () => { on = false; }; }, []);
   const upgrade = (k) => {
@@ -663,7 +714,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
       }, () => { setUpBusy(false); setUpMsg('Could not upgrade right now. Try again'); });
     } catch { setUpBusy(false); }
   };
-  useEffect(() => { if (aThumbs[arena] || phase !== 'menu') return undefined; const t = setTimeout(() => { const u = arenaThumb(arena); if (u) setAThumbs((p) => ({ ...p, [arena]: u })); }, 900); return () => clearTimeout(t); }, [arena, phase]);
+  useEffect(() => { if (aThumbs[wantArena] || phase !== 'menu' || (wantArena === 'rift' && !riftOk)) return undefined; const t = setTimeout(() => { const u = arenaThumb(wantArena); if (u) setAThumbs((p) => ({ ...p, [wantArena]: u })); }, 900); return () => clearTimeout(t); }, [wantArena, phase, riftOk]);
   useEffect(() => { if (!arenaSheet) return undefined; const t = setTimeout(() => { const o = {}; for (const k of E.ARENA_KEYS) o[k] = arenaThumb(k); setAThumbs(o); }, 60); return () => clearTimeout(t); }, [arenaSheet]);
 
   const freshRoster = () => {
@@ -678,36 +729,102 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
 
   const beginGame = (cfg) => {
     const g = G.current;
-    const ak = validArena(cfg.arena);
-    if (ak !== arenaRef.current) setArena(ak);
+    const team = cfg.md === 'team';
+    CARD_TEAM.on = team;
+    const ak = team ? 'rift' : validArena(cfg.arena);
+    if (!team && ak !== arenaRef.current) setArena(ak);
+    if (team !== (modeRef.current === 'team')) setMode(team ? 'team' : 'waves');
+    if (team && !RIFT.d) loadRift().then((d) => { if (d) setRiftOk(true); });
     try { ensureArena(ak); } catch {}
-    const W = E.newWorld(ak, validLv(cfg.lv), cfg.seed | 0 || 1, { endless: !!cfg.en });
+    const W = E.newWorld(ak, team ? 'normal' : validLv(cfg.lv), cfg.seed | 0 || 1, team ? { mode: 'team' } : { endless: !!cfg.en });
     W.host = isHost; W.local = new Set(); W.nowMs = performance.now();
+    if (team) T.setupTeamWorld(W, { ts: cfg.ts });
+    const slot = [0, 0];
     cfg.ids.forEach((k, i) => {
-      const p = E.heroSpawn(W.A, i);
       const key = validHero(cfg.heroes && cfg.heroes[k]);
+      if (team) {
+        const h = E.mkHero(k, key, 0, 0, k.startsWith('bot'), 1);
+        h.hc = clamp(Number(cfg.cols && cfg.cols[k]) | 0, 0, 3);
+        const tm = cfg.tms && cfg.tms[k] === 1 ? 1 : 0;
+        T.initHero(W, h, tm, cfg.sks && cfg.sks[k], slot[tm]++);
+        W.heroes[k] = h; W.order.push(k);
+        return;
+      }
+      const p = E.heroSpawn(W.A, i);
       const h = E.mkHero(k, key, p.x, p.z, k.startsWith('bot'), k === kindOf() && !watch ? levelOf(key) : 1);
       h.hc = clamp(Number(cfg.cols && cfg.cols[k]) | 0, 0, 3);
       W.heroes[k] = h; W.order.push(k);
     });
+    if (team) for (const tm of [0, 1]) T.assignRoles(W.order.map((k) => W.heroes[k]).filter((h) => h.tm === tm && h.bot), cfg.ts);
+    if (team && cfg.tls) for (const k of cfg.ids) { const L = clamp(cfg.tls[k] | 0, 1, T.TL_MAX); const h = W.heroes[k]; if (h && L > 1) { let xp = 0; for (let q = 1; q < L; q++) xp += T.xpNeed(q); T.addXP(W, h, xp); } }
     if (!watch && cfg.ids.includes(kindOf())) W.local.add(kindOf());
     g.botMeta = {};
     for (const b of cfg.bots || []) { g.botMeta[b.id] = { n: b.n }; if (isHost) W.local.add(b.id); }
     g.W = W; g.rid = cfg.rid; g.ids = cfg.ids.slice(); g.bots = (cfg.bots || []).map((b) => b.id);
     g.parts = []; g.nums = []; g.beams = []; g.zaps = []; g.seq = 0; g.hsq = 0; g.lastSeq = -1; g.lastSnapAt = performance.now(); g.waveSeen = 0; g.stSeen = ''; g.claimed = new Set(); g.over = false; g.cam = null; g.shake = 0; g.fireQ = []; g.aim = { on: false }; g.cardDone = 0; g.kill = null; g.gadQ = []; g.dashQ = []; g.myKills = 0; g.pend = []; g.pickId = 0;
+    g.skQ = []; g.recQ = []; g.tbeams = []; g.feedId = 0; g.riftRebuild = false; g.waveTold = 0; g.cardTold = false;
+    const meT = W.heroes[kindOf()];
+    g.flip = !!(team && meT && meT.tm === 1);
     g.sendMs = sendMsFor(cfg.ids.filter((k) => !k.startsWith('bot')).length);
-    setCards(null); setKill(null);
-    if (cfg.lv !== lvRef.current && E.LEVELS[cfg.lv]) setLv(cfg.lv);
-    setEndless(!!cfg.en);
+    setCards(null); setKill(null); setTfeed([]); setBoard(false); setMapSheet(false);
+    if (!team) {
+      if (cfg.lv !== lvRef.current && E.LEVELS[cfg.lv]) setLv(cfg.lv);
+      setEndless(!!cfg.en);
+    }
     setResult(null); setPaused(false); setQuick(false); setFollow(null); setArenaSheet(false); setOptSheet(false);
     setPhase('play');
-    showBanner('Get ready', `${E.ARENAS[ak].name}, ${E.LEVELS[W.lv].name}`, 'blue', 2.6);
+    if (team) showBanner('Team battle', meT ? 'Break the enemy core to win' : 'Nebula Valley', 'blue', 3);
+    else showBanner('Get ready', `${E.ARENAS[ak].name}, ${E.LEVELS[W.lv].name}`, 'blue', 2.6);
     J.reset();
     Sfx.init();
+  };
+  const sidesFor = (ids) => {
+    const out = {}, cnt = [0, 0];
+    const cap = Math.max(tsRef.current, Math.ceil(ids.length / 2));
+    const hs = wantSide.current[kindOf()] === 1 ? 1 : 0;
+    for (const id of ids) {
+      let s0 = wantSide.current[id];
+      if (s0 !== 0 && s0 !== 1) s0 = cnt[hs] < cap ? hs : 1 - hs;
+      if (cnt[s0] >= cap) s0 = 1 - s0;
+      out[id] = s0; cnt[s0] += 1;
+    }
+    return out;
+  };
+  const startTeam = () => {
+    const humans = (solo ? ['me'] : freshRoster()).slice(0, 10);
+    const ts0 = clamp(Math.max(tsRef.current, Math.ceil(humans.length / 2)), 1, 5);
+    const tms = sidesFor(humans);
+    const heroes = {}, cols = {}, sks = {}, bots = [], ids = [];
+    const used = [new Set(), new Set()];
+    for (const tm of [0, 1]) {
+      const hs = humans.filter((id) => tms[id] === tm);
+      for (const id of hs) {
+        const k = heroFor(id);
+        heroes[id] = k; used[tm].add(k);
+        cols[id] = id === kindOf() ? heroColRef.current : clamp(Number(colOfRef.current[id] != null ? colOfRef.current[id] : metaRef.current[id] && metaRef.current[id].hc) | 0, 0, 3);
+        const sk = id === kindOf() ? skillRef.current : skOfRef.current[id] || (metaRef.current[id] && metaRef.current[id].sk);
+        sks[id] = T.SKILLS[sk] ? sk : 'shock';
+        ids.push(id);
+      }
+      for (let i = hs.length; i < ts0; i++) {
+        const id = `bot${tm}${i}`;
+        const free = E.HERO_KEYS.filter((k) => !used[tm].has(k));
+        const k = free.length ? free[(i * 5 + tm * 3 + bots.length) % free.length] : E.HERO_KEYS[(i + tm) % E.HERO_KEYS.length];
+        used[tm].add(k);
+        heroes[id] = k; cols[id] = (i + tm * 2) % 4; sks[id] = TEAM_BOT_SK[(i + tm * 2) % TEAM_BOT_SK.length];
+        bots.push({ id, n: BOT_NAMES[bots.length % BOT_NAMES.length] });
+        ids.push(id);
+        tms[id] = tm;
+      }
+    }
+    const cfg = { md: 'team', ts: ts0, tms, sks, cols, rid: `${Date.now().toString(36)}${Math.floor(Math.random() * 1e4)}`, ids, heroes, bots, arena: 'rift', lv: 'normal', en: 0, seed: (Math.random() * 1e9) | 0 };
+    if (!solo) { setRoster(humans); relay.send('go', cfg); }
+    beginGame(cfg);
   };
   const startGame = () => {
     if (!isHost || !ready) return;
     Sfx.init();
+    if (modeRef.current === 'team') { startTeam(); return; }
     const ids = solo ? ['me'] : freshRoster();
     const heroes = {}, cols = {}, count = {}, tone = {};
     const cap = E.heroCap();
@@ -742,11 +859,36 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
     setPhase('menu'); setResult(null); setBanner(null);
     if (!solo && isHost && !quiet) relay.send('menu', {});
   };
+  const finishTeam = (res) => {
+    const g = G.current, W = g.W;
+    const meH = W && W.heroes[kindOf()];
+    const myTeam = meH ? meH.tm : 0;
+    const won = !res.lost && res.team === myTeam && !!meH;
+    const rows = Array.isArray(res.rows) && res.rows.length ? res.rows : W ? teamRows(W) : [];
+    setResult({ team: true, won, lost: !!res.lost, myTeam, win: res.team, sc: Array.isArray(res.sc) ? res.sc : W && W.tm ? W.tm.score : [0, 0], rows, mins: W && W.tm ? Math.round(W.tm.t / 60) : 0, scrap: null, wave: 0, score: 0, list: [] });
+    if (inGame() && progRef.current && !res.lost && W && W.tm) {
+      const kd = W.tm.kd[kindOf()] || { k: 0, a: 0 };
+      const mins = W.tm.t / 60;
+      try {
+        supabase.rpc('zchat_siege_award', { p_wave: clamp(Math.round(mins) + (won ? 6 : 2), 0, 40), p_kills: clamp((kd.k * 2 + kd.a) * 3, 0, 600), p_won: won }).then(({ data, error }) => {
+          if (error || !data || !data.ok) return;
+          const nd = { scrap: Math.max(0, Number(data.scrap) || 0), levels: (progRef.current && progRef.current.levels) || {} };
+          PROG.data = nd; PROG.at = Date.now(); setProg(nd);
+          setResult((r) => (r ? { ...r, scrap: Math.max(0, data.got | 0) } : r));
+        }, () => {});
+      } catch {}
+    }
+    setTimeout(() => { if (G.current.over) setPhase('done'); }, res.lost ? 600 : 2600);
+    if (res.lost) zap('lose', 0.6);
+    else if (won) { zap('win', 0.85); showBanner('Victory', 'Your team broke the enemy core', 'gold', 2.6); try { window.dispatchEvent(new CustomEvent('zchat-screen-fx', { detail: 'confetti' })); } catch {} }
+    else { zap('lose', 0.75); showBanner(meH ? 'Defeat' : 'Game over', meH ? 'Your core fell' : `${TNAME[res.team] || 'A'} team won`, 'red', 2.6); }
+  };
   const finishUp = (res) => {
     const g = G.current;
     if (phaseRef.current === 'done' || g.over) return;
     g.over = true; g.overAt = performance.now();
     setCards(null);
+    if (g.W && g.W.mode === 'team') { finishTeam(res); return; }
     const W = g.W;
     const wave = res.wave || (W ? W.wave.n : 0);
     const bk = BEST_KEY(uid, W ? W.A.key : arenaRef.current, W ? W.lv : lvRef.current);
@@ -801,6 +943,13 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
   const hostOver = () => {
     const g = G.current, W = g.W;
     if (!W || g.over) return;
+    if (W.mode === 'team') {
+      const win = W.over && W.over.team === 1 ? 1 : 0;
+      const rows = teamRows(W);
+      if (!solo) relay.send('over', { r: g.rid, tw: win, sc: W.tm.score, tr: rows.map((r) => [r.id, r.tm, r.key, r.tl, r.k, r.d, r.a, r.dmg]) });
+      finishUp({ team: win, sc: W.tm.score, rows });
+      return;
+    }
     const res = { won: !!W.over.won, wave: W.wave.n, score: W.score, list: statList(W) };
     if (!solo) relay.send('over', { r: g.rid, w: res.won ? 1 : 0, n: res.wave, sc: res.score, l: res.list });
     finishUp(res);
@@ -828,9 +977,11 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
     }
     if (lob && f.mag != null && !f.auto) dist = Math.max(1.5, f.mag * S.rng);
     if (S.k === 'turret' && f.mag != null && !f.auto) dist = 1 + f.mag * 3;
+    if (S.k === 'blink') { if (f.mag != null && !f.auto) dist = Math.max(2, f.mag * S.rng); else if (f.auto || f.a == null) dist = clamp((dist || S.rng) + 1.2, 2, S.rng); }
     const seed = (Math.random() * 1e9) | 0;
+    const x0 = h.x, z0 = h.z;
     E.fireHero(W, h, f.kind, a, dist, seed);
-    if (!solo) relay.send('f', { r: g.rid, h: h.id, c: sup ? 's' : 'a', a: +a.toFixed(3), d: dist == null ? null : +dist.toFixed(2), s: seed, x: +h.x.toFixed(2), z: +h.z.toFixed(2), k: modsPack(h) });
+    if (!solo) relay.send('f', { r: g.rid, h: h.id, c: sup ? 's' : 'a', a: +a.toFixed(3), d: dist == null ? null : +dist.toFixed(2), s: seed, x: +x0.toFixed(2), z: +z0.toFixed(2), k: modsPack(h) });
     if (h.id === kindOf() && sup) { try { navigator.vibrate && navigator.vibrate(18); } catch {} }
     return true;
   };
@@ -849,6 +1000,21 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
     if (h.id === kindOf()) { try { navigator.vibrate && navigator.vibrate(12); } catch {} }
     return true;
   };
+  const trySkill = (h, a0) => {
+    const g = G.current, W = g.W;
+    if (!W || W.mode !== 'team' || !h || h.st !== 0) return false;
+    let a = a0;
+    if (a == null) { const mv = Math.hypot(h.vx, h.vz); a = mv > 0.5 ? Math.atan2(h.vx, h.vz) : h.yaw; }
+    const r = T.useSkill(W, h, a);
+    if (!r) return false;
+    if (!solo) relay.send('f', { r: g.rid, h: h.id, c: 'k', sk: r.sk, a: r.a, x: r.x, z: r.z, x1: r.x1, z1: r.z1, t: r.t == null ? undefined : r.t });
+    return true;
+  };
+  const tryRecall = (h) => {
+    const W = G.current.W;
+    if (!W || W.mode !== 'team' || !h) return false;
+    return T.startRecall(W, h);
+  };
   const tryDash = (h, a0) => {
     const g = G.current, W = g.W;
     if (!W || !h || !E.canDash(h)) return false;
@@ -861,7 +1027,12 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
   const heroPack = (W, h) => {
     const mv = Math.hypot(h.vx, h.vz) > 0.4 ? 1 : 0;
     const f = mv | (h.hid ? 2 : 0) | (W.t - h.seen < 1.2 ? 4 : 0) | (h.pw > 0 ? 8 : 0) | (h.ocT > 0 ? 16 : 0) | (h.shield > 0 ? 32 : 0) | (h.rfT > 0 ? 64 : 0) | (h.spT > 0 ? 128 : 0) | (h.dashT > 0 ? 256 : 0) | (h.jump ? 512 : 0);
-    return [Math.round(h.x * 20), Math.round(h.z * 20), Math.round(h.yaw * 100), Math.round(h.hp), h.st, f, Math.round(h.sup * 100), Math.round(h.rv * 100), Math.round(h.downT * 10), Math.round(h.max), Math.round((h.shield || 0) / 10), h.lv | 0];
+    const o = [Math.round(h.x * 20), Math.round(h.z * 20), Math.round(h.yaw * 100), Math.round(h.hp), h.st, f, Math.round(h.sup * 100), Math.round(h.rv * 100), Math.round(h.downT * 10), Math.round(h.max), Math.round((h.shield || 0) / 10), h.lv | 0];
+    if (W.mode === 'team') {
+      const f2 = ((h.clkT || 0) > 0 ? 1 : 0) | ((h.recT || 0) > 0 ? 2 : 0) | ((h.stunT || 0) > 0 ? 4 : 0) | (h.buffs && h.buffs.fury ? 8 : 0) | (h.buffs && h.buffs.flow ? 16 : 0) | ((h.sprT || 0) > 0 ? 32 : 0) | ((h.spawnT || 0) > 0 ? 64 : 0);
+      o.push(h.tl | 0, Math.round((h.respT || 0) * 10), f2, Math.round(((h.stats && h.stats.hd) || 0) / 10));
+    }
+    return o;
   };
   const applyPack = (W, h, p, now, at) => {
     if (!Array.isArray(p) || p.length < 9) return;
@@ -877,8 +1048,17 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
     const st = clamp(p[4] | 0, 0, 2);
     if (st !== h.st) {
       if (st === 1 && h.st === 0) W.ev.push({ k: 'down', id: h.id, x: h.x, z: h.z, remote: true });
-      else if (st === 0 && h.st !== 0) W.ev.push({ k: 'revive', id: h.id, x: h.x, z: h.z, remote: true });
+      else if (st === 2 && h.st === 0 && W.mode === 'team') W.ev.push({ k: 'down', id: h.id, x: h.x, z: h.z, remote: true, team: true });
+      else if (st === 0 && h.st !== 0) { if (W.mode === 'team') { h.x = x; h.z = z; h.nb = null; h.nv = null; } W.ev.push({ k: 'revive', id: h.id, x, z, remote: true, team: W.mode === 'team' }); }
       h.st = st;
+    }
+    if (p.length >= 16 && W.mode === 'team') {
+      h.tl = clamp(p[12] | 0, 1, T.TL_MAX); h.respT = clamp(num(p[13]) / 10, 0, 60);
+      const f2 = p[14] | 0;
+      h.clkT = f2 & 1 ? 0.35 : 0; h.recV = !!(f2 & 2); h.stunV = !!(f2 & 4); h.sprV = !!(f2 & 32); h.spawnV = !!(f2 & 64);
+      const bf = h.buffs || (h.buffs = {});
+      bf.fury = f2 & 8 ? 1 : 0; bf.flow = f2 & 16 ? 1 : 0;
+      if (h.stats) h.stats.hd = Math.max(0, num(p[15]) * 10);
     }
     const f = p[5] | 0;
     h.mvF = f & 1; h.hid = !!(f & 2); if (f & 4) h.seen = W.t; h.pw = f & 8 ? 1 : 0;
@@ -897,7 +1077,20 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
       const bots = Array.isArray(m.bots) ? m.bots.filter((b) => b && typeof b.id === 'string' && ids.includes(b.id)).map((b) => ({ id: b.id, n: String(b.n || 'Bot').slice(0, 16) })) : [];
       const cols = {};
       for (const k of ids) cols[k] = clamp(Number(m.cols && m.cols[k]) | 0, 0, 3);
-      return { rid: m.rid, ids, heroes, cols, bots, arena: validArena(m.arena), lv: validLv(m.lv), en: m.en ? 1 : 0, seed: num(m.seed, 1) | 0 };
+      const out = { rid: m.rid, ids, heroes, cols, bots, arena: validArena(m.arena), lv: validLv(m.lv), en: m.en ? 1 : 0, seed: num(m.seed, 1) | 0 };
+      if (m.md === 'team') {
+        out.md = 'team'; out.arena = 'rift'; out.lv = 'normal'; out.en = 0; out.ts = clamp(m.ts | 0, 1, 5); out.tms = {}; out.sks = {};
+        for (const k of ids) { out.tms[k] = m.tms && m.tms[k] === 1 ? 1 : 0; out.sks[k] = m.sks && T.SKILLS[m.sks[k]] ? m.sks[k] : 'shock'; }
+        if (m.tls && typeof m.tls === 'object') { out.tls = {}; for (const k of ids) out.tls[k] = clamp(m.tls[k] | 0, 1, T.TL_MAX); }
+      }
+      return out;
+    };
+    const onTk = (m) => {
+      const g = G.current, W = g.W;
+      if (!W || W.mode !== 'team' || !m || m.r !== g.rid || typeof m.v !== 'string' || !W.heroes[m.v]) return;
+      if (W.local.has(m.v)) return;
+      if (m.from !== m.v && !(W.heroes[m.v].bot && m.from === hostId)) return;
+      takedown(W, { v: m.v, k: typeof m.k === 'string' && W.heroes[m.k] ? m.k : null, by: typeof m.by === 'number' || typeof m.by === 'string' ? m.by : null, as: Array.isArray(m.as) ? m.as.filter((x) => typeof x === 'string' && W.heroes[x]).slice(0, 4) : [] });
     };
     const offs = [
       relay.on('*', (m) => { if (m.m) { metaRef.current[m.from] = m.m; setNames((p) => (p[m.from] === m.m.n ? p : { ...p, [m.from]: m.m.n })); if (m.m.h && E.HEROES[m.m.h]) setHeroOf((p) => (p[m.from] ? p : { ...p, [m.from]: m.m.h })); } if (!joinOrder.current.includes(m.from)) joinOrder.current.push(m.from); }),
@@ -910,12 +1103,17 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
         if (typeof m.lv === 'string' && E.LEVELS[m.lv]) setLv(m.lv);
         if (typeof m.bn === 'number') setBotN(snapBots(clamp(m.bn | 0, 0, 9)));
         if (typeof m.en === 'number') setEndless(!!m.en);
+        if (m.md === 'team' || m.md === 'waves') { setMode(m.md); if (m.md === 'team') loadRift().then((d) => { if (d) setRiftOk(true); }); }
+        if (typeof m.ts === 'number') setTs(clamp(m.ts | 0, 1, 5));
+        if (m.tm && typeof m.tm === 'object') setSideOf((p) => { const n = {}; for (const [k, v] of Object.entries(m.tm)) n[k] = v === 1 ? 1 : 0; return JSON.stringify(n) === JSON.stringify(p) ? p : n; });
         const cfg = cleanCfg(m.cfg);
         if (cfg && phaseRef.current === 'menu' && !G.current.W) beginGame(cfg);
       }),
       relay.on('go', (m) => { if (isHost) return; const cfg = cleanCfg(m); if (cfg) beginGame(cfg); }),
       relay.on('menu', () => { if (!isHost) toMenu(true); }),
-      relay.on('hero', (m) => { if (m && E.HEROES[m.k]) setHeroOf((p) => ({ ...p, [m.from]: m.k })); if (m && typeof m.c === 'number') setColOf((p) => ({ ...p, [m.from]: clamp(m.c | 0, 0, 3) })); }),
+      relay.on('hero', (m) => { if (m && E.HEROES[m.k]) setHeroOf((p) => ({ ...p, [m.from]: m.k })); if (m && typeof m.c === 'number') setColOf((p) => ({ ...p, [m.from]: clamp(m.c | 0, 0, 3) })); if (m && T.SKILLS[m.sk]) setSkOf((p) => ({ ...p, [m.from]: m.sk })); }),
+      relay.on('side', (m) => { if (!isHost || !m || phaseRef.current !== 'menu') return; wantSide.current[m.from] = m.s === 1 ? 1 : 0; setSideOf(sidesFor(rosterRef.current)); }),
+      relay.on('tk', onTk),
       relay.on('swap', (m) => {
         const g = G.current, W = g.W;
         if (isHost || !W || m.r !== g.rid || typeof m.id !== 'string' || W.heroes[m.id] || !E.HEROES[m.k]) return;
@@ -923,6 +1121,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
         if (typeof m.b === 'string' && W.heroes[m.b]) { W.order = W.order.map((k) => (k === m.b ? m.id : k)); g.ids = g.ids.map((k) => (k === m.b ? m.id : k)); g.bots = g.bots.filter((k) => k !== m.b); }
         else { W.order.push(m.id); g.ids.push(m.id); }
         const h = E.mkHero(m.id, m.k, x, z, false, 1); h.hc = clamp(m.c | 0, 0, 3);
+        if (W.mode === 'team') { T.initHero(W, h, m.tm === 1 ? 1 : 0, T.SKILLS[m.sk] ? m.sk : 'shock', 0); h.x = x; h.z = z; h.tl = clamp(m.tl | 0, 1, T.TL_MAX); }
         W.heroes[m.id] = h;
       }),
       relay.on('hs', (m) => {
@@ -945,6 +1144,11 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
         if (Math.hypot(x - h.x, z - h.z) < 4) { h.x = x; h.z = z; }
         const a = num(m.a, h.yaw);
         if (m.c === 'd') { W.ev.push({ k: 'dash', id: h.id, x: h.x, z: h.z, a }); h.x = ox; h.z = oz; return; }
+        if (m.c === 'k') {
+          const sk = String(m.sk || '');
+          if (W.mode === 'team' && T.SKILLS[sk]) { h.sk = sk; T.applySkill(W, h, { sk, a, x, z, x1: m.x1 == null ? undefined : num(m.x1), z1: m.z1 == null ? undefined : num(m.z1), t: m.t == null ? null : m.t | 0 }, false); }
+          h.x = ox; h.z = oz; return;
+        }
         modsTake(h, m.k);
         if (m.c === 'g') { if (h.gad <= 0) h.gad = 1; h.gadCD = 0; E.useGadget(W, h, a, m.d == null ? null : clamp(num(m.d), 0, 30), m.tx == null ? null : num(m.tx), m.tz == null ? null : num(m.tz)); }
         else E.fireHero(W, h, m.c === 's' ? 'sup' : 'atk', a, m.d == null ? null : clamp(num(m.d), 0, 30), num(m.s, 1) | 0);
@@ -959,6 +1163,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
         if (Array.isArray(m.a)) E.applyRobotSnap(W, m.a, now, m.at);
         if (Array.isArray(m.w) && m.w.length >= 4) { W.wave.n = m.w[0] | 0; W.wave.st = ST_NAME[m.w[1] | 0] || 'fight'; W.wave.t = num(m.w[2]) / 10; W.wave.left = m.w[3] | 0; }
         if (typeof m.sc === 'number') W.score = m.sc;
+        if (m.tq && W.mode === 'team') T.applySnapTeam(W, m.tq);
         if (Array.isArray(m.d)) W.drops = m.d.filter((d) => Array.isArray(d) && !g.claimed.has(d[0])).map((d) => ({ id: d[0] | 0, k: E.DROP_KEYS[d[1] | 0] || 'hp', x: num(d[2]) / 10, z: num(d[3]) / 10, life: num(d[4], 140) / 10 }));
         if (Array.isArray(m.b)) for (const b of m.b) { if (!Array.isArray(b) || typeof b[0] !== 'string') continue; const h = W.heroes[b[0]]; if (h && h.bot) applyPack(W, h, b.slice(1), now, m.at); }
       }),
@@ -987,6 +1192,11 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
       relay.on('over', (m) => {
         const g = G.current;
         if (isHost || !m || m.r !== g.rid) return;
+        if (m.tw === 0 || m.tw === 1) {
+          const rows = Array.isArray(m.tr) ? m.tr.filter((r) => Array.isArray(r) && typeof r[0] === 'string').slice(0, E.SQUAD_MAX).map((r) => ({ id: r[0], tm: r[1] === 1 ? 1 : 0, key: validHero(r[2]), tl: clamp(r[3] | 0, 1, T.TL_MAX), k: r[4] | 0, d: r[5] | 0, a: r[6] | 0, dmg: Math.max(0, r[7] | 0) })) : [];
+          finishUp({ team: m.tw, sc: Array.isArray(m.sc) ? [m.sc[0] | 0, m.sc[1] | 0] : null, rows });
+          return;
+        }
         finishUp({ won: !!m.w, wave: m.n | 0, score: m.sc | 0, list: Array.isArray(m.l) ? m.l.slice(0, E.SQUAD_MAX) : [] });
       }),
       relay.on('emo', (m) => { const e = String(m.e || ''); if (!EMOTES.includes(e)) return; setBubbles((p) => ({ ...p, [m.from]: { e, at: Date.now() } })); zap('pop', 0.45); }),
@@ -1007,13 +1217,18 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
         for (const p of present) {
           if (next.includes(p) || g1.ids.includes(p) || next.length >= E.SQUAD_MAX) continue;
           const key = heroFor(p), c = clamp(Number(colOfRef.current[p] != null ? colOfRef.current[p] : metaRef.current[p] && metaRef.current[p].hc) | 0, 0, 3);
+          const team = W1.mode === 'team';
           const bot = g1.bots.length ? g1.bots[g1.bots.length - 1] : null;
+          if (team && !(bot && W1.heroes[bot])) continue;
+          const old = bot ? W1.heroes[bot] : null;
           let x, z;
           if (bot && W1.heroes[bot]) { x = W1.heroes[bot].x; z = W1.heroes[bot].z; W1.order = W1.order.map((k) => (k === bot ? p : k)); g1.ids = g1.ids.map((k) => (k === bot ? p : k)); g1.bots = g1.bots.filter((k) => k !== bot); W1.local.delete(bot); }
           else { const sp = E.heroSpawn(W1.A, W1.order.length); x = sp.x; z = sp.z; W1.order.push(p); g1.ids.push(p); }
           const h = E.mkHero(p, key, x, z, false, 1); h.hc = c;
+          const sk0 = metaRef.current[p] && T.SKILLS[metaRef.current[p].sk] ? metaRef.current[p].sk : 'shock';
+          if (team && old) { T.initHero(W1, h, old.tm, sk0, 0); h.x = x; h.z = z; h.tl = old.tl || 1; h.st = old.st; h.respT = old.respT || 0; }
           W1.heroes[p] = h;
-          relay.send('swap', { r: g1.rid, b: bot, id: p, k: key, c, x: +x.toFixed(2), z: +z.toFixed(2) });
+          relay.send('swap', { r: g1.rid, b: bot, id: p, k: key, c, x: +x.toFixed(2), z: +z.toFixed(2), tm: team && old ? old.tm : undefined, sk: team ? sk0 : undefined, tl: team && old ? old.tl || 1 : undefined });
           next.push(p);
           pushNote(`${(metaRef.current[p] && metaRef.current[p].n) || 'A friend'} joined${bot ? ' in place of a bot' : ''}`, 'join');
         }
@@ -1026,12 +1241,15 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
       next.forEach((p) => { hk[p] = heroFor(p); });
       const g = G.current, W = g.W;
       const cfg = playing && W && !g.over ? { rid: g.rid, ids: g.ids, heroes: Object.fromEntries(g.ids.map((k) => [k, W.heroes[k] ? W.heroes[k].key : 'blaze'])), bots: g.bots.map((k) => ({ id: k, n: g.botMeta[k] ? g.botMeta[k].n : 'Bot' })), arena: W.A.key, lv: W.lv, en: W.endless ? 1 : 0, seed: W.seed } : null;
-      relay.send('roster', { ids: next, nm, hk, ar: arenaRef.current, lv: lvRef.current, bn: botNRef.current, en: endRef.current ? 1 : 0, cfg });
+      const sides = sidesFor(next);
+      if (!playing && JSON.stringify(sides) !== JSON.stringify(sideOfRef.current)) setSideOf(sides);
+      if (cfg && W && W.mode === 'team') { cfg.md = 'team'; cfg.ts = W.tm ? W.tm.size : 3; cfg.tms = Object.fromEntries(g.ids.map((k) => [k, W.heroes[k] ? W.heroes[k].tm : 0])); cfg.sks = Object.fromEntries(g.ids.map((k) => [k, W.heroes[k] ? W.heroes[k].sk : 'shock'])); cfg.cols = Object.fromEntries(g.ids.map((k) => [k, W.heroes[k] ? W.heroes[k].hc | 0 : 0])); cfg.tls = Object.fromEntries(g.ids.map((k) => [k, W.heroes[k] ? W.heroes[k].tl || 1 : 1])); }
+      relay.send('roster', { ids: next, nm, hk, ar: arenaRef.current, lv: lvRef.current, bn: botNRef.current, en: endRef.current ? 1 : 0, md: modeRef.current, ts: tsRef.current, tm: playing ? sideOfRef.current : sides, cfg });
     };
     tick();
     const iv = setInterval(tick, 1500);
     return () => clearInterval(iv);
-  }, [relay.peers, allowWatch, arena, lv, botN, endless, heroKey]);
+  }, [relay.peers, allowWatch, arena, lv, botN, endless, heroKey, mode, ts, sideOf]);
   useEffect(() => {
     if (solo || !room || isHost) return undefined;
     const w = relay.peers.filter((p) => metaRef.current[p] && metaRef.current[p].w);
@@ -1052,7 +1270,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
   useWatchNotices(watchList, pushNote, !solo && !watch);
 
   const takenBy = (k) => roster.filter((p) => p !== kindOf() && validHero(heroOf[p] || (metaRef.current[p] && metaRef.current[p].h)) === k).length;
-  const pickHero = (k) => { if (!E.HEROES[k]) return; if (!solo && takenBy(k) >= E.heroCap()) { kitTap(); pushNote(`${E.HEROES[k].name} is taken by ${E.heroCap()} players`, 'info'); return; } kitTap(); setHeroKey(k); savePref(PREF.hero, k); let c = heroCol; const used = roster.filter((p) => p !== kindOf() && validHero(heroOf[p]) === k).map((p) => colOf[p] | 0); if (used.includes(c)) { c = [0, 1, 2, 3].find((q) => !used.includes(q)) || 0; setHeroCol(c); savePref('zchat-siege-hcol', c); } if (!solo) relay.send('hero', { k, c }); };
+  const pickHero = (k) => { if (!E.HEROES[k]) return; if (!solo && takenBy(k) >= E.heroCap()) { kitTap(); pushNote(`${E.HEROES[k].name} is taken by ${E.heroCap()} players`, 'info'); return; } kitTap(); setHeroKey(k); savePref(PREF.hero, k); let c = heroCol; const used = roster.filter((p) => p !== kindOf() && validHero(heroOf[p]) === k).map((p) => colOf[p] | 0); if (used.includes(c)) { c = [0, 1, 2, 3].find((q) => !used.includes(q)) || 0; setHeroCol(c); savePref('zchat-siege-hcol', c); } if (!solo) relay.send('hero', { k, c, sk: skillRef.current }); };
   const cardOk = (h, k) => { const C = E.CARDS[k]; if (!C || (C.hero && C.hero !== h.key)) return false; return !C.max || (h.cards || []).filter((x) => x === k).length < C.max; };
   const addPick = () => { const g = G.current; g.pickId = (g.pickId || 0) + 1; (g.pend || (g.pend = [])).push({ id: g.pickId, list: null, seen: false }); };
   const showPick = (fresh) => {
@@ -1064,14 +1282,24 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
     const p = g.pend[i];
     p.seen = true;
     const list = (p.list || []).filter((k) => cardOk(h, k));
-    for (const k of E.cardChoices(h, Math.random)) if (list.length < 3 && !list.includes(k)) list.push(k);
+    for (const k of E.cardChoices(h, Math.random, W.mode === 'team' ? E.TEAM_SKIP_CARDS : null)) if (list.length < 3 && !list.includes(k)) list.push(k);
     if (!list.length) { g.pend.splice(i, 1); return; }
     p.list = list;
     const c = { id: p.id, list, more: g.pend.length - 1, at: performance.now(), snap: cardSnap(h) };
     cardsRef.current = c; setCards(c);
     zap('star', 0.6);
   };
-  const pickCol = (c) => { kitTap(); setHeroCol(c); savePref('zchat-siege-hcol', c); if (!solo) relay.send('hero', { k: heroKey, c }); };
+  const pickCol = (c) => { kitTap(); setHeroCol(c); savePref('zchat-siege-hcol', c); if (!solo) relay.send('hero', { k: heroKey, c, sk: skillRef.current }); };
+  const pickMode = (k) => { if (!isHost || (k !== 'team' && k !== 'waves')) return; kitTap(); setMode(k); savePref(PREF.mode, k); };
+  const pickTs = (n) => { if (!isHost) return; const v = clamp(n | 0, 1, 5); kitTap(); setTs(v); savePref(PREF.ts, v); };
+  const pickSkill = (k) => { if (!T.SKILLS[k]) return; setSkill(k); savePref(PREF.sk, k); if (!solo) relay.send('hero', { k: heroKey, c: heroCol, sk: k }); };
+  const switchSide = () => {
+    kitTap();
+    const me0 = kindOf();
+    const s1 = sideOfRef.current[me0] === 1 ? 0 : 1;
+    if (isHost) { wantSide.current[me0] = s1; setSideOf(sidesFor(solo ? ['me'] : rosterRef.current)); }
+    else { relay.send('side', { s: s1 }); setSideOf((p) => ({ ...p, [me0]: s1 })); }
+  };
   const pickArena = (k) => { if (!isHost || !E.ARENAS[k]) return; kitTap(); setArena(k); savePref(PREF.arena, k); };
   const pickLv = (k) => { if (!isHost || !E.LEVELS[k]) return; kitTap(); setLv(k); savePref(PREF.lv, k); };
   const pickBots = (v) => { if (!isHost) return; const n = snapBots(clamp(Number(v) | 0, 0, E.SQUAD_MAX - 1)); kitTap(); setBotN(n); savePref(PREF.bots, n); };
@@ -1089,6 +1317,9 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
       else if (k === 'f' || k === 'j') { G.current.fireQ.push({ kind: 'atk', auto: true }); }
       else if (k === 'shift' || k === 'l') { G.current.dashQ.push(null); e.preventDefault(); }
       else if (k === 'q' || k === 'k') { const mo = G.current.mouse; G.current.gadQ.push(mo ? { a: mo.a, dist: mo.d } : null); e.preventDefault(); }
+      else if (k === 'r' && G.current.W && G.current.W.mode === 'team') { const mo = G.current.mouse; G.current.skQ.push(mo ? mo.a : null); e.preventDefault(); }
+      else if (k === 'b' && G.current.W && G.current.W.mode === 'team') { G.current.recQ.push(1); e.preventDefault(); }
+      else if (k === 'tab' && G.current.W && G.current.W.mode === 'team') { setBoard((v) => !v); e.preventDefault(); }
     };
     const ku = (e) => keys.current.delete(e.key.toLowerCase());
     const blur = () => keys.current.clear();
@@ -1148,7 +1379,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
     const R2 = 58 * look.size;
     if (L > 14) A.eng = true;
     A.mag = clamp((L - 10) / R2, 0, 1);
-    if (L > 4) A.a = Math.atan2(A.dx, A.dy);
+    if (L > 4) A.a = Math.atan2(A.dx, A.dy) + (G.current.flip ? Math.PI : 0);
     const knob = A.kind === 'sup' ? supKnob.current : atkKnob.current;
     if (knob) { const k = L > R2 ? R2 / L : 1; knob.style.transform = `translate(${A.dx * k * 0.62}px,${A.dy * k * 0.62}px)`; }
   };
@@ -1168,11 +1399,141 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
 
   if (typeof window !== 'undefined' && window.__zfake) window.__zsiege = { W: () => G.current.W, g: () => G.current, fire: (kind, a, dist) => G.current.fireQ.push(a == null ? { kind, auto: true } : { kind, a, dist }), move: (x, z) => { G.current.keyMove = [x, z]; }, god: (on) => { const W = G.current.W; const h = W && W.heroes[kindOf()]; if (h) h.god = on !== false; }, wave: (n) => { const W = G.current.W; if (W && isHost) { W.robots.length = 0; W.wave.st = 'break'; W.wave.t = 0.1; W.wave.n = Math.max(0, n - 1); } }, kill: () => { const W = G.current.W; if (W && isHost) for (const b of W.robots) E.hurtRobot(W, b, 1e6, kindOf(), 0, 1, {}); }, start: () => startGame(), sup: () => { const W = G.current.W; const h = W && W.heroes[kindOf()]; if (h) h.sup = 1; }, hurt: (d, by) => { const W = G.current.W; const h = W && W.heroes[kindOf()]; if (h) E.hurtHero(W, h, d || 500, by == null ? 'test' : by); }, gad: (a, dist) => G.current.gadQ.push(a == null ? null : { a, dist }), dash: (a) => G.current.dashQ.push(a == null ? null : a), cards: () => cardsRef.current, pick: (k) => pickCard(k), later: () => laterCard(), pend: () => G.current.pend, me: () => { const W = G.current.W; return W && W.heroes[kindOf()]; }, E: () => E };
 
+  const feedAdd = (it) => { const g = G.current; g.feedId = (g.feedId || 0) + 1; const e = { ...it, id: g.feedId, at: Date.now() }; setTfeed((p) => [...p.filter((q) => Date.now() - q.at < 6500), e].slice(-4)); };
+  const causeOf = (W, by) => {
+    if (typeof by === 'number') { const b = W.robots.find((r) => r.id === by); const t = b ? b.type : null; return t === 'tow' ? 'a tower' : t === 'gua' ? 'the guardian' : t === 'shp' ? 'the Hive Ship' : t === 'mel' || t === 'rng' || t === 'sie' ? 'the rovers' : 'an alien'; }
+    if (by === 'fount') return 'the enemy base';
+    if (by === 'laser' || by === 'stomp' || by === 'mis') return 'the Hive Ship';
+    return 'the enemy';
+  };
+  const takedown = (W, info) => {
+    const r = T.applyKill(W, info);
+    if (!r) return;
+    const myK = kindOf();
+    const me = W.heroes[myK], v = W.heroes[r.v];
+    if (!v) return;
+    const myTm = me ? me.tm : 0;
+    const nm = (id) => (id === myK ? 'You' : nameOf(id));
+    const kt = r.k && W.heroes[r.k] ? W.heroes[r.k].tm : 1 - v.tm;
+    const good = kt === myTm;
+    const pc = (tm) => TXT_COL[tm === myTm ? 0 : 1];
+    if (r.k) feedAdd({ good, parts: [[nm(r.k), pc(kt)], [r.shut ? 'shut down' : 'took down'], [r.v === myK ? 'you' : nm(r.v), pc(v.tm)]] });
+    else feedAdd({ good, parts: [[nm(r.v), pc(v.tm)], [`fell to ${causeOf(W, r.by)}`]] });
+    if (r.k === myK) { popNum(v.x, v.z, 'Takedown', '#FFE15A', true); zap('combo', 0.6); }
+    else if (r.as.includes(myK)) { popNum(v.x, v.z, 'Assist', '#9FD0FF', false); zap('coin', 0.45); }
+    const tone = good ? 'gold' : 'red';
+    if (r.ace) showBanner('Team wipe', good ? 'The whole enemy team is down' : 'Your whole team is down', tone, 2.4);
+    else if (r.multi >= 3) showBanner(r.multi === 3 ? 'Triple takedown' : r.multi === 4 ? 'Quad takedown' : 'Unstoppable', nm(r.k), tone, 2.2);
+    else if (r.first) { showBanner('First takedown', r.k ? nm(r.k) : null, tone, 2.2); zap('alert', 0.45); }
+    else if (r.multi === 2 && (r.k === myK || good)) showBanner('Double takedown', nm(r.k), tone, 1.8);
+  };
   const handleEvents = (W, now) => {
     const g = G.current;
     const myK = kindOf();
+    const team = W.mode === 'team';
+    const meT = team ? W.heroes[myK] : null;
+    const myTm = meT ? meT.tm : 0;
     for (const e of W.ev) {
       const k = e.k;
+      if (team) {
+        if (k === 'down' && e.team) {
+          const h = W.heroes[e.id];
+          if (h && !e.remote && W.local.has(e.id)) {
+            const info = T.deathInfo(W, h);
+            if (!solo) relay.send('tk', { r: g.rid, v: info.v, k: info.k, by: info.by, as: info.as });
+            takedown(W, info);
+          }
+          if (e.id === myK) {
+            zap('pdie', 0.7);
+            const kh = typeof e.by === 'string' && W.heroes[e.by] ? W.heroes[e.by] : null;
+            const kb = typeof e.by === 'number' ? W.robots.find((r) => r.id === e.by) : null;
+            g.kill = { at: performance.now(), by: kb ? kb.id : null, hero: kh ? kh.id : null, x: kh ? kh.x : kb ? kb.x : e.x, z: kh ? kh.z : kb ? kb.z : e.z };
+            setKill({ name: kh ? nameOf(kh.id) : causeOf(W, e.by), at: Date.now() });
+          }
+          blast(e.x, 0.6, e.z, false, 0.7);
+          sparks(e.x, 0.8, e.z, 10, 10, 6);
+          continue;
+        }
+        if (k === 'tan') {
+          const a = e.a;
+          if (a === 'tow' || a === 'gua' || a === 'cor') {
+            if (e.x != null) { blast(e.x, 2, e.z, true, a === 'cor' ? 2.4 : 1.7); for (let i = 0; i < 18; i++) { const an = R0(0, 6.283), sp = R0(2, 6); P3({ x: e.x, y: R0(1, 3), z: e.z, vx: Math.cos(an) * sp, vy: R0(3, 7), vz: Math.sin(an) * sp, g: 14, max: R0(0.6, 1.1), s0: R0(0.3, 0.6), s1: 0.1, a0: 1, type: 2 }); } const c = camFoc(); g.shake = Math.max(g.shake, 0.7 * clamp(1 - Math.hypot(e.x - c[0], e.z - c[2]) / 26, 0.15, 1)); zap('bigboom', volAt(e.x, e.z) * 0.9 + 0.2); }
+            if (!e.quiet) {
+              const ours = e.b === myTm;
+              if (a !== 'cor') showBanner(ours ? `Our ${TOW_NAME[a]} fell` : `We broke their ${TOW_NAME[a]}`, a === 'tow' ? `${T.LANE_NAME[e.c] || 'Mid'} lane` : null, ours ? 'red' : 'green', 2.2);
+              feedAdd({ good: !ours, parts: [[ours ? 'Enemy team' : 'Your team', TXT_COL[ours ? 1 : 0]], [`broke a ${TOW_NAME[a]}`]] });
+            }
+          } else if (a === 'ship') { showBanner('The Hive Ship is here', 'Beat it and it fights for your team', 'gold', 2.8); zap('alert', 0.7); }
+          else if (a === 'shiptake') { const ours = e.b === myTm; showBanner(ours ? 'We took the Hive Ship' : 'They took the Hive Ship', ours ? 'It pushes the middle lane for us' : 'Guard the middle lane', ours ? 'green' : 'red', 2.6); zap(ours ? 'combo' : 'alert', 0.65); }
+          else if (a === 'river') { const ours = e.b === myTm; feedAdd({ good: ours, parts: [[ours ? 'Your team' : 'Enemy team', TXT_COL[ours ? 0 : 1]], ['cleared the river aliens']] }); if (ours) pushNote('River aliens cleared. XP for the whole team', 'join'); }
+          else if (a === 'wave' && !g.waveTold) { g.waveTold = 1; showBanner('Rovers are coming', 'They walk every lane', 'blue', 2.2); zap('cp', 0.5); }
+          continue;
+        }
+        if (k === 'lvl') {
+          const h = W.heroes[e.id];
+          if (h) { P3({ x: h.x, y: 0.1, z: h.z, max: 0.6, s0: 0.8, s1: 3, a0: 0.8, type: 13, flat: 1 }); for (let i = 0; i < 10; i++) { const an = R0(0, 6.283); P3({ x: h.x + Math.cos(an) * 0.6, y: R0(0.2, 1.4), z: h.z + Math.sin(an) * 0.6, vy: R0(1.2, 2.6), max: R0(0.5, 0.9), s0: 0.3, s1: 0.05, a0: 1, type: 7 }); } }
+          if (e.id === myK) { popNum(h ? h.x : e.x, h ? h.z : e.z, `Level ${e.lv}`, '#FFE15A', true); zap('star', 0.7); if (e.card) { addPick(); if (!g.cardTold) { g.cardTold = true; pushNote('New power ready. Tap New power to pick it', 'join'); } } }
+          else if (isHost && h && h.bot && e.card) { const ch = E.cardChoices(h, Math.random, E.TEAM_SKIP_CARDS); if (ch.length) E.applyCard(h, ch[Math.floor(Math.random() * ch.length)]); }
+          continue;
+        }
+        if (k === 'buff') {
+          const B = T.BUFFS[e.b];
+          for (let i = 0; i < 14; i++) { const an = R0(0, 6.283); P3({ x: e.x + Math.cos(an) * 0.7, y: R0(0.2, 1.6), z: e.z + Math.sin(an) * 0.7, vy: R0(0.8, 2), max: R0(0.6, 1), s0: 0.35, s1: 0.05, a0: 1, type: e.b === 'fury' ? 1 : 6 }); }
+          if (e.id === myK && B) { pushNote(`${B.name}: ${B.text.toLowerCase()}`, 'join'); zap('pick', 0.7); }
+          continue;
+        }
+        if (k === 'portal') {
+          if (e.x0 != null) { P3({ x: e.x0, y: 0.1, z: e.z0, max: 0.5, s0: 0.6, s1: 2.6, a0: 0.9, type: 14, flat: 1 }); for (let i = 0; i < 8; i++) P3({ x: e.x0 + R0(-0.4, 0.4), y: R0(0.2, 1.6), z: e.z0 + R0(-0.4, 0.4), vy: R0(1, 3), max: 0.5, s0: 0.35, s1: 0.05, a0: 1, type: 10 }); }
+          P3({ x: e.x, y: 0.1, z: e.z, max: 0.55, s0: 0.6, s1: 2.8, a0: 0.9, type: 14, flat: 1 });
+          for (let i = 0; i < 10; i++) P3({ x: e.x + R0(-0.5, 0.5), y: R0(0.2, 1.8), z: e.z + R0(-0.5, 0.5), vy: R0(0.6, 2), max: 0.6, s0: 0.35, s1: 0.05, a0: 1, type: 10 });
+          zap('jump', e.id === myK ? 0.7 : volAt(e.x, e.z) * 0.5);
+          if (e.id === myK) { g.cam = null; if (e.recall) showBanner('Home', null, 'blue', 1.1); }
+          continue;
+        }
+        if (k === 'recall') { if (!e.stop) { P3({ x: e.x, y: 0.1, z: e.z, max: 4.5, s0: 1.4, s1: 1.4, a0: 0.5, type: 14, flat: 1 }); zap('cp', e.id === myK ? 0.5 : volAt(e.x, e.z) * 0.3); } continue; }
+        if (k === 'skill') {
+          const sk = e.sk;
+          if (sk === 'blink' && e.x1 != null) { const L = Math.hypot(e.x1 - e.x, e.z1 - e.z); for (let d = 0; d < L; d += 0.5) P3({ x: e.x + (e.x1 - e.x) * d / (L || 1), y: R0(0.4, 1.3), z: e.z + (e.z1 - e.z) * d / (L || 1), max: R0(0.3, 0.5), s0: 0.5, s1: 0.1, a0: 0.8, type: 9 }); P3({ x: e.x1, y: 0.1, z: e.z1, max: 0.4, s0: 0.5, s1: 2, a0: 0.8, type: 14, flat: 1 }); }
+          else if (sk === 'mend') { P3({ x: e.x, y: 0.12, z: e.z, max: 0.7, s0: 1, s1: 12, a0: 0.6, type: 3, flat: 1 }); for (let i = 0; i < 16; i++) { const an = R0(0, 6.283), d = R0(0, 2); P3({ x: e.x + Math.cos(an) * d, y: R0(0.2, 1.4), z: e.z + Math.sin(an) * d, vy: R0(1, 2.4), max: R0(0.6, 1), s0: 0.32, s1: 0.05, a0: 0.9, type: 3 }); } }
+          else if (sk === 'guard') P3({ x: e.x, y: 1, z: e.z, max: 0.6, s0: 1, s1: 3.2, a0: 0.5, type: 14 });
+          else if (sk === 'sprint') { for (let i = 0; i < 10; i++) P3({ x: e.x + R0(-0.5, 0.5), y: R0(0.1, 0.5), z: e.z + R0(-0.5, 0.5), vy: R0(0.3, 1), max: R0(0.4, 0.7), s0: 0.5, s1: 1.2, a0: 0.5, type: 2 }); }
+          else if (sk === 'shock') { P3({ x: e.x, y: 0.15, z: e.z, max: 0.45, s0: 1, s1: 9.6, a0: 0.9, type: 14, flat: 1 }); sparks(e.x, 1, e.z, 14, 6, 9); bolts(e.x, 1, e.z, 3, 6); const c = camFoc(); g.shake = Math.max(g.shake, 0.3 * clamp(1 - Math.hypot(e.x - c[0], e.z - c[2]) / 14, 0, 1)); }
+          zap(SKILL_ZAP[sk] || 'skill', e.id === myK ? 0.7 : volAt(e.x, e.z) * 0.6);
+          continue;
+        }
+        if (k === 'hunt') { const a = Math.atan2(e.tx - e.x, e.tz - e.z), len = Math.hypot(e.tx - e.x, e.tz - e.z); g.beams.push({ x: e.x, z: e.z, a, len, t: 0, max: 0.35 }); blast(e.tx, 0.8, e.tz, false, 0.6); continue; }
+        if (k === 'stunH') { for (let i = 0; i < 6; i++) P3({ x: e.x + R0(-0.4, 0.4), y: R0(1.5, 2.1), z: e.z + R0(-0.4, 0.4), vy: R0(-0.2, 0.2), max: 0.9, s0: 0.28, s1: 0.1, a0: 1, type: 7 }); continue; }
+        if (k === 'tbeam') {
+          const st0 = e.st | 0;
+          if (st0 >= 3) { g.tbeams.push({ x: e.x, z: e.z, tx: e.tx, tz: e.tz, y0: st0 === 5 ? 2.4 : st0 === 4 ? TLOOK.gua.glow : TLOOK.tow.glow, t: 0, max: st0 === 5 ? 0.3 : 0.22, tm: e.tm, w: st0 === 4 ? 1.3 : 1 }); sparks(e.tx, 1, e.tz, 4, e.tm === 1 ? 8 : 6, 5); if (volAt(e.x, e.z) > 0.2) zap('beam', volAt(e.x, e.z) * 0.32, 1.25); }
+          else if (st0 === 2) { blast(e.tx, 0.7, e.tz, false, 0.45); if (volAt(e.tx, e.tz) > 0.3) zap('tshot', volAt(e.tx, e.tz) * 0.3); }
+          else if (st0 === 1) { const L = Math.hypot(e.tx - e.x, e.tz - e.z) || 1; for (let d = 0.6; d < L; d += 1.1) P3({ x: e.x + (e.tx - e.x) * d / L, y: 0.8, z: e.z + (e.tz - e.z) * d / L, max: 0.12, s0: 0.3, s1: 0.1, a0: 0.9, type: e.tm === 1 ? 8 : 6 }); if (volAt(e.x, e.z) > 0.4) zap('eshot', volAt(e.x, e.z) * 0.2); }
+          else { sparks(e.tx, 0.8, e.tz, 2, e.tm === 1 ? 8 : 4, 3); if (volAt(e.tx, e.tz) > 0.45) zap('clank', volAt(e.tx, e.tz) * 0.18); }
+          continue;
+        }
+        if (k === 'fzap') { g.tbeams.push({ x: e.x, z: e.z, tx: e.tx, tz: e.tz, y0: 2.6, t: 0, max: 0.2, tm: 1 - myTm, w: 1.4 }); if (e.id === myK) zap('zapl', 0.6); continue; }
+        if (k === 'hitH') { sparks(e.x, 0.9, e.z, 3, 8, 4); if (e.by === myK) { popSum(`p${e.id}`, e.x, e.z, e.d, '#FFFFFF', (v) => v >= 1200); zap('hit', 0.3); } continue; }
+        if (k === 'kill' && (TLOOK[e.type] || e.type === 'shp')) {
+          if (e.type === 'shp') { blast(e.x, 2, e.z, true, 2.6); g.shake = Math.max(g.shake, 0.9 * volAt(e.x, e.z)); zap('bigboom', volAt(e.x, e.z)); }
+          else { blast(e.x, 0.6, e.z, e.type === 'sie', e.type === 'sie' ? 0.9 : 0.6); sparks(e.x, 0.6, e.z, 6, e.tm === 1 ? 8 : 6, 5); if (volAt(e.x, e.z) > 0.25) zap('boom', volAt(e.x, e.z) * 0.45); }
+          if (e.by === myK) popNum(e.x, e.z, '+XP', '#FFE15A', false, 1.6);
+          continue;
+        }
+      }
+      if (k === 'blink') {
+        const L = Math.hypot(e.x1 - e.x, e.z1 - e.z) || 1;
+        for (let d = 0; d < L; d += 0.35) P3({ x: e.x + (e.x1 - e.x) * d / L + R0(-0.15, 0.15), y: R0(0.5, 1.3), z: e.z + (e.z1 - e.z) * d / L + R0(-0.15, 0.15), max: R0(0.3, 0.55), s0: 0.55, s1: 0.1, a0: 0.9, type: 10 });
+        P3({ x: e.x1, y: 0.1, z: e.z1, max: 0.45, s0: 0.6, s1: 4.6, a0: 0.9, type: 14, flat: 1 });
+        for (let i = 0; i < 12; i++) { const an = R0(0, 6.283), sp = R0(2, 5); P3({ x: e.x1, y: R0(0.6, 1.2), z: e.z1, vx: Math.cos(an) * sp, vy: R0(0.5, 2), vz: Math.sin(an) * sp, max: R0(0.3, 0.5), s0: 0.4, s1: 0.05, a0: 1, type: 10 }); }
+        zap('dash', e.id === myK ? 0.7 : volAt(e.x1, e.z1) * 0.6, 0.9); zap('blast', e.id === myK ? 0.5 : volAt(e.x1, e.z1) * 0.4);
+        if (e.id === myK) g.shake = Math.max(g.shake, 0.3);
+        continue;
+      }
+      if (k === 'vanish' || k === 'unveil') {
+        for (let i = 0; i < (k === 'vanish' ? 14 : 6); i++) P3({ x: e.x + R0(-0.6, 0.6), y: R0(0.2, 1.6), z: e.z + R0(-0.6, 0.6), vy: R0(0.3, 1.2), max: R0(0.5, 0.9), s0: 0.5, s1: 1.2, a0: 0.5, type: i % 3 ? 11 : 10 });
+        if (k === 'vanish') zap('poof', e.id === myK ? 0.7 : volAt(e.x, e.z) * 0.5);
+        continue;
+      }
       if (k === 'fire') {
         const H = E.HEROES[e.hero];
         const hh = W.heroes[e.id], HL = HLOOK[e.hero];
@@ -1194,6 +1555,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
         else if (sk === 'shard') { zap('shard', v * 0.8); P3({ x: fx, y: 1, z: fz, max: 0.12, s0: 0.35, s1: 0.9, a0: 0.8, type: 6 }); }
         else if (sk === 'zap') zap('zapl', v * 0.5);
         else if (sk === 'turret') zap('build', v * 0.8);
+        else if (sk === 'blade') { zap('swing', v * 0.8, 1.3); P3({ x: fx, y: 0.95, z: fz, max: 0.1, s0: 0.45, s1: 1, a0: 0.9, type: 10 }); }
         if (mine) g.shake = Math.max(g.shake, e.kind === 'sup' ? 0.35 : 0.08);
       } else if (k === 'beam') {
         g.beams.push({ x: e.x, z: e.z, a: e.a, len: e.len, t: 0, max: 0.4 });
@@ -1246,7 +1608,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
         P3({ x: e.x, y: 0.95, z: e.z, max: 0.1, s0: 0.5, s1: 1.1, a0: 0.8, type: e.block ? 6 : 7 });
         if (mine) { popSum(`r${e.id}${e.block ? 'b' : ''}`, e.x, e.z, e.d, e.block ? '#B8C4D6' : (v) => (v >= 1000 ? '#FFE15A' : '#FFFFFF'), (v) => v >= 1000); if (e.block) zap('clank', 0.6); else zap('hit', 0.32); }
       } else if (k === 'kill') {
-        if (e.by === myK && W.heroes[myK]) {
+        if (e.by === myK && W.heroes[myK] && !team) {
           const hh = W.heroes[myK];
           if (hh.mods && hh.mods.rush) hh.rushT = 1.6 + hh.mods.rush;
           g.myKills = (g.myKills || 0) + 1;
@@ -1258,7 +1620,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
         if (e.type === 'boss') { for (let i = 1; i <= 3; i++) setTimeout(() => { if (G.current.W) goo(e.x + R0(-1.6, 1.6), e.z + R0(-1.6, 1.6), 1.6, 16); zap('splat', 0.9); zap('bigboom', 0.5); }, i * 260); g.shake = 1; }
         zap('splat', volAt(e.x, e.z) * (big ? 1 : 0.8));
         zap(big ? 'bigboom' : 'crunch', volAt(e.x, e.z) * (big ? 0.7 : 0.4));
-        if (e.by === myK) {
+        if (e.by === myK && !team) {
           const nowK = performance.now();
           g.kc = g.kc && nowK - g.kc.at < 1600 ? { n: g.kc.n + 1, at: nowK } : { n: 1, at: nowK };
           if (g.kc.n >= 2) { const lbl = g.kc.n === 2 ? 'Double' : g.kc.n === 3 ? 'Triple' : g.kc.n === 4 ? 'Quad' : 'Rampage'; popNum(e.x, e.z, lbl, g.kc.n >= 4 ? '#FF7AD9' : '#FFE15A', true); zap('combo', 0.55); g.shake = Math.max(g.shake, 0.12 + g.kc.n * 0.04); }
@@ -1360,6 +1722,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
           const kx = (kk.has('d') || kk.has('arrowright') ? 1 : 0) - (kk.has('a') || kk.has('arrowleft') ? 1 : 0);
           const kz = (kk.has('s') || kk.has('arrowdown') ? 1 : 0) - (kk.has('w') || kk.has('arrowup') ? 1 : 0);
           if (kx || kz) { mx = kx; mz = kz; }
+          if (g.flip) { mx = -mx; mz = -mz; }
           if (g.keyMove[0] || g.keyMove[1]) { mx = g.keyMove[0]; mz = g.keyMove[1]; }
           const aiming = g.aim.on && g.aim.eng;
           const inp = { mx, mz, aiming: aiming || !!g.mouse, aimA: aiming ? g.aim.a : g.mouse ? g.mouse.a : null };
@@ -1367,22 +1730,29 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
           while (g.fireQ.length) tryFire(mine, g.fireQ.shift());
           while (g.gadQ.length) tryGadget(mine, g.gadQ.shift());
           while (g.dashQ.length) { const d0 = g.dashQ.shift(); tryDash(mine, d0 != null ? d0 : (Math.hypot(mx, mz) > 0.2 ? Math.atan2(mx, mz) : null)); }
+          while (g.skQ.length) { const s0 = g.skQ.shift(); trySkill(mine, s0 != null ? s0 : (Math.hypot(mx, mz) > 0.2 ? Math.atan2(mx, mz) : null)); }
+          while (g.recQ.length) { g.recQ.shift(); if (tryRecall(mine)) zap('cp', 0.5); }
           E.stepHero(W, mine, inp, step);
+          if (W.mode === 'team') T.stepLocal(W, mine, step, inp);
           if (mine.st === 0) for (let i = W.drops.length - 1; i >= 0; i--) {
             const d = W.drops[i];
             if (Math.hypot(d.x - mine.x, d.z - mine.z) > 1.15 + ((mine.mods && mine.mods.magnet) || 0)) continue;
             if (isHost) { E.takeDrop(W, mine, d); W.drops.splice(i, 1); W.net.push(['pg', d.id, '', 0]); }
             else if (!g.claimed.has(d.id)) { g.claimed.add(d.id); W.drops.splice(i, 1); relay.send('ev', { r: g.rid, k: 'pk', i: d.id }); }
           }
-        } else { g.fireQ.length = 0; g.gadQ.length = 0; g.dashQ.length = 0; }
+        } else { g.fireQ.length = 0; g.gadQ.length = 0; g.dashQ.length = 0; g.skQ.length = 0; g.recQ.length = 0; }
         if (isHost && step > 0) for (const id of g.bots) {
           const h = W.heroes[id];
           if (!h) continue;
-          const inp = E.botBrain(W, h, step);
+          const tmB = W.mode === 'team';
+          const inp = tmB ? T.teamBot(W, h, step) : E.botBrain(W, h, step);
           if (inp.fire) tryFire(h, inp.fire);
           if (inp.gad) tryGadget(h, inp.gad);
           if (inp.dash != null) tryDash(h, inp.dash);
+          if (tmB && inp.skill != null) trySkill(h, inp.skill);
+          if (tmB && inp.recall) tryRecall(h);
           E.stepHero(W, h, inp, step);
+          if (tmB) { T.stepLocal(W, h, step, inp); continue; }
           if (h.st === 0) for (let i = W.drops.length - 1; i >= 0; i--) { const d = W.drops[i]; if (Math.hypot(d.x - h.x, d.z - h.z) < 1.15 + ((h.mods && h.mods.magnet) || 0)) { E.takeDrop(W, h, d); W.drops.splice(i, 1); } }
         }
         const kS = 1 - Math.exp(-step * 26);
@@ -1395,6 +1765,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
           if (v) { h.x = v[0]; h.z = v[1]; }
           h.aimT = Math.max(0, (h.aimT || 0) - step);
           h.ocT = Math.max(0, h.ocT - step); h.rfT = Math.max(0, h.rfT - step); h.spT = Math.max(0, h.spT - step);
+          if (h.clkT > 0) h.clkT = Math.max(0, h.clkT - step);
           if (h.jump) { h.jump.t += step; if (h.jump.t >= h.jump.T) h.jump = null; }
           const wantYaw = h.aimT > 0 ? h.aimA : v ? v[2] : h.yaw;
           h.yaw += wrapA(wantYaw - h.yaw) * kS;
@@ -1407,21 +1778,24 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
         if (!isHost) E.smoothRobots(W, step);
         if (solo && cardsRef.current && W.wave.st === 'break' && !W.over) W.wave.t += step;
         if (step > 0) { const subs = Math.max(1, Math.ceil(step / 0.034)); for (let i = 0; i < subs; i++) E.stepWorld(W, step / subs); }
-        if (W.wave.n > g.waveSeen) {
+        if (W.mode === 'team') {
+          if (RIFT.d && st.arena.key === 'rift' && !st.arena.kit && !g.riftRebuild) { g.riftRebuild = true; setTimeout(() => { try { ensureArena('rift'); } catch {} }, 0); }
+          if (!st.rk && RIFT.d && st.sk) { try { st.rk = riftUpload(st.R, RIFT.d); } catch { st.rk = { mesh: {}, still: {} }; } }
+        } else if (W.wave.n > g.waveSeen) {
           g.waveSeen = W.wave.n;
           const spec = E.waveSpec(W.wave.n, 1, W.lv, 1);
           if (spec.boss) { showBanner('Boss wave', `${E.ROBOTS.boss.name} is coming`, 'red', 2.8); zap('alert', 0.6); }
           else { showBanner(`Wave ${W.wave.n}`, W.wave.n === 1 ? 'Aliens incoming' : W.endless || W.wave.n < E.WIN_WAVE ? null : 'Last wave', 'gold', 2); zap('cp', 0.6); }
           for (const id of W.local) { const h = W.heroes[id]; if (h && h.st === 2) { const p = E.heroSpawn(W.A, W.order.indexOf(id)); h.x = p.x; h.z = p.z; h.st = 0; h.hp = h.max; h.ammo = 3; h.downT = 0; W.ev.push({ k: 'revive', id, x: h.x, z: h.z }); } }
         }
-        if (W.wave.st === 'break' && E.cardWave(W.wave.n) && g.cardDone !== W.wave.n && !g.over) {
+        if (W.mode !== 'team' && W.wave.st === 'break' && E.cardWave(W.wave.n) && g.cardDone !== W.wave.n && !g.over) {
           g.cardDone = W.wave.n;
           if (isHost) for (const id of g.bots) { const h = W.heroes[id]; if (h) { const ch = E.cardChoices(h, Math.random); if (ch.length) E.applyCard(h, ch[Math.floor(Math.random() * ch.length)]); } }
           const meH0 = W.heroes[myK];
           if (meH0 && W.local.has(myK)) addPick();
         }
-        if (W.wave.st === 'break' && !cardsRef.current && !g.over && (g.pend || []).some((p) => !p.seen)) showPick(true);
-        if (W.wave.st !== g.stSeen) {
+        if (W.mode !== 'team' && W.wave.st === 'break' && !cardsRef.current && !g.over && (g.pend || []).some((p) => !p.seen)) showPick(true);
+        if (W.mode !== 'team' && W.wave.st !== g.stSeen) {
           if (W.wave.st === 'break' && g.stSeen === 'fight') { showBanner(`Wave ${W.wave.n} cleared`, E.cardWave(W.wave.n) ? 'Pick an upgrade' : 'Catch your breath', 'green', 2.2); zap('combo', 0.6); }
           g.stSeen = W.wave.st;
         }
@@ -1431,11 +1805,12 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
         if (!solo && isHost) {
           if (now - g.snapAt > SNAP_MS) {
             g.snapAt = now; g.seq += 1;
-            relay.send('es', { r: g.rid, q: g.seq, a: W.robots.filter((b) => b.hp > 0).map(E.robotSnap), w: [W.wave.n, ST_CODE[W.wave.st] || 0, Math.round(Math.max(0, W.wave.t) * 10), W.wave.left], sc: W.score, d: W.drops.map((d) => [d.id, E.DROP_KEYS.indexOf(d.k), Math.round(d.x * 10), Math.round(d.z * 10), Math.round(d.life * 10)]), b: g.bots.map((id) => [id, ...heroPack(W, W.heroes[id])]) });
+            if (W.mode === 'team') relay.send('es', { r: g.rid, q: g.seq, a: W.robots.filter((b) => b.hp > 0 && !E.STILL_TYPES.has(b.type)).slice(0, 140).map(E.robotSnap), tq: T.snapTeam(W), b: g.bots.map((id) => [id, ...heroPack(W, W.heroes[id])]) });
+            else relay.send('es', { r: g.rid, q: g.seq, a: W.robots.filter((b) => b.hp > 0).map(E.robotSnap), w: [W.wave.n, ST_CODE[W.wave.st] || 0, Math.round(Math.max(0, W.wave.t) * 10), W.wave.left], sc: W.score, d: W.drops.map((d) => [d.id, E.DROP_KEYS.indexOf(d.k), Math.round(d.x * 10), Math.round(d.z * 10), Math.round(d.life * 10)]), b: g.bots.map((id) => [id, ...heroPack(W, W.heroes[id])]) });
           }
           if (W.net.length && now - g.reAt > RE_MS) { g.reAt = now; relay.send('re', { r: g.rid, e: W.net.splice(0, W.net.length) }); }
         } else W.net.length = 0;
-        if (!solo && !isHost && ph === 'play' && !g.over && now - g.lastSnapAt > 7000) finishUp({ won: false, wave: W.wave.n, score: W.score, list: statList(W), lost: true });
+        if (!solo && !isHost && ph === 'play' && !g.over && now - g.lastSnapAt > 7000) finishUp(W.mode === 'team' ? { team: -1, lost: true } : { won: false, wave: W.wave.n, score: W.score, list: statList(W), lost: true });
       }
 
       const P = g.parts;
@@ -1478,7 +1853,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
           const Pz = skPoseHero(st.sk, h, key, o, step);
           const hs = heroScale(key);
           const Ms = scl(m4.pose(x, jy, z, yaw), hs, hs, hs);
-          skHeroItems(st.sk, h, key, Ms, Pz, h.flash > 0 ? COLF : o.tint ? COLD : COLN, items);
+          skHeroItems(st.sk, h, key, Ms, Pz, h.flash > 0 ? COLF : o.cloak ? COLK : o.tint ? COLD : COLN, items);
           if (o.down) return;
           if (J && fx) { discAt(J.x1, J.z1, 1.1, TINT.cyan, 0.25); if (Math.random() < 0.8) P3({ x: x, y: jy + 0.5, z: z, vy: -1.5, max: 0.35, s0: 0.35, s1: 0.1, a0: 0.9, type: 1 }); }
           if ((h.shield || 0) > 0 && fx) items.push({ mesh: fx.bubble, model: scl(m4.pose(x, 0.95 + jy, z, tsec * 0.6), 0.95, 1.12, 0.95), blend: 1, alpha: 0.55 });
@@ -1514,7 +1889,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
 
       if (ph === 'menu' || !W) {
         g.menuT += step;
-        const hc = A.homes.length ? A.homes : [{ x: A.wx / 2, z: A.wz - 3 }];
+        const hc = A.homes.length ? A.homes : A.team ? [{ x: 15.5, z: 97 }] : [{ x: A.wx / 2, z: A.wz - 3 }];
         const cx = hc.reduce((s, p) => s + p.x, 0) / hc.length, cz = hc.reduce((s, p) => s + p.z, 0) / hc.length - 1;
         const list = solo ? ['me'] : rosterRef.current.slice(0, 4);
         list.forEach((k, i) => {
@@ -1537,11 +1912,36 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
         return;
       }
 
+      const team = W.mode === 'team';
+      const myTm = team && myH ? myH.tm : 0;
+      if (team) {
+        const TT = W.A.team, rk = st.rk, sk0 = st.sk;
+        for (const f of TT.founts) { const c0 = f.tm === myTm ? TINT.blueT : TINT.redT; discAt(f.x, f.z, T.FOUNT_R, c0, 0.08 + 0.03 * Math.sin(tsec * 2 + f.tm)); ringAt(f.x, f.z, T.FOUNT_R, c0, 0.45); parts.push({ x: f.x, y: 0.5, z: f.z, size: 2 + Math.sin(tsec * 3) * 0.2, alpha: 0.16, type: f.tm === myTm ? 6 : 8 }); }
+        for (const p of TT.pads) { const mine = p.tm === myTm, c0 = mine ? TINT.blueT : TINT.redT; discAt(p.x, p.z, 1.05, c0, mine ? 0.32 : 0.14); ringAt(p.x, p.z, 1.12, c0, (mine ? 0.65 : 0.3) + 0.2 * Math.sin(tsec * 4 + p.i)); if (mine && Math.random() < 0.25) P3({ x: p.x + R0(-0.6, 0.6), y: 0.1, z: p.z + R0(-0.6, 0.6), vy: R0(1, 2.2), max: 0.6, s0: 0.25, s1: 0.05, a0: 0.9, type: 6 }); }
+        for (const p of TT.portals) {
+          if (rk && rk.mesh.us_ring && sk0) items.push({ mesh: rk.mesh.us_ring, model: scl(m4.pose(p.x, 0, p.z, tsec * 0.25), 0.62, 0.4, 0.62), skin: rk.still.us_ring, tex: sk0.tex.p_base, col: COLP, cast: true });
+          discAt(p.x, p.z, 1.25, TINT.violet, 0.3 + 0.1 * Math.sin(tsec * 3 + p.i)); ringAt(p.x, p.z, 1.3, TINT.violet, 0.8);
+          parts.push({ x: p.x, y: 0.7, z: p.z, size: 1.5 + Math.sin(tsec * 4 + p.i) * 0.15, alpha: 0.3, type: 10 });
+          if (Math.random() < 0.3) P3({ x: p.x + R0(-0.8, 0.8), y: 0.1, z: p.z + R0(-0.8, 0.8), vy: R0(1.2, 2.6), max: 0.7, s0: 0.25, s1: 0.04, a0: 1, type: 10 });
+        }
+      }
       for (const id of W.order) {
         const h = W.heroes[id];
         if (!h || h.st === 2) continue;
         const isMe = id === myK;
-        drawHero(h, h.key, h.x, h.z, h.yaw, { down: h.st === 1 });
+        if (team) {
+          const ally = h.tm === myTm;
+          if (!ally && !E.seenBy(W, h, myTm)) continue;
+          drawHero(h, h.key, h.x, h.z, h.yaw, { cloak: (h.clkT || 0) > 0 });
+          ringAt(h.x, h.z, 0.72, isMe ? TINT.me : ally ? TINT.ally : TINT.foe, isMe ? 0.85 : 0.7);
+          if ((h.recT || 0) > 0 || h.recV) { discAt(h.x, h.z, 1.3, TINT.ice, 0.18 + 0.08 * Math.sin(tsec * 8)); if (Math.random() < 0.6) P3({ x: h.x + R0(-0.6, 0.6), y: 0.1, z: h.z + R0(-0.6, 0.6), vy: R0(1.5, 3), max: 0.6, s0: 0.25, s1: 0.04, a0: 1, type: 6 }); }
+          if (((h.stunT || 0) > 0 || h.stunV) && Math.random() < 0.3) P3({ x: h.x + R0(-0.4, 0.4), y: R0(1.6, 2.1), z: h.z + R0(-0.4, 0.4), max: 0.5, s0: 0.25, s1: 0.08, a0: 1, type: 7 });
+          if ((h.spawnT || 0) > 0 || h.spawnV) parts.push({ x: h.x, y: 0.95, z: h.z, size: 1.5, alpha: 0.1 + 0.04 * Math.sin(tsec * 6), type: 6 });
+          if (h.buffs && h.buffs.fury && Math.random() < 0.18) P3({ x: h.x + R0(-0.3, 0.3), y: R0(0.4, 1.4), z: h.z + R0(-0.3, 0.3), vy: R0(0.6, 1.2), max: 0.5, s0: 0.2, s1: 0.04, a0: 0.9, type: 1 });
+          if (h.buffs && h.buffs.flow && Math.random() < 0.18) P3({ x: h.x + R0(-0.3, 0.3), y: R0(0.4, 1.4), z: h.z + R0(-0.3, 0.3), vy: R0(0.6, 1.2), max: 0.5, s0: 0.2, s1: 0.04, a0: 0.9, type: 6 });
+          continue;
+        }
+        drawHero(h, h.key, h.x, h.z, h.yaw, { down: h.st === 1, cloak: (h.clkT || 0) > 0 });
         if (h.st === 0) ringAt(h.x, h.z, 0.72, isMe ? TINT.me : TINT.ally, isMe ? 0.85 : 0.6);
         else { discAt(h.x, h.z, E.REVIVE_R, TINT.mint, 0.12 + 0.05 * Math.sin(tsec * 5)); ringAt(h.x, h.z, E.REVIVE_R, TINT.mint, 0.5); }
         if (h.pw > 0 && h.st === 0 && Math.random() < 0.35) P3({ x: h.x + R0(-0.4, 0.4), y: R0(0.3, 1.5), z: h.z + R0(-0.4, 0.4), vy: R0(0.6, 1.4), max: 0.5, s0: 0.22, s1: 0.04, a0: 0.9, type: 10 });
@@ -1549,6 +1949,34 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
       }
       for (const b of W.robots) {
         if (b.hp <= 0) continue;
+        const TL = team && TLOOK[b.type];
+        if (TL) {
+          const rk = st.rk, still = E.STILL_TYPES.has(b.type);
+          const rise = b.sp > 0 && !still && b.type !== 'shp' ? -clamp(b.sp / 0.35, 0, 1) * 0.9 : 0;
+          const hov = b.type === 'shp' ? TL.y + Math.sin(tsec * 1.6 + b.id) * 0.18 + (b.sp > 0 ? -clamp(b.sp / 1.4, 0, 1) * 3 : 0) : 0;
+          const yaw = b.type === 'cor' ? 0 : b.yaw;
+          const atk = (b.atkT2 || 0) > 0 || b.atkV;
+          const bump = !still && b.type !== 'shp' ? Math.abs(Math.sin((b.walk || 0) * 3.2)) * 0.03 * clamp((b.mv || 0) / 2, 0, 1) : 0;
+          if (rk && rk.mesh[TL.m] && st.sk) {
+            const col = unitCol(b, myTm);
+            items.push({ mesh: rk.mesh[TL.m], model: scl(m4.pose(b.x, rise + hov + bump, b.z, yaw + TL.rot), TL.s, TL.s * (atk && !still ? 0.96 : 1), TL.s), skin: rk.still[TL.m], tex: st.sk.tex.p_base, col, cast: true });
+            if (TL.base && rk.mesh[TL.base]) items.push({ mesh: rk.mesh[TL.base], model: scl(m4.pose(b.x, 0, b.z, 0), TL.bs, 0.3, TL.bs), skin: rk.still[TL.base], tex: st.sk.tex.p_base, col, cast: true });
+          } else if (fx) items.push({ mesh: still ? fx.tower : fx.mine, model: scl(m4.pose(b.x, rise, b.z, yaw), still ? 1.8 : 1, still ? 1.8 : 1, still ? 1.8 : 1), cast: true });
+          const tc = b.tm == null || b.tm < 0 ? TINT.gold : b.tm === myTm ? TINT.blueT : TINT.redT;
+          if (still) {
+            parts.push({ x: b.x, y: TL.glow || TL.bar - 0.6, z: b.z, size: (b.type === 'cor' ? 2 : 1.3) + (atk ? 0.5 : 0) + Math.sin(tsec * 4 + b.id) * 0.1, alpha: atk ? 0.6 : 0.38, type: b.tm === myTm ? 6 : 8 });
+            if (Math.random() < 0.12) P3({ x: b.x + R0(-0.4, 0.4), y: (TL.glow || 3) - 0.4, z: b.z + R0(-0.4, 0.4), vy: R0(0.6, 1.4), max: 0.7, s0: 0.3, s1: 0.05, a0: 0.9, type: b.tm === myTm ? 6 : 8 });
+            if (b.inv && fx) items.push({ mesh: fx.bubble, model: scl(m4.pose(b.x, 0.2, b.z, tsec * 0.3), b.r * 1.6, b.r * 2.2, b.r * 1.6), blend: 1, alpha: 0.22 });
+            ringAt(b.x, b.z, b.r + 0.35, tc, 0.55);
+            if (myH && myH.st === 0 && b.tm !== myTm && b.type !== 'cor') { const R0b = E.ROBOTS[b.type].rng; const d = Math.hypot(myH.x - b.x, myH.z - b.z); if (d < R0b + 4) { ringAt(b.x, b.z, R0b, TINT.red, clamp(1 - (d - R0b) / 4, 0.15, 0.9) * (b.tg === myK ? 1 : 0.6)); if (b.tg === myK) discAt(b.x, b.z, R0b, TINT.red, 0.06 + 0.04 * Math.sin(tsec * 10)); } }
+          } else if (b.type === 'shp') {
+            parts.push({ x: b.x, y: 0.08, z: b.z, size: 4, alpha: 0.35, type: 21, dw: -1 });
+            if (Math.random() < 0.4) P3({ x: b.x + R0(-1.2, 1.2), y: hov - 0.2, z: b.z + R0(-1.2, 1.2), vy: R0(-1.5, -0.5), max: 0.5, s0: 0.4, s1: 0.1, a0: 0.8, type: b.ally ? (b.tm === myTm ? 6 : 8) : 10 });
+            ringAt(b.x, b.z, b.r + 0.3, b.ally ? tc : TINT.violet, 0.6);
+          } else ringAt(b.x, b.z, b.r + 0.1, tc, 0.45);
+          if (b.flash > 0 && !still) sparks(b.x, 0.6, b.z, 1, b.tm === myTm ? 6 : 8, 3);
+          continue;
+        }
         const RS = st.sk && RLOOK[b.type];
         if (RS) {
           const S = st.sk, M = S.d.m[RS.m], C = M.clips, dt = step;
@@ -1578,7 +2006,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
           else if (slowed && Math.random() < 0.18) P3({ x: b.x + R0(-0.5, 0.5), y: R0(0.2, 1.4), z: b.z + R0(-0.5, 0.5), vy: -0.4, max: 0.6, s0: 0.2, s1: 0.05, a0: 0.9, type: 6 });
           if (RS.fly && b.sp <= 0) parts.push({ x: b.x, y: 0.08, z: b.z, size: RS.h * 0.6, alpha: 0.38, type: 21, dw: -1 });
           if (b.type === 'bomber') { const blink = b.fuse > 0 ? (Math.sin(tsec * 30) > 0 ? 1 : 0.2) : 0.5 + 0.5 * Math.sin(tsec * 6 + b.id); parts.push({ x: b.x, y: RS.h * 0.62 + rise + hov, z: b.z, size: b.fuse > 0 ? 1.3 : 0.6, alpha: 0.35 + blink * 0.5, type: 8 }); }
-          if (b.sp <= 0) ringAt(b.x, b.z, b.r + 0.12, TINT.foe, 0.4);
+          if (b.sp <= 0) ringAt(b.x, b.z, b.r + 0.12, team ? TINT.gold : TINT.foe, 0.4);
           continue;
         }
         const RM = robotMesh(b.type);
@@ -1701,6 +2129,18 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
         const f = 1 - bm.t / bm.max;
         if (fx) { items.push({ mesh: fx.beamB, model: scl(m4.pose(bm.x, 0.95, bm.z, bm.a), 1.1 * f + 0.2, 1.1 * f + 0.2, bm.len), blend: 2, alpha: f }); items.push({ mesh: fx.beamW, model: scl(m4.pose(bm.x, 0.95, bm.z, bm.a), 0.35 * f, 0.35 * f, bm.len), blend: 2, alpha: f }); }
       }
+      for (let i = g.tbeams.length - 1; i >= 0; i--) {
+        const bm = g.tbeams[i];
+        bm.t += step || 0.016;
+        if (bm.t >= bm.max) { g.tbeams.splice(i, 1); continue; }
+        if (!fx) continue;
+        const f = 1 - bm.t / bm.max;
+        const dx = bm.tx - bm.x, dz = bm.tz - bm.z, L = Math.hypot(dx, dz) || 1, dy = bm.y0 - 1;
+        const yaw = Math.atan2(dx, dz), pitch = Math.atan2(dy, L), len = Math.hypot(L, dy);
+        const w = (0.55 * f + 0.15) * (bm.w || 1);
+        items.push({ mesh: bm.tm !== myTm ? fx.beamR : fx.beamB, model: scl(m4.pose(bm.x, bm.y0, bm.z, yaw, pitch), w, w, len), blend: 2, alpha: f });
+        items.push({ mesh: fx.beamW, model: scl(m4.pose(bm.x, bm.y0, bm.z, yaw, pitch), w * 0.35, w * 0.35, len), blend: 2, alpha: f });
+      }
       if (myH && myH.st === 0 && fx) {
         const A0 = g.aim;
         const H = E.HEROES[myH.key];
@@ -1713,7 +2153,8 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
           const al = show.kind === 'sup' ? 0.42 : 0.3;
           const ux = Math.sin(show.a), uz = Math.cos(show.a);
           if (S.k === 'spread' || S.k === 'wave') items.push({ mesh: S.k === 'wave' ? fx.fanWave : fx.fanBlaze, model: scl(m4.pose(myH.x, 0.04, myH.z, show.a), S.rng, 1, S.rng), blend: 3, alpha: al, tint });
-          else if (S.k === 'bolt' || S.k === 'orb' || S.k === 'beam') { const reach = E.rayWall(A, myH.x, myH.z, ux, uz, S.rng); items.push({ mesh: fx.strip, model: scl(m4.pose(myH.x, 0.04, myH.z, show.a), S.k === 'beam' ? 1.9 : S.k === 'orb' ? 1.5 : 0.7, 1, reach), blend: 3, alpha: al, tint }); }
+          else if (S.k === 'bolt' || S.k === 'orb' || S.k === 'beam' || S.k === 'blade') { const reach = E.rayWall(A, myH.x, myH.z, ux, uz, S.rng); items.push({ mesh: fx.strip, model: scl(m4.pose(myH.x, 0.04, myH.z, show.a), S.k === 'beam' ? 1.9 : S.k === 'orb' ? 1.5 : S.k === 'blade' ? 1.1 : 0.7, 1, reach), blend: 3, alpha: al, tint }); }
+          else if (S.k === 'blink') { const d = A0.on && A0.eng ? Math.max(2, show.mag * S.rng) : S.rng; const reach = Math.max(0.6, E.rayWall(A, myH.x, myH.z, ux, uz, d) - 0.35); items.push({ mesh: fx.strip, model: scl(m4.pose(myH.x, 0.04, myH.z, show.a), S.w * 2, 1, reach), blend: 3, alpha: al, tint }); discAt(myH.x + ux * reach, myH.z + uz * reach, S.rad, tint, al * 0.6); ringAt(myH.x + ux * reach, myH.z + uz * reach, S.rad, tint, 0.9); }
           else if (S.k === 'lob' || S.k === 'mega') {
             const d = Math.max(1.5, show.mag * S.rng);
             const tx = myH.x + ux * d, tz = myH.z + uz * d;
@@ -1729,21 +2170,23 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
       const fl = followRef.current;
       let kcam = null;
       if (g.kill) {
-        if (now - g.kill.at < 2300) { const kb = g.kill.by != null ? W.robots.find((r) => r.id === g.kill.by) : null; if (kb) { g.kill.x = kb.x; g.kill.z = kb.z; } kcam = g.kill; }
+        if (now - g.kill.at < 2300) { const kb = g.kill.by != null ? W.robots.find((r) => r.id === g.kill.by) : null; if (kb) { g.kill.x = kb.x; g.kill.z = kb.z; } const kh = g.kill.hero ? W.heroes[g.kill.hero] : null; if (kh && kh.st === 0) { g.kill.x = kh.x; g.kill.z = kh.z; } kcam = g.kill; }
         else { g.kill = null; setKill(null); }
       }
       g.zoom = (g.zoom || 1) + ((kcam ? 0.58 : window.__zfake && window.__zsiegeZoom ? window.__zsiegeZoom : 1) - (g.zoom || 1)) * (1 - Math.exp(-dt * (kcam ? 5 : 3)));
       if (kcam) fx0 = { x: kcam.x, z: kcam.z, id: null };
+      else if (team && myH) fx0 = myH;
       else if (myH && (myH.st !== 2 || !W.order.some((k) => W.heroes[k].st !== 2))) fx0 = myH;
       else fx0 = (fl && W.heroes[fl] && W.heroes[fl].st !== 2 ? W.heroes[fl] : null) || W.order.map((k) => W.heroes[k]).find((h) => h.st !== 2) || myH || W.heroes[W.order[0]];
       if (fx0 && fx0.id && fx0 !== myH && fx0.id !== camKRef.current) { camKRef.current = fx0.id; setCamK(fx0.id); }
       const tx0 = fx0 ? fx0.x : A.wx / 2, tz0 = fx0 ? fx0.z : A.wz / 2;
       const asp = cw / Math.max(1, ch);
-      const Dz = (asp >= 1.5 ? 15.5 : asp >= 1.1 ? 18.5 : 24) * (g.zoom || 1);
+      const Dz = (team ? (asp >= 1.5 ? 17.5 : asp >= 1.1 ? 20.5 : 26) : asp >= 1.5 ? 15.5 : asp >= 1.1 ? 18.5 : 24) * (g.zoom || 1);
       Dz0 = Dz;
       const halfW = Math.tan(0.36) * Dz * asp * 0.92;
-      const cxT = clamp(tx0, Math.min(A.wx / 2, halfW - 3), Math.max(A.wx / 2, A.wx - halfW + 3));
-      const czT = clamp(tz0 + 0.6, 8.5, A.wz - Dz * 0.36);
+      const sgn = g.flip ? -1 : 1;
+      const cxT = team ? clamp(tx0, 5, A.wx - 5) : clamp(tx0, Math.min(A.wx / 2, halfW - 3), Math.max(A.wx / 2, A.wx - halfW + 3));
+      const czT = team ? clamp(tz0 + 0.6 * sgn, 5, A.wz - 5) : clamp(tz0 + 0.6, 8.5, A.wz - Dz * 0.36);
       if (!g.cam || !g.cam.tx) g.cam = { tx: cxT, tz: czT };
       const kc = 1 - Math.exp(-dt * 6);
       g.cam.tx += (cxT - g.cam.tx) * kc; g.cam.tz += (czT - g.cam.tz) * kc;
@@ -1751,7 +2194,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
       const sh = hudOptRef.current.shake ? g.shake * g.shake * 0.5 : 0;
       const sx = (Math.random() - 0.5) * sh, sz = (Math.random() - 0.5) * sh;
       const Pp = 0.98;
-      const cam = { pos: [g.cam.tx + sx, Math.sin(Pp) * Dz, g.cam.tz + Math.cos(Pp) * Dz + sz], at: [g.cam.tx + sx, 0, g.cam.tz + sz], fov: 0.72, shadowAt: [g.cam.tx, 0, g.cam.tz - 2] };
+      const cam = { pos: [g.cam.tx + sx, Math.sin(Pp) * Dz, g.cam.tz + sgn * Math.cos(Pp) * Dz + sz], at: [g.cam.tx + sx, 0, g.cam.tz + sz], fov: 0.72, shadowAt: [g.cam.tx, 0, g.cam.tz - 2 * sgn] };
       if (window.__zfake && window.__zsiegeCam) Object.assign(cam, window.__zsiegeCam);
       g.cam.pos = cam.pos; g.cam.at = cam.at;
       const VP = st.R.render({ env: st.arena.env, cam, items, parts });
@@ -1765,8 +2208,26 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
         const rr = (x, y, w, h, r) => { c2.beginPath(); c2.moveTo(x + r, y); c2.arcTo(x + w, y, x + w, y + h, r); c2.arcTo(x + w, y + h, x, y + h, r); c2.arcTo(x, y + h, x, y, r); c2.arcTo(x, y, x + w, y, r); c2.closePath(); };
         const bar = (x, y, w, h, f, col, back = 'rgba(12,10,26,0.82)') => { rr(x - 1.5, y - 1.5, w + 3, h + 3, (h + 3) / 2); c2.fillStyle = back; c2.fill(); if (f > 0) { rr(x, y, Math.max(h, w * f), h, h / 2); c2.fillStyle = col; c2.fill(); c2.fillStyle = 'rgba(255,255,255,0.28)'; rr(x + 1, y + 1, Math.max(h - 2, w * f - 2), h * 0.38, h * 0.2); c2.fill(); } };
         const txt = (s, x, y, size, col, al = 'center') => { c2.font = `900 ${size}px ${FONT}`; c2.textAlign = al; c2.textBaseline = 'middle'; c2.lineJoin = 'round'; c2.lineWidth = Math.max(2.5, size * 0.24); c2.strokeStyle = 'rgba(16,10,30,0.92)'; c2.strokeText(s, x, y); c2.fillStyle = col; c2.fillText(s, x, y); };
+        if (team) for (const b of W.robots) {
+          const TL = TLOOK[b.type];
+          if (!TL || b.hp <= 0) continue;
+          const still = E.STILL_TYPES.has(b.type);
+          if (!still && (!hudOptRef.current.bars || b.sp > 0)) continue;
+          const p = proj(b.x, TL.bar + (b.type === 'shp' ? TL.y : 0), b.z);
+          if (!p || p[0] < -60 || p[0] > cw + 60 || p[1] < -30 || p[1] > ch + 30) continue;
+          if (b.type === 'shp') {
+            const wild = !b.ally;
+            bar(p[0] - 60, p[1], 120, 9, clamp(b.hp / b.max, 0, 1), wild ? '#B88CFF' : b.tm === myTm ? '#4DA3FF' : '#FF4A3D');
+            txt(wild ? 'Hive Ship' : b.tm === myTm ? 'Our Hive Ship' : 'Their Hive Ship', p[0], p[1] - 10, 11.5, wild ? '#E4D8FF' : '#FFFFFF');
+            continue;
+          }
+          const w = TL.w || 60, hh = still ? 8 : 4.5;
+          const col = b.inv ? '#9AA4B2' : b.tm === myTm ? '#4DA3FF' : '#FF4A3D';
+          bar(p[0] - w / 2, p[1], w, hh, clamp(b.hp / b.max, 0, 1), col);
+          if (still) txt(b.inv ? 'Protected' : fmtK(b.hp), p[0], p[1] - 9, 10, b.inv ? '#D8DEE6' : '#FFFFFF');
+        }
         if (hudOptRef.current.bars) for (const b of W.robots) {
-          if (b.hp <= 0 || b.sp > 0 || b.type === 'boss') continue;
+          if (b.hp <= 0 || b.sp > 0 || b.type === 'boss' || (team && TLOOK[b.type])) continue;
           const RB = st.sk && RLOOK[b.type];
           const p = proj(b.x, RB ? RB.h + (RB.fly || 0) + 0.12 : b.type === 'tank' ? 1.75 : b.type === 'shooter' ? 2.0 : 1.7, b.z);
           if (!p) continue;
@@ -1777,8 +2238,22 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
           const h = W.heroes[id];
           if (!h || h.st === 2) continue;
           const isMe = id === myK;
+          if (team && h.tm !== myTm && !E.seenBy(W, h, myTm)) continue;
           const p = proj(h.x, 2.05, h.z);
           if (!p) continue;
+          if (team && h.st === 0) {
+            const w = 58;
+            bar(p[0] - w / 2 + 8, p[1], w, 10, clamp(h.hp / h.max, 0, 1), isMe ? '#5BE35B' : h.tm === myTm ? '#3D9BFF' : '#FF4A3D');
+            if ((h.shield || 0) > 0) { rr(p[0] - w / 2 + 8, p[1] - 3, w * clamp(h.shield / h.max, 0, 1), 2.5, 1); c2.fillStyle = '#E8F4FF'; c2.fill(); }
+            c2.fillStyle = 'rgba(12,10,26,0.9)'; c2.beginPath(); c2.arc(p[0] - w / 2 - 2, p[1] + 5, 9, 0, Math.PI * 2); c2.fill();
+            c2.strokeStyle = h.tm === myTm ? '#3D8BFF' : '#FF4D5E'; c2.lineWidth = 2; c2.stroke();
+            txt(String(h.tl || 1), p[0] - w / 2 - 2, p[1] + 5.5, 10, '#FFE15A');
+            txt(h.hp >= 100000 ? fmtK(h.hp) : String(Math.ceil(h.hp)), p[0] + 8, p[1] + 5, 9.5, '#FFFFFF');
+            txt(isMe ? 'You' : nameOf(id), p[0] + 8, p[1] - 9, 11, isMe ? '#C9FFC0' : h.tm === myTm ? '#D8EAFF' : '#FFC9CF');
+            if (isMe) for (let i = 0; i < 3; i++) { const f = clamp(h.ammo - i, 0, 1); bar(p[0] - w / 2 + 8 + i * (w / 3 + 0.5), p[1] + 14, w / 3 - 3, 4.5, f, f >= 1 ? '#FF9F1A' : '#B06A14'); }
+            if (isMe && (h.recT || 0) > 0) { const f = clamp(1 - h.recT / 4.5, 0, 1); bar(p[0] - 40, p[1] + 24, 80, 6, f, '#9F8CFF'); txt('Going home', p[0], p[1] + 38, 11, '#E4DCFF'); }
+            continue;
+          }
           if (h.st === 0) {
             const w = 58;
             bar(p[0] - w / 2, p[1], w, 10, clamp(h.hp / h.max, 0, 1), isMe ? '#5BE35B' : '#3D9BFF');
@@ -1813,7 +2288,17 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
         }
       }
       const mc = mapRef.current;
-      if (mc && W && (g.mapN = (g.mapN || 0) + 1) % 2 === 0) {
+      if (mc && W && team && (g.mapN = (g.mapN || 0) + 1) % 2 === 0) {
+        const MW = cw > ch ? 124 : 108, md = Math.min(2, window.devicePixelRatio || 1);
+        if (mc.width !== Math.round(MW * md) || mc.height !== Math.round(MW * md)) { mc.width = Math.round(MW * md); mc.height = Math.round(MW * md); mc.style.width = `${MW}px`; mc.style.height = `${MW}px`; }
+        if (!st.mini || st.mini.key !== `${A.key}:${myTm}`) st.mini = { key: `${A.key}:${myTm}`, oc: teamMiniBase(A, myTm) };
+        const m2 = mc.getContext('2d');
+        m2.setTransform(md, 0, 0, md, 0, 0);
+        m2.clearRect(0, 0, MW, MW);
+        m2.imageSmoothingEnabled = false;
+        drawTeamMini(m2, A, W, myK, st.mini.oc, g.flip, MW);
+        if (g.cam && g.cam.tx != null) { const sx = MW / A.wx; const hw = Math.tan(0.36) * Dz0 * (cw / Math.max(1, ch)), hh = Dz0 * 0.55; const cxm = g.flip ? MW - g.cam.tx * sx : g.cam.tx * sx, czm = g.flip ? MW - g.cam.tz * sx : g.cam.tz * sx; m2.strokeStyle = 'rgba(255,255,255,0.6)'; m2.lineWidth = 1; m2.strokeRect(cxm - hw * sx, czm - hh * 1.1 * sx, hw * 2 * sx, hh * 1.6 * sx); }
+      } else if (mc && W && !team && (g.mapN = (g.mapN || 0) + 1) % 2 === 0) {
         const MW = 104, MH = Math.round(MW * (A.H / A.W)), md = Math.min(2, window.devicePixelRatio || 1);
         if (mc.width !== Math.round(MW * md)) { mc.width = Math.round(MW * md); mc.height = Math.round(MH * md); mc.style.width = `${MW}px`; mc.style.height = `${MH}px`; }
         if (!st.mini || st.mini.key !== A.key) {
@@ -1847,7 +2332,13 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
         const boss = W.robots.find((b) => b.type === 'boss' && b.hp > 0);
         const team = W.order.map((k) => { const h = W.heroes[k]; return { id: k, key: h.key, hp: Math.ceil(h.hp), max: h.max, st: h.st, dt: Math.ceil(h.downT) }; });
         const meH = W.heroes[myK];
-        setHud({ wave: W.wave.n, st: W.wave.st, t: Math.ceil(W.wave.t), left: W.wave.left, score: W.score, team, boss: boss ? { hp: boss.hp, max: boss.max } : null, me: meH ? { st: meH.st, sup: meH.sup >= 1, dt: Math.ceil(meH.downT), key: meH.key, pw: meH.pw > 0, gad: meH.gad, gadCD: Math.ceil(meH.gadCD * 10) / 10, dashCD: Math.ceil(meH.dashCD * 10) / 10, dashMax: E.DASH.cd * meH.mods.dashCd, oc: meH.ocT > 0, rf: meH.rfT > 0, sp: meH.spT > 0, sh: meH.shield > 0, ammoMax: meH.mods.ammo, lv: meH.lv, cards: meH.cards.length } : null });
+        if (W.mode === 'team') {
+          const allies = W.order.filter((k) => W.heroes[k] && W.heroes[k].tm === myTm).map((k) => { const h = W.heroes[k]; return { id: k, key: h.key, hp: Math.ceil(h.hp), max: h.max, st: h.st, dt: Math.ceil(h.respT || 0) }; });
+          const tmH = teamHudOf(W, myK);
+          setHud({ wave: 0, st: 'fight', t: 0, left: 0, score: 0, team: allies, boss: null, tm: tmH, me: meH ? { team: true, st: meH.st, sup: meH.sup >= 1, dt: 0, key: meH.key, pw: false, gad: meH.gad, gadCD: Math.ceil(meH.gadCD * 10) / 10, dashCD: Math.ceil(meH.dashCD * 10) / 10, dashMax: E.DASH.cd * meH.mods.dashCd, oc: meH.ocT > 0, rf: false, sp: meH.spT > 0 || meH.sprT > 0, sh: meH.shield > 0, ammoMax: meH.mods.ammo, lv: meH.lv, cards: meH.cards.length, sk: meH.sk, skCD: tmH.skCD, skMax: tmH.skMax, clk: (meH.clkT || 0) > 0 } : null });
+          return;
+        }
+        setHud({ wave: W.wave.n, st: W.wave.st, t: Math.ceil(W.wave.t), left: W.wave.left, score: W.score, team, boss: boss ? { hp: boss.hp, max: boss.max } : null, me: meH ? { st: meH.st, sup: meH.sup >= 1, dt: Math.ceil(meH.downT), key: meH.key, pw: meH.pw > 0, gad: meH.gad, gadCD: Math.ceil(meH.gadCD * 10) / 10, dashCD: Math.ceil(meH.dashCD * 10) / 10, dashMax: E.DASH.cd * meH.mods.dashCd, oc: meH.ocT > 0, rf: meH.rfT > 0, sp: meH.spT > 0, sh: meH.shield > 0, ammoMax: meH.mods.ammo, lv: meH.lv, cards: meH.cards.length, clk: (meH.clkT || 0) > 0 } : null });
       }
     };
     raf = requestAnimationFrame(loop);
@@ -1856,7 +2347,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
 
   const finish = () => { Sfx.stopAll(); onClose(); };
   const leave = () => { if (phase === 'play' && !solo && !watch) { setLeaveAsk(true); return; } finish(); };
-  useBackClose(true, () => { if (layEd) { layEnd('siege', false); setLayEd(false); setCtl(true); } else if (chatOpen) setChatOpen(false); else if (ctl) setCtl(false); else if (optSheet) setOptSheet(false); else if (arenaSheet) setArenaSheet(false); else if (people) setPeople(false); else if (quick) setQuick(false); else if (leaveAsk) setLeaveAsk(false); else if (paused) setPaused(false); else if (phase === 'play' && solo) setPaused(true); else leave(); });
+  useBackClose(true, () => { if (layEd) { layEnd('siege', false); setLayEd(false); setCtl(true); } else if (chatOpen) setChatOpen(false); else if (board) setBoard(false); else if (mapSheet) setMapSheet(false); else if (powSheet) setPowSheet(false); else if (ctl) setCtl(false); else if (optSheet) setOptSheet(false); else if (arenaSheet) setArenaSheet(false); else if (people) setPeople(false); else if (quick) setQuick(false); else if (leaveAsk) setLeaveAsk(false); else if (paused) setPaused(false); else if (phase === 'play' && solo) setPaused(true); else leave(); });
   const sendEmote = (e) => { setBubbles((p) => ({ ...p, [kindOf()]: { e, at: Date.now() } })); if (!solo) relay.send('emo', { e }); setQuick(false); zap('pop', 0.5); };
   useEffect(() => {
     if (!Object.keys(bubbles).length) return undefined;
@@ -1888,50 +2379,24 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
   const g0 = G.current;
   const ids0 = phase === 'menu' ? [] : g0.ids;
 
-  const lobbyUi = phase !== 'menu' ? null : (
-    <GLobby GS={GS} title="Bolt War" onClose={finish} closeLabel={solo ? 'Leave' : 'Back to chat'} tint="rgba(8,10,22,0.62)"
-      sub={watch ? `Watching ${hostName} and friends` : null}
-      badge={best ? <GChip style={{ height: 34, gap: 6 }}><GIcon k="crown" size={14} color="#FFD84E" />{`Best wave ${best}`}</GChip> : null}
-      tools={(
-        <>
-          {!solo && !watch && <GBtn icon="chat" color="dark" size={42} fast={false} label="Chat" badge={chatNew || null} onPress={() => { setChatNew(0); setChatOpen(true); }} />}
-          {!solo && isHost && !watch && <GBtn icon={allowWatch ? 'eye' : 'eyeoff'} color={allowWatch ? 'blue' : 'dark'} size={42} fast={false} label={allowWatch ? 'Friends can watch. Tap to stop' : 'Let friends watch'} badge={watchers.length || null} onPress={toggleWatch} />}
-          {!watch && <GBtn icon="gear" color="dark" size={42} fast={false} label={isHost ? 'Game settings' : 'Settings'} onPress={() => (isHost ? setOptSheet(true) : setCtl(true))} />}
-        </>
-      )}
-      side={(
-        <>
-          {!watch && (
-            <GPanel style={{ padding: '8px 10px 10px', display: 'flex', flexDirection: 'column', gap: 7 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 13.5, fontWeight: 900 }}>Your hero</span>
-                <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 800, color: H0.col, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{`${H0.name}, ${H0.role}`}</span>
-                {prog && <span style={{ display: 'flex', alignItems: 'center', gap: 4, height: 24, padding: '0 9px', borderRadius: 12, background: 'rgba(10,14,26,0.6)', fontSize: 11.5, fontWeight: 900, color: '#FFE15A', flexShrink: 0 }}><GIcon k="star" size={12} color="#FFE15A" ink="transparent" />{`${prog.scrap} scrap`}</span>}
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 6, justifyItems: 'center' }}>{E.HERO_KEYS.map((k) => <HeroCard key={k} k={k} on={heroKey === k} img={thumbs[k]} size={land ? 54 : 52} lv={prog ? prog.levels[k] : 0} locked={!solo && heroKey !== k && takenBy(k) >= E.heroCap()} onPress={() => pickHero(k)} />)}</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 12, fontWeight: 800, color: 'rgba(255,255,255,0.75)' }}>Colour</span>
-                {[0, 1, 2, 3].map((c) => <button key={c} type="button" className="zgk-btn" aria-label={`Colour ${c + 1}`} aria-pressed={heroCol === c} {...pressProps(() => pickCol(c))} style={{ width: 24, height: 24, borderRadius: 4, border: 'none', cursor: 'pointer', background: heroTint(heroKey, c), boxShadow: heroCol === c ? '0 0 0 2px #1B1430, 0 0 0 4px #F2B21B' : 'inset 0 0 0 1px rgba(0,0,0,0.3)' }} />)}
-                {!solo && takenBy(heroKey) > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.6)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>A friend has this hero too</span>}
-              </div>
-              <button type="button" className="zgk-btn" aria-label={`${H0.name} details and upgrades`} {...pressProps(() => { kitTap(); setUpMsg(''); setHeroSheet(true); })}
-                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 7px', border: 'none', borderRadius: 12, background: 'rgba(255,255,255,0.07)', cursor: 'pointer', color: '#FFFFFF', fontFamily: FONT, textAlign: 'left' }}>
-                <span style={{ width: 34, height: 34, borderRadius: 17, flexShrink: 0, background: 'rgba(20,24,30,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: 'inset 0 0 0 1.5px rgba(255,194,61,0.9)' }}><GGlyph k={SUP_GI[E.HEROES[heroKey].sup.k] || 'sonic'} size={22} /></span>
-                <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
-                  <span style={{ fontSize: 12.5, fontWeight: 900 }}>{prog ? `Level ${prog.levels[heroKey] || 1}` : H0.sup.name}</span>
-                  <span style={{ fontSize: 11.5, fontWeight: 700, color: 'rgba(255,255,255,0.75)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{`Super ${H0.sup.name}, gadget ${H0.gad.name}`}</span>
-                </span>
-                <span style={{ height: 26, padding: '0 10px', borderRadius: 13, background: 'linear-gradient(180deg, #FFE27A, #F5B321)', color: '#2A1D05', fontSize: 11.5, fontWeight: 900, display: 'flex', alignItems: 'center', flexShrink: 0 }}>{prog ? 'Upgrade' : 'Details'}</span>
-              </button>
+  const soloTeamPanel = solo && mode === 'team' && !watch ? (
+            <GPanel style={{ padding: '8px 10px 10px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <span style={{ fontSize: 13.5, fontWeight: 900 }}>Teams</span>
+              <TeamSlots list={[{ id: 'me', tm: sideOf.me === 1 ? 1 : 0, n: 'You', h: heroKey }]} ts={ts} thumbs={thumbs} myK="me" canSwap onSwap={switchSide} botsOn />
             </GPanel>
-          )}
-          {!solo && (
+  ) : null;
+  const squadPanel = !solo ? (
             <GPanel style={{ padding: '8px 10px 10px', display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 13.5, fontWeight: 900, flex: 1 }}>{watch ? 'Squad' : `Squad ${roster.length} of ${E.SQUAD_MAX}`}</span>
+                <span style={{ fontSize: 13.5, fontWeight: 900, flex: 1 }}>{mode === 'team' ? 'Teams' : watch ? 'Squad' : `Squad ${roster.length} of ${E.SQUAD_MAX}`}</span>
                 {watchers.length > 0 && <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 800, color: '#CFE6FF' }}><GIcon k="eye" size={14} color="#CFE6FF" />{`${watchers.length} watching`}</span>}
               </div>
-              {E.SQUAD_MAX > 10 ? (
+              {mode === 'team' ? (
+                <>
+                  <TeamSlots list={roster.map((k) => ({ id: k, tm: sideOf[k] === 1 ? 1 : 0, n: k === kindOf() ? 'You' : names[k] || 'Friend', h: k === kindOf() ? heroKey : validHero(heroOf[k]) }))} ts={Math.max(ts, Math.ceil(roster.length / 2))} thumbs={thumbs} myK={kindOf()} hostId={room && room.host} canSwap={!watch} onSwap={switchSide} botsOn />
+                  {isHost && onInvite && !watch && roster.length < Math.min(E.SQUAD_MAX, 10) && <GPill text="Invite" icon="plus" color="gold" small wide onPress={() => onInvite(roster.length, GS.side)} />}
+                </>
+              ) : E.SQUAD_MAX > 10 ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <div style={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
                     {roster.slice(0, 9).map((k, i) => { const isMe = k === kindOf(); const hk = isMe ? heroKey : validHero(heroOf[k]); return <span key={k} title={isMe ? 'You' : names[k] || 'Friend'} style={{ width: 30, height: 30, marginLeft: i ? -7 : 0, borderRadius: 15, overflow: 'hidden', flexShrink: 0, background: '#141A2C', boxShadow: `0 0 0 2px ${heroTint(hk, isMe ? heroCol : colOf[k] | 0)}` }}>{thumbs[hk] ? <img src={thumbs[hk]} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} /> : null}</span>; })}
@@ -1959,12 +2424,59 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
               )}
               {!watch && relay.mic.err && <div style={{ fontSize: 12, fontWeight: 800, color: '#FF9C9C' }}>{relay.mic.err}</div>}
             </GPanel>
+  ) : null;
+  const lobbyUi = phase !== 'menu' ? null : (
+    <GLobby GS={GS} title="Bolt War" onClose={finish} closeLabel={solo ? 'Leave' : 'Back to chat'} tint="rgba(8,10,22,0.62)"
+      sub={watch ? `Watching ${hostName} and friends` : null}
+      badge={best && mode !== 'team' ? <GChip style={{ height: 34, gap: 6 }}><GIcon k="crown" size={14} color="#FFD84E" />{`Best wave ${best}`}</GChip> : null}
+      tools={(
+        <>
+          {!solo && !watch && <GBtn icon="chat" color="dark" size={42} fast={false} label="Chat" badge={chatNew || null} onPress={() => { setChatNew(0); setChatOpen(true); }} />}
+          {!solo && isHost && !watch && <GBtn icon={allowWatch ? 'eye' : 'eyeoff'} color={allowWatch ? 'blue' : 'dark'} size={42} fast={false} label={allowWatch ? 'Friends can watch. Tap to stop' : 'Let friends watch'} badge={watchers.length || null} onPress={toggleWatch} />}
+          {!watch && <GBtn icon="gear" color="dark" size={42} fast={false} label={isHost ? 'Game settings' : 'Settings'} onPress={() => (isHost ? setOptSheet(true) : setCtl(true))} />}
+        </>
+      )}
+      side={(
+        <>
+          {!watch && (
+            <GPanel style={{ padding: '8px 10px 10px', display: 'flex', flexDirection: 'column', gap: 7 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 13.5, fontWeight: 900 }}>Your hero</span>
+                <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 800, color: H0.col, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{`${H0.name}, ${H0.role}`}</span>
+                {prog && <span style={{ display: 'flex', alignItems: 'center', gap: 4, height: 24, padding: '0 9px', borderRadius: 12, background: 'rgba(10,14,26,0.6)', fontSize: 11.5, fontWeight: 900, color: '#FFE15A', flexShrink: 0 }}><GIcon k="star" size={12} color="#FFE15A" ink="transparent" />{`${prog.scrap} scrap`}</span>}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${E.HERO_KEYS.length > 8 ? 5 : 4}, minmax(0, 1fr))`, gap: 6, justifyItems: 'center' }}>{E.HERO_KEYS.map((k) => <HeroCard key={k} k={k} on={heroKey === k} img={thumbs[k]} size={land ? 54 : 52} lv={prog ? prog.levels[k] : 0} locked={!solo && heroKey !== k && takenBy(k) >= E.heroCap()} onPress={() => pickHero(k)} />)}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 12, fontWeight: 800, color: 'rgba(255,255,255,0.75)' }}>Colour</span>
+                {[0, 1, 2, 3].map((c) => <button key={c} type="button" className="zgk-btn" aria-label={`Colour ${c + 1}`} aria-pressed={heroCol === c} {...pressProps(() => pickCol(c))} style={{ width: 24, height: 24, borderRadius: 4, border: 'none', cursor: 'pointer', background: heroTint(heroKey, c), boxShadow: heroCol === c ? '0 0 0 2px #1B1430, 0 0 0 4px #F2B21B' : 'inset 0 0 0 1px rgba(0,0,0,0.3)' }} />)}
+                {!solo && takenBy(heroKey) > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.6)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>A friend has this hero too</span>}
+              </div>
+              {mode === 'team' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                  <span style={{ fontSize: 12, fontWeight: 800, color: 'rgba(255,255,255,0.75)' }}>Battle skill</span>
+                  <SkillPick value={skill} onPick={pickSkill} compact={!land} />
+                </div>
+              )}
+              <button type="button" className="zgk-btn" aria-label={`${H0.name} details and upgrades`} {...pressProps(() => { kitTap(); setUpMsg(''); setHeroSheet(true); })}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 7px', border: 'none', borderRadius: 12, background: 'rgba(255,255,255,0.07)', cursor: 'pointer', color: '#FFFFFF', fontFamily: FONT, textAlign: 'left' }}>
+                <span style={{ width: 34, height: 34, borderRadius: 17, flexShrink: 0, background: 'rgba(20,24,30,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: 'inset 0 0 0 1.5px rgba(255,194,61,0.9)' }}><GGlyph k={SUP_GI[E.HEROES[heroKey].sup.k] || 'sonic'} size={22} /></span>
+                <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                  <span style={{ fontSize: 12.5, fontWeight: 900 }}>{prog ? `Level ${prog.levels[heroKey] || 1}` : H0.sup.name}</span>
+                  <span style={{ fontSize: 11.5, fontWeight: 700, color: 'rgba(255,255,255,0.75)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{`Super ${H0.sup.name}, gadget ${H0.gad.name}`}</span>
+                </span>
+                <span style={{ height: 26, padding: '0 10px', borderRadius: 13, background: 'linear-gradient(180deg, #FFE27A, #F5B321)', color: '#2A1D05', fontSize: 11.5, fontWeight: 900, display: 'flex', alignItems: 'center', flexShrink: 0 }}>{prog ? 'Upgrade' : 'Details'}</span>
+              </button>
+            </GPanel>
           )}
+          {mode !== 'team' && squadPanel}
         </>
       )}
       main={(
+        <>
+        {mode === 'team' && (soloTeamPanel || squadPanel)}
         <GPanel style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 9 }}>
-          <button type="button" className="zgk-btn" aria-label={isHost && !watch ? `Arena ${E.ARENAS[arena].name}. Change arena` : `Arena ${E.ARENAS[arena].name}`} {...pressProps(() => { kitTap(); setArenaSheet(true); })}
+          <div style={{ width: '100%' }}><GSeg value={mode} items={MODE_ITEMS} onPick={pickMode} disabled={!isHost || watch} label="Game mode" /></div>
+          {mode === 'team' ? <TeamMapCard img={aThumbs.rift} ts={Math.max(ts, Math.ceil((solo ? 1 : roster.length) / 2))} isHost={isHost && !watch} onPress={() => setMapSheet(true)} /> : <button type="button" className="zgk-btn" aria-label={isHost && !watch ? `Arena ${E.ARENAS[arena].name}. Change arena` : `Arena ${E.ARENAS[arena].name}`} {...pressProps(() => { kitTap(); setArenaSheet(true); })}
             style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 5, border: 'none', borderRadius: 12, background: 'rgba(255,255,255,0.07)', cursor: 'pointer', color: '#FFFFFF', fontFamily: FONT, textAlign: 'left' }}>
             <span style={{ width: 92, aspectRatio: '16 / 9', borderRadius: 8, overflow: 'hidden', display: 'block', background: ARENA_BG[arena] || ARENA_BG.yard, flexShrink: 0 }}>{aThumbs[arena] ? <img src={aThumbs[arena]} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} /> : null}</span>
             <span style={{ flex: 1, minWidth: 0 }}>
@@ -1972,36 +2484,24 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
               <span style={{ display: 'block', fontSize: 11.5, fontWeight: 700, color: 'rgba(255,255,255,0.72)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{`${E.LEVELS[lv].name}, ${endless ? 'endless waves' : `${E.WIN_WAVE} waves`}`}</span>
             </span>
             <span style={{ height: 26, padding: '0 10px', borderRadius: 13, background: isHost && !watch ? 'linear-gradient(180deg, #FFE27A, #F5B321)' : 'rgba(10,14,26,0.7)', color: isHost && !watch ? '#2A1D05' : '#FFFFFF', fontSize: 11.5, fontWeight: 900, display: 'flex', alignItems: 'center', flexShrink: 0 }}>{isHost && !watch ? 'Change' : 'See arenas'}</span>
-          </button>
+          </button>}
           {failed ? <div style={{ fontSize: 12.5, fontWeight: 800, lineHeight: 1.4, color: '#FFB4B4' }}>This phone could not start the 3D game. Try closing other apps, then open it again.</div>
             : watch ? <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 44, fontSize: 13.5, fontWeight: 800 }}><Spinner size={16} color="#FFFFFF" />{`${hostName} starts soon`}</div>
-            : isHost ? <GPill text={ready ? 'Start the fight' : `Building ${E.ARENAS[arena].name}`} icon="play" color="gold" wide disabled={!ready} onPress={startGame} />
-            : <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 44, fontSize: 13.5, fontWeight: 800 }}><Spinner size={16} color="#FFFFFF" />{`${hostName} picks the arena and starts`}</div>}
+            : isHost ? <GPill text={ready ? (mode === 'team' ? 'Start the battle' : 'Start the fight') : `Building ${mode === 'team' ? 'Nebula Valley' : E.ARENAS[arena].name}`} icon="play" color="gold" wide disabled={!ready} onPress={startGame} />
+            : <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 44, fontSize: 13.5, fontWeight: 800 }}><Spinner size={16} color="#FFFFFF" />{mode === 'team' ? `${hostName} sets the teams and starts` : `${hostName} picks the arena and starts`}</div>}
         </GPanel>
+        </>
       )}>
-      {powSheet && (() => {
-        const hh = G.current.W && G.current.W.heroes[kindOf()];
-        const cs = (hh && hh.cards) || [];
-        const cnt = {};
-        for (const k of cs) cnt[k] = (cnt[k] || 0) + 1;
-        const Hh = E.HEROES[hh ? hh.key : heroKey];
-        const left = STREAK - ((G.current.myKills || 0) % STREAK);
-        return (
-          <GLobbySheet GS={GS} title="Your powers" width={520} onClose={() => setPowSheet(false)}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <div style={{ fontSize: 12, fontWeight: 800, color: 'rgba(255,255,255,0.7)' }}>{`${Hh.name}: super ${Hh.sup.name}, gadget ${Hh.gad.name}. Next power in ${left} takedowns.`}</div>
-              {Object.keys(cnt).length === 0 && <div style={{ fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.8)' }}>No powers yet. You get one every second wave and every {STREAK} takedowns.</div>}
-              {Object.entries(cnt).map(([k, n]) => (
-                <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 9px', borderRadius: 4, background: 'rgba(255,255,255,0.06)' }}>
-                  <span style={{ width: 32, height: 32, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', background: E.CARDS[k].hero ? 'linear-gradient(180deg, #FFE27A, #F2A81D)' : 'linear-gradient(180deg, #5A6474, #343B48)', flexShrink: 0 }}><GIcon k={E.CARDS[k].icon} size={18} color={E.CARDS[k].hero ? '#2A1D05' : '#FFE15A'} ink="transparent" /></span>
-                  <span style={{ flex: 1, minWidth: 0 }}><span style={{ display: 'block', fontSize: 14, fontWeight: 900 }}>{E.CARDS[k].name}</span><span style={{ display: 'block', fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.75)' }}>{E.CARDS[k].text}</span></span>
-                  {n > 1 && <span style={{ fontSize: 13, fontWeight: 900, color: '#F2B21B' }}>{`x${n}`}</span>}
-                </div>
-              ))}
-            </div>
-          </GLobbySheet>
-        );
-      })()}
+      {mapSheet && (
+        <GLobbySheet GS={GS} title="Nebula Valley" width={560} onClose={() => setMapSheet(false)}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {aThumbs.rift ? <img src={aThumbs.rift} alt="" style={{ width: '100%', aspectRatio: '16 / 9', objectFit: 'cover', borderRadius: 12, display: 'block' }} /> : null}
+            <TeamHowTo />
+            {isHost && !watch && <TeamSettings ts={ts} onTs={pickTs} />}
+            <GPill text="Done" color="gold" wide onPress={() => setMapSheet(false)} />
+          </div>
+        </GLobbySheet>
+      )}
       {arenaSheet && (
         <GLobbySheet GS={GS} title="Arena" width={600} onClose={() => setArenaSheet(false)}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
@@ -2085,7 +2585,9 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
       {optSheet && (
         <GLobbySheet GS={GS} title="Game settings" width={520} onClose={() => setOptSheet(false)}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            {isHost && (
+            {isHost && mode === 'team' && <TeamSettings ts={ts} onTs={pickTs} />}
+            {isHost && mode === 'team' && <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.7)', lineHeight: 1.4 }}>Bots fill every open spot on both teams. Hero levels do not count here, so every player starts equal.</div>}
+            {isHost && mode !== 'team' && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span style={{ fontSize: 14.5, fontWeight: 900, flex: 1 }}>{solo ? 'Bot friends' : 'Bots fill empty spots'}</span>
                 <div style={{ width: 250 }}><GSeg value={String(botN)} items={BOT_ITEMS} onPick={pickBots} label="Bot friends" /></div>
@@ -2098,6 +2600,21 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
     </GLobby>
   );
 
+const powersBtn = (() => {
+                    const hh = G.current.W && G.current.W.heroes[kindOf()];
+                    const cs = (hh && hh.cards) || [];
+                    const tk = cards ? 0 : (G.current.pend || []).length;
+                    if (watch || (!cs.length && !tk)) return null;
+                    const uniq = [...new Set(cs)].slice(-4);
+                    return (
+                      <button type="button" className="zgk-btn" aria-label={tk > 1 ? `${tk} new powers. Pick one` : tk ? 'A new power is ready. Pick it' : `Your powers, ${cs.length}`} {...pressProps(() => { kitTap(); if (tk) showPick(false); else setPowSheet(true); })}
+                        style={{ pointerEvents: 'auto', height: 26, padding: '0 8px', border: 'none', borderRadius: 3, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', fontFamily: FONT, color: '#FFFFFF', background: tk ? 'linear-gradient(180deg, #FFE27A, #F2B21B)' : 'linear-gradient(180deg, rgba(50,57,68,0.92), rgba(25,29,37,0.92))', boxShadow: tk ? '0 0 0 2px #1B1430' : 'inset 0 2px 0 #F2B21B', animation: tk ? 'zgk-pulse 1.2s ease-in-out infinite' : 'none' }}>
+                        {tk ? <span style={{ fontSize: 12, fontWeight: 900, color: '#2A1D05' }}>{tk > 1 ? `${tk} new powers` : 'New power'}</span> : uniq.map((k) => <GIcon key={k} k={E.CARDS[k].icon} size={14} color="#FFE15A" ink="transparent" />)}
+                        {!tk && <span style={{ fontSize: 12, fontWeight: 900 }}>{cs.length}</span>}
+                      </button>
+                    );
+                  })();
+  const teamOn = !!hud.tm && phase !== 'menu';
   const waveLine = hud.st === 'fight' ? (hud.left === 1 ? '1 alien left' : `${hud.left} aliens left`) : hud.st === 'break' ? (solo && cards ? 'Waiting for your pick' : `Next wave in ${Math.max(1, hud.t)}`) : hud.st === 'won' ? 'All waves cleared' : 'Get ready';
   const superOn = !!(meHud && meHud.sup && meHud.st === 0);
   const ctrlScale = look.size;
@@ -2131,11 +2648,22 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
       <div data-hud="gad" data-hud-name="Gadget" style={{ position: 'absolute', right: right(40), bottom: bottom(150), zIndex: 5, transform: `scale(${ctrlScale})`, transformOrigin: '100% 100%', opacity: (mh.gad > 0 ? 1 : 0.55) - look.see * 0.4, ...hudT(hudLay.lay, 'gad') }}>
         <GHudSkill icon={GAD_GI[E.HEROES[mh.key].gad.k] || 'shield'} tone="#5EE6D2" size={56} cool={mh.gad > 0 ? mh.gadCD : 0} coolMax={E.GADGET_CD} badge={mh.gad} disabled={mh.gad <= 0} label={`Gadget, ${E.HEROES[mh.key].gad.name}, ${mh.gad} left`} sound="click" onPress={() => G.current.gadQ.push(null)} />
       </div>
-      {(mh.sh || mh.rf || mh.sp || mh.oc) && (
+      {mh.team && T.SKILLS[mh.sk] && (
+        <>
+          <div data-hud="skill" data-hud-name="Battle skill" style={{ position: 'absolute', right: right(land ? 236 : 40), bottom: bottom(land ? 34 : 222), zIndex: 5, transform: `scale(${ctrlScale})`, transformOrigin: '100% 100%', opacity: 1 - look.see * 0.4, ...hudT(hudLay.lay, 'skill') }}>
+            <GHudSkill icon={T.SKILLS[mh.sk].icon} tone={T.SKILLS[mh.sk].col} size={54} cool={mh.skCD || 0} coolMax={mh.skMax || 1} label={`Battle skill, ${T.SKILLS[mh.sk].name}`} sound="click" onPress={() => G.current.skQ.push(null)} />
+          </div>
+          <div data-hud="home" data-hud-name="Home" style={{ position: 'absolute', right: right(land ? 302 : 106), bottom: bottom(land ? 24 : 226), zIndex: 5, transform: `scale(${ctrlScale})`, transformOrigin: '100% 100%', opacity: 1 - look.see * 0.4, ...hudT(hudLay.lay, 'home') }}>
+            <GHudSkill icon="revive" tone="#9FD0FF" size={46} label="Go home" sound="click" onPress={() => G.current.recQ.push(1)} />
+          </div>
+        </>
+      )}
+      {(mh.sh || mh.rf || mh.sp || mh.oc || mh.clk) && (
         <div style={{ position: 'absolute', left: '50%', bottom: bottom(14), transform: 'translateX(-50%)', display: 'flex', gap: 6, zIndex: 4, pointerEvents: 'none' }}>
           {mh.sh && <GHudPanel style={{ height: 24, padding: '0 9px', display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 900, color: '#9FE6FF' }}><GIcon k="shield" size={13} color="#9FE6FF" ink="transparent" />Shield</GHudPanel>}
           {mh.rf && <GHudPanel style={{ height: 24, padding: '0 9px', display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 900, color: '#FFC27A' }}><GIcon k="replay" size={13} color="#FFC27A" ink="transparent" />Rapid fire</GHudPanel>}
           {mh.sp && <GHudPanel style={{ height: 24, padding: '0 9px', display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 900, color: '#9BF29B' }}><GIcon k="dash" size={13} color="#9BF29B" ink="transparent" />Speed</GHudPanel>}
+          {mh.clk && <GHudPanel style={{ height: 24, padding: '0 9px', display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 900, color: '#C9B6FF' }}><GGlyph k="ghost" size={13} color="#C9B6FF" />Hidden</GHudPanel>}
           {mh.oc && <GHudPanel style={{ height: 24, padding: '0 9px', display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 900, color: '#FFE36A' }}><GIcon k="bolt" size={13} color="#FFE36A" ink="transparent" />Overcharge</GHudPanel>}
         </div>
       )}
@@ -2152,7 +2680,20 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
 
           {(phase === 'play' || phase === 'done') && (
             <>
-              <div style={{ position: 'absolute', left: left(10), top: top(8), display: 'flex', flexDirection: 'column', gap: 5, alignItems: 'flex-start', zIndex: 3, pointerEvents: 'none' }}>
+              {teamOn && (
+                <div style={{ position: 'absolute', left: left(10), top: top(8), display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start', zIndex: 3, pointerEvents: 'none' }}>
+                  <TeamMe hud={hud} powers={powersBtn} />
+                  <canvas ref={mapRef} aria-label="Map" role="img" width="108" height="108" style={{ width: 108, height: 108, borderRadius: 10, boxShadow: '0 0 0 1.5px rgba(255,255,255,0.22), 0 4px 10px rgba(0,0,0,0.35)', pointerEvents: 'none', display: 'block', visibility: phase === 'play' && hudOpt.map ? 'visible' : 'hidden' }} />
+                </div>
+              )}
+              {teamOn && (
+                <div style={{ position: 'absolute', left: '50%', top: top(land ? 8 : 54), transform: 'translateX(-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, zIndex: 4, pointerEvents: 'none' }}>
+                  <TeamScore hud={hud} onPress={() => setBoard(true)} />
+                  <TeamShip hud={hud} />
+                  <KillFeed items={tfeed} />
+                </div>
+              )}
+              {!teamOn && <div style={{ position: 'absolute', left: left(10), top: top(8), display: 'flex', flexDirection: 'column', gap: 5, alignItems: 'flex-start', zIndex: 3, pointerEvents: 'none' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ display: 'flex', alignItems: 'baseline', gap: 4, padding: '3px 11px 4px', borderRadius: 12, background: 'linear-gradient(180deg, rgba(40,24,6,0.85), rgba(20,12,4,0.78))', boxShadow: 'inset 0 0 0 1.5px rgba(255,200,80,0.45)', textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>
                     <span style={{ fontSize: 12, fontWeight: 900, color: '#FFD45A' }}>Wave</span>
@@ -2160,20 +2701,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
                     {!endless && <span style={{ fontSize: 12, fontWeight: 900, opacity: 0.75 }}>{`of ${E.WIN_WAVE}`}</span>}
                   </span>
                   <GHudPanel style={{ height: 26, padding: '0 10px', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 900, whiteSpace: 'nowrap' }}>{waveLine}</GHudPanel>
-                  {(() => {
-                    const hh = G.current.W && G.current.W.heroes[kindOf()];
-                    const cs = (hh && hh.cards) || [];
-                    const tk = cards ? 0 : (G.current.pend || []).length;
-                    if (watch || (!cs.length && !tk)) return null;
-                    const uniq = [...new Set(cs)].slice(-4);
-                    return (
-                      <button type="button" className="zgk-btn" aria-label={tk > 1 ? `${tk} new powers. Pick one` : tk ? 'A new power is ready. Pick it' : `Your powers, ${cs.length}`} {...pressProps(() => { kitTap(); if (tk) showPick(false); else setPowSheet(true); })}
-                        style={{ pointerEvents: 'auto', height: 26, padding: '0 8px', border: 'none', borderRadius: 3, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', fontFamily: FONT, color: '#FFFFFF', background: tk ? 'linear-gradient(180deg, #FFE27A, #F2B21B)' : 'linear-gradient(180deg, rgba(50,57,68,0.92), rgba(25,29,37,0.92))', boxShadow: tk ? '0 0 0 2px #1B1430' : 'inset 0 2px 0 #F2B21B', animation: tk ? 'zgk-pulse 1.2s ease-in-out infinite' : 'none' }}>
-                        {tk ? <span style={{ fontSize: 12, fontWeight: 900, color: '#2A1D05' }}>{tk > 1 ? `${tk} new powers` : 'New power'}</span> : uniq.map((k) => <GIcon key={k} k={E.CARDS[k].icon} size={14} color="#FFE15A" ink="transparent" />)}
-                        {!tk && <span style={{ fontSize: 12, fontWeight: 900 }}>{cs.length}</span>}
-                      </button>
-                    );
-                  })()}
+                  {powersBtn}
                 </div>
                 {hud.team.length > 5 && phase === 'play' && !(cards && land) && (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 30px)', gap: 4 }}>
@@ -2198,15 +2726,19 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
                     {micOf(t.id) && !relay.muted[t.id] && <GIcon k="mic" size={11} color="#7BE05A" ink="transparent" />}
                   </GHudPanel>
                 ))}
-              </div>
-              <div style={{ position: 'absolute', right: right(10), top: top(8), display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 7, zIndex: 4 }}>
+              </div>}
+              {teamOn ? (
+                <div style={{ position: 'absolute', right: right(10), top: top(8), display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 7, zIndex: 4 }}>
+                  <div style={{ display: 'flex', gap: 6 }}>{rowBtns}</div>
+                </div>
+              ) : <div style={{ position: 'absolute', right: right(10), top: top(8), display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 7, zIndex: 4 }}>
                 <div style={{ display: 'flex', gap: 6 }}>{rowBtns}</div>
                 <GHudPanel style={{ height: 24, padding: '0 9px', display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 900 }}><GIcon k="star" size={13} color="#FFD84E" ink="transparent" />{hud.score.toLocaleString()}</GHudPanel>
                 <canvas ref={mapRef} aria-label="Map" role="img" width="104" height="75" style={{ width: 104, height: 75, borderRadius: 8, boxShadow: '0 0 0 1.5px rgba(255,255,255,0.22), 0 4px 10px rgba(0,0,0,0.35)', pointerEvents: 'none', display: 'block', visibility: phase === 'play' && hudOpt.map ? 'visible' : 'hidden' }} />
-              </div>
+              </div>}
               {hud.boss && (
-                <div aria-label="Boss health" style={{ position: 'absolute', left: '50%', top: top(54), transform: 'translateX(-50%)', width: 'min(46%, 360px)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, zIndex: 3, pointerEvents: 'none' }}>
-                  <span style={{ fontSize: 13, fontWeight: 900, color: '#FFD45A', textShadow: '0 2px 5px rgba(0,0,0,0.6)' }}>{E.ROBOTS.boss.name}</span>
+                <div aria-label="Boss health" style={{ position: 'absolute', left: '50%', top: top(teamOn ? (land ? 112 : 150) : 54), transform: 'translateX(-50%)', width: 'min(46%, 360px)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, zIndex: 3, pointerEvents: 'none' }}>
+                  <span style={{ fontSize: 13, fontWeight: 900, color: '#FFD45A', textShadow: '0 2px 5px rgba(0,0,0,0.6)' }}>{hud.boss.name || E.ROBOTS.boss.name}</span>
                   <span style={{ width: '100%', height: 13, borderRadius: 7, background: 'rgba(12,10,26,0.82)', boxShadow: '0 0 0 2px rgba(255,255,255,0.25)', overflow: 'hidden', display: 'block' }}><span style={{ display: 'block', height: '100%', width: `${Math.round(clamp(hud.boss.hp / hud.boss.max, 0, 1) * 1000) / 10}%`, background: 'linear-gradient(180deg, #FF7A5C, #D9261A)', transition: 'width 0.2s' }} /></span>
                 </div>
               )}
@@ -2219,9 +2751,10 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
               {playing && meHud && meHud.st === 1 && (
                 <div style={{ position: 'absolute', left: '50%', bottom: bottom(18), transform: 'translateX(-50%)', padding: '7px 14px', borderRadius: 14, background: 'rgba(10,14,26,0.72)', fontSize: 13.5, fontWeight: 900, zIndex: 4, pointerEvents: 'none', textAlign: 'center' }}>{`You are down. ${meHud.dt}s left for a friend to revive you`}</div>
               )}
-              {playing && meHud && meHud.st === 2 && (
+              {playing && meHud && meHud.st === 2 && !teamOn && (
                 <div style={{ position: 'absolute', left: '50%', bottom: bottom(18), transform: 'translateX(-50%)', padding: '7px 14px', borderRadius: 14, background: 'rgba(10,14,26,0.72)', fontSize: 13.5, fontWeight: 900, zIndex: 4, pointerEvents: 'none' }}>You come back when the next wave starts</div>
               )}
+              {playing && meHud && meHud.st === 2 && teamOn && phase === 'play' && <RespawnBox t={hud.tm.resp} bottom={bottom(24)} />}
               {playing && meHud && meHud.st === 0 && ctlBlock(meHud, superOn)}
               {cards && playing && phase === 'play' && (
                 <div onPointerDown={(e) => e.stopPropagation()} style={{ position: 'absolute', left: '50%', top: land ? top(GS.H < 350 ? 54 : 64) : '18%', transform: 'translateX(-50%)', width: land ? `min(${Math.max(1, cards.list.length) * 200 + 40}px, 82%)` : 'min(420px, 94%)', zIndex: 8, animation: 'zgk-pop 0.22s ease-out' }}>
@@ -2241,12 +2774,12 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
                 </div>
               )}
               {kill && phase === 'play' && (
-                <div aria-live="polite" style={{ position: 'absolute', left: '50%', top: top(hud.boss ? 92 : 58), transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', gap: 8, padding: '6px 14px 6px 8px', borderRadius: 16, background: 'rgba(40,6,6,0.78)', boxShadow: 'inset 0 0 0 1.5px rgba(255,110,90,0.55)', zIndex: 6, pointerEvents: 'none', animation: 'zgk-pop 0.25s ease-out', whiteSpace: 'nowrap' }}>
+                <div aria-live="polite" style={{ position: 'absolute', left: '50%', top: top(teamOn ? (land ? 150 : 190) : hud.boss ? 92 : 58), transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', gap: 8, padding: '6px 14px 6px 8px', borderRadius: 16, background: 'rgba(40,6,6,0.78)', boxShadow: 'inset 0 0 0 1.5px rgba(255,110,90,0.55)', zIndex: 6, pointerEvents: 'none', animation: 'zgk-pop 0.25s ease-out', whiteSpace: 'nowrap' }}>
                   <span style={{ width: 26, height: 26, borderRadius: 13, background: '#E5483B', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 0 0 2px ${INK}` }}><GIcon k="close" size={14} color="#FFFFFF" ink="transparent" /></span>
-                  <span style={{ fontSize: 15, fontWeight: 900 }}>{`Downed by ${kill.name}`}</span>
+                  <span style={{ fontSize: 15, fontWeight: 900 }}>{teamOn ? `Taken down by ${kill.name}` : `Downed by ${kill.name}`}</span>
                 </div>
               )}
-              {(!inGame() || (meHud && meHud.st === 2 && !kill)) && phase === 'play' && (
+              {(!inGame() || (meHud && meHud.st === 2 && !kill && !teamOn)) && phase === 'play' && (
                 <div style={{ position: 'absolute', left: 0, right: 0, bottom: bottom(inGame() ? 52 : 14), display: 'flex', justifyContent: 'center', padding: '0 14px', zIndex: 3 }}>
                   <GWatchBar ids={inGame() ? ids0.filter((k) => k !== kindOf() && hud.team.some((t) => t.id === k && t.st !== 2)) : ids0} cur={camK} nameOf={nameOf} colorOf={(k) => { const h = g0.W && g0.W.heroes[k]; return h && E.HEROES[h.key] ? E.HEROES[h.key].col : '#FFFFFF'; }} onPick={(k) => { setFollow(k); camKRef.current = k; setCamK(k); }} />
                 </div>
@@ -2264,7 +2797,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
           )}
 
           {!layEd && lobbyUi}
-          {layEd && phase !== 'play' && ctlBlock({ key: heroKey, st: 0, dashCD: 0, dashMax: 1, gad: 2, gadCD: 0, ammoMax: 3 }, true)}
+          {layEd && phase !== 'play' && ctlBlock({ key: heroKey, st: 0, dashCD: 0, dashMax: 1, gad: 2, gadCD: 0, ammoMax: 3, team: mode === 'team', sk: skill, skCD: 0, skMax: 1 }, true)}
           {layEd && <GHudEditor g="siege" stageRef={wrapRef} side={GS.side} W={GS.W} H={GS.H} at={GS.at} onClose={() => { setLayEd(false); setCtl(true); }} />}
 
           {paused && phase === 'play' && !layEd && (
@@ -2281,7 +2814,36 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
             </div>
           )}
 
-          {phase === 'done' && result && (() => {
+          {phase === 'done' && result && result.team && (
+            <div style={{ position: 'absolute', inset: 0, zIndex: 20, background: 'rgba(10,8,24,0.55)', display: 'flex', padding: 12, overflowY: 'auto', touchAction: 'pan-x pan-y' }}>
+              <GPanel style={{ margin: 'auto', width: '100%', maxWidth: land ? 760 : 440, padding: land ? '12px 14px' : 16, display: 'flex', flexDirection: 'column', gap: 10, animation: 'zgk-pop 0.35s ease-out', boxSizing: 'border-box' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 180 }}>
+                    <GTitle text={result.lost ? 'Connection lost' : !inGame() ? `${TNAME[result.win] || 'Blue'} team won` : result.won ? 'Victory' : 'Defeat'} size={land ? 28 : 30} color={result.won ? '#FFE15A' : '#FFFFFF'} />
+                    <div style={{ fontSize: 13, fontWeight: 800, color: 'rgba(255,255,255,0.88)' }}>{result.lost ? 'The host stopped sending the game' : `${inGame() ? `Your team ${result.sc[result.myTeam]}, enemy ${result.sc[1 - result.myTeam]}` : `Blue ${result.sc[0]}, Red ${result.sc[1]}`}. ${result.mins > 0 ? `${result.mins} min` : 'Under a minute'}`}</div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    {inGame() && <GChip style={{ height: 30, gap: 6 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: TCOL[result.myTeam] }} />{`You played ${TNAME[result.myTeam].toLowerCase()} side`}</GChip>}
+                    {result.scrap != null && result.scrap > 0 && <GChip style={{ height: 30, gap: 6 }}><GIcon k="plus" size={13} color="#7BF27B" ink="transparent" />{`${result.scrap} scrap`}</GChip>}
+                  </div>
+                </div>
+                {!result.lost && result.rows.length > 0 && <TeamBoard GS={GS} rows={result.rows} myK={kindOf()} myTeam={result.myTeam} thumbs={thumbs} nameOf={nameOf} score={result.sc} />}
+                {isHost ? (
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <GPill text="Play again" icon="replay" color="green" small wide onPress={() => { toMenu(true); setTimeout(startGame, 60); }} style={{ flex: 1 }} />
+                    <GPill text="Lobby" color="white" small wide onPress={() => toMenu(false)} style={{ flex: 1 }} />
+                    <GPill text={solo ? 'Leave' : 'Back to chat'} color="dark" small wide onPress={finish} style={{ flex: 1 }} />
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ fontSize: 13.5, fontWeight: 800, color: 'rgba(255,255,255,0.75)' }}>{`${hostName} picks what is next`}</div>
+                    <GPill text="Back to chat" color="dark" small wide onPress={finish} />
+                  </>
+                )}
+              </GPanel>
+            </div>
+          )}
+          {phase === 'done' && result && !result.team && (() => {
             const two = land && result.list.length > 5;
             const chips = (
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -2343,7 +2905,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
             </div>
           )}
           <GTalkers ids={talking} nameOf={nameOf} top={top(phase === 'play' ? (hud.boss ? 92 : 54) : 50)} />
-          <GNotices items={notes} style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: top(phase === 'menu' ? 64 : 104), width: 'min(52%, 420px)', zIndex: 30 }} />
+          <GNotices items={notes} style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: top(phase === 'menu' ? 64 : teamOn ? (land ? 196 : 236) : 104), width: 'min(52%, 420px)', zIndex: 30 }} />
           <GJoinAsks asks={jask.asks} onAnswer={jask.answer} style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: top(phase === 'menu' ? 110 : 150), width: 'min(80%, 380px)', zIndex: 35 }} />
           {phase !== 'menu' && <GChatFeed items={feed} style={{ position: 'absolute', left: left(GS.land ? 222 : 12), top: top(GS.land ? 10 : 200), width: GS.land ? 'min(34%, 300px)' : 'calc(100% - 120px)', zIndex: 29 }} />}
           {people && !solo && (
@@ -2373,7 +2935,31 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
               </div>
             </Sheet>
           )}
-          {chatOpen && <ChatSheet title="Talk to your squad" chat={chat} onEmote={sendEmote} at={GS.at} onClose={() => setChatOpen(false)} />}
+          {chatOpen && <ChatSheet title={teamOn ? 'Talk to everyone' : 'Talk to your squad'} chat={chat} onEmote={sendEmote} at={GS.at} onClose={() => setChatOpen(false)} />}
+          {powSheet && (() => {
+            const hh = G.current.W && G.current.W.heroes[kindOf()];
+            const cs = (hh && hh.cards) || [];
+            const cnt = {};
+            for (const k of cs) cnt[k] = (cnt[k] || 0) + 1;
+            const Hh = E.HEROES[hh ? hh.key : heroKey];
+            const left = STREAK - ((G.current.myKills || 0) % STREAK);
+            return (
+              <GLobbySheet GS={GS} title="Your powers" width={520} onClose={() => setPowSheet(false)}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: 'rgba(255,255,255,0.7)' }}>{G.current.W && G.current.W.mode === 'team' ? `${Hh.name}: super ${Hh.sup.name}, gadget ${Hh.gad.name}. A new power comes at every second level.` : `${Hh.name}: super ${Hh.sup.name}, gadget ${Hh.gad.name}. Next power in ${left} takedowns.`}</div>
+                  {Object.keys(cnt).length === 0 && <div style={{ fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.8)' }}>{G.current.W && G.current.W.mode === 'team' ? 'No powers yet. You get one at every second level.' : `No powers yet. You get one every second wave and every ${STREAK} takedowns.`}</div>}
+                  {Object.entries(cnt).map(([k, n]) => (
+                    <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 9px', borderRadius: 4, background: 'rgba(255,255,255,0.06)' }}>
+                      <span style={{ width: 32, height: 32, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', background: E.CARDS[k].hero ? 'linear-gradient(180deg, #FFE27A, #F2A81D)' : 'linear-gradient(180deg, #5A6474, #343B48)', flexShrink: 0 }}><GIcon k={E.CARDS[k].icon} size={18} color={E.CARDS[k].hero ? '#2A1D05' : '#FFE15A'} ink="transparent" /></span>
+                      <span style={{ flex: 1, minWidth: 0 }}><span style={{ display: 'block', fontSize: 14, fontWeight: 900 }}>{E.CARDS[k].name}</span><span style={{ display: 'block', fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.75)' }}>{cardLine(k)}</span></span>
+                      {n > 1 && <span style={{ fontSize: 13, fontWeight: 900, color: '#F2B21B' }}>{`x${n}`}</span>}
+                    </div>
+                  ))}
+                </div>
+              </GLobbySheet>
+            );
+          })()}
+          {board && teamOn && G.current.W && <TeamBoard GS={GS} rows={teamRows(G.current.W)} myK={kindOf()} myTeam={hud.tm.my} thumbs={thumbs} nameOf={nameOf} score={hud.tm.sc} onClose={() => setBoard(false)} />}
           {leaveAsk && (
             <Sheet title="Leave the game?" text="Your squad can keep fighting without you." onClose={() => setLeaveAsk(false)}>
               <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>

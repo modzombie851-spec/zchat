@@ -143,13 +143,13 @@ export function recolor(img, size, band, target, shift, lift = 1, extra = null) 
   const mid = band[2] != null ? band[2] : band[0] <= band[1] ? (band[0] + band[1]) / 2 : ((band[0] + band[1] + 360) / 2) % 360;
   const smin = band[3] != null ? band[3] : 0.18;
   const rot = target == null ? shift : target - mid + shift;
-  const sat = extra && extra.sat ? extra.sat : 1, suit = extra && extra.suit;
+  const sat = extra && extra.sat ? extra.sat : 1, suit = extra && extra.suit, dark = extra && extra.dark ? extra.dark : 0;
   if (!rot && lift === 1 && sat === 1 && !suit) return cv;
   const sh = ((((target == null ? mid : target) + shift) % 360) + 360) % 360;
   for (let i = 0; i < p.length; i += 4) {
     const [h, s, v] = hsv(p[i] / 255, p[i + 1] / 255, p[i + 2] / 255);
     if (suit && s > 0.03 && s < 0.12 && v > 0.58 && v < 0.74 && inBand(h, 230, 290)) {
-      const [r, g, b] = rgb(sh, suit, Math.min(1, v * 1.12));
+      const [r, g, b] = rgb(sh, suit, Math.min(1, v * (1.12 - dark)));
       p[i] = r * 255; p[i + 1] = g * 255; p[i + 2] = b * 255;
       continue;
     }

@@ -78,7 +78,7 @@ const GROUPS = [
     items: [
       ['Survivors, zombies and their animations', 'Mixamo by Adobe', 'https://www.mixamo.com', 'Mixamo license'],
       ['German Shepherd dog', 'RetroStyle Games', 'https://retrostylegames.artstation.com/store/5Y6zX/german-shepherd-3d-model', 'ArtStation standard license'],
-      ['Bolt War heroes, mechs, aliens and power ups, Ultimate Space Kit', 'Quaternius', 'https://quaternius.com', 'CC0'],
+      ['Bolt War heroes, mechs, aliens, power ups, rovers, towers, the Hive Ship and the Nebula Valley trees, rocks and buildings, Ultimate Space Kit', 'Quaternius', 'https://quaternius.com', 'CC0'],
     ],
   },
   {

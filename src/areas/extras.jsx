@@ -6562,27 +6562,30 @@ function WnSegments({ total, at, onArt, dark }) {
   );
 }
 
-const WN_PHOTOS = { chat574: '/wn574-chat.webp', cards574: '/wn574-cards.webp', shop573: '/wn573-shop.webp', try573: '/wn573-try.webp', cmt573: '/wn573-comments.webp', rally57: '/race-art.webp', set57: '/wn57-set.webp', lay57: '/wn57-lay.webp', bolt57: '/wn57-bolt.webp', hub57: '/wn57-hub.webp', zombies49: '/wn49-zombies.webp', mutant49: '/wn49-mutant.webp', guns50: '/wn50-guns.webp', house50: '/wn50-house.webp', pond50: '/wn50-pond.webp', buttons50: '/wn50-buttons.webp', settings50: '/wn50-settings.webp', pack51: '/wn51-pack.webp', emote51: '/wn51-emote.webp', lobby51: '/wn51-lobby.webp', waves52: '/wn52-waves.webp', sky52: '/wn52-sky.webp', map52: '/wn52-map.webp', boss53: '/wn53-boss.webp', fire53: '/wn53-fire.webp', dog53: '/wn53-dog.webp', train53: '/wn53-train.webp', hud531: '/wn531-hud.webp', moves531: '/wn531-moves.webp', pc531: '/wn531-pc.webp', squad54: '/wn54-squad.webp', boom54: '/wn54-boom.webp', heli54: '/wn54-heli.webp', gas54: '/wn54-gas.webp' , shop55: '/wn55-shop.webp', stall55: '/wn55-stall.webp', boss55: '/wn55-boss.webp', climb55: '/wn55-climb.webp', drop55: '/wn55-drop.webp', squad55: '/wn55-squad.webp', hud55: '/wn55-hud.webp', set55: '/wn55-settings.webp', music55: '/wn55-music.webp', guns55: '/wn55-guns.webp', zj55: '/zombie-art2.webp', bolt55: '/bolt-art2.webp', torch55: '/duo-art.webp' };
+const WN_PHOTOS = { team576: '/wn576-team.webp', nyx576: '/wn576-nyx.webp', chat574: '/wn574-chat.webp', cards574: '/wn574-cards.webp', shop573: '/wn573-shop.webp', try573: '/wn573-try.webp', cmt573: '/wn573-comments.webp', rally57: '/race-art.webp', set57: '/wn57-set.webp', lay57: '/wn57-lay.webp', bolt57: '/wn57-bolt.webp', hub57: '/wn57-hub.webp', zombies49: '/wn49-zombies.webp', mutant49: '/wn49-mutant.webp', guns50: '/wn50-guns.webp', house50: '/wn50-house.webp', pond50: '/wn50-pond.webp', buttons50: '/wn50-buttons.webp', settings50: '/wn50-settings.webp', pack51: '/wn51-pack.webp', emote51: '/wn51-emote.webp', lobby51: '/wn51-lobby.webp', waves52: '/wn52-waves.webp', sky52: '/wn52-sky.webp', map52: '/wn52-map.webp', boss53: '/wn53-boss.webp', fire53: '/wn53-fire.webp', dog53: '/wn53-dog.webp', train53: '/wn53-train.webp', hud531: '/wn531-hud.webp', moves531: '/wn531-moves.webp', pc531: '/wn531-pc.webp', squad54: '/wn54-squad.webp', boom54: '/wn54-boom.webp', heli54: '/wn54-heli.webp', gas54: '/wn54-gas.webp' , shop55: '/wn55-shop.webp', stall55: '/wn55-stall.webp', boss55: '/wn55-boss.webp', climb55: '/wn55-climb.webp', drop55: '/wn55-drop.webp', squad55: '/wn55-squad.webp', hud55: '/wn55-hud.webp', set55: '/wn55-settings.webp', music55: '/wn55-music.webp', guns55: '/wn55-guns.webp', zj55: '/zombie-art2.webp', bolt55: '/bolt-art2.webp', torch55: '/duo-art.webp' };
 const WN_HIGHLIGHTS = [
-  { k: 'chat574', art: 'chat574', go: 'games', cta: 'Open games', title: 'Game chat that turns with you', text: 'Chat in every game now opens a big panel with your messages, quick messages and emojis. The keyboard turns sideways with the game, and you can swipe back through older messages.' },
-  { k: 'cards574', art: 'cards574', go: 'siege', cta: 'Play Bolt War', title: 'New upgrade cards in Bolt War', text: 'Every card shows what it changes with real numbers, your level and its type: Hero power, Ability or Boost. On a computer, press 1, 2 or 3 to pick.' },
+  { k: 'team576', art: 'team576', go: 'siege', cta: 'Play Bolt War', title: 'Team battle in Bolt War', text: 'Two teams fight across Nebula Valley, a big new map with three lanes, towers, rovers and a jungle full of aliens. Break the enemy core to win. Play 1v1 up to 5v5, and bots fill every open spot.' },
+  { k: 'nyx576', art: 'nyx576', go: 'siege', cta: 'Play Bolt War', title: 'Meet Nyx', text: 'A new assassin with twin blades. Shadow strike blinks her through enemies, and Fade turns her invisible for a moment. She plays in Waves and Team battle.' },
 ];
 const WN_SECTIONS = [
-  { title: 'Games', items: [
-    { art: 'chat574', title: 'Sideways keyboard', text: 'Type in landscape without the tall phone keyboard.' },
-    { art: 'chat574', title: 'Bigger chat', text: 'Read your last messages and swipe back through older ones.' },
-    { art: 'chat574', title: 'Quick messages', text: 'Emojis and quick lines side by side, with a button to type.' },
+  { title: 'Team battle', items: [
+    { art: 'team576', title: 'Nebula Valley', text: 'Three lanes, a river, jungle aliens and a base for each team.' },
+    { art: 'team576', title: 'The Hive Ship', text: 'A boss in the river. Beat it and it pushes the middle lane for your team.' },
+    { art: 'team576', title: 'Battle skills', text: 'Pick Blink, Mend, Hunter, Guard, Sprint or Shock before you play.' },
+    { art: 'team576', title: 'Portals and pads', text: 'Jump from your base to a lane, or cross the map through the river portals.' },
+    { art: 'team576', title: 'Jungle buffs', text: 'Big aliens give Fury for more damage and Flow for faster supers.' },
+    { art: 'team576', title: 'Levels and powers', text: 'Reach level 12 in each battle and pick a new power every second level.' },
+    { art: 'team576', title: 'A fair start', text: 'Hero levels from scrap do not count here, so every player starts equal.' },
   ] },
-  { title: 'Bolt War', items: [
-    { art: 'cards574', title: 'Real numbers', text: 'See your health, damage or speed before and after a card.' },
-    { art: 'cards574', title: 'Card levels', text: 'See which cards you have and how many more you can take.' },
-    { art: 'cards574', title: 'Keys 1, 2 and 3', text: 'Pick a card from your keyboard on a computer.' },
+  { title: 'Heroes', items: [
+    { art: 'nyx576', title: 'Nyx', text: 'A fast assassin who hides with Fade and strikes from the shadows.' },
   ] },
 ];
 const WN_NEW_COUNT = WN_SECTIONS.reduce((n, sec) => n + sec.items.length, 0);
 const WN_SUMMARY = `${WN_NEW_COUNT} new things to try.`;
 
 const WN_EARLIER = [
+  { title: 'Game chat that turns with you and new upgrade cards', text: 'A big chat panel with a sideways keyboard in every game, and Bolt War cards that show real numbers.' },
   { title: 'A new Shop, try on and a comment filter', text: 'Rarity cards and a Daily shop, try items on before you buy, and rude comments on your posts hidden from others.' },
   { title: 'Game settings and your own button layout', text: 'Graphics, HUD, Controls, Audio and Credits in every big game, drag and resize your buttons, space heroes in Bolt War and real pictures on the games page.' },
   { title: 'Gun shop, boss entrance and new names', text: 'A real gun shop and seller stall, a boss entrance with danger music, climbing, parachute airdrops, squad controls, fire modes, new buttons, and the new names Zombie Junction, Bolt War and Torchbound.' },

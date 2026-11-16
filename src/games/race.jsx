@@ -112,7 +112,7 @@ function sirenSound() {
     o1.connect(g1); o2.connect(g2); g1.connect(f); g2.connect(f); f.connect(out); out.connect(bus);
     o1.start(); o2.start(); lfo.start();
     let cur = 0;
-    return {
+    return { gen: Sfx.gen,
       set(v) { const t = Math.max(0, Math.min(0.32, v)); if (Math.abs(t - cur) < 0.01) return; cur = t; try { out.gain.setTargetAtTime(t, ac.currentTime, 0.12); } catch {} },
       stop() { try { o1.stop(); o2.stop(); lfo.stop(); out.disconnect(); } catch {} },
     };
@@ -138,7 +138,7 @@ function engineSound() {
     let src = null, dead = false;
     const start = () => { if (src || dead || !carBuf) return; src = ac.createBufferSource(); src.buffer = carBuf; src.loop = true; src.connect(lp); src.start(0, Math.random() * carBuf.duration); };
     loadCar(ac).then(start);
-    return {
+    return { gen: Sfx.gen,
       set(v, boost, drift, on) {
         start();
         const t = ac.currentTime;
@@ -400,6 +400,8 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
     setCount(3);
     hold.current = { l: false, r: false, d: false, b: false };
     Sfx.init();
+    if (g.eng && g.eng.gen !== Sfx.gen) { try { g.eng.stop(); } catch {} g.eng = null; }
+    if (g.siren && g.siren.gen !== Sfx.gen) { try { g.siren.stop(); } catch {} g.siren = null; }
     if (!g.eng && !watch) g.eng = engineSound();
   };
   const startRace = () => {
@@ -1160,6 +1162,8 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
         else if (f.k === 'pad') { if (local) { Sfx.play('dash', { vol: 0.85 }); try { if (navigator.vibrate) navigator.vibrate(16); } catch {} } }
       }
       const mineC = g.cars[myK];
+      if (g.eng && g.eng.gen !== Sfx.gen) { try { g.eng.stop(); } catch {} g.eng = watch ? null : engineSound(); }
+      if (g.siren && g.siren.gen !== Sfx.gen) { try { g.siren.stop(); } catch {} g.siren = null; }
       if (g.eng) g.eng.set(mineC ? mineC.v : 0, mineC && mineC.boostT > 0, mineC ? mineC.drift : 0, racing && !!mineC && !pausedRef.current);
       const P = g.parts;
       const cap = [420, 300, 170][B.tier] || 260;

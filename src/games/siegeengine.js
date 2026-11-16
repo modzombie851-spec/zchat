@@ -68,8 +68,14 @@ export const HEROES = {
     sup: { k: 'freeze', rad: 6.2, dmg: 700, stun: 2.6, need: 3000, name: 'Deep freeze', text: 'Freezes every alien near her solid.' },
     gad: { k: 'nova', rad: 4.4, dmg: 420, slow: 0.6, slowT: 3, name: 'Frost nova', text: 'A burst of cold slows aliens around her.' },
   },
+  nyx: {
+    name: 'Nyx', role: 'Assassin', text: 'Fast twin blades up close. Strikes from the shadows.', hp: 3300, spd: 5.8, col: '#9A6BFF', want: 3.6, stats: [3, 4, 2, 5],
+    atk: { k: 'blade', n: 2, arc: 0.2, rng: 6.4, spd: 34, dmg: 540, w: 0.34, reload: 1.1, cd: 0.32 },
+    sup: { k: 'blink', rng: 7.5, rad: 2.3, dmg: 1700, w: 1.15, need: 2900, name: 'Shadow strike', text: 'Blinks forward and cuts everything on the way.' },
+    gad: { k: 'vanish', t: 3.2, name: 'Fade', text: 'Turns invisible and runs faster for a moment.' },
+  },
 };
-export const HERO_KEYS = ['blaze', 'pip', 'boom', 'mira', 'rex', 'volt', 'kai', 'ivy'];
+export const HERO_KEYS = ['blaze', 'pip', 'boom', 'mira', 'rex', 'volt', 'kai', 'ivy', 'nyx'];
 export const MAX_LEVEL = 10;
 export const levelCost = (lv) => 80 * lv;
 export const levelMods = (lv) => { const L = clamp(lv | 0, 1, MAX_LEVEL); return { hp: 1 + 0.06 * (L - 1), dmg: 1 + 0.05 * (L - 1) }; };
@@ -94,6 +100,7 @@ export const CARDS = {
   volt: { hero: 'volt', name: 'Long arc', text: 'Zaps hit one more alien', icon: 'bolt', go: (m) => { m.extra += 1; }, max: 3 },
   kai: { hero: 'kai', name: 'Cluster rockets', text: 'Rockets blast a bigger area', icon: 'rocket', go: (m) => { m.rad *= 1.25; }, max: 2 },
   ivy: { hero: 'ivy', name: 'Deep chill', text: 'Slows last longer', icon: 'snow', go: (m) => { m.slow *= 1.4; }, max: 2 },
+  nyx: { hero: 'nyx', name: 'Long shadow', text: 'Fade lasts longer and her blades hit harder', icon: 'dash', go: (m) => { m.fade = (m.fade || 1) * 1.35; m.dmg *= 1.06; }, max: 2 },
   crit: { name: 'Lucky shot', text: 'Some shots hit twice as hard', icon: 'star', go: (m) => { m.crit = Math.min(0.36, (m.crit || 0) + 0.12); }, max: 3 },
   chain: { name: 'Chain blast', text: 'Aliens you take down explode', icon: 'bomb', go: (m) => { m.chain = (m.chain || 0) + 1; }, max: 2 },
   rush: { name: 'Kill rush', text: 'Run faster for a moment after a takedown', icon: 'dash', go: (m) => { m.rush = (m.rush || 0) + 1; }, max: 2 },
@@ -103,10 +110,11 @@ export const CARDS = {
 };
 export const CARD_KEYS = Object.keys(CARDS);
 export const cardWave = (n) => n > 0 && n % 2 === 0;
-export function cardChoices(h, rnd) {
+export const TEAM_SKIP_CARDS = new Set(['lucky', 'magnet', 'medic']);
+export function cardChoices(h, rnd, skip) {
   const have = {};
   for (const k of h.cards || []) have[k] = (have[k] || 0) + 1;
-  const pool = CARD_KEYS.filter((k) => { const C = CARDS[k]; if (C.hero && C.hero !== h.key) return false; return !C.max || (have[k] || 0) < C.max; });
+  const pool = CARD_KEYS.filter((k) => { const C = CARDS[k]; if (skip && skip.has(k)) return false; if (C.hero && C.hero !== h.key) return false; return !C.max || (have[k] || 0) < C.max; });
   const out = [];
   if (pool.includes(h.key) && rnd() < 0.55) out.push(h.key);
   while (out.length < 3 && out.length < pool.length) { const k = pool[Math.floor(rnd() * pool.length)]; if (!out.includes(k)) out.push(k); }
@@ -132,8 +140,17 @@ export const ROBOTS = {
   bomber: { name: 'Popper', hp: 620, spd: 5.1, r: 0.56, dmg: 1250, rad: 2.7, fuse: 0.7, pts: 15, drop: 0.06 },
   tank: { name: 'Brute', hp: 3800, spd: 2.25, r: 0.98, dmg: 270, rng: 9, cd: 2.7, burst: 3, bspd: 11.5, shield: 0.25, pts: 40, drop: 0.3 },
   boss: { name: 'Glob Queen', hp: 30000, spd: 2.1, r: 1.75, dmg: 1300, pts: 400, drop: 1 },
+  mel: { name: 'Rover', hp: 2900, spd: 3.3, r: 0.6, dmg: 210, rng: 1.6, cd: 1.0, pts: 0, drop: 0 },
+  rng: { name: 'Dish rover', hp: 1850, spd: 3.3, r: 0.55, dmg: 240, rng: 6.5, cd: 1.4, pts: 0, drop: 0 },
+  sie: { name: 'Big rover', hp: 5200, spd: 3.0, r: 0.75, dmg: 430, rng: 7.5, cd: 2.0, pts: 0, drop: 0 },
+  tow: { name: 'Tower', hp: 24000, spd: 0, r: 1.15, dmg: 950, rng: 8.6, cd: 1.0, pts: 0, drop: 0 },
+  gua: { name: 'Guardian', hp: 34000, spd: 0, r: 1.35, dmg: 1150, rng: 9.2, cd: 1.0, pts: 0, drop: 0 },
+  cor: { name: 'Core', hp: 30000, spd: 0, r: 2.4, dmg: 0, rng: 0, cd: 9, pts: 0, drop: 0 },
+  shp: { name: 'Hive Ship', hp: 42000, spd: 2.4, r: 2.1, dmg: 1200, rng: 11, cd: 2.4, pts: 0, drop: 0 },
 };
-export const ROBOT_KEYS = ['grunt', 'shooter', 'bomber', 'tank', 'boss'];
+export const ROBOT_KEYS = ['grunt', 'shooter', 'bomber', 'tank', 'boss', 'mel', 'rng', 'sie', 'tow', 'gua', 'cor', 'shp'];
+export const STILL_TYPES = new Set(['tow', 'gua', 'cor']);
+export const foeTo = (h, b) => !h || !b || b.tm == null || h.tm == null || b.tm !== h.tm;
 
 export const LEVELS = {
   easy: { name: 'Easy', hp: 0.62, dmg: 0.56, n: 0.8 },
@@ -198,10 +215,13 @@ const ARENA_DEF = {
 };
 export const ARENA_KEYS = ['yard', 'ruins', 'frost', 'lava', 'docks'];
 export const ARENAS = Object.fromEntries(ARENA_KEYS.map((k) => [k, { name: ARENA_DEF[k].name, theme: ARENA_DEF[k].theme }]));
+ARENAS.rift = { name: 'Nebula Valley', theme: 'rift' };
+export const ARENA_BUILD = {};
 const CODE = { '.': 0, '#': 1, x: 2, b: 3, w: 4, S: 5, P: 6 };
-export const C_FLOOR = 0, C_WALL = 1, C_CRATE = 2, C_BUSH = 3, C_WATER = 4, C_PAD = 5, C_HOME = 6;
+export const C_FLOOR = 0, C_WALL = 1, C_CRATE = 2, C_BUSH = 3, C_WATER = 4, C_PAD = 5, C_HOME = 6, C_RIVER = 7, C_LANE = 8, C_BASE = 9;
 
 export function makeArena(key) {
+  if (ARENA_BUILD[key]) return ARENA_BUILD[key]();
   const D = ARENA_DEF[key] || ARENA_DEF.yard;
   const rows = D.rows.map((r) => r + r.split('').reverse().join(''));
   const H = rows.length, W = rows[0].length;
@@ -217,7 +237,7 @@ export function makeArena(key) {
   A.clusters = bushClusters(A);
   return A;
 }
-function bushClusters(A) {
+export function bushClusters(A) {
   const seen = new Uint8Array(A.W * A.H), out = [];
   for (const b of A.bushes) {
     const i0 = b.r * A.W + b.c;
@@ -405,7 +425,7 @@ export function mkRobot(id, type, x, z, spec) {
 export function newWorld(arenaKey, lvKey, seed, opt = {}) {
   const A = makeArena(arenaKey);
   return {
-    A, lv: LEVELS[lvKey] ? lvKey : 'normal', seed: seed || 1, endless: !!opt.endless, t: 0,
+    A, lv: LEVELS[lvKey] ? lvKey : 'normal', seed: seed || 1, endless: !!opt.endless, t: 0, mode: opt.mode === 'team' ? 'team' : 'squad', pvp: opt.mode === 'team',
     heroes: {}, order: [], robots: [], shots: [], zones: [], drops: [], fxq: [], turrets: [], mines: [], decoys: [], pend: [], gid: 1,
     wave: { n: 0, st: 'intro', t: 3.2, queue: [], spawnT: 0, spec: null, left: 0 },
     nextId: 1, dropId: 1, ev: [], net: [], flows: {}, flowT: 0, rnd: rngOf(seed || 1), over: null, score: 0, allDownT: 0,
@@ -414,17 +434,42 @@ export function newWorld(arenaKey, lvKey, seed, opt = {}) {
 export const aliveHero = (h) => !!h && h.st === 0;
 export function heroList(W) { return W.order.map((k) => W.heroes[k]).filter(Boolean); }
 
-function emit(W, e) { W.ev.push(e); }
-function net(W, e) { W.net.push(e); }
+export function emit(W, e) { W.ev.push(e); }
+export function net(W, e) { W.net.push(e); }
+const NOH = [];
+export const foeHeroes = (W, h) => (W.pvp && h ? heroList(W).filter((o) => o.st === 0 && o.tm !== h.tm) : NOH);
+export function pvpHit(W, att, t, d, dirx, dirz, o = {}) {
+  if (!t || t.st !== 0 || !att || t.tm === att.tm || !(d > 0)) return 0;
+  const dd = Math.round(d * 0.8);
+  if (W.local && W.local.has(t.id)) {
+    const got = hurtHero(W, t, dd, att.id);
+    if (got > 0 && W.local.has(att.id) && att.stats) att.stats.hd = (att.stats.hd || 0) + got;
+    if (got > 0 || t.st === 2) {
+      if (o.stun) t.stunT = Math.max(t.stunT || 0, Math.min(1.2, o.stun * 0.55));
+      if (o.slow) { t.slowK = Math.max(t.slowT > 0 ? t.slowK || 0 : 0, clamp(o.slow[0] * 0.8, 0, 0.6)); t.slowT = Math.max(t.slowT || 0, o.slow[1] * 0.7); }
+      if (o.kb) { t.kbx = (t.kbx || 0) + (dirx || 0) * o.kb * 0.7; t.kbz = (t.kbz || 0) + (dirz || 0) * o.kb * 0.7; }
+    }
+    return got;
+  }
+  emit(W, { k: 'hitH', id: t.id, d: dd, x: t.x, z: t.z, by: att.id });
+  if (W.local && W.local.has(att.id)) { creditSup(W, { own: att.id, sup: !!o.sup }, dd); if (att.stats) att.stats.hd = (att.stats.hd || 0) + dd; }
+  return dd;
+}
 
 export function hurtHero(W, h, d, src) {
   if (!h || h.st !== 0 || !(d > 0)) return 0;
   if (h.dashT > 0 || h.jump) { emit(W, { k: 'dodge', id: h.id, x: h.x, z: h.z }); return 0; }
+  if (W.pvp && (h.spawnT || 0) > 0) return 0;
   let dd = Math.round(d * (1 - (h.mods ? h.mods.armor : 0)));
   if (h.shield > 0) { const a = Math.min(h.shield, dd); h.shield -= a; dd -= a; emit(W, { k: 'shieldHit', id: h.id, x: h.x, z: h.z, d: a }); if (dd <= 0) return 0; }
-  h.hp -= dd; h.regen = 0; h.flash = 0.12; h.lastBy = src;
+  h.hp -= dd; h.regen = 0; h.flash = 0.12; h.lastBy = src; h.lastHurt = W.t;
+  if (W.pvp && typeof src === 'string' && W.heroes[src]) (h.dmgBy || (h.dmgBy = {}))[src] = W.t;
   emit(W, { k: 'hurtH', id: h.id, d: dd, x: h.x, z: h.z, src });
-  if (h.hp <= 0) { h.hp = 0; h.st = 1; h.downT = DOWN_T; h.rv = 0; h.shield = 0; emit(W, { k: 'down', id: h.id, x: h.x, z: h.z, by: src }); }
+  if (h.hp <= 0) {
+    h.hp = 0; h.rv = 0; h.shield = 0;
+    if (W.pvp) { h.st = 2; h.downT = 0; h.respT = W.respawnFor ? W.respawnFor(h) : 8; h.stunT = 0; h.slowT = 0; h.kbx = 0; h.kbz = 0; emit(W, { k: 'down', id: h.id, x: h.x, z: h.z, by: src, team: true }); }
+    else { h.st = 1; h.downT = DOWN_T; emit(W, { k: 'down', id: h.id, x: h.x, z: h.z, by: src }); }
+  }
   return dd;
 }
 export function healHero(W, h, n, by) {
@@ -445,25 +490,29 @@ export function stunRobot(b, t) { if (!b || b.hp <= 0) return; b.stun = Math.max
 export function slowRobot(b, k, t) { if (!b || b.hp <= 0) return; const bk = b.type === 'boss' ? k * 0.5 : k; b.slowK = Math.max(b.slowT > 0 ? b.slowK || 0 : 0, clamp(bk, 0, 0.8)); b.slowT = Math.max(b.slowT || 0, t); }
 export function hurtRobot(W, b, d, by, dirx, dirz, o = {}) {
   if (!b || b.hp <= 0 || b.sp > 0 || !(d > 0)) return 0;
-  let dmg = d;
-  if (b.type === 'tank' && dirx != null) {
+  if (b.inv) { emit(W, { k: 'hitR', id: b.id, d: 0, x: b.x, z: b.z, by, block: true, inv: true }); return 0; }
+  let dmg = d * (b.dmgIn != null && typeof by === 'string' ? b.dmgIn * 0.6 : 1) * (b.dmgAll || 1);
+  if (W.pvp && STILL_TYPES.has(b.type)) o = { ...o, kb: 0, stun: 0, slow: null };
+  if (b.type === 'tank' && dirx != null && !b.camp && !W.pvp) {
     const fx = Math.sin(b.yaw), fz = Math.cos(b.yaw);
     if (-(dirx * fx + dirz * fz) > 0.5) { dmg *= ROBOTS.tank.shield; o.block = true; }
   }
   dmg = Math.round(dmg);
   b.flash = 0.1; b.hitAt = W.t; b.lastHit = by;
-  if (o.kb && b.type !== 'boss') { const k = b.type === 'tank' ? 0.35 : 1; b.kbx += (dirx || 0) * o.kb * k; b.kbz += (dirz || 0) * o.kb * k; }
+  if (o.kb && b.type !== 'boss' && b.type !== 'shp' && !STILL_TYPES.has(b.type)) { const k = b.type === 'tank' ? 0.35 : 1; b.kbx += (dirx || 0) * o.kb * k; b.kbz += (dirz || 0) * o.kb * k; }
   if (o.host !== false) { if (o.stun) stunRobot(b, o.stun); if (o.slow) slowRobot(b, o.slow[0], o.slow[1]); }
   if (o.host === false) { b.hp = Math.max(1, b.hp - dmg); b.predAt = W.t; emit(W, { k: 'hitR', id: b.id, d: dmg, x: b.x, z: b.z, by, block: !!o.block, pred: true }); return dmg; }
   b.hp -= dmg;
   const h = W.heroes[by];
   if (h) h.stats.dmg += dmg;
+  if (W.pvp && h) { b.lastHero = by; b.lastHeroAt = W.t; if (W.onHit) W.onHit(W, b, h, dmg); }
   emit(W, { k: 'hitR', id: b.id, d: dmg, x: b.x, z: b.z, by, block: !!o.block });
   if (b.hp <= 0) killRobot(W, b, by);
   return dmg;
 }
 function killRobot(W, b, by) {
   b.hp = 0;
+  if (W.onKill) W.onKill(W, b, by);
   const R = ROBOTS[b.type];
   W.score += Math.round(R.pts * (LEVELS[W.lv].hp + 0.3));
   const h = W.heroes[by];
@@ -474,7 +523,7 @@ function killRobot(W, b, by) {
     const r = 2.6 + h.mods.chain * 0.5, d = Math.round(320 * h.mods.chain * (h.mods.dmg || 1));
     W.zones.push({ k: 'boom', x: b.x, z: b.z, r, d: 0, t: 0, live: true });
     net(W, ['z', 'boom', +b.x.toFixed(2), +b.z.toFixed(2), r, 0, 0]);
-    for (const o of W.robots) if (o !== b && o.hp > 0 && Math.hypot(o.x - b.x, o.z - b.z) < r + o.r) { o.chained = true; const dx = o.x - b.x, dz = o.z - b.z, L = Math.hypot(dx, dz) || 1; hurtRobot(W, o, d, by, dx / L, dz / L, { kb: 3 }); }
+    for (const o of W.robots) if (o !== b && o.hp > 0 && foeTo(h, o) && Math.hypot(o.x - b.x, o.z - b.z) < r + o.r) { o.chained = true; const dx = o.x - b.x, dz = o.z - b.z, L = Math.hypot(dx, dz) || 1; hurtRobot(W, o, d, by, dx / L, dz / L, { kb: 3 }); }
   }
   if (b.type === 'bomber' && !b.blown) bomberBlast(W, b, 0.75);
   const n = b.type === 'boss' ? 3 : W.rnd() < R.drop ? 1 : 0;
@@ -500,7 +549,7 @@ function bomberBlast(W, b, mul) {
 export function addZone(W, z, local) {
   W.zones.push({ ...z, t: z.t || 0, live: true });
   if (!local) return;
-  net(W, ['z', z.k, +z.x.toFixed(2), +z.z.toFixed(2), z.r || 0, Math.round(z.d || 0), +(z.t || 0).toFixed(2), z.a != null ? +z.a.toFixed(3) : 0, z.a1 != null ? +z.a1.toFixed(3) : 0, z.dur || 0, z.len || 0]);
+  net(W, ['z', z.k, +z.x.toFixed(2), +z.z.toFixed(2), z.r || 0, Math.round(z.d || 0), +(z.t || 0).toFixed(2), z.a != null ? +z.a.toFixed(3) : 0, z.a1 != null ? +z.a1.toFixed(3) : 0, z.dur || 0, z.len || 0, z.tm != null ? z.tm : -9]);
 }
 
 function pickTarget(W, b) {
@@ -509,7 +558,8 @@ function pickTarget(W, b) {
   let best = null, bd = 1e9;
   for (const h of L) {
     const d = Math.hypot(h.x - b.x, h.z - b.z);
-    const hidden = h.hid && d > 3.6 && W.t - h.seen > 1.2;
+    const clk = (h.clkT || 0) > 0;
+    const hidden = clk ? d > 2.2 : h.hid && d > 3.6 && W.t - h.seen > 1.2;
     const score = d + (hidden ? 30 : 0) + (h.id === b.tg ? -2.5 : 0);
     if (score < bd) { bd = score; best = h; }
   }
@@ -517,7 +567,7 @@ function pickTarget(W, b) {
   return best ? best.id : null;
 }
 function decoyOf(W, key) { const d = W.decoys.find((o) => o.key === key); return d ? { id: d.key, x: d.x, z: d.z, vx: 0, vz: 0, st: 0, hid: false, seen: W.t, decoy: true } : null; }
-export const visibleTo = (W, h, x, z) => !!h && h.st === 0 && (!h.hid || Math.hypot(h.x - x, h.z - z) < 3.6 || W.t - h.seen < 1.2);
+export const visibleTo = (W, h, x, z) => !!h && h.st === 0 && ((h.clkT || 0) > 0 ? Math.hypot(h.x - x, h.z - z) < 2.2 : !h.hid || Math.hypot(h.x - x, h.z - z) < 3.6 || W.t - h.seen < 1.2);
 
 function flowFor(W, h) {
   const F = W.flows[h.id];
@@ -533,7 +583,7 @@ export function steerTo(W, o, tx, tz, rad, F) {
   if (!s) return [tx - o.x, tz - o.z];
   return [s[0] - o.x, s[1] - o.z];
 }
-function moveRobot(W, b, tx, tz, spd, dt, F) {
+export function moveRobot(W, b, tx, tz, spd, dt, F) {
   const [dx, dz] = steerTo(W, b, tx, tz, b.r, F);
   const L = Math.hypot(dx, dz);
   if (L < 0.05) { b.mv = 0; return; }
@@ -545,16 +595,16 @@ function moveRobot(W, b, tx, tz, spd, dt, F) {
   moveCircle(W.A, b, ux * s, uz * s, b.r);
   b.mv = sp; b.walk += s;
 }
-function faceTo(b, x, z, dt, rate = 8) { const want = Math.atan2(x - b.x, z - b.z); b.yaw += clamp(wrapA(want - b.yaw), -dt * rate, dt * rate); return Math.abs(wrapA(want - b.yaw)); }
+export function faceTo(b, x, z, dt, rate = 8) { const want = Math.atan2(x - b.x, z - b.z); b.yaw += clamp(wrapA(want - b.yaw), -dt * rate, dt * rate); return Math.abs(wrapA(want - b.yaw)); }
 
-function robotShot(W, b, a, spd, dmg, k = 'eb') {
-  const s = { side: 'r', k, own: b.id, x: b.x + Math.sin(a) * (b.r + 0.2), z: b.z + Math.cos(a) * (b.r + 0.2), y: k === 'eb' ? 0.95 : 1.1, vx: Math.sin(a) * spd, vz: Math.cos(a) * spd, range: 15, d: Math.round(dmg), w: 0.38, hit: null };
+export function robotShot(W, b, a, spd, dmg, k = 'eb') {
+  const s = { side: 'r', k, own: b.id, x: b.x + Math.sin(a) * (b.r + 0.2), z: b.z + Math.cos(a) * (b.r + 0.2), y: k === 'eb' ? 0.95 : 1.1, vx: Math.sin(a) * spd, vz: Math.cos(a) * spd, range: 15, d: Math.round(dmg), w: 0.38, hit: null, tm: b.tm };
   W.shots.push(s);
   emit(W, { k: 'rshot', x: s.x, z: s.z, a, type: b.type, id: b.id });
-  net(W, ['s', b.id, +s.x.toFixed(2), +s.z.toFixed(2), +a.toFixed(3), spd, s.d, k]);
+  net(W, ['s', b.id, +s.x.toFixed(2), +s.z.toFixed(2), +a.toFixed(3), spd, s.d, k, b.tm != null ? b.tm : -9]);
 }
-export function spawnRobotShot(W, rid, x, z, a, spd, d, k) {
-  const s = { side: 'r', k: k || 'eb', own: rid, x, z, y: (k || 'eb') === 'eb' ? 0.95 : 1.1, vx: Math.sin(a) * spd, vz: Math.cos(a) * spd, range: 15, d, w: 0.38, hit: null };
+export function spawnRobotShot(W, rid, x, z, a, spd, d, k, tm) {
+  const s = { side: 'r', k: k || 'eb', own: rid, x, z, y: (k || 'eb') === 'eb' ? 0.95 : 1.1, vx: Math.sin(a) * spd, vz: Math.cos(a) * spd, range: 15, d, w: 0.38, hit: null, tm: tm != null && tm > -9 ? tm : undefined };
   W.shots.push(s);
   emit(W, { k: 'rshot', x, z, a, id: rid });
 }
@@ -681,7 +731,7 @@ function stepZones(W, dt) {
       if (z.tick <= 0) {
         z.tick = 0.2;
         for (const h of heroList(W)) {
-          if (h.st !== 0 || !(W.local && W.local.has(h.id))) continue;
+          if (h.st !== 0 || !(W.local && W.local.has(h.id)) || (z.tm != null && h.tm === z.tm)) continue;
           const px = h.x - z.x, pz = h.z - z.z, along = px * ux + pz * uz, perp = Math.abs(px * uz - pz * ux);
           if (along > 0 && along < z.reach && perp < z.r + 0.5) hurtHero(W, h, z.d, 'laser');
         }
@@ -694,10 +744,11 @@ function stepZones(W, dt) {
       z.fired = true;
       emit(W, { k: 'zone', z: z.k, x: z.x, z2: z.z, r: z.r });
       for (const h of heroList(W)) {
-        if (h.st !== 0 || !(W.local && W.local.has(h.id))) continue;
+        if (h.st !== 0 || !(W.local && W.local.has(h.id)) || (z.tm != null && h.tm === z.tm)) continue;
         const d = Math.hypot(h.x - z.x, h.z - z.z);
         if (d < z.r + 0.45) hurtHero(W, h, z.d * (z.k === 'boom' ? 1 - 0.45 * clamp(d / z.r, 0, 1) : 1), z.k);
       }
+      if (W.pvp && W.host && z.tm != null && z.d > 0 && z.k !== 'boom') for (const b of W.robots) { if (b.hp <= 0 || b.tm == null || b.tm === z.tm || b.tm < 0) continue; if (Math.hypot(b.x - z.x, b.z - z.z) < z.r + b.r) hurtRobot(W, b, z.d * (STILL_TYPES.has(b.type) ? 1.5 : 1), z.own != null ? z.own : -1, 0, 0, {}); }
     }
     W.zones.splice(i, 1);
   }
@@ -714,8 +765,9 @@ export function stepShots(W, dt) {
       if (u >= 1) {
         W.shots.splice(i, 1);
         emit(W, { k: 'blast', x: s.x1, z: s.z1, r: s.rad, big: s.k === 'mega', own: s.own, rocket: s.k === 'rain' });
+        const ow = W.heroes[s.own];
         for (const b of W.robots) {
-          if (b.hp <= 0) continue;
+          if (b.hp <= 0 || !foeTo(ow, b)) continue;
           const dx = b.x - s.x1, dz = b.z - s.z1, d = Math.hypot(dx, dz);
           if (d < s.rad + b.r * 0.7) {
             const f = 1 - 0.4 * clamp(d / s.rad, 0, 1);
@@ -723,6 +775,7 @@ export function stepShots(W, dt) {
             creditSup(W, s, got);
           }
         }
+        for (const t of foeHeroes(W, ow)) { const dx = t.x - s.x1, dz = t.z - s.z1, d = Math.hypot(dx, dz); if (d < s.rad + 0.35) pvpHit(W, ow, t, s.d * (1 - 0.4 * clamp(d / s.rad, 0, 1)), dx / (d || 1), dz / (d || 1), { kb: s.kb || 0, sup: s.sup }); }
       }
       continue;
     }
@@ -734,8 +787,9 @@ export function stepShots(W, dt) {
       if (s.range <= 0) { dead = true; if (s.k === 'rocket') rocketBoom(W, s, host); else if (s.side === 'h') emit(W, { k: 'fizz', x: s.x, z: s.z, shot: s.k }); break; }
       if (blockAt(W.A, s.x, s.z)) { dead = true; if (s.k === 'rocket') { s.x -= (s.vx * dt) / n; s.z -= (s.vz * dt) / n; rocketBoom(W, s, host); } else emit(W, { k: 'wallHit', x: s.x, z: s.z, shot: s.k, side: s.side }); break; }
       if (s.side === 'h') {
+        const ow = W.heroes[s.own];
         for (const b of W.robots) {
-          if (b.hp <= 0 || b.sp > 0) continue;
+          if (b.hp <= 0 || b.sp > 0 || !foeTo(ow, b)) continue;
           if (s.hit && s.hit.has(b.id)) continue;
           if (Math.hypot(b.x - s.x, b.z - s.z) < b.r + s.w) {
             if (s.k === 'rocket') { rocketBoom(W, s, host); dead = true; break; }
@@ -747,9 +801,19 @@ export function stepShots(W, dt) {
             dead = true; break;
           }
         }
+        if (!dead && W.pvp) for (const t of foeHeroes(W, ow)) {
+          if (s.hit && s.hit.has(t.id)) continue;
+          if (Math.hypot(t.x - s.x, t.z - s.z) >= 0.5 + s.w) continue;
+          if (s.k === 'rocket') { rocketBoom(W, s, host); dead = true; break; }
+          const sp = Math.hypot(s.vx, s.vz) || 1;
+          pvpHit(W, ow, t, s.d, s.vx / sp, s.vz / sp, { kb: s.kb || 0, slow: s.slow || null, sup: s.sup });
+          if (s.k === 'orb') { (s.hit || (s.hit = new Set())).add(t.id); continue; }
+          if (s.k === 'bolt' && (s.pierce || 0) > 0) { s.pierce -= 1; s.d = Math.round(s.d * 0.85); (s.hit || (s.hit = new Set())).add(t.id); continue; }
+          dead = true; break;
+        }
         if (!dead && s.k === 'orb' && s.heal) {
           for (const h of heroList(W)) {
-            if (h.id === s.own || h.st !== 0) continue;
+            if (h.id === s.own || h.st !== 0 || (W.pvp && ow && h.tm !== ow.tm)) continue;
             if (s.healed && s.healed.has(h.id)) continue;
             if (Math.hypot(h.x - s.x, h.z - s.z) < 0.6 + s.w) {
               (s.healed || (s.healed = new Set())).add(h.id);
@@ -759,7 +823,7 @@ export function stepShots(W, dt) {
         }
       } else {
         for (const h of heroList(W)) {
-          if (h.st !== 0) continue;
+          if (h.st !== 0 || (s.tm != null && h.tm === s.tm)) continue;
           if (Math.hypot(h.x - s.x, h.z - s.z) < 0.55 + s.w) {
             if (W.local && W.local.has(h.id)) hurtHero(W, h, s.d, s.own);
             else emit(W, { k: 'spark', x: s.x, z: s.z });
@@ -774,39 +838,54 @@ export function stepShots(W, dt) {
 function rocketBoom(W, s, host) {
   emit(W, { k: 'blast', x: s.x, z: s.z, r: s.rad, big: false, own: s.own, rocket: true });
   const h = W.heroes[s.own];
+  for (const t of foeHeroes(W, h)) { const dx = t.x - s.x, dz = t.z - s.z, d = Math.hypot(dx, dz); if (d <= s.rad + 0.35) pvpHit(W, h, t, s.d * (1 - 0.35 * clamp(d / s.rad, 0, 1)), dx / (d || 1), dz / (d || 1), { kb: 2.5, sup: s.sup }); }
   for (const b of W.robots) {
-    if (b.hp <= 0 || b.sp > 0) continue;
+    if (b.hp <= 0 || b.sp > 0 || !foeTo(h, b)) continue;
     const dx = b.x - s.x, dz = b.z - s.z, d = Math.hypot(dx, dz);
     if (d > s.rad + b.r * 0.7) continue;
     const got = hurtRobot(W, b, s.d * (1 - 0.35 * clamp(d / s.rad, 0, 1)), s.own, dx / (d || 1), dz / (d || 1), { kb: 2.5, host });
     if (h) creditSup(W, s, got);
   }
 }
-function creditSup(W, s, got) {
+export function creditSup(W, s, got) {
   if (!got) return;
   const h = W.heroes[s.own];
   if (!h || !(W.local && W.local.has(h.id))) return;
   if (h.mods && h.mods.life > 0 && h.st === 0) h.hp = Math.min(h.max, h.hp + got * h.mods.life);
   if (s.sup) return;
   const H = HEROES[h.key];
-  h.sup = Math.min(1, h.sup + (got / H.sup.need) * (h.mods ? h.mods.supRate : 1));
+  h.sup = Math.min(1, h.sup + (got / H.sup.need) * (h.mods ? h.mods.supRate : 1) * (h.buffs && h.buffs.flow ? 1.35 : 1));
 }
 
+export const seenBy = (W, t, tm) => {
+  if (!W.pvp) return true;
+  const clk = (t.clkT || 0) > 0;
+  if (!clk && (!t.hid || W.t - (t.seen || -9) < 1.2)) return true;
+  const R = clk ? 2.2 : 3.6;
+  return heroList(W).some((o) => o.st === 0 && o.tm === tm && Math.hypot(o.x - t.x, o.z - t.z) < R);
+};
 export function autoAim(W, h, rng, needLos = true) {
-  let best = null, bd = 1e9;
+  let best = null, bd = 1e9, hero = false;
   for (const b of W.robots) {
-    if (b.hp <= 0 || b.sp > 0) continue;
+    if (b.hp <= 0 || b.sp > 0 || !foeTo(h, b) || b.inv) continue;
     const d = Math.hypot(b.x - h.x, b.z - h.z);
-    if (d > rng * 1.12) continue;
+    if (d > rng * 1.12 + (W.pvp ? b.r : 0)) continue;
     if (needLos && !losClear(W.A, h.x, h.z, b.x, b.z, 0)) continue;
-    const s = d - (b.type === 'bomber' && d < 5 ? 3 : 0);
+    const s = d - (b.type === 'bomber' && d < 5 ? 3 : 0) + (W.pvp && STILL_TYPES.has(b.type) ? 2.5 : 0);
     if (s < bd) { bd = s; best = b; }
+  }
+  for (const t of foeHeroes(W, h)) {
+    const d = Math.hypot(t.x - h.x, t.z - h.z);
+    if (d > rng * 1.12 || !seenBy(W, t, h.tm)) continue;
+    if (needLos && !losClear(W.A, h.x, h.z, t.x, t.z, 0)) continue;
+    const s = d - 3.2 - (1 - t.hp / Math.max(1, t.max)) * 2;
+    if (s < bd) { bd = s; best = t; hero = true; }
   }
   if (!best) return null;
   const d = Math.hypot(best.x - h.x, best.z - h.z);
-  return { a: Math.atan2(best.x - h.x, best.z - h.z), d, x: best.x, z: best.z, id: best.id };
+  return { a: Math.atan2(best.x - h.x, best.z - h.z), d, x: best.x, z: best.z, id: best.id, hero };
 }
-const dmgOf = (h, n) => Math.round(n * (h.mods ? h.mods.dmg : 1) * (h.pw > 0 ? 1.3 : 1));
+const dmgOf = (h, n) => Math.round(n * (h.mods ? h.mods.dmg : 1) * (h.pw > 0 ? 1.3 : 1) * (h.buffs && h.buffs.fury ? 1.15 : 1));
 export function heroShots(W, h, kind, a, dist, seed) {
   const H = HEROES[h.key];
   const S = kind === 'sup' ? H.sup : H.atk;
@@ -816,13 +895,13 @@ export function heroShots(W, h, kind, a, dist, seed) {
   const sup = kind === 'sup';
   const fx = Math.sin(a), fz = Math.cos(a);
   const ox = h.x + fx * 0.55, oz = h.z + fz * 0.55;
-  if (S.k === 'spread' || S.k === 'wave' || S.k === 'shard') {
+  if (S.k === 'spread' || S.k === 'wave' || S.k === 'shard' || S.k === 'blade') {
     const n = S.n + (S.k === 'spread' ? M.extra : 0);
     const arc = S.arc * (S.k === 'spread' && M.extra ? 1 + M.extra * 0.08 : 1);
     for (let i = 0; i < n; i++) {
       const aa = a + arc * (n > 1 ? i / (n - 1) - 0.5 : 0) + (rnd() - 0.5) * 0.05;
       const sp = S.spd * (0.94 + rnd() * 0.1);
-      const sh = { side: 'h', k: S.k === 'wave' ? 'wave' : S.k === 'shard' ? 'shard' : 'pellet', own: h.id, x: ox, z: oz, y: 0.85, vx: Math.sin(aa) * sp, vz: Math.cos(aa) * sp, range: S.rng * (0.95 + rnd() * 0.08), d: dmgOf(h, S.dmg), w: S.w, kb: S.kb || 0, sup };
+      const sh = { side: 'h', k: S.k === 'wave' ? 'wave' : S.k === 'shard' ? 'shard' : S.k === 'blade' ? 'blade' : 'pellet', own: h.id, x: ox, z: oz, y: 0.85, vx: Math.sin(aa) * sp, vz: Math.cos(aa) * sp, range: S.rng * (0.95 + rnd() * 0.08), d: dmgOf(h, S.dmg), w: S.w, kb: S.kb || 0, sup };
       if (S.k === 'shard') sh.slow = [Math.min(0.75, S.slow + (M.slow - 1) * 0.15), S.slowT * M.slow];
       out.push(sh);
     }
@@ -848,7 +927,8 @@ function zapChain(W, h, a, S, extra, host) {
   const pts = [[h.x, h.z]];
   const hit = new Set();
   let cur = null, bd = 1e9;
-  for (const b of W.robots) {
+  const tgts = W.pvp ? W.robots.filter((b) => foeTo(h, b)).concat(foeHeroes(W, h).map((t) => ({ hero: t, id: t.id, x: t.x, z: t.z, r: 0.4, hp: 1, sp: 0 }))) : W.robots;
+  for (const b of tgts) {
     if (b.hp <= 0 || b.sp > 0) continue;
     const dx = b.x - h.x, dz = b.z - h.z, d = Math.hypot(dx, dz);
     if (d > S.rng + b.r) continue;
@@ -866,20 +946,21 @@ function zapChain(W, h, a, S, extra, host) {
     pts.push([cur.x, cur.z]);
     const prev = pts[pts.length - 2];
     const ux = cur.x - prev[0], uz = cur.z - prev[1], L = Math.hypot(ux, uz) || 1;
-    const got = hurtRobot(W, cur, dmg, h.id, ux / L, uz / L, { kb: 1.5, host });
-    creditSup(W, { own: h.id, sup: false }, got);
+    if (cur.hero) pvpHit(W, h, cur.hero, dmg, ux / L, uz / L, {});
+    else { const got = hurtRobot(W, cur, dmg, h.id, ux / L, uz / L, { kb: 1.5, host }); creditSup(W, { own: h.id, sup: false }, got); }
     n++;
     dmg = Math.round(dmg * 0.78);
     let nx = null, nd = 1e9;
-    for (const b of W.robots) { if (b.hp <= 0 || b.sp > 0 || hit.has(b.id)) continue; const d = Math.hypot(b.x - cur.x, b.z - cur.z); if (d < S.hop * (h.ocT > 0 ? 1.5 : 1) && d < nd && losClear(W.A, cur.x, cur.z, b.x, b.z, 0)) { nd = d; nx = b; } }
+    for (const b of tgts) { if (b.hp <= 0 || b.sp > 0 || hit.has(b.id)) continue; const d = Math.hypot(b.x - cur.x, b.z - cur.z); if (d < S.hop * (h.ocT > 0 ? 1.5 : 1) && d < nd && losClear(W.A, cur.x, cur.z, b.x, b.z, 0)) { nd = d; nx = b; } }
     cur = nx;
   }
   return { pts, n };
 }
 function aoe(W, h, x, z, rad, dmg, o, host) {
   let tot = 0;
+  for (const t of foeHeroes(W, h)) { const dx = t.x - x, dz = t.z - z, d = Math.hypot(dx, dz); if (d <= rad + 0.4) tot += pvpHit(W, h, t, dmg, dx / (d || 1), dz / (d || 1), o); }
   for (const b of W.robots) {
-    if (b.hp <= 0 || b.sp > 0) continue;
+    if (b.hp <= 0 || b.sp > 0 || !foeTo(h, b)) continue;
     const dx = b.x - x, dz = b.z - z, d = Math.hypot(dx, dz);
     if (d > rad + b.r) continue;
     const got = hurtRobot(W, b, dmg, h.id, dx / (d || 1), dz / (d || 1), { ...o, host });
@@ -893,24 +974,42 @@ export function fireHero(W, h, kind, a, dist, seed) {
   const S = kind === 'sup' ? H.sup : H.atk;
   const M = h.mods || baseMods();
   const host = !!W.host;
-  h.aimA = a; h.aimT = 0.45; h.yaw = a; h.rec = 0.12; h.regen = 0; h.seen = W.t;
+  h.aimA = a; h.aimT = 0.45; h.yaw = a; h.rec = 0.12; h.regen = 0; h.seen = W.t; h.spawnT = 0; h.recT = 0; h.clkT = 0;
   if (kind === 'sup') { h.sup = 0; if (M.supShield) h.shield = Math.max(h.shield || 0, Math.round(h.max * M.supShield)); } else { h.ammo = Math.max(0, h.ammo - 1); h.cd = S.cd; }
   emit(W, { k: 'fire', id: h.id, kind, hero: h.key, x: h.x, z: h.z, a, dist });
   const fx = Math.sin(a), fz = Math.cos(a);
   if (S.k === 'beam') {
     const reach = rayWall(W.A, h.x, h.z, fx, fz, S.rng);
     emit(W, { k: 'beam', id: h.id, x: h.x, z: h.z, a, len: reach });
+    for (const t of foeHeroes(W, h)) { const px = t.x - h.x, pz = t.z - h.z, along = px * fx + pz * fz, perp = Math.abs(px * fz - pz * fx); if (along > 0 && along < reach + 0.4 && perp < S.w + 0.4) pvpHit(W, h, t, dmgOf(h, S.dmg), fx, fz, { kb: 4, sup: true }); }
     for (const b of W.robots) {
-      if (b.hp <= 0 || b.sp > 0) continue;
+      if (b.hp <= 0 || b.sp > 0 || !foeTo(h, b)) continue;
       const px = b.x - h.x, pz = b.z - h.z, along = px * fx + pz * fz, perp = Math.abs(px * fz - pz * fx);
       if (along > 0 && along < reach + b.r && perp < S.w + b.r) hurtRobot(W, b, dmgOf(h, S.dmg), h.id, fx, fz, { kb: 4, host });
+    }
+    return;
+  }
+  if (S.k === 'blink') {
+    const want = clamp(dist == null ? S.rng : dist, 2, S.rng);
+    const x0 = h.x, z0 = h.z;
+    const reach = Math.max(0.6, rayWall(W.A, x0, z0, fx, fz, want) - 0.35);
+    const p = { x: x0 + fx * reach, z: z0 + fz * reach };
+    moveCircle(W.A, p, 0, 0, 0.55);
+    if (W.local && W.local.has(h.id)) { h.x = p.x; h.z = p.z; h.kbx = 0; h.kbz = 0; }
+    emit(W, { k: 'blink', id: h.id, x: x0, z: z0, x1: p.x, z1: p.z, a });
+    const L = Math.hypot(p.x - x0, p.z - z0);
+    const hit = (tx, tz, r) => { const px = tx - x0, pz = tz - z0, along = px * fx + pz * fz, perp = Math.abs(px * fz - pz * fx); return (along > -0.4 && along < L + r && perp < S.w + r) || Math.hypot(tx - p.x, tz - p.z) < S.rad + r; };
+    for (const t of foeHeroes(W, h)) if (hit(t.x, t.z, 0.4)) pvpHit(W, h, t, dmgOf(h, S.dmg), fx, fz, { kb: 2, sup: true });
+    for (const b of W.robots) {
+      if (b.hp <= 0 || b.sp > 0 || !foeTo(h, b)) continue;
+      if (hit(b.x, b.z, b.r)) hurtRobot(W, b, dmgOf(h, S.dmg), h.id, fx, fz, { kb: 2, host });
     }
     return;
   }
   if (S.k === 'bloom') {
     emit(W, { k: 'bloom', id: h.id, x: h.x, z: h.z, r: S.rad });
     for (const o of heroList(W)) {
-      if (!(W.local && W.local.has(o.id))) continue;
+      if (!(W.local && W.local.has(o.id)) || (W.pvp && o.tm !== h.tm)) continue;
       const d = Math.hypot(o.x - h.x, o.z - h.z);
       if (d > S.rad) continue;
       if (o.st === 1) reviveHero(W, o, 0.55, [h.id]);
@@ -921,8 +1020,9 @@ export function fireHero(W, h, kind, a, dist, seed) {
   }
   if (S.k === 'smash') {
     emit(W, { k: 'smash', id: h.id, x: h.x, z: h.z, a, r: S.rng, arc: S.arc });
+    for (const t of foeHeroes(W, h)) { const dx = t.x - h.x, dz = t.z - h.z, d = Math.hypot(dx, dz); if (d > S.rng + 0.4 || (d > 0.8 && Math.abs(wrapA(Math.atan2(dx, dz) - a)) > S.arc / 2)) continue; pvpHit(W, h, t, dmgOf(h, S.dmg), dx / (d || 1), dz / (d || 1), { kb: S.kb }); }
     for (const b of W.robots) {
-      if (b.hp <= 0 || b.sp > 0) continue;
+      if (b.hp <= 0 || b.sp > 0 || !foeTo(h, b)) continue;
       const dx = b.x - h.x, dz = b.z - h.z, d = Math.hypot(dx, dz);
       if (d > S.rng + b.r) continue;
       if (d > 0.8 && Math.abs(wrapA(Math.atan2(dx, dz) - a)) > S.arc / 2) continue;
@@ -956,7 +1056,7 @@ export function useGadget(W, h, a, dist, tx, tz) {
   const G = H.gad;
   const M = h.mods || baseMods();
   const host = !!W.host;
-  h.gad = Math.max(0, h.gad - 1); h.gadCD = GADGET_CD; h.seen = W.t; h.gUse = (h.gUse || 0) + 1;
+  h.gad = Math.max(0, h.gad - 1); h.gadCD = GADGET_CD * (h.buffs && h.buffs.flow ? 0.65 : 1); h.seen = W.t; h.gUse = (h.gUse || 0) + 1; h.spawnT = 0; h.clkT = 0;
   const fx = Math.sin(a), fz = Math.cos(a);
   emit(W, { k: 'gadget', id: h.id, hero: h.key, g: G.k, x: h.x, z: h.z, a });
   if (G.k === 'ring' || G.k === 'nova') {
@@ -972,13 +1072,14 @@ export function useGadget(W, h, a, dist, tx, tz) {
     W.mines.push({ id: `${h.id}|${h.gUse}`, own: h.id, x: p.x, z: p.z, t: G.t, arm: 0.6, rad: G.rad * M.rad, d: dmgOf(h, G.dmg) });
   } else if (G.k === 'bubble') {
     emit(W, { k: 'bubble', id: h.id, x: h.x, z: h.z, r: G.rad });
-    for (const o of heroList(W)) { if (o.st !== 0 || !(W.local && W.local.has(o.id))) continue; if (Math.hypot(o.x - h.x, o.z - h.z) > G.rad) continue; o.shield = Math.max(o.shield, Math.round(G.shield * M.heal)); o.shT = Math.max(o.shT, G.t); }
+    for (const o of heroList(W)) { if (o.st !== 0 || !(W.local && W.local.has(o.id)) || (W.pvp && o.tm !== h.tm)) continue; if (Math.hypot(o.x - h.x, o.z - h.z) > G.rad) continue; o.shield = Math.max(o.shield, Math.round(G.shield * M.heal)); o.shT = Math.max(o.shT, G.t); }
   } else if (G.k === 'charge') {
     const reach = Math.max(0.5, rayWall(W.A, h.x, h.z, fx, fz, G.len) - 0.4);
     if (W.local && W.local.has(h.id)) { h.dashT = G.t; h.dashVx = (fx * reach) / G.t; h.dashVz = (fz * reach) / G.t; h.yaw = a; }
     emit(W, { k: 'charge', id: h.id, x: h.x, z: h.z, a, len: reach });
+    for (const t of foeHeroes(W, h)) { const px = t.x - h.x, pz = t.z - h.z, along = px * fx + pz * fz, perp = px * fz - pz * fx; if (along < -0.5 || along > reach + 0.4 || Math.abs(perp) > 1.6) continue; const sg = perp >= 0 ? 1 : -1; pvpHit(W, h, t, dmgOf(h, G.dmg), fx * 0.6 + fz * sg * 0.8, fz * 0.6 - fx * sg * 0.8, { kb: G.kb }); }
     for (const b of W.robots) {
-      if (b.hp <= 0 || b.sp > 0) continue;
+      if (b.hp <= 0 || b.sp > 0 || !foeTo(h, b)) continue;
       const px = b.x - h.x, pz = b.z - h.z, along = px * fx + pz * fz, perp = px * fz - pz * fx;
       if (along < -0.5 || along > reach + b.r || Math.abs(perp) > 1.2 + b.r) continue;
       const sg = perp >= 0 ? 1 : -1;
@@ -986,6 +1087,10 @@ export function useGadget(W, h, a, dist, tx, tz) {
     }
   } else if (G.k === 'over') {
     h.ocT = G.t;
+  } else if (G.k === 'vanish') {
+    const t = G.t * (M.fade || 1);
+    h.clkT = t; h.spT = Math.max(h.spT || 0, t * 0.85); h.seen = -9;
+    emit(W, { k: 'vanish', id: h.id, x: h.x, z: h.z });
   } else if (G.k === 'jet') {
     let x1 = tx, z1 = tz;
     if (x1 == null || z1 == null) { const d = clamp(dist == null ? G.len : dist, 2, G.len); x1 = h.x + fx * d; z1 = h.z + fz * d; }
@@ -999,13 +1104,13 @@ export function useGadget(W, h, a, dist, tx, tz) {
   }
   return null;
 }
-export function canGadget(h) { return h.st === 0 && h.gad > 0 && h.gadCD <= 0 && !h.jump && h.dashT <= 0; }
-export function canDash(h) { return h.st === 0 && h.dashCD <= 0 && !h.jump && h.dashT <= 0; }
+export function canGadget(h) { return h.st === 0 && h.gad > 0 && h.gadCD <= 0 && !h.jump && h.dashT <= 0 && !((h.stunT || 0) > 0); }
+export function canDash(h) { return h.st === 0 && h.dashCD <= 0 && !h.jump && h.dashT <= 0 && !((h.stunT || 0) > 0); }
 export function startDash(W, h, a) {
   h.dashT = DASH.t; h.dashVx = (Math.sin(a) * DASH.len) / DASH.t; h.dashVz = (Math.cos(a) * DASH.len) / DASH.t; h.dashCD = DASH.cd * (h.mods ? h.mods.dashCd : 1); h.yaw = a;
   emit(W, { k: 'dash', id: h.id, x: h.x, z: h.z, a });
 }
-export function canFire(h) { return h.st === 0 && h.ammo >= 1 && h.cd <= 0 && !h.jump; }
+export function canFire(h) { return h.st === 0 && h.ammo >= 1 && h.cd <= 0 && !h.jump && !((h.stunT || 0) > 0); }
 export function stepHero(W, h, inp, dt) {
   const H = HEROES[h.key];
   h.flash = Math.max(0, h.flash - dt);
@@ -1022,8 +1127,15 @@ export function stepHero(W, h, inp, dt) {
   }
   if (h.st === 2) { h.vx = 0; h.vz = 0; return; }
   const M = h.mods || baseMods();
+  const blockers = W.pvp ? W.robots.filter((b) => b.hp > 0 && (STILL_TYPES.has(b.type) || b.type === 'shp')) : W.robots;
+  h.spawnT = Math.max(0, (h.spawnT || 0) - dt);
+  const stun = (h.stunT || 0) > 0;
+  if (stun) h.stunT = Math.max(0, h.stunT - dt);
+  if (h.slowT > 0) { h.slowT -= dt; if (h.slowT <= 0) h.slowK = 0; }
+  if (h.kbx || h.kbz) { moveCircle(W.A, h, h.kbx * dt * 6, h.kbz * dt * 6, 0.55); const f = Math.exp(-dt * 9); h.kbx *= f; h.kbz *= f; if (Math.abs(h.kbx) + Math.abs(h.kbz) < 0.05) { h.kbx = 0; h.kbz = 0; } }
   h.dashCD = Math.max(0, h.dashCD - dt); h.gadCD = Math.max(0, h.gadCD - dt);
   h.ocT = Math.max(0, h.ocT - dt); h.rfT = Math.max(0, h.rfT - dt); h.spT = Math.max(0, h.spT - dt); h.rushT = Math.max(0, (h.rushT || 0) - dt);
+  if (h.clkT > 0) { h.clkT -= dt; if (h.clkT <= 0) { h.clkT = 0; emit(W, { k: 'unveil', id: h.id, x: h.x, z: h.z }); } }
   if (h.shT > 0) { h.shT -= dt; if (h.shT <= 0) h.shield = 0; }
   const ox = h.x, oz = h.z;
   if (h.jump) {
@@ -1046,19 +1158,19 @@ export function stepHero(W, h, inp, dt) {
     const s0 = Math.min(dt, h.dashT);
     h.dashT -= dt;
     moveCircle(W.A, h, h.dashVx * s0, h.dashVz * s0, 0.55);
-    for (const b of W.robots) { if (b.hp <= 0) continue; const dx = h.x - b.x, dz = h.z - b.z, d = Math.hypot(dx, dz), need = b.r + 0.5; if (d < need && d > 0.001) { h.x = b.x + dx / d * need; h.z = b.z + dz / d * need; } }
+    for (const b of blockers) { if (b.hp <= 0) continue; const dx = h.x - b.x, dz = h.z - b.z, d = Math.hypot(dx, dz), need = b.r + 0.5; if (d < need && d > 0.001) { h.x = b.x + dx / d * need; h.z = b.z + dz / d * need; } }
     moveCircle(W.A, h, 0, 0, 0.55);
     h.vx = dt > 0 ? (h.x - ox) / dt : 0; h.vz = dt > 0 ? (h.z - oz) / dt : 0;
     h.walk += Math.hypot(h.vx, h.vz) * dt;
     h.hid = bushAt(W.A, h.x, h.z);
     return;
   }
-  let mx = inp ? inp.mx || 0 : 0, mz = inp ? inp.mz || 0 : 0;
+  let mx = inp && !stun ? inp.mx || 0 : 0, mz = inp && !stun ? inp.mz || 0 : 0;
   const m = Math.hypot(mx, mz);
   if (m > 1) { mx /= m; mz /= m; }
-  const spd = H.spd * M.spd * (h.pw > 0 ? 1.08 : 1) * (h.spT > 0 ? 1.35 : 1) * (h.rushT > 0 ? 1.22 : 1);
+  const spd = H.spd * M.spd * (h.pw > 0 ? 1.08 : 1) * (h.spT > 0 ? 1.35 : 1) * (h.rushT > 0 ? 1.22 : 1) * (h.slowT > 0 ? 1 - (h.slowK || 0) : 1) * (h.spdMul || 1);
   if (m > 0.05) moveCircle(W.A, h, mx * spd * dt, mz * spd * dt, 0.55);
-  for (const b of W.robots) {
+  for (const b of blockers) {
     if (b.hp <= 0) continue;
     const dx = h.x - b.x, dz = h.z - b.z, d = Math.hypot(dx, dz), need = b.r + 0.5;
     if (d < need && d > 0.001) { h.x = b.x + dx / d * need; h.z = b.z + dz / d * need; }
@@ -1076,7 +1188,8 @@ export function stepHero(W, h, inp, dt) {
 export function stepWorld(W, dt) {
   W.t += dt;
   W.ev = W.ev || [];
-  if (W.host) {
+  if (W.pvp && W.teamStep) W.teamStep(W, dt);
+  else if (W.host) {
     W.flowT -= dt;
     if (W.flowT <= 0) { W.flowT = 0.3; for (const h of heroList(W)) if (h.st === 0) flowFor(W, h); }
     for (const b of W.robots) if (b.hp > 0) stepRobot(W, b, dt);
@@ -1099,22 +1212,28 @@ function stepGear(W, dt) {
     if (T.t <= 0) { W.turrets.splice(i, 1); emit(W, { k: 'turretEnd', x: T.x, z: T.z }); continue; }
     if (T.cd > 0) continue;
     let best = null, bd = 1e9;
-    for (const b of W.robots) { if (b.hp <= 0 || b.sp > 0) continue; const d = Math.hypot(b.x - T.x, b.z - T.z); if (d < T.rad + b.r && d < bd && losClear(W.A, T.x, T.z, b.x, b.z, 0)) { bd = d; best = b; } }
+    const oh = W.heroes[T.own];
+    for (const b of W.robots) { if (b.hp <= 0 || b.sp > 0 || !foeTo(oh, b)) continue; const d = Math.hypot(b.x - T.x, b.z - T.z); if (d < T.rad + b.r && d < bd && losClear(W.A, T.x, T.z, b.x, b.z, 0)) { bd = d; best = b; } }
+    for (const t of foeHeroes(W, oh)) { const d = Math.hypot(t.x - T.x, t.z - T.z); if (d < T.rad && d - 1 < bd && seenBy(W, t, oh.tm) && losClear(W.A, T.x, T.z, t.x, t.z, 0)) { bd = d - 1; best = t; } }
     if (!best) { T.cd = 0.2; continue; }
     T.cd = T.rate;
     const dx = best.x - T.x, dz = best.z - T.z, L = Math.hypot(dx, dz) || 1;
-    hurtRobot(W, best, T.d, T.own, dx / L, dz / L, { kb: 1, host });
+    if (W.heroes[best.id] === best) pvpHit(W, oh, best, T.d, dx / L, dz / L, { kb: 1 });
+    else hurtRobot(W, best, T.d, T.own, dx / L, dz / L, { kb: 1, host });
     emit(W, { k: 'tzap', x: T.x, z: T.z, tx: best.x, tz: best.z });
   }
   for (let i = W.mines.length - 1; i >= 0; i--) {
     const mn = W.mines[i];
     mn.t -= dt; mn.arm -= dt;
     if (mn.t <= 0) { W.mines.splice(i, 1); emit(W, { k: 'fizz', x: mn.x, z: mn.z }); continue; }
-    if (!host || mn.arm > 0) continue;
-    if (!W.robots.some((b) => b.hp > 0 && b.sp <= 0 && Math.hypot(b.x - mn.x, b.z - mn.z) < b.r + 0.55)) continue;
+    if (mn.arm > 0) continue;
+    const mo = W.heroes[mn.own];
+    const byHero = W.pvp && foeHeroes(W, mo).some((t) => W.local && W.local.has(t.id) && Math.hypot(t.x - mn.x, t.z - mn.z) < 0.95);
+    if (!host && !byHero) continue;
+    if (!byHero && !W.robots.some((b) => b.hp > 0 && b.sp <= 0 && foeTo(mo, b) && Math.hypot(b.x - mn.x, b.z - mn.z) < b.r + 0.55)) continue;
     W.mines.splice(i, 1);
     mineBoom(W, mn, host);
-    net(W, ['mn', mn.id]);
+    if (host) net(W, ['mn', mn.id]); else if (W.onMine) W.onMine(mn.id);
   }
   for (let i = W.decoys.length - 1; i >= 0; i--) { const d = W.decoys[i]; d.t -= dt; if (d.t <= 0) { W.decoys.splice(i, 1); emit(W, { k: 'decoyEnd', x: d.x, z: d.z }); } }
   for (let i = W.pend.length - 1; i >= 0; i--) {
@@ -1311,6 +1430,7 @@ export function botBrain(W, h, dt) {
     else if (G.k === 'charge') use = !!tgt && tgt.d > 2.4 && tgt.d < 6;
     else if (G.k === 'over') use = W.robots.filter((r) => r.hp > 0 && Math.hypot(r.x - h.x, r.z - h.z) < 9).length >= 3;
     else if (G.k === 'jet' && near && h.hp < h.max * 0.4 && close >= 1) { use = true; ga = Math.atan2(h.x - near.x, h.z - near.z); gd = G.len; }
+    else if (G.k === 'vanish') use = close >= 2 && h.hp < h.max * 0.5;
     if (use) inp.gad = { a: ga, dist: gd };
   }
   return inp;
@@ -1326,7 +1446,9 @@ export function robotSnap(b) {
   if (b.burst > 0) f |= 16;
   if (b.stun > 0) f |= 32;
   if (b.slowT > 0) f |= 64;
-  return [b.id, TYPE_IDX[b.type], Math.round(b.x * 20), Math.round(b.z * 20), Math.round(b.yaw * 100), Math.max(0, Math.round(b.hp)), f, Math.round(b.max), Math.round((b.mv || 0) * 10)];
+  const out = [b.id, TYPE_IDX[b.type], Math.round(b.x * 20), Math.round(b.z * 20), Math.round(b.yaw * 100), Math.max(0, Math.round(b.hp)), f, Math.round(b.max), Math.round((b.mv || 0) * 10)];
+  if (b.tm != null) out.push(b.tm + 2, (b.inv ? 1 : 0) | (b.ally ? 2 : 0) | (b.atkT2 > 0 ? 4 : 0) | (b.buff ? 8 : 0), b.ln != null ? b.ln : -1);
+  return out;
 }
 export function applyRobotSnap(W, list, now, at) {
   const seen = new Set();
@@ -1338,7 +1460,7 @@ export function applyRobotSnap(W, list, now, at) {
     let b = W.robots.find((r) => r.id === id);
     const x = Number(a[2]) / 20, z = Number(a[3]) / 20, yaw = Number(a[4]) / 100;
     if (!Number.isFinite(x) || !Number.isFinite(z)) continue;
-    if (!b) { b = mkRobot(id, type, x, z, null); b.max = Math.max(1, a[7] | 0); b.hp = a[5] | 0; b.yaw = yaw; b.nb = mkNet(); netPush(b.nb, at, [x, z, yaw]); b.netAt = now; b.sp = a[6] & 4 ? 0.6 : 0; W.robots.push(b); emit(W, { k: 'spawn', id, type, x, z, remote: true }); continue; }
+    if (!b) { b = mkRobot(id, type, x, z, null); b.max = Math.max(1, a[7] | 0); b.hp = a[5] | 0; b.yaw = yaw; b.nb = mkNet(); netPush(b.nb, at, [x, z, yaw]); b.netAt = now; b.sp = a[6] & 4 ? 0.6 : 0; if (a.length >= 11) { b.tm = (a[9] | 0) - 2; b.inv = !!(a[10] & 1); b.ally = !!(a[10] & 2); b.buff = !!(a[10] & 8); b.ln = a.length >= 12 ? a[11] | 0 : -1; } W.robots.push(b); emit(W, { k: 'spawn', id, type, x, z, remote: true }); continue; }
     netPush(b.nb || (b.nb = mkNet()), at, [x, z, yaw]);
     b.netAt = now;
     const hp = a[5] | 0;
@@ -1347,10 +1469,11 @@ export function applyRobotSnap(W, list, now, at) {
     const f = a[6] | 0;
     b.wind = f & 1 ? 0.3 : 0; b.fuse = f & 2 ? Math.max(b.fuse || 0, 0.01) : 0; b.sp = f & 4 ? Math.max(b.sp, 0.05) : 0; b.busy = f & 8 ? 0.2 : 0; b.burst = f & 16 ? 1 : 0; b.stunV = f & 32 ? 1 : 0; b.slowV = f & 64 ? 1 : 0;
     b.mv = (a[8] | 0) / 10;
+    if (a.length >= 11) { b.tm = (a[9] | 0) - 2; b.inv = !!(a[10] & 1); b.ally = !!(a[10] & 2); b.atkV = !!(a[10] & 4); b.buff = !!(a[10] & 8); }
   }
   for (let i = W.robots.length - 1; i >= 0; i--) {
     const b = W.robots[i];
-    if (!seen.has(b.id)) { W.robots.splice(i, 1); markDead(W, b.id); emit(W, { k: 'kill', id: b.id, type: b.type, x: b.x, z: b.z, by: null, remote: true }); }
+    if (!seen.has(b.id) && !(W.pvp && STILL_TYPES.has(b.type))) { W.robots.splice(i, 1); markDead(W, b.id); emit(W, { k: 'kill', id: b.id, type: b.type, x: b.x, z: b.z, by: null, remote: true }); }
   }
 }
 function markDead(W, id) { if (!W.dead) W.dead = new Map(); W.dead.set(id, W.t); if (W.dead.size > 80) for (const [k, t] of W.dead) if (W.t - t > 6) W.dead.delete(k); }
@@ -1369,14 +1492,16 @@ export function smoothRobots(W, dt) {
 export function applyNetEvent(W, e) {
   if (!Array.isArray(e)) return;
   const k = e[0];
-  if (k === 's') { const rid = e[1] | 0, x = +e[2], z = +e[3], a = +e[4]; if ([x, z, a].every(Number.isFinite)) spawnRobotShot(W, rid, x, z, a, clamp(+e[5] || 12, 4, 30), clamp(e[6] | 0, 0, 1000000), e[7] === 'tb' ? 'tb' : 'eb'); }
+  if (k === 's') { const rid = e[1] | 0, x = +e[2], z = +e[3], a = +e[4]; if ([x, z, a].every(Number.isFinite)) spawnRobotShot(W, rid, x, z, a, clamp(+e[5] || 12, 4, 30), clamp(e[6] | 0, 0, 1000000), e[7] === 'tb' ? 'tb' : 'eb', e.length > 8 ? e[8] | 0 : -9); }
   else if (k === 'm') { const h = W.heroes[e[2]]; const d = clamp(e[3] | 0, 0, 1000000); emit(W, { k: 'melee', id: e[1] | 0, to: e[2], d }); if (h && W.local && W.local.has(h.id)) hurtHero(W, h, d, e[1] | 0); }
   else if (k === 'z') {
     const z = { k: ['boom', 'stomp', 'mis', 'laser'].includes(e[1]) ? e[1] : 'boom', x: +e[2], z: +e[3], r: clamp(+e[4] || 0, 0, 12), d: clamp(e[5] | 0, 0, 1000000), t: clamp(+e[6] || 0, 0, 4), a: +e[7] || 0, a1: +e[8] || 0, dur: clamp(+e[9] || 0, 0, 4), len: clamp(+e[10] || 0, 0, 40) };
+    if (e.length > 11 && (e[11] | 0) > -9) z.tm = e[11] | 0;
     if (Number.isFinite(z.x) && Number.isFinite(z.z)) addZone(W, z, false);
   } else if (k === 'k') { const id = e[1] | 0; markDead(W, id); const b = W.robots.find((r) => r.id === id); if (b) { W.robots.splice(W.robots.indexOf(b), 1); emit(W, { k: 'kill', id: b.id, type: b.type, x: b.x, z: b.z, by: typeof e[2] === 'string' ? e[2] : null, remote: true }); } }
   else if (k === 'f') { const b = W.robots.find((r) => r.id === (e[1] | 0)); if (b) { b.fuse = ROBOTS.bomber.fuse; emit(W, { k: 'fuse', id: b.id }); } }
   else if (k === 'w') emit(W, { k: 'wave', n: e[1] | 0, remote: true });
   else if (k === 'mn') { const i = W.mines.findIndex((o) => o.id === String(e[1])); if (i >= 0) { const mn = W.mines.splice(i, 1)[0]; mineBoom(W, mn, false); } }
   else if (k === 'c') emit(W, { k: 'clear', n: e[1] | 0, remote: true });
+  else if (W.onNet) W.onNet(W, e);
 }

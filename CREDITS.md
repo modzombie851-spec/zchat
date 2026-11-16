@@ -52,7 +52,7 @@ From Sketchfab, CC BY 4.0
 ## Characters
 
 - Survivors, zombies and their animations, by Mixamo by Adobe (Mixamo license): https://www.mixamo.com
-- Bolt War heroes, mechs, aliens and power ups, Ultimate Space Kit by Quaternius (CC0): https://quaternius.com
+- Bolt War heroes, mechs, aliens, power ups, rovers, towers, the Hive Ship and the Nebula Valley trees, rocks and buildings, Ultimate Space Kit by Quaternius (CC0): https://quaternius.com
 
 ## Icons
 From game icons, CC BY 3.0

@@ -25,6 +25,7 @@ function setPref(key, on) {
 const vol = (k, d) => { try { const v = Number(localStorage.getItem(k)); return Number.isFinite(v) && localStorage.getItem(k) != null ? Math.max(0, Math.min(1, v)) : d; } catch { return d; } };
 
 export const Sfx = {
+  gen: 0,
   sfxOn: pref('zchat-game-sfx', true),
   musicOn: pref('zchat-game-music', true),
   sfxVol: vol('zchat-game-sfxvol', 1),
@@ -44,7 +45,7 @@ export const Sfx = {
       musBus = ac.createGain(); musBus.gain.value = this.musicOn ? 0.55 * this.musicVol : 0; musBus.connect(master);
       try { ac.addEventListener('statechange', () => { if (ac && ac.state !== 'running' && typeof document !== 'undefined' && document.visibilityState !== 'hidden') armWake(); }); } catch {}
     }
-    if (ac.state !== 'running') { try { const r = ac.resume(); if (r && r.catch) r.catch(() => {}); } catch {} }
+    if (ac.state !== 'running') { try { const r = ac.resume(); if (r && r.catch) r.catch(() => {}); } catch {} if (typeof document !== 'undefined' && document.visibilityState !== 'hidden') setTimeout(() => { if (ac && ac.state !== 'running') armWake(); }, 0); }
     this.load();
   },
   load() {
@@ -155,19 +156,29 @@ export const Sfx = {
     if (musBus) musBus.gain.setTargetAtTime(this.musicOn ? 0.55 * this.musicVol : 0, ac.currentTime, 0.1);
   },
   pause(hidden) {
-    if (!ac) return;
-    try { if (hidden) ac.suspend(); else ac.resume(); } catch {}
+    if (!ac || ac.state === 'closed') return;
+    try { const r = hidden ? ac.suspend() : ac.resume(); if (r && r.catch) r.catch(() => {}); } catch {}
   },
   bus() { return ac && sfxBus ? { ac, out: sfxBus } : null; },
   mbus() { return ac && musBus ? { ac, out: musBus } : null; },
 };
 
 let wakeArmed = false;
+let awayAt = 0, backAt = 0, clock0 = 0, stale = false;
+function kick() {
+  if (!ac) return;
+  try { const b = ac.createBuffer(1, 1, 22050); const s = ac.createBufferSource(); s.buffer = b; s.connect(ac.destination); s.start(0); } catch {}
+  try { const r = ac.resume(); if (r && r.catch) r.catch(() => {}); } catch {}
+}
 function rebuildSfx() {
   const keep = musicNow ? musicNow.name : null;
-  try { if (ac) ac.close(); } catch {}
-  ac = null; master = null; sfxBus = null; musBus = null; musicNow = null;
+  const old = ac;
+  ac = null; master = null; sfxBus = null; musBus = null; musicNow = null; ambNow = null; voices = 0;
+  for (const k of Object.keys(lastAt)) delete lastAt[k];
+  try { if (old && old.state !== 'closed') { const r = old.close(); if (r && r.catch) r.catch(() => {}); } } catch {}
+  Sfx.gen += 1;
   Sfx.init();
+  kick();
   if (keep) Sfx.music(keep, true);
 }
 function armWake() {
@@ -178,15 +189,28 @@ function armWake() {
     evs.forEach((e) => document.removeEventListener(e, go, true));
     wakeArmed = false;
     if (!ac || document.visibilityState === 'hidden') return;
-    try { const b = ac.createBuffer(1, 1, 22050); const s = ac.createBufferSource(); s.buffer = b; s.connect(ac.destination); s.start(0); } catch {}
-    try { const r = ac.resume(); if (r && r.catch) r.catch(() => {}); } catch {}
-    setTimeout(() => { if (ac && ac.state !== 'running' && document.visibilityState !== 'hidden') rebuildSfx(); }, 650);
+    const el = (Date.now() - backAt) / 1000;
+    const frozen = stale && ac.state === 'running' && el > 0.3 && ac.currentTime - clock0 < el * 0.4;
+    const bad = ac.state === 'closed' || ac.state === 'interrupted' || frozen;
+    stale = false;
+    if (bad) { rebuildSfx(); return; }
+    kick();
+    setTimeout(() => { if (ac && ac.state !== 'running' && document.visibilityState !== 'hidden') { rebuildSfx(); if (ac && ac.state !== 'running') armWake(); } }, 650);
   };
   evs.forEach((e) => document.addEventListener(e, go, true));
 }
 if (typeof document !== 'undefined') {
-  const back = () => { if (!ac || document.visibilityState === 'hidden') return; Sfx.pause(false); if (ac.state !== 'running') armWake(); else setTimeout(() => { if (ac && ac.state !== 'running') armWake(); }, 400); };
-  document.addEventListener('visibilitychange', () => { if (!ac) return; if (document.visibilityState === 'hidden') Sfx.pause(true); else back(); });
+  const back = () => {
+    if (!ac || document.visibilityState === 'hidden') return;
+    if (awayAt && Date.now() - awayAt > 600) { stale = true; backAt = Date.now(); clock0 = ac.state === 'closed' ? 0 : ac.currentTime; awayAt = 0; }
+    if (ac.state === 'closed') { armWake(); return; }
+    Sfx.pause(false);
+    if (ac.state !== 'running' || stale) armWake();
+    else setTimeout(() => { if (ac && ac.state !== 'running') armWake(); }, 400);
+  };
+  document.addEventListener('visibilitychange', () => { if (!ac) return; if (document.visibilityState === 'hidden') { awayAt = Date.now(); Sfx.pause(true); } else back(); });
+  window.addEventListener('pagehide', () => { awayAt = Date.now(); });
   window.addEventListener('pageshow', back);
   window.addEventListener('focus', back);
+  window.addEventListener('blur', () => { if (document.visibilityState === 'hidden') awayAt = awayAt || Date.now(); });
 }
