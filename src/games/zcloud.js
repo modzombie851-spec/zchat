@@ -47,6 +47,27 @@ export async function listRooms() {
   if (!cloudOn()) return null;
   try { const r = await fetch(`${ZG_HTTP}/rooms`, { cache: 'no-store' }); if (!r.ok) return null; const j = await r.json(); if (!j || !j.rooms) return null; const out = { ...j.rooms }; out.open = Array.isArray(j.open) ? j.open : []; return out; } catch { return null; }
 }
+let boltCap = null;
+export async function boltServerOn(force) {
+  if (!cloudOn()) return false;
+  if (!force && boltCap && Date.now() - boltCap.at < 10 * 60 * 1000) return boltCap.on;
+  let on = false;
+  try { const r = await fetch(`${ZG_HTTP}/health`, { cache: 'no-store' }); if (r.ok) { const j = await r.json(); on = !!(j && Number(j.bolt) >= 1); } } catch {}
+  boltCap = { at: Date.now(), on };
+  return on;
+}
+export async function listBoltRooms() {
+  if (!cloudOn()) return null;
+  try {
+    const r = await fetch(`${ZG_HTTP}/rooms?g=siege`, { cache: 'no-store' });
+    if (!r.ok) return null;
+    const j = await r.json();
+    if (!j || !j.rooms) return null;
+    const out = {};
+    for (const reg of REGION_KEYS) out[reg] = (Array.isArray(j.rooms[reg]) ? j.rooms[reg] : []).filter((x) => x && Number(x.n) >= 1).map((x) => ({ n: Number(x.n) | 0, p: Number(x.p) | 0, cap: Number(x.cap) | 0 || 10, gm: String(x.g || ''), map: String(x.m || ''), ph: String(x.ph || ''), left: Number(x.l) | 0 }));
+    return out;
+  } catch { return null; }
+}
 export async function mineRoom() {
   if (!cloudOn()) return null;
   const tk = await token();
@@ -57,7 +78,7 @@ const LIVE_KEY = 'zchat-zombie-live';
 export function saveLive(room) { try { if (room) localStorage.setItem(LIVE_KEY, JSON.stringify({ reg: room.reg, r: String(room.r), at: Date.now() })); else localStorage.removeItem(LIVE_KEY); } catch {} }
 export function readLive(maxAge = 32000) { try { const v = JSON.parse(localStorage.getItem(LIVE_KEY) || 'null'); if (v && v.reg && v.r && Date.now() - v.at < maxAge) return v; } catch {} return null; }
 
-export function openCloud({ g, r, reg, meta, onMsg, onState }) {
+export function openCloud({ g, r, reg, meta, onMsg, onState, sv }) {
   let ws = null, dead = false, tries = 0, timer = null, pingT = null;
   const st = { ok: false, rtt: 0 };
   const go = async () => {
@@ -66,6 +87,7 @@ export function openCloud({ g, r, reg, meta, onMsg, onState }) {
     if (dead) return;
     if (!tk) { onState && onState({ ok: false, err: 'auth' }); return; }
     const q = new window.URLSearchParams({ g, r: String(r || ''), reg: reg || 'usa', tk, m: JSON.stringify(meta || {}) });
+    if (sv) q.set('sv', '1');
     try { ws = new WebSocket(`${ZG_WS}/ws?${q.toString()}`); } catch { retry(); return; }
     ws.onopen = () => { tries = 0; st.ok = true; onState && onState({ ok: true }); ping(); };
     ws.onmessage = (e) => {
@@ -96,7 +118,7 @@ export function openCloud({ g, r, reg, meta, onMsg, onState }) {
   };
 }
 
-export function useCloudRoom({ g, id, myId, enabled = true, meta, reg }) {
+export function useCloudRoom({ g, id, myId, enabled = true, meta, reg, sv = false }) {
   const [peers, setPeers] = useState([]);
   const [state, setState] = useState({ ok: false });
   const subs = useRef(new Map());
@@ -115,10 +137,10 @@ export function useCloudRoom({ g, id, myId, enabled = true, meta, reg }) {
     const list = new Set();
     const sync = () => { const next = [...list].filter((p) => p !== myId).sort(); setPeers((prev) => (prev.join('|') === next.join('|') ? prev : next)); };
     const c = openCloud({
-      g, r: id, reg, meta: metaRef.current,
+      g, r: id, reg, meta: metaRef.current, sv,
       onState: (s) => setState((p) => ({ ...p, ...s })),
       onMsg: (m) => {
-        if (m.t === '$hi') { list.clear(); for (const [p, mm] of m.peers || []) { list.add(p); metas.current[p] = mm; deliver({ t: 'hi', from: p, m: mm, at: Date.now() }); } sync(); return; }
+        if (m.t === '$hi') { if (m.srv) setState((p) => (p.srv ? p : { ...p, srv: 1 })); list.clear(); for (const [p, mm] of m.peers || []) { list.add(p); metas.current[p] = mm; deliver({ t: 'hi', from: p, m: mm, at: Date.now() }); } sync(); return; }
         if (m.t === '$join') { list.add(m.id); metas.current[m.id] = m.m; sync(); deliver({ t: 'hi', from: m.id, m: m.m, at: Date.now() }); return; }
         if (m.t === '$meta') { metas.current[m.id] = m.m; deliver({ t: 'hey', from: m.id, m: m.m, at: Date.now() }); return; }
         if (m.t === '$leave') { list.delete(m.id); sync(); deliver({ t: 'bye', from: m.id, at: Date.now() }); return; }
@@ -129,7 +151,7 @@ export function useCloudRoom({ g, id, myId, enabled = true, meta, reg }) {
     });
     conn.current = c;
     return () => { c.close(); conn.current = null; list.clear(); setPeers([]); };
-  }, [enabled, id, myId, g, reg]);
+  }, [enabled, id, myId, g, reg, sv]);
   const metaKey = JSON.stringify(meta || {});
   useEffect(() => { if (conn.current && conn.current.ok) conn.current.send({ t: '$meta', m: metaRef.current }); }, [metaKey]);
   const on = useMemo(() => (t, fn) => {
@@ -139,5 +161,5 @@ export function useCloudRoom({ g, id, myId, enabled = true, meta, reg }) {
     return () => set.delete(fn);
   }, []);
   const send = (t, data) => (conn.current ? conn.current.send({ ...(data || {}), t }) : false);
-  return useMemo(() => ({ peers, send, on, me: myId, here: peers.length > 0, ok: state.ok, rtt: state.rtt, err: state.err, metas: metas.current }), [peers, myId, state.ok, state.rtt, state.err]);
+  return useMemo(() => ({ peers, send, on, me: myId, here: peers.length > 0, ok: state.ok, rtt: state.rtt, err: state.err, srv: !!state.srv, metas: metas.current }), [peers, myId, state.ok, state.rtt, state.err, state.srv]);
 }

@@ -79,7 +79,9 @@ const GROUPS = [
       ['Survivors, zombies and their animations', 'Mixamo by Adobe', 'https://www.mixamo.com', 'Mixamo license'],
       ['German Shepherd dog', 'RetroStyle Games', 'https://retrostylegames.artstation.com/store/5Y6zX/german-shepherd-3d-model', 'ArtStation standard license'],
       ['Bolt War heroes, mechs, aliens, power ups, rovers, towers, the Hive Ship and the Nebula Valley trees, rocks and buildings, Ultimate Space Kit', 'Quaternius', 'https://quaternius.com', 'CC0'],
-      ['Bolt War heroes Arlo, Wren, Nyx and Ivy, KayKit Character Pack Adventurers', 'Kay Lousberg', 'https://kaylousberg.itch.io/kaykit-adventurers', 'CC0'],
+      ['Bolt War heroes Arlo, Wren, Nyx, Ivy and Tusk, KayKit Character Pack Adventurers', 'Kay Lousberg', 'https://kaylousberg.itch.io/kaykit-adventurers', 'CC0'],
+      ['Bolt War heroes Bones, Hex and Rattle, KayKit Character Pack Skeletons', 'Kay Lousberg', 'https://kaylousberg.itch.io/kaykit-skeletons', 'CC0'],
+      ['Bolt War Graveyard crypt, graves, fences, trees and pumpkins, KayKit Halloween Bits', 'Kay Lousberg', 'https://kaylousberg.itch.io/halloween-bits', 'CC0'],
       ['Bolt War Mars outpost habitats, landers, trucks, cargo, cliffs and the mine, KayKit Space Base Bits', 'Kay Lousberg', 'https://kaylousberg.itch.io/space-base-bits', 'CC0'],
       ['Bolt War Downtown buildings, roads, cars and street props, KayKit City Builder Bits', 'Kay Lousberg', 'https://kaylousberg.itch.io/city-builder-bits', 'CC0'],
       ['Bolt War Old fort walls, towers, banners, barrels and props, KayKit Dungeon Remastered', 'Kay Lousberg', 'https://kaylousberg.itch.io/kaykit-dungeon-remastered', 'CC0'],
@@ -141,25 +143,26 @@ const GROUPS = [
   },
 ];
 
-export function CreditsTab() {
+export function CreditsTab({ tone }) {
+  const T = tone || { ink: '#FFFFFF', muted: 'rgba(255,255,255,0.58)', faint: 'rgba(255,255,255,0.45)', head: '#FFC23D', box: 'rgba(255,255,255,0.04)', line: 'rgba(255,255,255,0.06)', chip: 'rgba(255,255,255,0.08)', chipTxt: 'rgba(255,255,255,0.7)' };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, paddingTop: 4 }}>
-      <div style={{ fontSize: 13, lineHeight: 1.45, color: 'rgba(255,255,255,0.62)' }}>Our games use work by these artists. Thank you.</div>
+      <div style={{ fontSize: 13, lineHeight: 1.45, color: T.muted }}>Our games use work by these artists. Thank you.</div>
       {GROUPS.map((g) => (
         <div key={g.t} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 13.5, fontWeight: 900, color: '#FFC23D' }}>{g.t}</span>
-            {g.note && <span style={{ fontSize: 11.5, fontWeight: 700, color: 'rgba(255,255,255,0.45)' }}>{g.note}</span>}
+            <span style={{ fontSize: 13.5, fontWeight: 900, color: T.head }}>{g.t}</span>
+            {g.note && <span style={{ fontSize: 11.5, fontWeight: 700, color: T.faint }}>{g.note}</span>}
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', borderRadius: 12, overflow: 'hidden', background: 'rgba(255,255,255,0.04)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.06)' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', borderRadius: 12, overflow: 'hidden', background: T.box, boxShadow: `inset 0 0 0 1px ${T.line}` }}>
             {g.items.map(([title, by, src, lic], i) => (
               <a key={title + by + i} href={/^(https?:)?\//.test(src) ? src : SK + src} target="_blank" rel="noopener noreferrer"
-                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', textDecoration: 'none', color: '#FFFFFF', borderTop: i ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
+                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', textDecoration: 'none', color: T.ink, borderTop: i ? `1px solid ${T.line}` : 'none' }}>
                 <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
                   <span style={{ fontSize: 13, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</span>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.58)' }}>{by}</span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: T.muted }}>{by}</span>
                 </span>
-                {lic && <span style={{ flexShrink: 0, fontSize: 10.5, fontWeight: 800, color: 'rgba(255,255,255,0.7)', padding: '3px 7px', borderRadius: 7, background: 'rgba(255,255,255,0.08)' }}>{lic}</span>}
+                {lic && <span style={{ flexShrink: 0, fontSize: 10.5, fontWeight: 800, color: T.chipTxt, padding: '3px 7px', borderRadius: 7, background: T.chip }}>{lic}</span>}
               </a>
             ))}
           </div>

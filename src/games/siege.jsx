@@ -3,9 +3,9 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { GGlyph } from './gskill.jsx';
 import { Avatar, Portal, useBackClose, FONT, Spinner } from '../App.jsx';
 import { useRoomLink } from './relay.jsx';
-import { cloudOn } from './zcloud.js';
+import { cloudOn, REGION_NAMES, boltServerOn, listBoltRooms, pingRegions } from './zcloud.js';
 import { EMOTES, Sheet, injectCss, useGameChat, ChatSheet, CHAT_PHRASES } from './livekit.jsx';
-import { GBtn, GPill, GPanel, GTitle, GIcon, GHudBtn, GHudPanel, GNotices, useNotices, useWatchNotices, injectKitCss, kitTap, pressProps, maxDpr, weakPhone, INK, useCtlLook, useGameStage, GControlsPanel, GVolBars, GLobbySheet, GSeg, GTalkers, GJoy, useJoystick, stagePoint, TOUCHY, GWatchBar, GSkin, GChatFeed, useChatFeed, GJoinAsks, GHudSkill, GSetRow, GSetToggle , GSetHead, useHudLay, hudT, layOpen, layEnd, GLayoutRow, GHudEditor, GQuickPanel } from './gamekit.jsx';
+import { GBtn, GPill, GPanel, GTitle, GIcon, GHudBtn, GHudPanel, GNotices, useNotices, useWatchNotices, injectKitCss, kitTap, pressProps, maxDpr, weakPhone, INK, useCtlLook, useGameStage, GControlsPanel, GVolBars, GLobbySheet, GSeg, GTalkers, GJoy, useJoystick, stagePoint, TOUCHY, GWatchBar, GSkin, GChatFeed, useChatFeed, GJoinAsks, GHudSkill, GSetRow, GSetSlider, GSoundMix, GSetToggle , GSetHead, useHudLay, hudT, layOpen, layEnd, GLayoutRow, GHudEditor, GQuickPanel } from './gamekit.jsx';
 import { mkNet, netPush, netRead } from './netlerp.js';
 import { Sfx } from './sfx.js';
 import { setWatchAllowed, useLiveBeacon, useGamePrivacy, useJoinAsks } from './live.js';
@@ -21,9 +21,9 @@ import { SiegeLobby, SiegeLoadout, SiegeResult, SiegeBoard } from './siegelobby.
 import { TNAME, TXT_COL, LineIcon, TLOOK, unitCol, riftUnpack, TeamScore, TeamMe, KillFeed, TeamHowTo, RespawnBox, drawTeamMini, teamMiniBase, teamHudOf, teamRows, ZoneChip, SkIcon, PaintSkill, heroIc } from './siegeteamui.jsx';
 
 const SIEGE_KEYS = [['W A S D or Arrows', 'Move'], ['Mouse', 'Aim'], ['Left click or F', 'Attack'], ['Right click or Space or E', 'Super'], ['Q', 'Gadget'], ['Shift', 'Dash'], ['R', 'Battle skill in team matches'], ['Tab', 'Scoreboard in team matches'], ['Esc', 'Pause or leave']];
-const KK = ['kk_nyx', 'kk_ivy', 'kk_arlo', 'kk_wren'];
+const KK = ['kk_nyx', 'kk_ivy', 'kk_arlo', 'kk_wren', 'kk_tusk', 'kk_bones', 'kk_hex', 'kk_rattle'];
 const SKF = ['ua_anim', 'ua_flamingo', 'ua_frog', 'ua_bee', 'um_flamingo', 'um_bee', 'um_panda', 'um_frog', 'kk_anim', ...KK, 'ue_small', 'ue_fly', 'ue_large', 'up_health', 'up_thunder', 'up_bullets', 'up_sphere', 'up_jar'];
-const SKT = ['t_usk', 't_umech', 't_umechf', 't_uen', 't_krogue', 't_kmage', 't_kknight'];
+const SKT = ['t_usk', 't_umech', 't_umechf', 't_uen', 't_krogue', 't_kmage', 't_kknight', 't_kbarb', 't_kskel'];
 const SKL = { job: null, d: null };
 const skImg = (u) => new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = u; });
 function loadSk() {
@@ -47,6 +47,10 @@ const HLOOK = {
   nyx: { kind: 'k', body: 'kk_nyx', tex: 't_krogue', band: [135, 185, 158, 0.25], sc: 1.02, atk: 'slash2', sup: 'stab2', gad: 'interact' },
   arlo: { kind: 'k', body: 'kk_arlo', tex: 't_kknight', band: [330, 3, 348, 0.42], sc: 1.0, atk: 'chop1', sup: 'chop2', gad: 'block' },
   wren: { kind: 'k', body: 'kk_wren', tex: 't_krogue', band: [135, 185, 158, 0.25], keep: 1, sc: 1.02, atk: 'shoot2', sup: 'shoot2', gad: 'throw' },
+  tusk: { kind: 'k', body: 'kk_tusk', tex: 't_kbarb', band: [195, 228, 210, 0.3], sc: 1.05, atk: 'chop2', sup: 'spin', gad: 'chop2' },
+  bones: { kind: 'k', body: 'kk_bones', tex: 't_kskel', band: [328, 4, 346, 0.3], sc: 1.0, atk: 'chop1', sup: 'raise', gad: 'block' },
+  hex: { kind: 'k', body: 'kk_hex', tex: 't_kskel', band: [328, 4, 346, 0.3], sc: 0.97, atk: 'cast', sup: 'castl', gad: 'raise' },
+  rattle: { kind: 'k', body: 'kk_rattle', tex: 't_kskel', band: [328, 4, 346, 0.3], sc: 0.98, atk: 'throw', sup: 'slash2', gad: 'interact' },
 };
 const ALIEN_BAND = [78, 112, 94, 0.4];
 const RLOOK = {
@@ -193,6 +197,7 @@ const ARENA_BG = { yard: 'linear-gradient(135deg, #8A7A60, #4A3F31)', ruins: 'li
 const shotDmg = (H) => (H.atk.n ? H.atk.n * H.atk.dmg : H.atk.dmg);
 const snapBots = (n) => BOT_STEPS.reduce((b, v) => (Math.abs(v - n) < Math.abs(b - n) ? v : b), 0);
 const sendMsFor = (n) => (n <= 4 ? 100 : n <= 7 ? 125 : 150);
+const netBadOf = (h, now) => !h.bot && ((h.netAt && now - h.netAt > 1400) || (h.nq || 0) > 280);
 const GFX = [['auto', 'Auto'], ['best', 'Best'], ['fast', 'Fast']];
 const LV_ITEMS = E.LEVEL_KEYS.map((k) => [k, E.LEVELS[k].name]);
 const BOT_ITEMS = [['0', 'Off'], ['1', '1'], ['3', '3'], ['5', '5'], ['9', '9']];
@@ -200,6 +205,28 @@ const WAVE_ITEMS = [['15', `${E.WIN_WAVE} waves`], ['end', 'Endless']];
 const ST_CODE = { intro: 0, fight: 1, break: 2, won: 3 };
 const ST_NAME = ['intro', 'fight', 'break', 'won'];
 const PROG = { data: null, at: 0 };
+const PLV_MAX = 100;
+const plvTotal = (lv) => 50 * (lv - 1) * (lv - 1) + 250 * (lv - 1);
+export function plvOf(xp) {
+  const x = Math.max(0, Number(xp) || 0);
+  const lv = Math.min(PLV_MAX, 1 + Math.floor((-250 + Math.sqrt(62500 + 200 * x)) / 100));
+  const need = lv >= PLV_MAX ? 0 : plvTotal(lv + 1) - plvTotal(lv);
+  return { lv, into: lv >= PLV_MAX ? 0 : x - plvTotal(lv), need, xp: x };
+}
+const PLV_MEM = new Map();
+function loadPlvs(ids) {
+  const want = ids.filter((id) => typeof id === 'string' && /^[0-9a-f-]{36}$/i.test(id) && !(PLV_MEM.has(id) && Date.now() - PLV_MEM.get(id).at < 90000)).slice(0, 20);
+  if (!want.length) return Promise.resolve(false);
+  return new Promise((res) => {
+    try {
+      supabase.rpc('zchat_siege_lvs', { p_ids: want }).then(({ data, error }) => {
+        if (error || !data || typeof data !== 'object') { res(false); return; }
+        for (const id of want) PLV_MEM.set(id, { lv: clamp(Number(data[id]) | 0 || 1, 1, PLV_MAX), at: Date.now() });
+        res(true);
+      }, () => res(false));
+    } catch { res(false); }
+  });
+}
 function loadProg() {
   if (PROG.data && Date.now() - PROG.at < 60000) return Promise.resolve(PROG.data);
   return new Promise((res) => {
@@ -208,7 +235,7 @@ function loadProg() {
         if (error || !data || typeof data !== 'object') { res(null); return; }
         const levels = {};
         for (const k of E.HERO_KEYS) levels[k] = clamp(Number(data.levels && data.levels[k]) || 1, 1, E.MAX_LEVEL);
-        PROG.data = { scrap: Math.max(0, Number(data.scrap) || 0), levels }; PROG.at = Date.now();
+        PROG.data = { scrap: Math.max(0, Number(data.scrap) || 0), levels, xp: Math.max(0, Number(data.xp) || 0) }; PROG.at = Date.now();
         res(PROG.data);
       }, () => res(null));
     } catch { res(null); }
@@ -350,7 +377,7 @@ function zap(kind, vol = 1, rate = 1) {
   } catch {}
 }
 
-const KIT_SRC = { base: ['/bolt/base-pack-v1.bin', '/bolt/t_kspace.webp'], city: ['/bolt/city-pack-v1.bin', '/bolt/t_kcity.webp'], fort: ['/bolt/fort-pack-v1.bin', '/bolt/t_kfort.webp'] };
+const KIT_SRC = { base: ['/bolt/base-pack-v1.bin', '/bolt/t_kspace.webp'], city: ['/bolt/city-pack-v1.bin', '/bolt/t_kcity.webp'], fort: ['/bolt/fort-pack-v1.bin', '/bolt/t_kfort.webp'], grave: ['/bolt/grave-pack-v1.bin', '/bolt/t_kgrave.webp'] };
 const KITS = {};
 const UNITS = { job: null, d: null };
 const kitOf = (k) => (KITS[k] && KITS[k].d ? KITS[k].d : null);
@@ -395,7 +422,7 @@ function riftUpload(R, u) {
   return out;
 }
 const ULOOK = { mel: { m: 'tm_leela', t: 't_mleela', h: 1.32, atk: 'atk' }, rng: { m: 'tm_leela', t: 't_mleela', h: 1.16, atk: 'shoot' }, sie: { m: 'tm_george', t: 't_mgeorge', h: 1.95, atk: 'shoot' } };
-const CLOOK = { fury: { m: 'mo_cyclops', h: 2.3 }, pair: { m: 'mo_crab', h: 1.3 }, flow: { m: 'mo_yeti', h: 2.3 }, spit: { m: 'mo_cactus', h: 1.55 }, river: { m: 'mo_demon', h: 2.5 }, riverS: { m: 'mo_skull', h: 1.2 } };
+const CLOOK = { fury: { m: 'mo_cyclops', h: 2.3 }, pair: { m: 'mo_crab', h: 1.3 }, flow: { m: 'mo_yeti', h: 2.3 }, spit: { m: 'mo_cactus', h: 1.55 }, river: { m: 'mo_demon', h: 2.5 }, riverS: { m: 'mo_skull', h: 1.2 }, pack: { m: 'mo_demon', h: 2.6 }, pop: { m: 'mo_skull', h: 1.05 } };
 function campLook(W, b) {
   if (b.ck === undefined) {
     let best = null, bd = 9;
@@ -403,7 +430,7 @@ function campLook(W, b) {
     b.ck = best;
   }
   if (!b.ck) return null;
-  return b.ck === 'river' && b.type !== 'tank' ? CLOOK.riverS : CLOOK[b.ck] || null;
+  return (b.ck === 'river' || b.ck === 'pack') && b.type !== 'tank' ? CLOOK.riverS : CLOOK[b.ck] || null;
 }
 function unitPose(b, M, act, dt) {
   const P = b.upose && b.upose.q.length === M.nb * 4 ? b.upose : (b.upose = newPose(M.nb));
@@ -472,21 +499,32 @@ function arenaThumb(key) {
 
 
 
-export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite, onInviteOne = null, friends = null, online = null, watch = false }) {
+export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite, onInviteOne = null, friends = null, online = null, watch = false, onServer = null }) {
   injectCss(); injectKitCss();
   const uid = solo ? 'me' : myId;
-  const isHost = solo || (room && room.host === myId);
-  const hostId = solo ? 'me' : room && room.host;
+  const srvMode = !solo && !!room && !!room.sv;
+  const pubRoom = srvMode && !!room.pub;
+  const isHost = solo || (!srvMode && room && room.host === myId);
+  const hostId = solo ? 'me' : srvMode ? '$srv' : room && room.host;
   const myFirst = String((me && me.name) || 'You').split(' ')[0];
   const [heroKey, setHeroKey] = useState(() => validHero(readPref(PREF.hero, 'blaze')));
   const [heroCol, setHeroCol] = useState(() => clamp(Number(readPref('zchat-siege-hcol', 0)) | 0, 0, 3));
   const [skill, setSkill] = useState(() => { const v = readPref(PREF.sk, 'shock'); return T.SKILLS[v] ? v : 'shock'; });
   const myPw = E.HERO_KEYS.reduce((sum, k) => sum + clamp(Number(PROG.data && PROG.data.levels && PROG.data.levels[k]) | 0 || 1, 1, E.MAX_LEVEL), 0);
   const myPwRef = useRef(myPw); myPwRef.current = myPw;
-  const meta = { n: myFirst, a: me && me.avatar, w: watch ? 1 : 0, h: heroKey, hc: heroCol, sk: skill, pw: myPw };
-  const relay = useRoomLink({ id: solo || !room ? null : `siege-${room.rm}`, myId, enabled: !solo && !!room, meta, fast: ['hs', 'es'], audio: !watch, cloud: 'siege' });
+  const [dlNow, setDlNow] = useState(1);
+  const meta = { n: myFirst, a: me && me.avatar, w: watch ? 1 : 0, h: heroKey, hc: heroCol, sk: skill, pw: myPw, dl: dlNow };
+  const relay = useRoomLink({ id: solo || !room ? null : pubRoom ? String(room.pub.n) : `siege-${room.rm}`, myId, enabled: !solo && !!room, meta, fast: ['hs', 'es'], audio: !watch && !pubRoom, cloud: 'siege', reg: srvMode ? room.reg || 'asia' : undefined, sv: srvMode });
+  const relayLive = useRef(relay); relayLive.current = relay;
+  const [srvInfo, setSrvInfo] = useState(null);
+  const amLead = srvMode && !pubRoom && !!srvInfo && srvInfo.lead === myId;
+  const canEdit = isHost || amLead;
+  const cfgSeqRef = useRef(0);
+  const pushCfg = (patch) => { if (srvMode && amLead) relay.send('cfg', { cs: ++cfgSeqRef.current, gm: gmRef.current, map: tmapRef.current, tl: tlimRef.current, gl: glimRef.current[gmRef.current] || 0, ts: tsRef.current, bl: blRef.current, ...(patch || {}) }); };
   const [phase, setPhase] = useState('menu');
   const [ready, setReady] = useState(false);
+  useEffect(() => { setDlNow(ready ? 0 : 1); }, [ready]);
+  const [, setMetaTick] = useState(0);
   const [failed, setFailed] = useState(false);
   const [arena, setArena] = useState(() => (isHost ? validArena(readPref(PREF.arena, 'yard')) : 'yard'));
   const [lv, setLv] = useState(() => (isHost ? validLv(readPref(PREF.lv, 'normal')) : 'normal'));
@@ -534,6 +572,13 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
   const [thumbs, setThumbs] = useState({});
   const [aThumbs, setAThumbs] = useState({});
   const [thumbAll, setThumbAll] = useState(false);
+  const [srvList, setSrvList] = useState(null);
+  const [mixOpen, setMixOpen] = useState(false);
+  useEffect(() => { if (relay.healMic) relay.healMic(); }, [phase]);
+  const loadServers = () => {
+    setSrvList((p) => ({ ...(p || {}), busy: true }));
+    Promise.all([boltServerOn(true), listBoltRooms(), pingRegions().catch(() => null)]).then(([on, rooms, ping]) => setSrvList({ on, rooms: rooms || {}, ping: ping || {}, at: Date.now(), busy: false }), () => setSrvList({ on: false, rooms: {}, ping: {}, at: Date.now(), busy: false }));
+  };
   const [bubbles, setBubbles] = useState({});
   const [aimUi, setAimUi] = useState(null);
   const [prog, setProg] = useState(() => PROG.data);
@@ -553,7 +598,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
   const GS = useGameStage(useMemo(() => ({ ...look, side: true }), [look]));
   const { top, right, bottom, left } = GS.at;
   const land = GS.land;
-  useLiveBeacon({ game: 'siege', room: room ? room.rm : null, info: { h: room && room.host, n: Math.max(1, roster.length) }, active: !solo && !watch && !!room, allow: allowWatch });
+  useLiveBeacon({ game: 'siege', room: room ? room.rm : null, info: { h: room && room.host, n: Math.max(1, roster.length), sv: srvMode ? 1 : 0, reg: srvMode ? room.reg || 'asia' : undefined, pb: pubRoom ? room.pub.n : undefined }, active: !solo && !watch && !!room, allow: allowWatch && !pubRoom });
 
   const cvRef = useRef(null);
   const ovRef = useRef(null);
@@ -746,6 +791,9 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
   }, [wantArena, kitN]);
   useEffect(() => { let on = true; const t = setTimeout(() => { if (on) setThumbs((p) => (Object.keys(p || {}).length ? p : heroThumbs())); }, 6000); loadSk().then((d) => { if (!on || !d) return; const th = skThumbs(d); if (Object.keys(th).length) setThumbs(th); }); return () => { on = false; clearTimeout(t); }; }, []);
   useEffect(() => { if (watch) return undefined; let on = true; loadProg().then((d) => { if (on && d) setProg(d); }); return () => { on = false; }; }, []);
+  const [, setPlvTick] = useState(0);
+  const rosterKey = roster.join(',');
+  useEffect(() => { if (solo) return undefined; let on = true; const ids = roster.filter((k) => k !== kindOf()); loadPlvs(ids).then((ok) => { if (on && ok) setPlvTick((n) => n + 1); }); return () => { on = false; }; }, [rosterKey, solo]);
   const upgrade = (k) => {
     const P0 = progRef.current;
     if (upBusy || !P0) return;
@@ -759,7 +807,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
         setUpBusy(false);
         if (error || !data) { setUpMsg('Could not upgrade right now. Try again'); return; }
         if (data.ok) {
-          const nd = { scrap: Math.max(0, Number(data.scrap) || 0), levels: { ...P0.levels, [k]: clamp(Number(data.level) || lv + 1, 1, E.MAX_LEVEL) } };
+          const nd = { ...P0, scrap: Math.max(0, Number(data.scrap) || 0), levels: { ...P0.levels, [k]: clamp(Number(data.level) || lv + 1, 1, E.MAX_LEVEL) } };
           PROG.data = nd; PROG.at = Date.now(); setProg(nd);
           zap('coin', 0.75);
         } else setUpMsg(data.reason === 'max' ? 'This hero is at the top level' : 'Not enough scrap yet');
@@ -833,6 +881,11 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
     }
     setResult(null); setPaused(false); setQuick(false); setFollow(null); setArenaSheet(false); setOptSheet(false);
     setPhase('play');
+    g.ticket = null;
+    if (!watch && cfg.ids.includes(kindOf())) {
+      const rid0 = cfg.rid;
+      try { supabase.rpc('zchat_siege_begin', { p_mode: team ? (W.tm.gm === 'hp' ? 'hp' : 'tdm') : 'waves' }).then(({ data, error }) => { if (!error && data && data.ok && typeof data.id === 'string' && G.current.rid === rid0) G.current.ticket = data.id; }, () => {}); } catch {}
+    }
     if (team) showBanner(T.GM_NAME[W.tm.gm] || 'Team deathmatch', W.tm.gm === 'hp' ? `Hold the zone. First to ${W.tm.goal} wins` : `First team to ${W.tm.goal} kills wins`, 'blue', 3);
     else showBanner('Get ready', `${E.ARENAS[ak].name}, ${E.LEVELS[W.lv].name}`, 'blue', 2.6);
     J.reset();
@@ -885,6 +938,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
     beginGame(cfg);
   };
   const startGame = () => {
+    if (srvMode) { if (amLead && ready) { Sfx.init(); relay.send('start', {}); } return; }
     if (!isHost || !ready) return;
     Sfx.init();
     if (modeRef.current === 'team') { startTeam(); return; }
@@ -920,7 +974,24 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
     const g = G.current;
     g.W = null; g.ids = []; g.bots = []; g.parts = []; g.nums = []; g.beams = [];
     setPhase('menu'); setResult(null); setBanner(null);
-    if (!solo && isHost && !quiet) relay.send('menu', {});
+    if (!solo && (isHost || (srvMode && amLead)) && !quiet) relay.send('menu', {});
+  };
+  const sendFinish = ({ won, kills, assists, wave }) => {
+    const g = G.current, id = g.ticket;
+    g.ticket = null;
+    if (!id) return;
+    try {
+      supabase.rpc('zchat_siege_finish', { p_id: id, p_won: !!won, p_kills: kills | 0, p_assists: assists | 0, p_wave: wave | 0 }).then(({ data, error }) => {
+        if (error || !data || !data.ok) return;
+        const P0 = progRef.current || PROG.data || { levels: {} };
+        const before = plvOf(P0.xp || 0);
+        const nd = { ...P0, scrap: Math.max(0, Number(data.scrap) || 0), levels: P0.levels || {}, xp: Math.max(0, Number(data.xp) || 0) };
+        PROG.data = nd; PROG.at = Date.now(); setProg(nd);
+        const after = plvOf(nd.xp);
+        setResult((r) => (r ? { ...r, scrap: Math.max(0, data.got | 0), xp: { got: Math.max(0, data.xp_got | 0), ups: Math.max(0, data.ups | 0), bonus: Math.max(0, data.bonus | 0), from: before, to: after } } : r));
+        if ((data.ups | 0) > 0) zap('combo', 0.7);
+      }, () => {});
+    } catch {}
   };
   const finishTeam = (res) => {
     const g = G.current, W = g.W;
@@ -933,15 +1004,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
     setResult({ team: true, mk: W && W.A ? W.A.key : null, won, draw, gm: gmK, lost: !!res.lost, myTeam, win: res.team, sc: Array.isArray(res.sc) ? res.sc : W && W.tm ? W.tm.score : [0, 0], rows, mins: W && W.tm ? Math.round(W.tm.t / 60) : 0, scrap: null, wave: 0, score: 0, list: [] });
     if (inGame() && progRef.current && !res.lost && W && W.tm) {
       const kd = W.tm.kd[kindOf()] || { k: 0, a: 0 };
-      const mins = W.tm.t / 60;
-      try {
-        supabase.rpc('zchat_siege_award', { p_wave: clamp(Math.round(mins) + (won ? 6 : 2), 0, 40), p_kills: clamp((kd.k * 2 + kd.a) * 3, 0, 600), p_won: won }).then(({ data, error }) => {
-          if (error || !data || !data.ok) return;
-          const nd = { scrap: Math.max(0, Number(data.scrap) || 0), levels: (progRef.current && progRef.current.levels) || {} };
-          PROG.data = nd; PROG.at = Date.now(); setProg(nd);
-          setResult((r) => (r ? { ...r, scrap: Math.max(0, data.got | 0) } : r));
-        }, () => {});
-      } catch {}
+      sendFinish({ won, kills: kd.k | 0, assists: kd.a | 0, wave: 0 });
     }
     setTimeout(() => { if (G.current.over) setPhase('done'); }, res.lost ? 600 : 2600);
     if (res.lost) zap('lose', 0.6);
@@ -965,14 +1028,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
     setResult({ won: !!res.won, wave, score: res.score || 0, list, prev, best: Math.max(prev, reached), newBest: inGame() && reached > prev, lost: !!res.lost, endless: W ? W.endless : false, scrap: null });
     if (inGame() && progRef.current && !res.lost) {
       const meH = W && W.heroes[kindOf()];
-      try {
-        supabase.rpc('zchat_siege_award', { p_wave: wave | 0, p_kills: meH ? meH.stats.kills | 0 : 0, p_won: !!res.won }).then(({ data, error }) => {
-          if (error || !data || !data.ok) return;
-          const nd = { scrap: Math.max(0, Number(data.scrap) || 0), levels: (progRef.current && progRef.current.levels) || {} };
-          PROG.data = nd; PROG.at = Date.now(); setProg(nd);
-          setResult((r) => (r ? { ...r, scrap: Math.max(0, data.got | 0) } : r));
-        }, () => {});
-      } catch {}
+      sendFinish({ won: !!res.won, kills: meH ? meH.stats.kills | 0 : 0, assists: 0, wave: wave | 0 });
     }
     setTimeout(() => { if (G.current.over) setPhase('done'); }, res.won ? 1400 : g.kill && performance.now() - g.kill.at < 2400 ? 2600 : 1300);
     if (res.won) { zap('win', 0.85); try { window.dispatchEvent(new CustomEvent('zchat-screen-fx', { detail: 'confetti' })); } catch {} }
@@ -1109,7 +1165,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
     const f = mv | (h.hid ? 2 : 0) | (W.t - h.seen < 1.2 ? 4 : 0) | (h.pw > 0 ? 8 : 0) | (h.ocT > 0 ? 16 : 0) | (h.shield > 0 ? 32 : 0) | (h.rfT > 0 ? 64 : 0) | (h.spT > 0 ? 128 : 0) | (h.dashT > 0 ? 256 : 0) | (h.jump ? 512 : 0);
     const o = [Math.round(h.x * 20), Math.round(h.z * 20), Math.round(h.yaw * 100), Math.round(h.hp), h.st, f, Math.round(h.sup * 100), Math.round(h.rv * 100), Math.round(h.downT * 10), Math.round(h.max), Math.round((h.shield || 0) / 10), h.lv | 0];
     if (W.mode === 'team') {
-      const f2 = ((h.clkT || 0) > 0 ? 1 : 0) | ((h.recT || 0) > 0 ? 2 : 0) | ((h.stunT || 0) > 0 ? 4 : 0) | (h.buffs && h.buffs.fury ? 8 : 0) | (h.buffs && h.buffs.flow ? 16 : 0) | ((h.sprT || 0) > 0 ? 32 : 0) | ((h.spawnT || 0) > 0 ? 64 : 0);
+      const f2 = ((h.clkT || 0) > 0 ? 1 : 0) | ((h.recT || 0) > 0 ? 2 : 0) | ((h.stunT || 0) > 0 ? 4 : 0) | (h.buffs && h.buffs.fury ? 8 : 0) | (h.buffs && h.buffs.flow ? 16 : 0) | ((h.sprT || 0) > 0 ? 32 : 0) | ((h.spawnT || 0) > 0 ? 64 : 0) | (h.buffs && h.buffs.guard ? 128 : 0);
       o.push(h.tl | 0, Math.round((h.respT || 0) * 10), f2, Math.round(((h.stats && h.stats.hd) || 0) / 10));
     }
     return o;
@@ -1137,7 +1193,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
       const f2 = p[14] | 0;
       h.clkT = f2 & 1 ? 0.35 : 0; h.recV = !!(f2 & 2); h.stunV = !!(f2 & 4); h.sprV = !!(f2 & 32); h.spawnV = !!(f2 & 64);
       const bf = h.buffs || (h.buffs = {});
-      bf.fury = f2 & 8 ? 1 : 0; bf.flow = f2 & 16 ? 1 : 0;
+      bf.fury = f2 & 8 ? 1 : 0; bf.flow = f2 & 16 ? 1 : 0; bf.guard = f2 & 128 ? 1 : 0;
       if (h.stats) h.stats.hd = Math.max(0, num(p[15]) * 10);
     }
     const f = p[5] | 0;
@@ -1173,9 +1229,13 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
       takedown(W, { v: m.v, k: typeof m.k === 'string' && W.heroes[m.k] ? m.k : null, by: typeof m.by === 'number' || typeof m.by === 'string' ? m.by : null, as: Array.isArray(m.as) ? m.as.filter((x) => typeof x === 'string' && W.heroes[x]).slice(0, 4) : [] });
     };
     const offs = [
-      relay.on('*', (m) => { if (m.m) { metaRef.current[m.from] = m.m; setNames((p) => (p[m.from] === m.m.n ? p : { ...p, [m.from]: m.m.n })); if (m.m.h && E.HEROES[m.m.h]) setHeroOf((p) => (p[m.from] ? p : { ...p, [m.from]: m.m.h })); } if (!joinOrder.current.includes(m.from)) joinOrder.current.push(m.from); }),
+      relay.on('*', (m) => { if (m.m) { const was = metaRef.current[m.from]; if (!was || !was.dl !== !m.m.dl) setMetaTick((n) => n + 1); metaRef.current[m.from] = m.m; setNames((p) => (p[m.from] === m.m.n ? p : { ...p, [m.from]: m.m.n })); if (m.m.h && E.HEROES[m.m.h]) setHeroOf((p) => (p[m.from] ? p : { ...p, [m.from]: m.m.h })); } if (!joinOrder.current.includes(m.from)) joinOrder.current.push(m.from); }),
       relay.on('roster', (m) => {
         if (isHost || !Array.isArray(m.ids)) return;
+        if (srvMode && m.from !== '$srv') return;
+        let oldCfg = false;
+        if (srvMode && typeof m.cs === 'number') { if (m.cs < cfgSeqRef.current) oldCfg = true; else cfgSeqRef.current = m.cs; }
+        if (srvMode && m.sv && typeof m.sv === 'object') { setSrvInfo({ ph: String(m.sv.ph || 'lobby'), left: Math.max(0, m.sv.left | 0), pub: !!m.sv.pub, lead: typeof m.sv.lead === 'string' ? m.sv.lead : null, at: Date.now() }); if (typeof m.sv.bl === 'number' && !oldCfg) setBl(clamp(m.sv.bl | 0, 0, 2)); }
         setRoster(m.ids.filter((k) => typeof k === 'string').slice(0, E.SQUAD_MAX));
         if (m.nm && typeof m.nm === 'object') setNames((p) => ({ ...p, ...m.nm }));
         if (m.hk && typeof m.hk === 'object') setHeroOf((p) => ({ ...p, ...Object.fromEntries(Object.entries(m.hk).filter(([, v]) => E.HEROES[v])) }));
@@ -1184,27 +1244,30 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
         if (typeof m.bn === 'number') setBotN(snapBots(clamp(m.bn | 0, 0, 9)));
         if (typeof m.en === 'number') setEndless(!!m.en);
         if (m.md === 'team' || m.md === 'waves') setMode(m.md);
-        if (typeof m.tmap === 'string' && T.MAPS[m.tmap]) setTmap(m.tmap);
-        if (typeof m.gm === 'string') setGm(T.validGm(m.gm));
-        if (typeof m.tl === 'number') setTlim(clamp(m.tl | 0, 3, 20));
-        if (typeof m.gl === 'number' && typeof m.gm === 'string') { const gk = T.validGm(m.gm); setGlim((p) => (p[gk] === (m.gl | 0) ? p : { ...p, [gk]: Math.max(0, m.gl | 0) })); }
-        if (typeof m.ts === 'number') setTs(clamp(m.ts | 0, 1, 5));
+        if (!oldCfg) {
+          if (typeof m.tmap === 'string' && T.MAPS[m.tmap]) setTmap(m.tmap);
+          if (typeof m.gm === 'string') setGm(T.validGm(m.gm));
+          if (typeof m.tl === 'number') setTlim(clamp(m.tl | 0, 3, 20));
+          if (typeof m.gl === 'number' && typeof m.gm === 'string') { const gk = T.validGm(m.gm); setGlim((p) => (p[gk] === (m.gl | 0) ? p : { ...p, [gk]: Math.max(0, m.gl | 0) })); }
+          if (typeof m.ts === 'number') setTs(clamp(m.ts | 0, 1, 5));
+        }
         if (m.tm && typeof m.tm === 'object') setSideOf((p) => { const n = {}; for (const [k, v] of Object.entries(m.tm)) n[k] = v === 1 ? 1 : 0; return JSON.stringify(n) === JSON.stringify(p) ? p : n; });
         const cfg = cleanCfg(m.cfg);
         if (cfg && phaseRef.current === 'menu' && !G.current.W) beginGame(cfg);
       }),
-      relay.on('go', (m) => { if (isHost) return; const cfg = cleanCfg(m); if (cfg) beginGame(cfg); }),
-      relay.on('menu', () => { if (!isHost) toMenu(true); }),
+      relay.on('go', (m) => { if (isHost || (srvMode && m.from !== '$srv')) return; const cfg = cleanCfg(m); if (cfg) beginGame(cfg); }),
+      relay.on('menu', (m) => { if (!isHost && (!srvMode || m.from === '$srv')) toMenu(true); }),
       relay.on('hero', (m) => { if (m && E.HEROES[m.k]) setHeroOf((p) => ({ ...p, [m.from]: m.k })); if (m && typeof m.c === 'number') setColOf((p) => ({ ...p, [m.from]: clamp(m.c | 0, 0, 3) })); if (m && T.SKILLS[m.sk]) setSkOf((p) => ({ ...p, [m.from]: m.sk })); }),
       relay.on('side', (m) => { if (!isHost || !m || phaseRef.current !== 'menu') return; wantSide.current[m.from] = m.s === 1 ? 1 : 0; setSideOf(sidesFor(rosterRef.current)); }),
       relay.on('tk', onTk),
       relay.on('swap', (m) => {
         const g = G.current, W = g.W;
-        if (isHost || !W || m.r !== g.rid || typeof m.id !== 'string' || W.heroes[m.id] || !E.HEROES[m.k]) return;
+        if (isHost || (srvMode && m.from !== '$srv') || !W || m.r !== g.rid || typeof m.id !== 'string' || W.heroes[m.id] || !E.HEROES[m.k]) return;
         const x = num(m.x), z = num(m.z);
-        if (typeof m.b === 'string' && W.heroes[m.b]) { W.order = W.order.map((k) => (k === m.b ? m.id : k)); g.ids = g.ids.map((k) => (k === m.b ? m.id : k)); g.bots = g.bots.filter((k) => k !== m.b); }
+        if (typeof m.b === 'string' && W.heroes[m.b]) { W.order = W.order.map((k) => (k === m.b ? m.id : k)); g.ids = g.ids.map((k) => (k === m.b ? m.id : k)); g.bots = g.bots.filter((k) => k !== m.b); if (m.bot) delete W.heroes[m.b]; }
         else { W.order.push(m.id); g.ids.push(m.id); }
-        const h = E.mkHero(m.id, m.k, x, z, false, 1); h.hc = clamp(m.c | 0, 0, 3);
+        const h = E.mkHero(m.id, m.k, x, z, !!m.bot, 1); h.hc = clamp(m.c | 0, 0, 3);
+        if (m.bot) { g.bots.push(m.id); g.botMeta[m.id] = { n: String(m.n || 'Bot').slice(0, 16) }; }
         if (W.mode === 'team') { T.initHero(W, h, m.tm === 1 ? 1 : 0, T.SKILLS[m.sk] ? m.sk : 'shock', 0); h.x = x; h.z = z; h.tl = clamp(m.tl | 0, 1, T.TL_MAX); }
         W.heroes[m.id] = h;
       }),
@@ -1214,6 +1277,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
         const h = W.heroes[m.from];
         if (!h || h.bot) return;
         if (typeof m.q === 'number') { if (m.q <= (h.netQ == null ? -1 : h.netQ)) return; h.netQ = m.q; }
+        if (typeof m.nq === 'number') h.nq = clamp(m.nq | 0, 0, 9999);
         applyPack(W, h, m.p, performance.now(), m.at);
       }),
       relay.on('f', (m) => {
@@ -1240,7 +1304,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
       }),
       relay.on('es', (m) => {
         const g = G.current, W = g.W;
-        if (isHost || !W || !m || m.r !== g.rid) return;
+        if (isHost || !W || !m || m.r !== g.rid || (srvMode && m.from !== '$srv')) return;
         if (typeof m.q === 'number') { if (m.q <= g.lastSeq) return; g.lastSeq = m.q; }
         const now = performance.now();
         g.lastSnapAt = now;
@@ -1253,7 +1317,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
       }),
       relay.on('re', (m) => {
         const g = G.current, W = g.W;
-        if (isHost || !W || !m || m.r !== g.rid || !Array.isArray(m.e)) return;
+        if (isHost || !W || !m || m.r !== g.rid || !Array.isArray(m.e) || (srvMode && m.from !== '$srv')) return;
         for (const e of m.e.slice(0, 200)) {
           if (Array.isArray(e) && e[0] === 'pg') { const h = W.heroes[e[2]]; if (h && W.local.has(h.id)) E.takeDrop(W, h, { k: E.DROP_KEYS[e[3] | 0] || 'hp', x: h.x, z: h.z }); continue; }
           E.applyNetEvent(W, e);
@@ -1275,7 +1339,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
       }),
       relay.on('over', (m) => {
         const g = G.current;
-        if (isHost || !m || m.r !== g.rid) return;
+        if (isHost || !m || m.r !== g.rid || (srvMode && m.from !== '$srv')) return;
         if (m.tw === 0 || m.tw === 1 || m.tw === 2) {
           const rows = Array.isArray(m.tr) ? m.tr.filter((r) => Array.isArray(r) && typeof r[0] === 'string').slice(0, E.SQUAD_MAX).map((r) => ({ id: r[0], tm: r[1] === 1 ? 1 : 0, key: validHero(r[2]), tl: clamp(r[3] | 0, 1, T.TL_MAX), k: r[4] | 0, d: r[5] | 0, a: r[6] | 0, dmg: Math.max(0, r[7] | 0) })) : [];
           finishUp({ team: m.tw, sc: Array.isArray(m.sc) ? [m.sc[0] | 0, m.sc[1] | 0] : null, rows });
@@ -1374,13 +1438,13 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
     zap('star', 0.6);
   };
   const pickCol = (c) => { kitTap(); setHeroCol(c); savePref('zchat-siege-hcol', c); if (!solo) relay.send('hero', { k: heroKey, c, sk: skillRef.current }); };
-  const pickMode = (k) => { if (!isHost || (k !== 'team' && k !== 'waves')) return; kitTap(); setMode(k); savePref(PREF.mode, k); };
-  const pickTs = (n) => { if (!isHost) return; const v = clamp(n | 0, 1, 5); kitTap(); setTs(v); savePref(PREF.ts, v); };
-  const pickBl = (n) => { if (!isHost) return; const v = clamp(n | 0, 0, 2); kitTap(); setBl(v); savePref('zchat-siege-bl', v); };
-  const pickPlay = (k) => { if (!isHost) return; if (k === 'waves') { pickMode('waves'); return; } const v = T.validGm(k); setGm(v); savePref('zchat-siege-gm', v); setTmap(T.validMap(readPref(`zchat-siege-map-${v}`, T.MAP_DEF[v]))); pickMode('team'); };
-  const pickMap = (k) => { if (!isHost || !T.MAPS[k]) return; kitTap(); setTmap(k); savePref(`zchat-siege-map-${gmRef.current}`, k); };
-  const pickTlim = (n) => { if (!isHost) return; const v = clamp(n | 0, 3, 20); kitTap(); setTlim(v); savePref('zchat-siege-tlim', v); };
-  const pickGlim = (n) => { if (!isHost) return; const v = Math.max(0, n | 0); kitTap(); setGlim((p) => ({ ...p, [gmRef.current]: v })); savePref(`zchat-siege-goal-${gmRef.current}`, v); };
+  const pickMode = (k) => { if (!canEdit || (k !== 'team' && k !== 'waves') || (srvMode && k !== 'team')) return; kitTap(); setMode(k); savePref(PREF.mode, k); };
+  const pickTs = (n) => { if (!canEdit) return; const v = clamp(n | 0, 1, 5); kitTap(); setTs(v); savePref(PREF.ts, v); pushCfg({ ts: v }); };
+  const pickBl = (n) => { if (!canEdit) return; const v = clamp(n | 0, 0, 2); kitTap(); setBl(v); savePref('zchat-siege-bl', v); pushCfg({ bl: v }); };
+  const pickPlay = (k) => { if (!canEdit || (srvMode && k === 'waves')) return; if (k === 'waves') { pickMode('waves'); return; } const v = T.validGm(k); setGm(v); savePref('zchat-siege-gm', v); const mp = T.validMap(readPref(`zchat-siege-map-${v}`, T.MAP_DEF[v])); setTmap(mp); pickMode('team'); pushCfg({ gm: v, map: mp, gl: glimRef.current[v] || 0 }); };
+  const pickMap = (k) => { if (!canEdit || !T.MAPS[k]) return; kitTap(); setTmap(k); savePref(`zchat-siege-map-${gmRef.current}`, k); pushCfg({ map: k }); };
+  const pickTlim = (n) => { if (!canEdit) return; const v = clamp(n | 0, 3, 20); kitTap(); setTlim(v); savePref('zchat-siege-tlim', v); pushCfg({ tl: v }); };
+  const pickGlim = (n) => { if (!canEdit) return; const v = Math.max(0, n | 0); kitTap(); setGlim((p) => ({ ...p, [gmRef.current]: v })); savePref(`zchat-siege-goal-${gmRef.current}`, v); pushCfg({ gl: v }); };
   const pickSkill = (k) => { if (!T.SKILLS[k]) return; setSkill(k); savePref(PREF.sk, k); if (!solo) relay.send('hero', { k: heroKey, c: heroCol, sk: k }); };
   const switchSide = () => {
     kitTap();
@@ -1502,7 +1566,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
     else g.fireQ.push({ kind: A.kind, auto: true });
   };
 
-  if (typeof window !== 'undefined' && window.__zfake) window.__zsiege = { W: () => G.current.W, g: () => G.current, fire: (kind, a, dist) => G.current.fireQ.push(a == null ? { kind, auto: true } : { kind, a, dist }), move: (x, z) => { G.current.keyMove = [x, z]; }, god: (on) => { const W = G.current.W; const h = W && W.heroes[kindOf()]; if (h) h.god = on !== false; }, wave: (n) => { const W = G.current.W; if (W && isHost) { W.robots.length = 0; W.wave.st = 'break'; W.wave.t = 0.1; W.wave.n = Math.max(0, n - 1); } }, kill: () => { const W = G.current.W; if (W && isHost) for (const b of W.robots) E.hurtRobot(W, b, 1e6, kindOf(), 0, 1, {}); }, start: () => startGame(), sup: () => { const W = G.current.W; const h = W && W.heroes[kindOf()]; if (h) h.sup = 1; }, hurt: (d, by) => { const W = G.current.W; const h = W && W.heroes[kindOf()]; if (h) E.hurtHero(W, h, d || 500, by == null ? 'test' : by); }, gad: (a, dist) => G.current.gadQ.push(a == null ? null : { a, dist }), dash: (a) => G.current.dashQ.push(a == null ? null : a), cards: () => cardsRef.current, pick: (k) => pickCard(k), later: () => laterCard(), pend: () => G.current.pend, me: () => { const W = G.current.W; return W && W.heroes[kindOf()]; }, E: () => E };
+  if (typeof window !== 'undefined' && window.__zfake) window.__zsiege = { W: () => G.current.W, g: () => G.current, fire: (kind, a, dist) => G.current.fireQ.push(a == null ? { kind, auto: true } : { kind, a, dist }), move: (x, z) => { G.current.keyMove = [x, z]; }, god: (on) => { const W = G.current.W; const h = W && W.heroes[kindOf()]; if (h) h.god = on !== false; }, wave: (n) => { const W = G.current.W; if (W && isHost) { W.robots.length = 0; W.wave.st = 'break'; W.wave.t = 0.1; W.wave.n = Math.max(0, n - 1); } }, kill: () => { const W = G.current.W; if (W && isHost) for (const b of W.robots) E.hurtRobot(W, b, 1e6, kindOf(), 0, 1, {}); }, start: () => startGame(), sup: () => { const W = G.current.W; const h = W && W.heroes[kindOf()]; if (h) h.sup = 1; }, hurt: (d, by) => { const W = G.current.W; const h = W && W.heroes[kindOf()]; if (h) E.hurtHero(W, h, d || 500, by == null ? 'test' : by); }, gad: (a, dist) => G.current.gadQ.push(a == null ? null : { a, dist }), dash: (a) => G.current.dashQ.push(a == null ? null : a), cards: () => cardsRef.current, pick: (k) => pickCard(k), map: (k) => pickMap(k), play: (k) => pickPlay(k), net: () => ({ rtt: relay.rtt, gap: Math.round(performance.now() - (G.current.lastSnapAt || 0)) }), info: () => ({ srvMode, isHost, amLead, lead: srvInfo && srvInfo.lead, ph: srvInfo && srvInfo.ph, gm: gmRef.current, map: tmapRef.current }), later: () => laterCard(), pend: () => G.current.pend, me: () => { const W = G.current.W; return W && W.heroes[kindOf()]; }, E: () => E };
 
   const feedAdd = (it) => { const g = G.current; g.feedId = (g.feedId || 0) + 1; const e = { ...it, id: g.feedId, at: Date.now() }; setTfeed((p) => [...p.filter((q) => Date.now() - q.at < 6500), e].slice(-4)); };
   const causeOf = (W, by) => {
@@ -1586,7 +1650,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
         }
         if (k === 'buff') {
           const B = T.BUFFS[e.b];
-          for (let i = 0; i < 14; i++) { const an = R0(0, 6.283); P3({ x: e.x + Math.cos(an) * 0.7, y: R0(0.2, 1.6), z: e.z + Math.sin(an) * 0.7, vy: R0(0.8, 2), max: R0(0.6, 1), s0: 0.35, s1: 0.05, a0: 1, type: e.b === 'fury' ? 1 : 6 }); }
+          for (let i = 0; i < 14; i++) { const an = R0(0, 6.283); P3({ x: e.x + Math.cos(an) * 0.7, y: R0(0.2, 1.6), z: e.z + Math.sin(an) * 0.7, vy: R0(0.8, 2), max: R0(0.6, 1), s0: 0.35, s1: 0.05, a0: 1, type: e.b === 'fury' ? 1 : e.b === 'guard' ? 3 : 6 }); }
           if (e.id === myK && B) { pushNote(`${B.name}: ${B.text.toLowerCase()}`, 'join'); zap('pick', 0.7); }
           continue;
         }
@@ -1887,7 +1951,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
           const h = W.heroes[id];
           if (!h.nb) continue;
           const ox = h.x, oz = h.z;
-          const v = netRead(h.nb, h.nv || (h.nv = [h.x, h.z, h.yaw]), { ang: [2], lin: [0, 1], ext: 180, base: 110, cap: 420, snap: 5 });
+          const v = netRead(h.nb, h.nv || (h.nv = [h.x, h.z, h.yaw]), { ang: [2], lin: [0, 1], ext: 260, base: 120, cap: 560, snap: 8 });
           if (v) { h.x = v[0]; h.z = v[1]; }
           h.aimT = Math.max(0, (h.aimT || 0) - step);
           h.ocT = Math.max(0, h.ocT - step); h.rfT = Math.max(0, h.rfT - step); h.spT = Math.max(0, h.spT - step);
@@ -1927,7 +1991,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
         }
         handleEvents(W, now);
         if (isHost && W.over && !g.over) hostOver();
-        if (!solo && !watch && W.local.has(myK) && now - g.sendAt > g.sendMs && W.heroes[myK]) { g.sendAt = now; g.hsq += 1; relay.send('hs', { r: g.rid, q: g.hsq, p: heroPack(W, W.heroes[myK]) }); }
+        if (!solo && !watch && W.local.has(myK) && now - g.sendAt > g.sendMs && W.heroes[myK]) { g.sendAt = now; g.hsq += 1; relay.send('hs', { r: g.rid, q: g.hsq, p: heroPack(W, W.heroes[myK]), nq: relayLive.current.rtt | 0 }); }
         if (!solo && isHost) {
           if (now - g.snapAt > SNAP_MS) {
             g.snapAt = now; g.seq += 1;
@@ -2066,6 +2130,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
       for (const id of W.order) {
         const h = W.heroes[id];
         if (!h || h.st === 2) continue;
+        if (h.bot && !isHost && h.netAt && now - h.netAt > 3500) continue;
         const isMe = id === myK;
         if (team) {
           const ally = h.tm === myTm;
@@ -2077,6 +2142,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
           if ((h.spawnT || 0) > 0 || h.spawnV) parts.push({ x: h.x, y: 0.95, z: h.z, size: 1.5, alpha: 0.1 + 0.04 * Math.sin(tsec * 6), type: 6 });
           if (h.buffs && h.buffs.fury && Math.random() < 0.18) P3({ x: h.x + R0(-0.3, 0.3), y: R0(0.4, 1.4), z: h.z + R0(-0.3, 0.3), vy: R0(0.6, 1.2), max: 0.5, s0: 0.2, s1: 0.04, a0: 0.9, type: 1 });
           if (h.buffs && h.buffs.flow && Math.random() < 0.18) P3({ x: h.x + R0(-0.3, 0.3), y: R0(0.4, 1.4), z: h.z + R0(-0.3, 0.3), vy: R0(0.6, 1.2), max: 0.5, s0: 0.2, s1: 0.04, a0: 0.9, type: 6 });
+          if (h.buffs && h.buffs.guard && Math.random() < 0.18) P3({ x: h.x + R0(-0.3, 0.3), y: R0(0.4, 1.4), z: h.z + R0(-0.3, 0.3), vy: R0(0.6, 1.2), max: 0.5, s0: 0.2, s1: 0.04, a0: 0.9, type: 3 });
           continue;
         }
         drawHero(h, h.key, h.x, h.z, h.yaw, { down: h.st === 1, cloak: (h.clkT || 0) > 0 });
@@ -2427,6 +2493,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
         for (const id of W.order) {
           const h = W.heroes[id];
           if (!h || h.st === 2) continue;
+          if (h.bot && !isHost && h.netAt && now - h.netAt > 3500) continue;
           const isMe = id === myK;
           if (team && h.tm !== myTm && !E.seenBy(W, h, myTm)) continue;
           const p = proj(h.x, 2.05, h.z);
@@ -2440,6 +2507,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
             c2.strokeStyle = h.tm === myTm ? '#3D8BFF' : '#FF4D5E'; c2.lineWidth = 1.6; c2.stroke();
             txt(String(h.tl || 1), x0 - 8.5, p[1] + 5.1, 8.5, '#FFE15A');
             if (!isMe) txt(nameOf(id), p[0] + 7, p[1] - 7.5, 9.5, h.tm === myTm ? '#9FCBFF' : '#FF8A95');
+            if (!h.bot && !solo && netBadOf(h, now)) { c2.save(); c2.translate(x0 + w + 8, p[1] + 4.5); c2.strokeStyle = '#FF4D5E'; c2.lineWidth = 1.7; c2.lineCap = 'round'; for (const r0 of [3.2, 6]) { c2.beginPath(); c2.arc(0, 3, r0, -Math.PI * 0.78, -Math.PI * 0.22); c2.stroke(); } c2.fillStyle = '#FF4D5E'; c2.beginPath(); c2.arc(0, 3, 1.4, 0, Math.PI * 2); c2.fill(); c2.restore(); }
             if (isMe) for (let i = 0; i < 3; i++) { const f = clamp(h.ammo - i, 0, 1); bar(x0 + i * (w / 3 + 0.5), p[1] + 13, w / 3 - 3, 3.5, f, f >= 1 ? '#FF9F1A' : '#B06A14'); }
             if (isMe && (h.recT || 0) > 0) { const f = clamp(1 - h.recT / 4.5, 0, 1); bar(p[0] - 40, p[1] + 24, 80, 6, f, '#9F8CFF'); txt('Going home', p[0], p[1] + 38, 11, '#E4DCFF'); }
             continue;
@@ -2575,16 +2643,22 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
   const micOf = (k) => (k === kindOf() ? relay.mic.on : !!relay.mics[k]);
   const hb = 38;
   const playing = inGame() && phase === 'play';
+  const netMine = (() => { if (solo) return null; const g1 = G.current; const gap = !isHost && phase === 'play' && g1.lastSnapAt ? performance.now() - g1.lastSnapAt : 0; const ms = relay.rtt | 0; const bad = gap > 1400 || ms > 280; return { ms, bad, warn: !bad && ms > 160 }; })();
   const rowBtns = [
+    netMine && relay.cloud && <span key="net" role="status" aria-label={netMine.bad ? 'Bad connection' : `Ping ${netMine.ms} ms`} style={{ display: 'flex', alignItems: 'center', gap: 4, height: Math.round(hb * 0.62), padding: '0 8px', borderRadius: 999, alignSelf: 'center', background: netMine.bad ? 'rgba(200,30,50,0.92)' : 'rgba(10,12,20,0.72)', color: netMine.bad ? '#FFFFFF' : netMine.warn ? '#FFD45A' : '#7BF27B', fontFamily: FONT, fontSize: 11.5, fontWeight: 900, fontVariantNumeric: 'tabular-nums' }}><LineIcon k="wifi" size={14} color={netMine.bad ? '#FFFFFF' : netMine.warn ? '#FFD45A' : '#7BF27B'} />{netMine.bad ? 'Bad connection' : `${netMine.ms || '?'} ms`}</span>,
     playing && hud.tm && <GHudBtn key="board" size={hb} label="Scoreboard" onPress={() => { setQuick(false); setBoard(true); }}><LineIcon k="board" size={Math.round(hb * 0.52)} /></GHudBtn>,
-    talkOn && <GHudBtn key="mic" icon={relay.mic.on ? 'mic' : 'micoff'} on={relay.mic.on} size={hb} label={relay.mic.on ? 'Turn your mic off' : 'Turn your mic on'} onPress={relay.toggleMic} />,
+    talkOn && !pubRoom && <GHudBtn key="mic" icon={relay.mic.on ? 'mic' : 'micoff'} on={relay.mic.on} size={hb} label={relay.mic.on ? 'Turn your mic off' : 'Turn your mic on'} onPress={relay.toggleMic} />,
     !solo && <GHudBtn key="ppl" icon="people" on={people} size={hb} label="Players and voice" badge={roster.length > 1 ? roster.length : null} onPress={() => { setQuick(false); setPeople(true); }} />,
-    talkOn && <GHudBtn key="chat" icon="chat" size={hb} label="Chat" badge={chatNew || null} onPress={() => { setQuick(false); setChatNew(0); setChatOpen(true); }} />,
+    talkOn && !pubRoom && <GHudBtn key="chat" icon="chat" size={hb} label="Chat" badge={chatNew || null} onPress={() => { setQuick(false); setChatNew(0); setChatOpen(true); }} />,
     talkOn && <GHudBtn key="emo" icon="smile" on={quick} tone="#F5AE1E" size={hb} label="Emojis" onPress={() => setQuick((v) => !v)} />,
+ playing && <GHudBtn key="snd" icon="sound" on={mixOpen} size={hb} label="Sound" onPress={() => { setQuick(false); setMixOpen((v) => !v); }} />,
     playing && <GHudBtn key="gear" icon="gear" size={hb} label="Settings" onPress={() => { setQuick(false); if (solo) setPaused(true); setCtl(true); }} />,
     <GHudBtn key="x" icon={solo && phase === 'play' ? 'pause' : 'close'} size={hb} label={solo && phase === 'play' ? 'Pause' : 'Leave the game'} onPress={() => (solo && phase === 'play' ? setPaused(true) : leave())} />,
   ].filter(Boolean);
-  const hostName = names[room && room.host] || 'The host';
+  const leadKey = srvMode ? srvInfo && srvInfo.lead : room && room.host;
+  const hostName = (leadKey && names[leadKey]) || (srvMode ? 'The leader' : 'The host');
+  const srvLeft = srvInfo ? Math.max(0, srvInfo.left - Math.floor((Date.now() - srvInfo.at) / 1000)) : 0;
+  const pubText = !srvInfo ? 'Connecting to the server' : srvInfo.ph === 'lobby' ? (srvLeft > 0 ? `Match starts in ${srvLeft}s` : 'Match starting') : srvInfo.ph === 'play' ? 'Joining the match' : `Next match in ${srvLeft}s`;
   const best = Number(readPref(BEST_KEY(uid, arena, lv), '0')) || 0;
   const H0 = E.HEROES[heroKey];
   const toggleWatch = () => { setWatchAllowed(!allowWatch); kitTap(); };
@@ -2594,30 +2668,32 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
 
   const inRoomSet = new Set(roster);
   const tsEff = Math.max(ts, Math.ceil((solo ? 1 : roster.length) / 2));
-  const lobSlot = (k) => ({ id: k, name: k === kindOf() ? 'You' : names[k] || 'Friend', hero: k === kindOf() ? heroKey : validHero(heroOf[k]), pw: powerOf(k), me: k === kindOf(), host: !solo && room && k === room.host, talk: !solo && micOf(k) && !relay.muted[k] });
+  const lvOfId = (k) => (k === kindOf() ? (prog ? plvOf(prog.xp).lv : 0) : PLV_MEM.has(k) ? PLV_MEM.get(k).lv : 0);
+  const lobSlot = (k) => ({ id: k, name: k === kindOf() ? 'You' : names[k] || 'Friend', hero: k === kindOf() ? heroKey : validHero(heroOf[k]), pw: powerOf(k), lv: lvOfId(k), me: k === kindOf(), host: !solo && !!leadKey && k === leadKey, talk: !solo && micOf(k) && !relay.muted[k], dl: k !== kindOf() && !!(metaRef.current[k] && metaRef.current[k].dl) });
   const teamList = (tm) => { const L0 = (solo ? ['me'] : roster).filter((k) => (k === 'me' ? (sideOf.me === 1 ? 1 : 0) : sideOf[k] === 1 ? 1 : 0) === tm).map(lobSlot); while (L0.length < tsEff) L0.push({ empty: true, bot: true }); return L0; };
   const squadList = (() => { const L0 = (solo ? ['me'] : roster).map(lobSlot); const nb = Math.min(botN, E.SQUAD_MAX - L0.length); for (let i = 0; i < nb; i++) L0.push({ empty: true, bot: true }); return L0; })();
   const goalItems = gm === 'hp' ? [[0, 'Normal', '150 points'], [100, '100 points'], [200, '200 points'], [250, '250 points']] : [[0, 'Normal', `${T.goalFor('tdm', tsEff)} takedowns for ${tsEff}v${tsEff}`], [10, '10 takedowns'], [20, '20 takedowns'], [30, '30 takedowns'], [50, '50 takedowns'], [75, '75 takedowns']];
   const glimNow = glim[gm] || 0;
   const goalText = glimNow > 0 ? (gm === 'hp' ? `${glimNow} points` : `${glimNow} takedowns`) : gm === 'hp' ? '150 points' : `${T.goalFor('tdm', tsEff)} takedowns`;
-  const canInvite = !watch && !!onInviteOne && (solo || isHost);
+  const canInvite = !watch && !!onInviteOne && (solo || isHost || srvMode);
   const lobbyL = {
-    GS, solo, watch, isHost, title: watch ? 'Watching' : solo ? 'Bot match' : 'Private match', sub: watch ? `Watching ${hostName} and friends` : null,
+    GS, solo, watch, isHost: canEdit, title: watch ? 'Watching' : solo ? 'Bot match' : pubRoom ? `${REGION_NAMES[room.pub.reg] || 'Server'} ${room.pub.n}` : 'Private match', sub: watch ? `Watching ${hostName} and friends` : pubRoom ? 'Public server, the next match starts by itself' : srvMode ? 'Running on the ZChat server' : null,
     mode, gm, onPlay: pickPlay, map: tmap, onMap: pickMap, mapThumbs: aThumbs, onMapSheet: () => { setThumbAll(true); for (const k of T.MAP_KEYS) if (!kitOf(k)) loadKit(k).then((d) => { if (d) setKitN((n) => n + 1); }); },
     arenaName: E.ARENAS[arena] ? E.ARENAS[arena].name : 'Arena', lvName: E.LEVELS[lv].name, wavesText: endless ? 'Endless' : `${E.WIN_WAVE} waves`, botText: botN > 0 ? `${botN} bots` : 'Off', onArena: () => setArenaSheet(true), botN, onBots: pickBots, botItems: BOT_ITEMS.map(([v, t]) => [Number(v), t === 'Off' ? 'Off' : `${t} bots`]),
     ts: tsEff, onTs: pickTs, bl, onBl: pickBl, tlim, onTlim: pickTlim, glim: glimNow, onGlim: pickGlim, goalText, goalItems,
     cap: mode === 'team' ? tsEff : E.SQUAD_MAX, blue: teamList(0), red: teamList(1), squad: squadList, myTm: sideOf[solo ? 'me' : kindOf()] === 1 ? 1 : 0,
     onSwap: !watch ? switchSide : null, thumbs, heroKey, heroLine: `${H0.name}, level ${prog ? prog.levels[heroKey] || 1 : 1}`,
     friends: (friends || []).filter((p) => p && p.id && !p.is_bot).map((p) => ({ id: p.id, name: p.name || 'Friend', avatar: p.avatar, on: !!(online && online.has && online.has(p.id)) })), inRoom: inRoomSet,
-    onInvite: canInvite ? (p) => { kitTap(); onInviteOne(p); pushNote(`Invite sent to ${p.name || 'your friend'}`, 'join'); } : null,
+    onInvite: canInvite ? (p) => { kitTap(); onInviteOne(p, { md: mode === 'team' ? `${gm}:${tmap}` : 'waves' }); pushNote(`Invite sent to ${p.name || 'your friend'}`, 'join'); } : null,
     onInviteSlot: canInvite && !solo && onInvite ? () => onInvite(roster.length, GS.side) : null,
     roomList: (solo ? [{ id: 'me', name: 'You', hero: heroKey, me: true }] : roster.map((k) => ({ ...lobSlot(k), muted: !!relay.muted[k] }))).concat(watchers.map((k) => ({ id: k, name: names[k] || 'Friend', watch: true }))),
-    onChat: !solo && !watch ? () => { setChatNew(0); setChatOpen(true); } : null, chatN: chatNew, onMic: !solo && !watch ? relay.toggleMic : null, micOn: relay.mic.on, micErr: !watch ? relay.mic.err : null,
+    onChat: !solo && !watch && !pubRoom ? () => { setChatNew(0); setChatOpen(true); } : null, chatN: chatNew, onMic: !solo && !watch && !pubRoom ? relay.toggleMic : null, micOn: relay.mic.on, micErr: !watch ? relay.mic.err : null,
     onPeople: !solo ? () => setPeople(true) : null, onWatch: !solo && isHost && !watch ? toggleWatch : null, allowWatch, watchers: watchers.length,
     onSettings: () => setCtl(true), onLoadout: () => { kitTap(); setLobView('hero'); }, howTo: mode === 'team' ? <TeamHowTo gm={gm} /> : <div style={{ fontSize: 13, fontWeight: 700, lineHeight: 1.5, color: 'rgba(255,255,255,0.85)' }}>{`Fight ${E.WIN_WAVE} waves of aliens with your squad. A boss comes every 5 waves. Every few waves you pick a power, and friends who fall can be revived.`}</div>,
-    ready: ready && !failed, failed, readyText: `Loading ${mode === 'team' ? (T.MAPS[tmap] ? T.MAPS[tmap].name : 'map') : E.ARENAS[arena].name}`, onStart: startGame,
-    waitText: mode === 'team' ? `${hostName} starts the match` : `${hostName} starts the fight`, onClose: finish, closeLabel: solo ? 'Leave' : 'Back to chat',
-    scrap: prog ? prog.scrap : null, best: mode !== 'team' ? best : 0,
+    ready: ready && !failed && !pubRoom, failed, readyText: pubRoom ? pubText : `Loading ${mode === 'team' ? (T.MAPS[tmap] ? T.MAPS[tmap].name : 'map') : E.ARENAS[arena].name}`, onStart: startGame,
+    waitText: pubRoom ? pubText : mode === 'team' ? `${hostName} starts the match` : `${hostName} starts the fight`, onClose: finish, closeLabel: solo ? 'Leave' : pubRoom ? 'Leave server' : 'Back to chat',
+    scrap: prog ? prog.scrap : null, plv: prog ? plvOf(prog.xp) : null, best: mode !== 'team' ? best : 0,
+    onServers: onServer && solo && !watch && cloudOn() ? loadServers : null, servers: srvList, onServer: (reg, n) => { kitTap(); if (onServer) onServer(reg, n); },
   };
   const loadD = {
     GS, heroKey, thumbs, levels: prog ? prog.levels : null, scrap: prog ? prog.scrap : null, onPick: pickHero, taken: (k) => !solo && heroKey !== k && takenBy(k) >= E.heroCap(),
@@ -2895,14 +2971,15 @@ const powersBtn = (() => {
               info: result.lost ? '' : `${T.GM_NAME[result.gm] || 'Team match'}${mk ? ` on ${mk}` : ''}, ${result.mins > 0 ? `${result.mins} min` : 'under a minute'}`,
               rows: result.rows,
             };
-            return <SiegeResult R={{ ...R, myK: kindOf(), thumbs, nameOf, scrap: result.scrap, host: isHost, hostName, solo, onAgain: () => { toMenu(true); setTimeout(startGame, 60); }, onLobby: () => toMenu(false), onLeave: finish }} />;
+            return <SiegeResult R={{ ...R, myK: kindOf(), thumbs, nameOf, scrap: result.scrap, xp: result.xp || null, host: isHost || amLead, hostName, waitText: pubRoom ? pubText : null, solo, onAgain: () => { toMenu(true); setTimeout(startGame, 60); }, onLobby: () => toMenu(false), onLeave: finish }} />;
           })()}
 
           {ctl && (
             <div onPointerDown={(e) => e.stopPropagation()} style={{ position: 'absolute', inset: 0, zIndex: 45, background: 'rgba(10,8,24,0.55)', display: 'flex', padding: 12, overflowY: 'auto', touchAction: 'pan-x pan-y' }}>
-              <div style={{ margin: 'auto', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><GControlsPanel sideways onClose={() => setCtl(false)} at={GS.at} keys={SIEGE_KEYS} preview={['laser', 'shield']} layout={!watch ? <GLayoutRow g="siege" onOpen={() => { setCtl(false); setQuick(false); setOptSheet(false); layOpen('siege'); setLayEd(true); }} /> : null} tabs={[{ k: 'graphics', label: 'Graphics', body: <><GSetHead>Picture</GSetHead><GSetRow label="Graphics quality" sub="Fast helps older phones"><GSeg value={gfx} items={GFX} onPick={pickGfx} label="Graphics quality" /></GSetRow><GSetRow label="Camera shake" sub="Shakes the view on hits and blasts"><GSetToggle on={hudOpt.shake} label="Camera shake" onToggle={(n) => setHudK('shake', n)} /></GSetRow></> }, { k: 'hud', label: 'HUD', body: <><GSetRow label="Mini map"><GSetToggle on={hudOpt.map} label="Mini map" onToggle={(n) => setHudK('map', n)} /></GSetRow><GSetRow label="Damage numbers"><GSetToggle on={hudOpt.nums} label="Damage numbers" onToggle={(n) => setHudK('nums', n)} /></GSetRow><GSetRow label="Enemy health bars"><GSetToggle on={hudOpt.bars} label="Enemy health bars" onToggle={(n) => setHudK('bars', n)} /></GSetRow></> }]} /></div>
+              <div style={{ margin: 'auto', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><GControlsPanel sideways onClose={() => setCtl(false)} at={GS.at} keys={SIEGE_KEYS} audioExtra={!solo && !pubRoom ? <GSetRow label="Voices volume" sub="Friends talking in the game"><GSetSlider value={relay.vall == null ? 1 : relay.vall} label="Voices volume" onChange={(x) => relay.setAllVol(x)} /></GSetRow> : null} preview={['laser', 'shield']} layout={!watch ? <GLayoutRow g="siege" onOpen={() => { setCtl(false); setQuick(false); setOptSheet(false); layOpen('siege'); setLayEd(true); }} /> : null} tabs={[{ k: 'graphics', label: 'Graphics', body: <><GSetHead>Picture</GSetHead><GSetRow label="Graphics quality" sub="Fast helps older phones"><GSeg value={gfx} items={GFX} onPick={pickGfx} label="Graphics quality" /></GSetRow><GSetRow label="Camera shake" sub="Shakes the view on hits and blasts"><GSetToggle on={hudOpt.shake} label="Camera shake" onToggle={(n) => setHudK('shake', n)} /></GSetRow></> }, { k: 'hud', label: 'HUD', body: <><GSetRow label="Mini map"><GSetToggle on={hudOpt.map} label="Mini map" onToggle={(n) => setHudK('map', n)} /></GSetRow><GSetRow label="Damage numbers"><GSetToggle on={hudOpt.nums} label="Damage numbers" onToggle={(n) => setHudK('nums', n)} /></GSetRow><GSetRow label="Enemy health bars"><GSetToggle on={hudOpt.bars} label="Enemy health bars" onToggle={(n) => setHudK('bars', n)} /></GSetRow></> }]} /></div>
             </div>
           )}
+          {mixOpen && phase === 'play' && <div style={{ position: 'absolute', right: right(12), top: top(62), zIndex: 44 }}><GSoundMix voice={!solo && !pubRoom ? relay.vall : null} onVoice={!solo && !pubRoom ? (x) => relay.setAllVol(x) : null} onClose={() => setMixOpen(false)} /></div>}
           <GTalkers ids={talking} nameOf={nameOf} top={top(phase === 'play' ? (hud.boss ? 92 : 54) : 50)} />
           <GNotices items={notes} style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: top(phase === 'menu' ? 64 : teamOn ? (land ? 196 : 236) : 104), width: 'min(52%, 420px)', zIndex: 30 }} />
           <GJoinAsks asks={jask.asks} onAnswer={jask.answer} style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: top(phase === 'menu' ? 110 : 150), width: 'min(80%, 380px)', zIndex: 35 }} />
@@ -2958,7 +3035,7 @@ const powersBtn = (() => {
               </GLobbySheet>
             );
           })()}
-          {board && teamOn && G.current.W && <SiegeBoard B={{ GS, rows: teamRows(G.current.W), my: hud.tm.my, sc: hud.tm.sc, myK: kindOf(), thumbs, nameOf, info: `${T.GM_NAME[G.current.W.tm.gm] || ''}${G.current.W.A && G.current.W.A.name ? ` on ${G.current.W.A.name}` : ''}`, onClose: () => setBoard(false) }} />}
+          {board && teamOn && G.current.W && <SiegeBoard B={{ GS, rows: teamRows(G.current.W).map((r) => { const h = G.current.W.heroes[r.id]; return { ...r, nb: !!h && !solo && (r.id === kindOf() ? !!(netMine && netMine.bad) : netBadOf(h, performance.now())) }; }), my: hud.tm.my, sc: hud.tm.sc, myK: kindOf(), thumbs, nameOf, info: `${T.GM_NAME[G.current.W.tm.gm] || ''}${G.current.W.A && G.current.W.A.name ? ` on ${G.current.W.A.name}` : ''}`, onClose: () => setBoard(false) }} />}
           {leaveAsk && (
             <Sheet title="Leave the game?" text="Your squad can keep fighting without you." onClose={() => setLeaveAsk(false)}>
               <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>

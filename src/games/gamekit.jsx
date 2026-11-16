@@ -1,5 +1,4 @@
 import React, { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { CreditsTab } from './gcredits.jsx';
 import { GSkill, GGlyph } from './gskill.jsx';
 import { FONT, hapticTap, useBackClose } from '../App.jsx';
 import { Sfx } from './sfx.js';
@@ -752,7 +751,7 @@ export function GSettings({ onClose, sideways = true, tabs = [], audioExtra = nu
   const g = useSkin().k;
   const v = useCtlLook(g);
   const P = setPal(g);
-  const all = [...tabs, { k: 'controls', label: 'Controls', body: <>{controlsExtra}{buttons ? ctlTab(g, v, sideways, preview || ['dash', 'suck'], layout) : null}{keysPart(keys)}</> }, { k: 'audio', label: 'Audio', body: <><GSetHead>Volume</GSetHead><AudioTab extra={audioExtra} /></> }, { k: 'credits', label: 'Credits', body: <CreditsTab /> }];
+  const all = [...tabs, { k: 'controls', label: 'Controls', body: <>{controlsExtra}{buttons ? ctlTab(g, v, sideways, preview || ['dash', 'suck'], layout) : null}{keysPart(keys)}</> }, { k: 'audio', label: 'Audio', body: <><GSetHead>Volume</GSetHead><AudioTab extra={audioExtra} /></> }];
   const [cur, setCur] = useState(first || all[0].k);
   const tab = all.find((t) => t.k === cur) || all[0];
   const ins = at ? { t: at.top(0), r: at.right(0), b: at.bottom(0), l: at.left(0) } : { t: 'env(safe-area-inset-top, 0px)', r: 'env(safe-area-inset-right, 0px)', b: 'env(safe-area-inset-bottom, 0px)', l: 'env(safe-area-inset-left, 0px)' };
@@ -964,8 +963,27 @@ export function GHudRows({ opts, onSet, rows }) {
   return <>{rows.map(([k, label, sub]) => <GSetRow key={k} label={label} sub={sub}><GSetToggle on={!!opts[k]} label={label} onToggle={(n) => onSet(k, n)} /></GSetRow>)}</>;
 }
 
-export function GControlsPanel({ onClose, sideways, tabs, first, keys, layout, at, preview, controlsExtra }) {
-  return <GSettings onClose={onClose} sideways={sideways} tabs={tabs || []} first={first} keys={keys} layout={layout} at={at} preview={preview} controlsExtra={controlsExtra} />;
+export function GControlsPanel({ onClose, sideways, tabs, first, keys, layout, at, preview, controlsExtra, audioExtra }) {
+  return <GSettings onClose={onClose} sideways={sideways} tabs={tabs || []} first={first} keys={keys} layout={layout} at={at} preview={preview} controlsExtra={controlsExtra} audioExtra={audioExtra} />;
+}
+export function GSoundMix({ voice, onVoice, onClose, style }) {
+  const [g, setG] = useState(() => (Sfx.sfxVol == null ? 1 : Sfx.sfxVol));
+  const row = (label, v, set) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <span style={{ width: 92, fontSize: 13, fontWeight: 900 }}>{label}</span>
+      <button type="button" aria-label={`Lower ${label}`} className="zgk-btn" {...pressProps(() => { kitTap(); set(Math.max(0, Math.round((v - 0.1) * 10) / 10)); })} style={{ width: 34, height: 34, borderRadius: 10, border: 'none', background: 'rgba(255,255,255,0.12)', color: '#FFFFFF', fontSize: 20, fontWeight: 900, cursor: 'pointer', lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M2.5 7h9" stroke="#FFFFFF" strokeWidth="2.4" strokeLinecap="round" /></svg></button>
+      <span style={{ flex: 1, minWidth: 60, height: 8, borderRadius: 4, background: 'rgba(255,255,255,0.16)', overflow: 'hidden' }}><span style={{ display: 'block', width: `${Math.round(v * 100)}%`, height: '100%', borderRadius: 4, background: v > 0 ? '#7BE05A' : 'transparent' }} /></span>
+      <button type="button" aria-label={`Raise ${label}`} className="zgk-btn" {...pressProps(() => { kitTap(); set(Math.min(1, Math.round((v + 0.1) * 10) / 10)); })} style={{ width: 34, height: 34, borderRadius: 10, border: 'none', background: 'rgba(255,255,255,0.12)', color: '#FFFFFF', fontSize: 20, fontWeight: 900, cursor: 'pointer', lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M2.5 7h9M7 2.5v9" stroke="#FFFFFF" strokeWidth="2.4" strokeLinecap="round" /></svg></button>
+      <span style={{ width: 38, textAlign: 'right', fontSize: 12, fontWeight: 900, fontVariantNumeric: 'tabular-nums', color: 'rgba(255,255,255,0.75)' }}>{`${Math.round(v * 100)}%`}</span>
+    </div>
+  );
+  return (
+    <div role="dialog" aria-label="Sound" onPointerDown={(e) => e.stopPropagation()} style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '12px 12px 12px 14px', width: 330, maxWidth: 'calc(100vw - 24px)', boxSizing: 'border-box', borderRadius: 16, background: 'rgba(14,16,26,0.94)', boxShadow: '0 10px 30px rgba(0,0,0,0.45), inset 0 0 0 1px rgba(255,255,255,0.1)', color: '#FFFFFF', fontFamily: FONT, ...style }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span style={{ flex: 1, fontSize: 14.5, fontWeight: 900 }}>Sound</span><button type="button" aria-label="Close" className="zgk-btn" {...pressProps(onClose)} style={{ width: 30, height: 30, borderRadius: 9, border: 'none', background: 'rgba(255,255,255,0.1)', color: '#FFFFFF', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8" stroke="#FFFFFF" strokeWidth="2.2" strokeLinecap="round" /></svg></button></div>
+      {onVoice && row('Voices', voice == null ? 1 : voice, onVoice)}
+      {row('Game sounds', g, (x) => { setG(x); Sfx.init(); if (Sfx.setSfxVol) Sfx.setSfxVol(x); })}
+    </div>
+  );
 }
 
 export function useFitScale(ref, W, H, cap = 1) {
@@ -1528,7 +1546,7 @@ export function GChatPanel({ title, log, phrases = [], emotes = null, onSend, on
   const land = box.w > box.h * 1.05;
   const [text, setText] = useState('');
   const [kb, setKb] = useState(false);
-  const [phone, setPhone] = useState(!TOUCHY);
+  const [phone, setPhone] = useState(() => { let coarse = false; try { coarse = !!(window.matchMedia && (window.matchMedia('(pointer: coarse)').matches || window.matchMedia('(any-pointer: coarse)').matches)); } catch {} const small = typeof window !== 'undefined' && Math.min(window.innerWidth, window.innerHeight) < 820; return !(TOUCHY || coarse || small); });
   useBackClose(kb, () => setKb(false));
   const [histEl, setHistEl] = useState(null);
   const histSet = useCallback((el) => { histRef.current = el; setHistEl(el); }, []);

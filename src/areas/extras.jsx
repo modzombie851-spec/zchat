@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
 import ReactDOM from 'react-dom';
 import { Send, Search, Mail, ShieldCheck, AtSign, Eye, EyeOff, Flag, X, Trash2, Phone, MoreVertical, Image as ImageIcon, ArrowLeft, Check, Settings as SettingsIcon, UserPlus, ChevronRight, ChevronLeft, Compass, Bell, Volume2, VolumeX, Mic, Play, Pause, Users, Camera, Edit3, Archive, Bookmark, Share2, Copy, Pencil, Undo2, Link as LinkIcon, Repeat, SwitchCamera, Clock, Timer, Plus, Activity, MessageSquare } from 'lucide-react';
 import { supabase, reportUser } from '../supabaseClient.js';
@@ -18,6 +18,7 @@ import {
   CHAR_BUBBLES,
   CHAR_BUBBLE_KEYS,
   CL,
+  CV,
   COMPLIMENT_BY,
   CR_SHARE,
   CUSTOM_BADGES,
@@ -364,7 +365,6 @@ import {
   AiSparkIcon,
   AppPinSetupPage,
   AvatarMakerIcon,
-  BubbleTileDark,
   CR_PRICES,
   CrPriceList,
   DECOR_PIECES,
@@ -382,8 +382,6 @@ import {
   LoginRequestList,
   MEME_FONT,
   PhotoFindIcon,
-  SegTabs,
-  SetCard,
   ShopChatMock,
   ShopDayNight,
   ShopPagePill,
@@ -422,7 +420,17 @@ import {
   useShopOwners,
   useSpendLimit,
   useTrendingTags,
+  CharBubbleSample,
+  ShopCoinPill,
+  ShopSky,
+  shopBtn,
+  shopCss2,
+  shopGlow,
+  shopPal,
+  shopRar,
+  shopTint,
 } from './shared.jsx';
+import { GAME_KITS, KIT_GAME_NAMES, kitKeyFor, kitSet, gameKitSave, useKit, GameKitArt } from '../games/kits.jsx';
 
 const GIFT_CODE_ABC = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
 function GiftCodeArt({ kind, k, me, width }) {
@@ -1014,13 +1022,13 @@ function LiveWallShelf({ rewards, onOpen }) {
           const mine = w.free || own.has(w.k);
           return (
             <div key={w.k} role="button" aria-label={mine ? `${w.label}, yours` : `${w.label}, ${LIVE_WALL_PRICE} coins`} onClick={() => { if (!w.free && onOpen) { playUiSound('tap'); onOpen(w.k); } else { hapticTap(); appSnack(`${w.label} is free. Open a chat, then Theme, then Live.`); } }} className="zchat-press" style={{ display: 'flex', flexDirection: 'column', gap: 6, cursor: 'pointer', minWidth: 0 }}>
-              <div style={{ position: 'relative', aspectRatio: '3 / 4', borderRadius: 14, overflow: 'hidden', background: liveWallBg(w, true), boxShadow: `inset 0 0 0 1px ${CL.line}`, opacity: mine ? 1 : 0.72 }}>
+              <div style={{ position: 'relative', aspectRatio: '3 / 4', borderRadius: 14, overflow: 'hidden', background: liveWallBg(w, true), boxShadow: `inset 0 0 0 1px ${CV.line}`, opacity: mine ? 1 : 0.72 }}>
                 <LiveWallCanvas k={w.k} dark small fps={15} />
                 {!mine && <LiveWallLock price={LIVE_WALL_PRICE} />}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4, minWidth: 0 }}>
-                <span style={{ fontSize: 12.5, fontWeight: 600, color: CL.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{w.label}</span>
-                {mine && <span style={{ fontSize: 11.5, fontWeight: 600, color: w.free ? CL.ink3 : CL.own, flexShrink: 0 }}>{w.free ? 'Free' : 'Yours'}</span>}
+                <span style={{ fontSize: 12.5, fontWeight: 600, color: CV.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{w.label}</span>
+                {mine && <span style={{ fontSize: 11.5, fontWeight: 600, color: w.free ? CV.ink3 : CV.own, flexShrink: 0 }}>{w.free ? 'Free' : 'Yours'}</span>}
               </div>
             </div>
           );
@@ -2177,7 +2185,7 @@ function useLooks(uid) {
   return { list, save, remove, off: looksMem.uid === uid && !!looksMem.off };
 }
 
-function CollProgress({ stats, ms, onClaim, busy }) {
+function CollProgress({ stats, ms, onClaim, busy, pal }) {
   const R = 30;
   const C = 2 * Math.PI * R;
   const claimed = new Set((ms && ms.claimed) || []);
@@ -2187,42 +2195,51 @@ function CollProgress({ stats, ms, onClaim, busy }) {
   const prevLv = next ? (MILESTONES[MILESTONES.indexOf(next) - 1] || [0])[0] : 0;
   const frac = next ? Math.max(0, Math.min(1, (count - prevLv) / (next[0] - prevLv))) : 1;
   const cats = [['Sets', DECOR_ALL.filter((s) => stats.frames.has(s.key) || stats.plates.has(s.key) || stats.effects.has(s.key)).length, DECOR_ALL.length], ['Effects', stats.effects.size, DECOR_ALL.length], ['Bubbles', stats.bubbles.size, CHAR_BUBBLE_KEYS.length], ['Charms', stats.charms.size, Object.keys(CUSTOM_BADGES).length], ...(cxFlag.on ? [['Styles', stats.styles.size + stats.themes.size + stats.supers.size, NS_KEYS.length + THEME_KEYS.length + SUPER_KEYS.length - SUPER_FREE.length]] : [])];
+  const track = pal.dark ? 'rgba(160,185,255,0.14)' : 'rgba(20,60,120,0.1)';
   return (
-    <div style={{ marginTop: 6, borderRadius: 22, background: CL.card, boxShadow: `inset 0 0 0 1px ${CL.line}`, padding: '16px 16px 14px' }}>
+    <div style={{ marginTop: 12, borderRadius: 20, background: pal.stage, boxShadow: `0 4px 0 ${pal.edge}`, padding: '16px 16px 14px', marginBottom: 4 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
         <div style={{ position: 'relative', width: 76, height: 76, flexShrink: 0 }}>
           <svg width="76" height="76" viewBox="0 0 76 76" aria-hidden="true">
-            <circle cx="38" cy="38" r={R} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="7" />
-            <circle cx="38" cy="38" r={R} fill="none" stroke="url(#zcollring)" strokeWidth="7" strokeLinecap="round" strokeDasharray={`${(C * stats.pct) / 100} ${C}`} transform="rotate(-90 38 38)" style={{ transition: 'stroke-dasharray 0.6s ease' }} />
-            <defs><linearGradient id="zcollring" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#A78BFF" /><stop offset="1" stopColor="#6B48F0" /></linearGradient></defs>
+            <circle cx="38" cy="38" r={R} fill="none" stroke={track} strokeWidth="8" />
+            <circle cx="38" cy="38" r={R} fill="none" stroke="url(#zcollring2)" strokeWidth="8" strokeLinecap="round" strokeDasharray={`${(C * stats.pct) / 100} ${C}`} transform="rotate(-90 38 38)" style={{ transition: 'stroke-dasharray 0.6s ease' }} />
+            <defs><linearGradient id="zcollring2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#FFE27A" /><stop offset="1" stopColor="#F59E0B" /></linearGradient></defs>
           </svg>
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 750, color: CL.ink, fontVariantNumeric: 'tabular-nums' }}>{stats.pct}%</div>
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 900, color: pal.ink, fontVariantNumeric: 'tabular-nums' }}>{stats.pct}%</div>
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 16.5, fontWeight: 700, color: CL.ink }}>{stats.pct}% collected</div>
-          <div style={{ fontSize: 13, color: CL.ink2, marginTop: 2 }}>{formatCount(stats.owned)} of {formatCount(stats.total)} items are yours</div>
+          <div style={{ fontSize: 17, fontWeight: 850, color: pal.ink, letterSpacing: '-0.01em' }}>{stats.pct}% collected</div>
+          <div style={{ fontSize: 13, color: pal.ink2, marginTop: 2 }}>{formatCount(stats.owned)} of {formatCount(stats.total)} items are yours</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', columnGap: 12, rowGap: 3, marginTop: 8 }}>
             {cats.map(([l, n, t]) => (
-              <div key={l} style={{ fontSize: 12, color: CL.ink3, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}><span style={{ color: CL.ink2, fontWeight: 600 }}>{l}</span> {n} of {t}</div>
+              <div key={l} style={{ fontSize: 12, color: pal.ink3, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}><span style={{ color: pal.ink2, fontWeight: 700 }}>{l}</span> {n} of {t}</div>
             ))}
           </div>
         </div>
       </div>
       {next && (
-        <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${CL.line}`, display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${pal.line}`, display: 'flex', alignItems: 'center', gap: 12 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 13, color: CL.ink2 }}>{ready ? `You reached ${next[0]} items` : `Collect ${next[0]} items to get ${next[1]} coins`}</div>
-            <div style={{ height: 5, borderRadius: 3, background: 'rgba(255,255,255,0.08)', marginTop: 7, overflow: 'hidden' }}><div style={{ height: '100%', width: `${frac * 100}%`, borderRadius: 3, background: ready ? CL.gold : CL.accent, transition: 'width 0.5s ease' }} /></div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+              <div style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 650, color: pal.ink2 }}>{ready ? `You reached ${next[0]} items` : `Collect ${next[0]} items to get ${next[1]} coins`}</div>
+              <div style={{ fontSize: 12, fontWeight: 800, color: pal.ink3, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{Math.min(count, next[0])} of {next[0]}</div>
+            </div>
+            <div style={{ position: 'relative', height: 10, borderRadius: 5, background: track, marginTop: 7, overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${Math.max(frac > 0 ? 6 : 0, frac * 100)}%`, borderRadius: 5, background: ready ? 'linear-gradient(180deg, #6EE79A, #22B45E)' : `linear-gradient(180deg, #FFE27A, ${pal.gold})`, boxShadow: 'inset 0 -2px 0 rgba(0,0,0,0.15)', transition: 'width 0.5s ease' }} />
+            </div>
           </div>
-          {ready && onClaim && ms && (
+          {ready && onClaim && ms ? (
             <button type="button" disabled={busy} onClick={() => onClaim(next[0])} aria-label={`Claim ${next[1]} coins`} className="zchat-press"
-              style={{ height: 36, padding: '0 14px', borderRadius: 18, border: 'none', background: CL.gold, color: '#2A1C00', fontFamily: FONT, fontSize: 14, fontWeight: 750, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5, flexShrink: 0, opacity: busy ? 0.6 : 1 }}><CoinIcon size={16} />Claim {next[1]}</button>
+              style={{ height: 38, padding: '0 14px', borderRadius: 13, border: 'none', background: `linear-gradient(180deg, #FFE27A, ${pal.gold})`, color: '#3B2500', boxShadow: `0 3px 0 ${pal.goldEdge}`, fontFamily: FONT, fontSize: 14, fontWeight: 900, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5, flexShrink: 0, marginBottom: 3, opacity: busy ? 0.6 : 1 }}><CoinIcon size={17} />Claim {next[1]}</button>
+          ) : (
+            <span aria-hidden="true" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, height: 30, padding: '0 10px 0 7px', borderRadius: 15, background: pal.stage2, color: pal.ink, fontSize: 13, fontWeight: 850, flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}><CoinIcon size={16} />{next[1]}</span>
           )}
         </div>
       )}
     </div>
   );
 }
+
 function CxSampleChat({ k, me, auto = true }) {
   const stage = useRef(null);
   const cv = useRef(null);
@@ -2679,23 +2696,64 @@ export function OwnStylePage({ me, rewards, wallet, onClose, onOpenWallet, onEqu
   );
 }
 
-function LookSlot({ look, slot, me, current, onApply, onSave, onMenu }) {
+const COLL_FREE_RAR = ['#7F92BF', '#4F6390', '#34436A'];
+function collVars(pal) {
+  return {
+    '--zc-bg': pal.bg, '--zc-card': pal.stage, '--zc-card2': pal.stage2, '--zc-thumb': pal.dark ? '#2B3B74' : '#C9DDF2', '--zc-line': pal.line,
+    '--zc-ink': pal.ink, '--zc-ink2': pal.ink2, '--zc-ink3': pal.ink3,
+    '--zc-own': pal.dark ? '#3DD68C' : '#12804F', '--zc-gold': pal.dark ? '#FFC83A' : '#A86400', '--zc-use': pal.dark ? '#7DB8FF' : '#1D66D6', '--zc-track': pal.dark ? 'rgba(160,185,255,0.14)' : 'rgba(20,60,120,0.1)',
+  };
+}
+function CollShelf({ pal }) {
+  const top = pal.dark ? '#8C5B33' : '#DDA062';
+  const front = pal.dark ? '#5C381C' : '#AE6E33';
+  return (
+    <div aria-hidden="true" style={{ position: 'relative', height: 16, marginBottom: -8, zIndex: 2, filter: 'drop-shadow(0 3px 2px rgba(0,0,0,0.2))' }}>
+      <div style={{ height: 6, background: `linear-gradient(180deg, ${pal.dark ? '#A8724A' : '#ECB97F'}, ${top})` }} />
+      <div style={{ height: 10, background: `linear-gradient(180deg, ${front}, ${pal.dark ? '#4A2C15' : '#955B27'})`, boxShadow: `inset 0 1px 0 ${pal.dark ? 'rgba(255,220,180,0.12)' : 'rgba(255,240,220,0.35)'}` }} />
+    </div>
+  );
+}
+function CollTile({ pal, rar, w, name, art, status, sub, wearing = false, tag = null, label, onOpen }) {
+  const [ca, cb, edge] = rar === 'free' ? COLL_FREE_RAR : shopRar(rar);
+  return (
+    <div role="button" aria-label={label || `${name}, ${status}`} aria-pressed={wearing} onClick={onOpen} className="zchat-press" style={{ minWidth: 0, cursor: 'pointer', paddingBottom: 4 }}>
+      <div style={{ position: 'relative', borderRadius: 18, overflow: 'hidden', isolation: 'isolate', background: cb, boxShadow: `0 4px 0 ${edge}` }}>
+        <div style={{ position: 'relative', height: w, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', background: shopGlow(pal, ca), boxShadow: `inset 0 0 0 2px ${shopTint(ca, 0.9)}`, borderRadius: '18px 18px 0 0' }}>
+          {art}
+          {tag && <div style={{ position: 'absolute', left: 8, top: 8, zIndex: 3 }}>{tag}</div>}
+          {wearing && <div aria-hidden="true" style={{ position: 'absolute', right: 8, top: 8, zIndex: 3, width: 24, height: 24, borderRadius: 12, background: '#F59E0B', color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 0 rgba(0,0,0,0.2)' }}><Check size={14} strokeWidth={3.4} /></div>}
+        </div>
+        <div style={{ padding: '8px 10px 10px', background: `linear-gradient(180deg, ${cb}, ${edge})`, color: '#FFFFFF' }}>
+          <div style={{ fontSize: 13.5, fontWeight: 750, lineHeight: 1.25, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textShadow: '0 1px 0 rgba(0,0,0,0.25)' }}>{name}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 5, minHeight: 20 }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12.5, fontWeight: 800, whiteSpace: 'nowrap', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{wearing && <Check size={13} strokeWidth={3.4} style={{ flexShrink: 0 }} />}{status}</span>
+            <span style={{ flex: 1 }} />
+            <span style={{ fontSize: 11.5, fontWeight: 650, color: 'rgba(255,255,255,0.84)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0, flexShrink: 1 }}>{sub || (RARITY_STYLE[rar] || RARITY_STYLE.epic).label}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+function LookSlot({ look, slot, me, current, onApply, onSave, onMenu, pal }) {
   if (!look) {
     return (
       <div role="button" aria-label={`Save what you wear as look ${slot}`} onClick={onSave} className="zchat-press"
-        style={{ minWidth: 0, height: 128, borderRadius: 18, border: `1.5px dashed rgba(235,235,245,0.22)`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer', color: CL.ink2 }}>
-        <Plus size={20} />
-        <div style={{ fontSize: 12.5, fontWeight: 600, textAlign: 'center', lineHeight: 1.3, padding: '0 6px' }}>Save what you wear</div>
+        style={{ minWidth: 0, height: 128, borderRadius: 18, border: `2px dashed ${pal.border}`, background: pal.dark ? 'rgba(22,35,76,0.45)' : 'rgba(255,255,255,0.55)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 9, cursor: 'pointer', color: pal.ink2, boxSizing: 'border-box' }}>
+        <span style={{ width: 34, height: 34, borderRadius: 17, display: 'flex', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(180deg, #FFE27A, ${pal.gold})`, color: '#3B2500', boxShadow: `0 3px 0 ${pal.goldEdge}` }}><Plus size={19} strokeWidth={3} /></span>
+        <div style={{ fontSize: 12.5, fontWeight: 750, textAlign: 'center', lineHeight: 1.3, padding: '0 6px' }}>Save this look</div>
       </div>
     );
   }
   const frameKey = isDecorKey(look.frame) ? look.frame : null;
   return (
-    <div role="button" aria-label={`Wear ${look.name || `look ${slot}`}`} onClick={onApply} className="zchat-press"
-      style={{ position: 'relative', minWidth: 0, height: 128, borderRadius: 18, background: CL.card, boxShadow: `inset 0 0 0 ${current ? 2 : 1}px ${current ? CL.accent : CL.line}`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, cursor: 'pointer', padding: '8px 6px' }}>
-      {frameKey ? <DecorFrameBadge setKey={frameKey} size={62} photo={me.avatar} name={me.name} lazy /> : <Avatar emoji={me.avatar} name={me.name} size={50} />}
-      <div style={{ maxWidth: '100%', fontSize: 12.5, fontWeight: 650, color: current ? '#6FB0F7' : CL.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', padding: '0 4px' }}>{current ? 'Wearing' : look.name || `Look ${slot}`}</div>
-      <div role="button" aria-label={`Options for ${look.name || `look ${slot}`}`} onClick={(e) => { e.stopPropagation(); onMenu(); }} style={{ position: 'absolute', top: 4, right: 4, width: 30, height: 30, borderRadius: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', color: CL.ink2, cursor: 'pointer' }}><MoreVertical size={16} /></div>
+    <div role="button" aria-label={`Wear ${look.name || `look ${slot}`}`} onClick={onApply} className="zchat-press" style={{ minWidth: 0, cursor: 'pointer', paddingBottom: 4 }}>
+      <div style={{ position: 'relative', height: 128, borderRadius: 18, background: current ? `radial-gradient(circle at 50% 40%, ${pal.stage} 40%, ${pal.dark ? 'rgba(255,200,58,0.32)' : 'rgba(255,200,58,0.42)'} 100%)` : pal.stage, boxShadow: `0 4px 0 ${current ? pal.goldEdge : pal.edge}${current ? `, inset 0 0 0 2px ${pal.gold}` : ''}`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 6px', boxSizing: 'border-box' }}>
+        {frameKey ? <DecorFrameBadge setKey={frameKey} size={62} photo={me.avatar} name={me.name} lazy /> : <Avatar emoji={me.avatar} name={me.name} size={50} />}
+        <div style={{ maxWidth: '100%', fontSize: 12.5, fontWeight: 800, color: current ? (pal.dark ? pal.gold : '#9A6300') : pal.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', padding: '0 4px' }}>{current ? 'Wearing' : look.name || `Look ${slot}`}</div>
+        <div role="button" aria-label={`Options for ${look.name || `look ${slot}`}`} onClick={(e) => { e.stopPropagation(); onMenu(); }} style={{ position: 'absolute', top: 4, right: 4, width: 30, height: 30, borderRadius: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', color: pal.ink2, cursor: 'pointer' }}><MoreVertical size={16} /></div>
+      </div>
     </div>
   );
 }
@@ -2725,21 +2783,6 @@ function LookMenuSheet({ look, slot, onClose, onUpdate, onRename, onRemove }) {
   );
 }
 
-function EffectRow({ set, me, own, wearing, onOpen, edition = null }) {
-  const can = own.frame && own.plate;
-  return (
-    <div role="button" aria-label={`${set.name} effect`} onClick={onOpen} className="zchat-press"
-      style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '10px 14px 10px 10px', borderRadius: 18, background: wearing ? `linear-gradient(90deg, ${set.accent}38 0%, ${CL.card} 70%)` : CL.card, boxShadow: `inset 0 0 0 1px ${wearing ? `${set.accent}88` : CL.line}`, cursor: 'pointer', marginBottom: 10 }}>
-      <DecorFrameBadge setKey={set.key} size={64} photo={me.avatar} name={me.name} lazy />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 15.5, fontWeight: 650, color: CL.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{set.name}</div>
-        <div style={{ marginTop: 3, display: 'flex', alignItems: 'center', gap: 8 }}><RarityTag rarity={set.rarity} size={11.5} />{edition ? <EditionTag n={edition} size={11} /> : null}</div>
-        <div style={{ fontSize: 12.5, color: wearing ? '#6FB0F7' : CL.ink2, marginTop: 4, lineHeight: 1.35 }}>{wearing ? 'Playing on your profile' : can ? 'Wear the full set to play it' : 'Get the frame and nameplate to play it'}</div>
-      </div>
-      <div style={{ width: 36, height: 36, borderRadius: 18, background: 'rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Play size={14} fill="#FFFFFF" strokeWidth={0} style={{ marginLeft: 2 }} /></div>
-    </div>
-  );
-}
 
 const COLL_RX_LINES = { heart_pump: 'Love you lots', laugh_shake: 'He fell in the pool', thumbs_confetti: 'Tickets are booked', fire_flare: 'New song is out', sleepy: 'Up since five', rain_cloud: 'The trip got moved', jaw_drop: 'She said what', hundred: 'Full marks', applause: 'Passed my test', party_popper: 'Friday at last', mind_blown: 'It was him all along', heart_fireworks: 'We are engaged', paw_five: 'We got a kitten', cake: 'It is my birthday', snowball: 'First snow here', kiss: 'Miss you', rocket: 'Our app is live', spotlight: 'I got the part', drum_roll: 'Results are out', mic_drop: 'And that is a wrap', trophy: 'We won the final', diamond: 'She said yes' };
 const collRx = { tiles: new Map(), io: null, timer: 0, last: 0, covered: false };
@@ -2778,21 +2821,22 @@ function collRxWatch(el, api) {
 }
 function CollNsTile({ k, me, owned, wearing, status, tone, edition, onTap }) {
   const spec = NAME_STYLES[k];
+  const { theme } = useTheme();
   if (!spec) return null;
   const label = `${spec.label} name style, ${owned ? (wearing ? 'in use' : status) : `${formatCount(Number(status))} coins in the Shop`}${edition ? `, number ${Math.floor(edition).toLocaleString()}` : ''}`;
   return (
     <div role="button" aria-label={label} aria-pressed={owned ? wearing : undefined} onClick={onTap} className="zchat-press"
-      style={{ position: 'relative', minWidth: 0, borderRadius: 18, padding: '18px 12px 12px', cursor: 'pointer', background: CL.card, boxShadow: `inset 0 0 0 ${wearing ? 2 : 1}px ${wearing ? CL.accent : CL.line}`, display: 'flex', flexDirection: 'column' }}>
+      style={{ position: 'relative', minWidth: 0, borderRadius: 18, padding: '18px 12px 12px', cursor: 'pointer', background: CV.card, boxShadow: `inset 0 0 0 ${wearing ? 2 : 1}px ${wearing ? CV.accent : CV.line}`, display: 'flex', flexDirection: 'column' }}>
       {edition ? <EditionTag n={edition} size={11} style={{ position: 'absolute', top: 9, right: 10 }} /> : null}
-      <div style={{ minHeight: 40, display: 'flex', alignItems: 'center', minWidth: 0, opacity: owned ? 1 : 0.6, transition: 'opacity 0.2s ease' }}><NameStyleArt k={k} name={me && me.name} size={19} width={150} /></div>
+      <div style={{ minHeight: 40, display: 'flex', alignItems: 'center', minWidth: 0, opacity: owned ? 1 : 0.6, transition: 'opacity 0.2s ease' }}><NameStyleArt k={k} name={me && me.name} size={19} width={150} dark={!!theme.dark} /></div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, marginTop: 10 }}>
-        <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: owned ? CL.ink : CL.ink2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{spec.label}</span>
-        {tone === 'coin' ? <CollPrice price={Number(status)} size={13} /> : <span style={{ fontSize: 12.5, fontWeight: 600, color: tone === 'use' ? '#6FB0F7' : CL.own, flexShrink: 0 }}>{status}</span>}
+        <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: owned ? CV.ink : CV.ink2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{spec.label}</span>
+        {tone === 'coin' ? <CollPrice price={Number(status)} size={13} /> : <span style={{ fontSize: 12.5, fontWeight: 600, color: tone === 'use' ? CV.use : CV.own, flexShrink: 0 }}>{status}</span>}
       </div>
     </div>
   );
 }
-function CollFavMark({ size = 12, color = '#6FB0F7' }) {
+function CollFavMark({ size = 12, color = CV.use }) {
   return (
     <svg width={size} height={size} viewBox="0 0 12 12" aria-hidden="true" style={{ display: 'block', flexShrink: 0 }}>
       <path d="M6 1.1l1.45 2.95 3.25.47-2.35 2.3.56 3.24L6 8.53 3.09 10.06l.56-3.24-2.35-2.3 3.25-.47z" fill={color} />
@@ -2826,7 +2870,7 @@ function CollRxTile({ k, owned, fav, status, tone, edition, onTap }) {
   const label = `${spec.label} super reaction, ${owned ? (fav ? 'in your favourites' : status) : `${formatCount(Number(status))} coins in the Shop`}${edition ? `, number ${Math.floor(edition).toLocaleString()}` : ''}`;
   return (
     <div role="button" aria-label={label} aria-pressed={owned ? fav : undefined} onClick={onTap} className="zchat-press"
-      style={{ position: 'relative', minWidth: 0, borderRadius: 18, overflow: 'hidden', cursor: 'pointer', background: CL.card, boxShadow: `inset 0 0 0 ${fav ? 2 : 1}px ${fav ? CL.accent : CL.line}`, display: 'flex', flexDirection: 'column' }}>
+      style={{ position: 'relative', minWidth: 0, borderRadius: 18, overflow: 'hidden', cursor: 'pointer', background: CV.card, boxShadow: `inset 0 0 0 ${fav ? 2 : 1}px ${fav ? CV.accent : CV.line}`, display: 'flex', flexDirection: 'column' }}>
       <div ref={stage} style={{ position: 'relative', height: 104, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', padding: '0 12px 22px', boxSizing: 'border-box' }}>
         <div ref={bub} style={{ position: 'relative', alignSelf: 'flex-start', maxWidth: '92%', background: '#26262E', color: CL.ink, borderRadius: 16, borderBottomLeftRadius: 5, padding: '6px 10px', fontSize: 12.5, lineHeight: 1.3, whiteSpace: 'nowrap', overflow: 'visible', opacity: owned ? 1 : 0.7 }}>
           <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis' }}>{COLL_RX_LINES[k] || 'Guess what happened'}</span>
@@ -2838,10 +2882,10 @@ function CollRxTile({ k, owned, fav, status, tone, edition, onTap }) {
         {edition ? <EditionTag n={edition} size={11} style={{ position: 'absolute', top: 9, right: 10 }} /> : null}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, padding: '0 12px 12px' }}>
-        <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: owned ? CL.ink : CL.ink2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{spec.label}</span>
+        <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: owned ? CV.ink : CV.ink2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{spec.label}</span>
         {tone === 'coin'
           ? <CollPrice price={Number(status)} size={13} />
-          : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12.5, fontWeight: 600, color: tone === 'fav' ? '#6FB0F7' : tone === 'free' ? CL.gold : CL.own, flexShrink: 0 }}>{tone === 'fav' && <CollFavMark size={12} />}{status}</span>}
+          : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12.5, fontWeight: 600, color: tone === 'fav' ? CV.use : tone === 'free' ? CV.gold : CV.own, flexShrink: 0 }}>{tone === 'fav' && <CollFavMark size={12} />}{status}</span>}
       </div>
     </div>
   );
@@ -2893,7 +2937,7 @@ function CollStyles({ me, rewards, covered, onWear, onOpenItem, onOpenTheme, onO
     const d = left('reaction', k);
     return [d != null ? `${d} ${d === 1 ? 'day' : 'days'} left` : 'Yours', 'own'];
   };
-  const count = (n, t) => <span style={{ fontSize: 13, fontWeight: 600, color: CL.ink3, fontVariantNumeric: 'tabular-nums', flexShrink: 0, marginBottom: 2 }}>{n} of {t}</span>;
+  const count = (n, t) => <span style={{ fontSize: 13, fontWeight: 600, color: CV.ink3, fontVariantNumeric: 'tabular-nums', flexShrink: 0, marginBottom: 2 }}>{n} of {t}</span>;
   return (
     <>
       <CollSection title="Name styles" sub="Tap one of yours to wear it. Everyone sees it." right={count(nsMine.length, NS_KEYS.length)}>
@@ -2913,24 +2957,25 @@ function CollStyles({ me, rewards, covered, onWear, onOpenItem, onOpenTheme, onO
           {rxList.map((k) => { const [st, tone] = rxStatus(k); return <CollRxTile key={k} k={k} owned={tone !== 'coin'} fav={tone === 'fav'} status={st} tone={tone} edition={editionOf(rewards, 'reaction', k)} onTap={() => tapRx(k)} />; })}
         </div>
       </CollSection>
-      {onOpenShop && <button type="button" onClick={() => onOpenShop('styles')} className="zchat-press" style={{ marginTop: 22, width: '100%', height: 46, borderRadius: 14, border: 'none', background: CL.card2, color: CL.ink, fontFamily: FONT, fontSize: 14.5, fontWeight: 650, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}><ShopBagIcon size={18} />More styles in the Shop</button>}
+      {onOpenShop && <button type="button" onClick={() => onOpenShop('styles')} className="zchat-press" style={{ marginTop: 22, width: '100%', height: 46, borderRadius: 14, border: 'none', background: CV.card2, color: CV.ink, fontFamily: FONT, fontSize: 14.5, fontWeight: 650, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}><ShopBagIcon size={18} />More styles in the Shop</button>}
     </>
   );
 }
 
 function SiCollTile({ kind, k, me, status, tone, on, onTap }) {
   const name = kind === 'namestyle' ? NS_OWN_ITEM.label : shopItemName(kind, k);
+  const { theme } = useTheme();
   return (
     <div role="button" aria-label={`${name} ${kind === 'namestyle' ? 'name style' : siWord(kind)}${status ? `, ${tone === 'coin' ? `${status} coins` : status}` : ''}`} onClick={onTap} className="zchat-press"
-      style={{ position: 'relative', minWidth: 0, borderRadius: 18, padding: '12px 10px 11px', cursor: 'pointer', background: CL.card, boxShadow: `inset 0 0 0 ${on ? 2 : 1}px ${on ? CL.accent : CL.line}`, display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
+      style={{ position: 'relative', minWidth: 0, borderRadius: 18, padding: '12px 10px 11px', cursor: 'pointer', background: CV.card, boxShadow: `inset 0 0 0 ${on ? 2 : 1}px ${on ? CV.accent : CV.line}`, display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
       <div style={{ height: 66, display: 'flex', alignItems: 'center', justifyContent: 'center', minWidth: 0, overflow: 'hidden' }}>
         {kind === 'namestyle'
-          ? <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%', ...NS_ROOM }}><StyledName name={String(me.name || 'You').split(' ')[0]} k={k} dark /></div>
+          ? <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%', ...NS_ROOM }}><StyledName name={String(me.name || 'You').split(' ')[0]} k={k} dark={!!theme.dark} /></div>
           : <SiItemArt kind={kind} k={k} me={me} size={66} />}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-        <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 600, color: CL.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{kind === 'namestyle' ? 'Your own' : name}</span>
-        {tone === 'coin' ? <CollPrice price={Number(status)} size={12.5} /> : status ? <span style={{ fontSize: 12.5, fontWeight: 600, color: tone === 'use' ? '#6FB0F7' : CL.own, flexShrink: 0 }}>{status}</span> : null}
+        <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 600, color: CV.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{kind === 'namestyle' ? 'Your own' : name}</span>
+        {tone === 'coin' ? <CollPrice price={Number(status)} size={12.5} /> : status ? <span style={{ fontSize: 12.5, fontWeight: 600, color: tone === 'use' ? CV.use : CV.own, flexShrink: 0 }}>{status}</span> : null}
       </div>
     </div>
   );
@@ -2954,7 +2999,7 @@ function SiCollSections({ me, rewards, onOpen, say, cols = 2 }) {
     playUiSound(next ? 'like' : 'tap');
     say(next ? `${SI_TYPING_BY[k].label} is on. Friends see it while you type.` : 'Back to the plain dots');
   };
-  const count = (kind, keys) => <span style={{ fontSize: 13, fontWeight: 600, color: CL.ink3, fontVariantNumeric: 'tabular-nums', flexShrink: 0, marginBottom: 2 }}>{keys.filter((k) => siOwns(rewards, kind, k)).length} of {keys.length}</span>;
+  const count = (kind, keys) => <span style={{ fontSize: 13, fontWeight: 600, color: CV.ink3, fontVariantNumeric: 'tabular-nums', flexShrink: 0, marginBottom: 2 }}>{keys.filter((k) => siOwns(rewards, kind, k)).length} of {keys.length}</span>;
   return (
     <>
       <CollSection title="Your own name style" sub={own ? 'Tap it to change colours, motion or weight. Changes are free.' : 'Make a name style that is only yours'}>
@@ -2975,8 +3020,12 @@ function SiCollSections({ me, rewards, onOpen, say, cols = 2 }) {
 export function CollectionPanel({ me, rewards, onClose, onEquip, onWear, isAdmin, onRewardsChanged, onOpenWallet, onGift, startSet = null, onOpenShop }) {
   useBackClose(true, onClose);
   const edgeBack = useEdgeSwipeBack(true);
-  const { bubbleStyle, setBubbleStyle } = useTheme();
+  const { theme, bubbleStyle, setBubbleStyle } = useTheme();
+  const pal = shopPal(theme);
+  shopCss2();
+  useKit('chess');
   const [tab, setTab] = useState('sets');
+  const chipsRef = useRef(null);
   const [openSet, setOpenSet] = useState(null);
   const [openMode, setOpenMode] = useState('set');
   useEffect(() => { if (isDecorKey(startSet)) setOpenSet(startSet); }, []);
@@ -3028,7 +3077,8 @@ export function CollectionPanel({ me, rewards, onClose, onEquip, onWear, isAdmin
   const myBubbles = ['classic', ...CHAR_BUBBLE_KEYS.filter((k) => stats.bubbles.has(k))];
   const wearingBubble = bubbleKeyOf(bubbleStyle) || 'classic';
   const cols = gw >= 700 ? 4 : gw >= 500 ? 3 : 2;
-  const tileW = Math.max(110, Math.floor((gw - (cols - 1) * 10) / cols) - 8);
+  const tw = Math.max(120, Math.floor((gw - (cols - 1) * 12) / cols));
+  const myKits = GAME_KITS.filter((g) => siOwns(rewards, 'gamekit', g.key));
   const rewardFor = (kind, key) => (rewards || []).find((r) => r.kind === kind && r.reward_key === key) || null;
   const items = tab === 'charm'
     ? Object.entries(CUSTOM_BADGES).filter(([key]) => ownedCharms.has(key)).map(([key, spec]) => ({ key, spec, owned: true, equipped: me.custom_badge === key, reward: rewardFor('charm', key) }))
@@ -3091,82 +3141,159 @@ export function CollectionPanel({ me, rewards, onClose, onEquip, onWear, isAdmin
     const t = setTimeout(() => setHideBody(true), 420);
     return () => clearTimeout(t);
   }, [covered]);
-  const btnStyle = (primary) => ({ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 44, padding: '0 18px', borderRadius: 13, border: 'none', fontFamily: FONT, fontSize: 14.5, fontWeight: 650, cursor: 'pointer', background: primary ? CL.accent : CL.card2, color: '#FFFFFF' });
-  const emptyTab = (title, text) => (
+  const btnStyle = (primary) => ({ ...shopBtn(pal, primary ? 'primary' : 'plain', 46), width: 'auto', fontSize: 15 });
+  const pickTab = (k) => {
+    if (k === tab) return;
+    setTab(k);
+    setSelected(null);
+    hapticTap();
+    playUiSound('tap');
+    const el = gridRef.current;
+    const head = el && el.querySelector('[data-coll-tabs]');
+    if (el && head && el.scrollTop > head.offsetTop) el.scrollTop = head.offsetTop;
+  };
+  useLayoutEffect(() => {
+    const row = chipsRef.current;
+    const chip = row && row.querySelector(`[data-tab="${tab}"]`);
+    if (row && chip) { const left = chip.offsetLeft - (row.clientWidth - chip.offsetWidth) / 2; try { row.scrollTo({ left: Math.max(0, left), behavior: reducedMotion() ? 'auto' : 'smooth' }); } catch { row.scrollLeft = Math.max(0, left); } }
+  }, [tab]);
+  const tabs = [['sets', 'Sets', mine.length], ['effects', 'Effects', myFx.length], ['bubble', 'Bubbles', myBubbles.length], ['charm', 'Charms', ownedCharms.size], ...(cxOn ? [['styles', 'Styles', 0]] : []), ['games', 'Games', myKits.length], ['badge', 'Badges', 0]];
+  const chip = ([k, l, n]) => {
+    const on = tab === k;
+    return (
+      <div key={k} data-tab={k} role="tab" aria-selected={on} onClick={() => pickTab(k)} className="zchat-press"
+        style={{ flexShrink: 0, height: 34, padding: '0 14px', borderRadius: 12, display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, fontWeight: 800, marginBottom: 3, boxShadow: `0 3px 0 ${on ? pal.goldEdge : pal.edge}`, cursor: 'pointer', background: on ? `linear-gradient(180deg, #FFE27A, ${pal.gold})` : pal.stage, color: on ? '#3B2500' : pal.ink, whiteSpace: 'nowrap', transition: 'background 0.15s ease, color 0.15s ease' }}>
+        {l}
+        {n > 0 && <span style={{ minWidth: 18, height: 18, padding: '0 5px', borderRadius: 9, boxSizing: 'border-box', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 900, background: on ? 'rgba(59,37,0,0.16)' : pal.stage2, color: on ? '#3B2500' : pal.ink2, fontVariantNumeric: 'tabular-nums' }}>{formatCount(n)}</span>}
+      </div>
+    );
+  };
+  const tagSt = { padding: '3px 6px', borderRadius: 8, background: 'rgba(11,11,15,0.55)' };
+  const grid = (children) => <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, columnGap: 12, rowGap: 16, marginTop: 14 }}>{children}</div>;
+  const note = (t) => <div style={{ fontSize: 13.5, color: pal.ink2, lineHeight: 1.45, padding: '14px 2px 0' }}>{t}</div>;
+  const emptyTab = (title, text, shopTab) => (
     <div style={{ textAlign: 'center', padding: '24px 8px 30px' }}>
-      <div style={{ maxWidth: 280, margin: '0 auto 16px' }}><SpotArt k="saved" dark /></div>
-      <div style={{ fontSize: 17, fontWeight: 700, color: CL.ink }}>{title}</div>
-      <div style={{ fontSize: 14, color: CL.ink2, marginTop: 6, lineHeight: 1.5, textWrap: 'balance' }}>{text}</div>
-      {onOpenShop && <button type="button" onClick={() => onOpenShop()} className="zchat-press" style={{ marginTop: 16, height: 44, padding: '0 20px', borderRadius: 22, border: 'none', background: CL.accent, color: '#FFFFFF', fontFamily: FONT, fontSize: 15, fontWeight: 650, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}><ShopBagIcon size={18} />Open the Shop</button>}
+      <div style={{ maxWidth: 260, margin: '0 auto 16px' }}><SpotArt k="saved" dark={pal.dark} /></div>
+      <div style={{ fontSize: 18, fontWeight: 850, color: pal.ink }}>{title}</div>
+      <div style={{ fontSize: 14, color: pal.ink2, marginTop: 6, lineHeight: 1.5, textWrap: 'balance' }}>{text}</div>
+      {onOpenShop && <div style={{ display: 'flex', justifyContent: 'center', marginTop: 18 }}><button type="button" onClick={() => { playUiSound('tap'); onOpenShop(shopTab); }} className="zchat-press" style={{ ...shopBtn(pal, 'primary', 46), width: 'auto', padding: '0 22px', fontSize: 15 }}><ShopBagIcon size={18} />Open the Shop</button></div>}
     </div>
   );
+  const kitTap = (g) => {
+    const on = kitKeyFor(g.game) === g.key;
+    hapticTap();
+    playUiSound(on ? 'tap' : 'like');
+    kitSet(g.game, on ? null : g.key);
+    gameKitSave(g.game, on ? '' : g.key);
+    say(on ? 'Back to the classic look' : `${g.label} is on for ${KIT_GAME_NAMES[g.game] || 'your games'}`);
+  };
   return (
     <>
     <WideDim onClose={onClose} z={620} />
-    <div {...edgeBack} className="zchat-panel-open zchat-wide-page" style={{ position: 'fixed', inset: 0, zIndex: 620, background: CL.bg, color: CL.ink, display: 'flex', flexDirection: 'column', fontFamily: FONT }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px 0', paddingTop: 'calc(6px + env(safe-area-inset-top))' }}>
-        <div role="button" aria-label="Close collection" onClick={onClose} style={{ width: 42, height: 42, borderRadius: 21, display: 'flex', alignItems: 'center', justifyContent: 'center', color: CL.ink, cursor: 'pointer' }}><ArrowLeft size={23} /></div>
-        <div style={{ flex: 1 }} />
-        {onOpenShop && <div role="button" aria-label="Open the shop" onClick={() => { playUiSound('tap'); onOpenShop(); }} className="zchat-press" style={{ height: 34, padding: '0 13px 0 11px', borderRadius: 17, background: CL.accent, display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, fontWeight: 650, color: '#FFFFFF', cursor: 'pointer' }}><ShopBagIcon size={17} />Shop</div>}
-        <div role="button" aria-label={`${formatCount(coins)} coins`} onClick={onOpenWallet} className="zchat-press" style={{ display: 'flex', alignItems: 'center', gap: 6, height: 34, padding: '0 13px 0 10px', borderRadius: 17, background: CL.card2, fontSize: 14.5, fontWeight: 650, color: CL.ink, cursor: 'pointer', fontVariantNumeric: 'tabular-nums' }}><CoinIcon size={18} />{formatCount(coins)}</div>
+    <div {...edgeBack} className="zchat-panel-open zchat-wide-page" style={{ position: 'fixed', inset: 0, zIndex: 620, background: pal.bg, color: pal.ink, display: 'flex', flexDirection: 'column', fontFamily: FONT, ...collVars(pal) }}>
+      <div style={{ flexShrink: 0, position: 'relative', background: pal.bg, paddingTop: 'env(safe-area-inset-top)', visibility: hideBody ? 'hidden' : 'visible' }}>
+        <ShopSky pal={pal} />
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 8, height: 56, padding: '0 12px 0 6px' }}>
+          <div role="button" aria-label="Close collection" onClick={onClose} className="zchat-press" style={{ width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: pal.ink, flexShrink: 0 }}><ArrowLeft size={24} strokeWidth={2} /></div>
+          <h1 style={{ margin: 0, flex: 1, minWidth: 0, fontSize: 30, fontWeight: 900, letterSpacing: '-0.02em', color: '#FFFFFF', textShadow: `0 3px 0 ${pal.dark ? '#050A1F' : '#2A7BC4'}, 0 6px 10px rgba(0,0,0,0.18)`, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Collection</h1>
+          {onOpenShop && <div role="button" aria-label="Open the Shop" onClick={() => { hapticTap(); playUiSound('tap'); onOpenShop(); }} className="zchat-press" style={{ width: 40, height: 40, borderRadius: 20, background: pal.stage, color: pal.ink, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}><ShopBagIcon size={20} /></div>}
+          <ShopCoinPill coins={coins} onOpenWallet={onOpenWallet} pal={pal} />
+        </div>
+        <div ref={chipsRef} className="zshop-chips" role="tablist" aria-label="Collection" style={{ position: 'relative', display: 'flex', gap: 8, overflowX: 'auto', padding: '10px 16px 14px', scrollbarWidth: 'none' }}>
+          {tabs.map(chip)}
+        </div>
+        <CollShelf pal={pal} />
       </div>
-      <div ref={gridRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain', padding: '0 16px 40px', visibility: hideBody ? 'hidden' : 'visible' }}>
-        <div style={{ padding: '4px 0 12px', fontSize: 31, fontWeight: 750, letterSpacing: '-0.025em' }}>Collection</div>
-        <CollProgress stats={stats} ms={ms} onClaim={claim} busy={msBusy} />
+      <div ref={gridRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain', padding: '8px 16px 40px', visibility: hideBody ? 'hidden' : 'visible' }}>
+        <CollProgress stats={stats} ms={ms} onClaim={claim} busy={msBusy} pal={pal} />
         {!looks.off && (
-          <CollSection title="Looks" sub="Save what you wear and switch in one tap" style={{ marginTop: 22 }}>
+          <CollSection title="Looks" sub="Save what you wear and switch in one tap" style={{ marginTop: 24 }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10 }}>
               {[1, 2, 3].map((slot) => {
                 const l = looks.list.find((x) => x.slot === slot) || null;
-                return <LookSlot key={slot} slot={slot} look={l} me={me} current={!!l && sameLook(l)} onSave={() => saveLook(slot)} onApply={() => applyLook(l)} onMenu={() => setLookMenu(slot)} />;
+                return <LookSlot key={slot} slot={slot} look={l} me={me} pal={pal} current={!!l && sameLook(l)} onSave={() => saveLook(slot)} onApply={() => applyLook(l)} onMenu={() => setLookMenu(slot)} />;
               })}
             </div>
           </CollSection>
         )}
-        <div style={{ position: 'sticky', top: 0, zIndex: 6, margin: '20px -16px 0', padding: '8px 16px', background: CL.bg }}>
-          <SegTabs items={[['sets', 'Sets'], ['effects', 'Effects'], ['bubble', 'Bubbles'], ['charm', 'Charms'], ['badge', 'Badges'], ...(cxOn ? [['styles', 'Styles']] : [])]} value={tab} onChange={(k) => { setTab(k); setSelected(null); playUiSound('tap'); }} />
+        <div data-coll-tabs="1" style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginTop: 26 }}>
+          <h2 style={{ margin: 0, flex: 1, minWidth: 0, fontSize: 22, fontWeight: 850, letterSpacing: '-0.02em', color: pal.ink }}>{(tabs.find(([k]) => k === tab) || [null, ''])[1]}</h2>
         </div>
-        {tab === 'sets' && (mine.length ? (
-          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gap: 10, marginTop: 12 }}>
-            {mine.map((s) => <SetCard key={s.key} set={s} me={me} own={ownOf(s.key)} owned wearing={wearF === s.key && wearP === s.key} width={tileW} edition={ownOf(s.key).full ? editionOf(rewards, 'set', s.key) : null} onOpen={() => openSetPage(s.key)} />)}
-          </div>
-        ) : emptyTab('No sets yet', 'Sets you get show up here. Every set comes with a frame, a nameplate and a profile effect.'))}
+        {tab === 'sets' && (mine.length ? grid(mine.map((st) => {
+          const o = ownOf(st.key);
+          const wearing = wearF === st.key && wearP === st.key;
+          const ed = o.full ? editionOf(rewards, 'set', st.key) : null;
+          return <CollTile key={st.key} pal={pal} rar={st.rarity} w={tw} name={st.name} wearing={wearing} status={wearing ? 'Wearing' : o.full ? 'Full set' : `${o.count} of 3`} label={`${st.name} set, ${wearing ? 'wearing' : o.full ? 'full set' : `${o.count} of 3 pieces`}${ed ? `, number ${Math.floor(ed).toLocaleString()}` : ''}`}
+            tag={ed ? <EditionTag n={ed} size={11} style={tagSt} /> : null} onOpen={() => openSetPage(st.key)}
+            art={<DecorHero frameKey={st.key} plateKey={st.key} width={Math.round(tw * 0.94)} photo={me.avatar} name={me.name} lazy compact gapColor={pal.stage} />} />;
+        })) : emptyTab('No sets yet', 'Sets you get show up here. Every set comes with a frame, a nameplate and a profile effect.', 'set'))}
         {tab === 'effects' && (myFx.length ? (
-          <div style={{ marginTop: 12 }}>
-            <div style={{ fontSize: 13.5, color: CL.ink2, lineHeight: 1.45, padding: '0 2px 12px' }}>An effect plays when someone opens your profile, while you wear its full set.</div>
-            {myFx.map((s) => <EffectRow key={s.key} set={s} me={me} own={ownOf(s.key)} wearing={wearF === s.key && wearP === s.key} edition={editionOf(rewards, 'effect', s.key)} onOpen={() => openSetPage(s.key, 'effect')} />)}
-          </div>
-        ) : emptyTab('No effects yet', 'Every set has its own profile effect. Get one in the Shop.'))}
+          <>
+            {note('An effect plays when someone opens your profile, while you wear its full set.')}
+            {grid(myFx.map((st) => {
+              const o = ownOf(st.key);
+              const wearing = wearF === st.key && wearP === st.key;
+              const can = o.frame && o.plate;
+              const ed = editionOf(rewards, 'effect', st.key);
+              return <CollTile key={st.key} pal={pal} rar={st.rarity} w={tw} name={st.name} wearing={wearing} status={wearing ? 'Playing' : can ? 'Yours' : 'Get the set'} label={`${st.name} effect, ${wearing ? 'playing on your profile' : can ? 'wear the full set to play it' : 'get the frame and nameplate to play it'}`}
+                tag={ed ? <EditionTag n={ed} size={11} style={tagSt} /> : null} onOpen={() => openSetPage(st.key, 'effect')}
+                art={(
+                  <div style={{ position: 'relative', width: tw, height: tw, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <DecorFrameBadge setKey={st.key} size={Math.round(tw * 0.78)} photo={me.avatar} name={me.name} lazy />
+                    <span style={{ position: 'absolute', right: 8, bottom: 8, display: 'inline-flex', alignItems: 'center', gap: 4, height: 22, padding: '0 8px', borderRadius: 11, background: pal.bg, color: pal.ink, fontSize: 11.5, fontWeight: 800 }}><Play size={10} fill={pal.ink} strokeWidth={0} />Play</span>
+                  </div>
+                )} />;
+            }))}
+          </>
+        ) : emptyTab('No effects yet', 'Every set has its own profile effect. Get one in the Shop.', 'set'))}
         {tab === 'bubble' && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10, marginTop: 12 }}>
-            {myBubbles.map((k) => <BubbleTileDark key={k} k={k} on={wearingBubble === k} status={wearingBubble === k ? 'In use' : k === 'classic' ? 'Free' : 'Yours'} tone={wearingBubble === k ? 'use' : 'own'} edition={k === 'classic' ? null : editionOf(rewards, 'bubble', k)} onPick={() => { if (wearingBubble === k) return; hapticTap(); playUiSound('like'); setBubbleStyle(k); say(k === 'classic' ? 'Back to the classic bubble' : `${CHAR_BUBBLES[k].label} is on. Everyone sees it.`); }} />)}
-            {myBubbles.length === 1 && <div style={{ gridColumn: '1 / -1' }}>{emptyTab('Only the classic bubble', 'Get a bubble with a little character on it in the Shop.')}</div>}
-          </div>
+          <>
+            {grid(myBubbles.map((k) => {
+              const on = wearingBubble === k;
+              const ed = k === 'classic' ? null : editionOf(rewards, 'bubble', k);
+              const name = CHAR_BUBBLES[k] ? CHAR_BUBBLES[k].label : 'Classic';
+              return <CollTile key={k} pal={pal} rar={k === 'classic' ? 'free' : 'rare'} w={tw} name={name} wearing={on} status={on ? 'In use' : k === 'classic' ? 'Free' : 'Yours'} sub={k === 'classic' ? 'Free' : null} label={`Bubble ${name}, ${on ? 'in use' : k === 'classic' ? 'free' : 'yours'}`}
+                tag={ed ? <EditionTag n={ed} size={11} style={tagSt} /> : null}
+                onOpen={() => { if (on) return; hapticTap(); playUiSound('like'); setBubbleStyle(k); say(k === 'classic' ? 'Back to the classic bubble' : `${CHAR_BUBBLES[k].label} is on. Everyone sees it.`); }}
+                art={<div style={{ width: '100%', padding: '0 12px', boxSizing: 'border-box', display: 'flex', flexDirection: 'column' }}><CharBubbleSample k={k} text="Hi there" cw={Math.round(tw * 0.27)} fontSize={Math.max(12, Math.round(tw * 0.09))} /></div>} />;
+            }))}
+            {myBubbles.length === 1 && emptyTab('Only the classic bubble', 'Get a bubble with a little character on it in the Shop.', 'bubble')}
+          </>
         )}
         {(tab === 'charm' || tab === 'badge') && (sorted.length ? (
           <>
-            <div style={{ fontSize: 13.5, color: CL.ink2, lineHeight: 1.4, padding: '14px 2px 12px' }}>{tab === 'charm' ? 'A charm sits next to your name everywhere in ZChat.' : 'Badges show next to your name and are given by the ZChat team.'}</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
-              {sorted.map((it) => {
-                const left = daysLeft(it.reward);
-                return (
-                  <div key={it.key} role="button" aria-label={it.spec.label} onClick={() => { setSelected(it.key); playUiSound('tap'); }} className="zchat-press"
-                    style={{ position: 'relative', minWidth: 0, borderRadius: 18, padding: '14px 12px 13px', cursor: 'pointer', background: CL.card, boxShadow: `inset 0 0 0 ${it.equipped ? 2 : 1}px ${it.equipped ? CL.accent : CL.line}` }}>
-                    {tab === 'charm' && editionOf(rewards, 'charm', it.key) ? <EditionTag n={editionOf(rewards, 'charm', it.key)} size={11} style={{ position: 'absolute', top: 10, right: 11 }} /> : null}
-                    <div style={{ height: 88, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      {tab === 'charm' ? <CharmPreview charm={it.key} size={54} /> : <VerifiedBadge tier={it.key} size={54} style={{ marginLeft: 0, display: 'block' }} />}
+            {note(tab === 'charm' ? 'A charm sits next to your name everywhere in ZChat.' : 'Badges show next to your name and are given by the ZChat team.')}
+            {grid(sorted.map((it) => {
+              const left = daysLeft(it.reward);
+              const ed = tab === 'charm' ? editionOf(rewards, 'charm', it.key) : null;
+              const name = it.spec.label.replace(/ (charm|badge)$/i, '');
+              const status = it.equipped ? 'In use' : left != null ? `${left} ${left === 1 ? 'day' : 'days'} left` : 'Yours';
+              return <CollTile key={it.key} pal={pal} rar={it.spec.rarity} w={tw} name={name} wearing={it.equipped} status={status} label={`${it.spec.label}, ${status}`}
+                tag={ed ? <EditionTag n={ed} size={11} style={tagSt} /> : null} onOpen={() => { setSelected(it.key); playUiSound('tap'); }}
+                art={tab === 'charm'
+                  ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: Math.round(tw * 0.07) }}>
+                      <CharmPreview charm={it.key} size={Math.round(tw * 0.4)} />
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, maxWidth: tw - 24, height: 24, padding: '0 9px', borderRadius: 12, background: pal.bg, color: pal.ink, fontSize: 12, fontWeight: 700 }}>
+                        <span style={{ minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{String(me.name || me.username || 'You').split(' ')[0]}</span><VerifiedBadge tier={null} custom={it.key} size={13} />
+                      </span>
                     </div>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: CL.ink, marginTop: 8, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.spec.label.replace(/ (charm|badge)$/i, '')}</div>
-                    <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
-                      <RarityTag rarity={it.spec.rarity} size={11.5} />
-                      <span style={{ fontSize: 12, fontWeight: 600, color: it.equipped ? '#6FB0F7' : CL.own, flexShrink: 0 }}>{it.equipped ? 'In use' : left != null ? `${left} ${left === 1 ? 'day' : 'days'} left` : 'Yours'}</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                  )
+                  : <VerifiedBadge tier={it.key} size={Math.round(tw * 0.42)} style={{ marginLeft: 0, display: 'block' }} />} />;
+            }))}
           </>
-        ) : emptyTab(tab === 'charm' ? 'No charms yet' : 'No badges yet', tab === 'charm' ? 'Charms sit next to your name. Find them in the Shop.' : 'Badges are given by the ZChat team.'))}
+        ) : emptyTab(tab === 'charm' ? 'No charms yet' : 'No badges yet', tab === 'charm' ? 'Charms sit next to your name. Find them in the Shop.' : 'Badges are given by the ZChat team.', 'charm'))}
+        {tab === 'games' && (myKits.length ? (
+          <>
+            {note('Tap one to use it in its game. Tap again to go back to the classic look.')}
+            {grid(myKits.map((g) => {
+              const on = kitKeyFor(g.game) === g.key;
+              const game = KIT_GAME_NAMES[g.game] || 'Games';
+              return <CollTile key={g.key} pal={pal} rar={g.rarity} w={tw} name={g.label} wearing={on} status={on ? 'In use' : 'Yours'} sub={game} label={`${g.label} for ${game}, ${on ? 'in use' : 'yours'}`}
+                onOpen={() => kitTap(g)} art={<GameKitArt k={g.key} size={Math.round(tw * 0.84)} />} />;
+            }))}
+          </>
+        ) : emptyTab('No game items yet', 'Boards, tables, cues and strikers for your games are in the Shop.', 'gamekit'))}
         {tab === 'styles' && cxOn && (
           <div style={{ marginTop: -8 }}>
             <CollStyles me={me} rewards={rewards} covered={!!(cxOpen || covered)} say={say} onOpenShop={onOpenShop} cols={cols}
@@ -3180,25 +3307,25 @@ export function CollectionPanel({ me, rewards, onClose, onEquip, onWear, isAdmin
       </div>
 
       {sel && (
-        <div className="zchat-sheet-up" style={{ position: 'absolute', zIndex: 30, left: 0, right: 0, bottom: 0, padding: '18px 16px', paddingBottom: 'calc(18px + env(safe-area-inset-bottom))', background: '#17171C', boxShadow: '0 -12px 40px rgba(0,0,0,0.5)', borderRadius: '24px 24px 0 0' }}>
+        <div className="zchat-sheet-up" style={{ position: 'absolute', zIndex: 30, left: 0, right: 0, bottom: 0, padding: '18px 16px', paddingBottom: 'calc(18px + env(safe-area-inset-bottom))', background: pal.sheet, color: pal.ink, boxShadow: '0 -12px 40px rgba(0,0,0,0.35)', borderRadius: '24px 24px 0 0' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
-            <div role="button" onClick={() => tab === 'charm' && setTryOn(sel.key)} style={{ width: 84, height: 84, borderRadius: 18, background: CL.card2, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: tab === 'charm' ? 'pointer' : 'default' }}>
+            <div role="button" onClick={() => tab === 'charm' && setTryOn(sel.key)} style={{ width: 84, height: 84, borderRadius: 18, background: pal.stage2, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: tab === 'charm' ? 'pointer' : 'default' }}>
               {tab === 'charm' ? <CharmPreview charm={sel.key} size={52} /> : <VerifiedBadge tier={sel.key} size={52} style={{ marginLeft: 0, display: 'block' }} />}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <RarityTag rarity={sel.spec.rarity} size={12.5} />
               <div style={{ fontSize: 18, fontWeight: 700, marginTop: 3 }}>{sel.spec.label}</div>
-              {daysLeft(sel.reward) != null && <div style={{ fontSize: 12.5, fontWeight: 500, color: daysLeft(sel.reward) <= 5 ? '#FCA5A5' : CL.ink2, marginTop: 3 }}>Yours for {daysLeft(sel.reward)} more {daysLeft(sel.reward) === 1 ? 'day' : 'days'}</div>}
+              {daysLeft(sel.reward) != null && <div style={{ fontSize: 12.5, fontWeight: 500, color: daysLeft(sel.reward) <= 5 ? (pal.dark ? '#FCA5A5' : '#C2410C') : pal.ink2, marginTop: 3 }}>Yours for {daysLeft(sel.reward)} more {daysLeft(sel.reward) === 1 ? 'day' : 'days'}</div>}
               {tab === 'charm' && <EditionLine n={editionOf(rewards, 'charm', sel.key)} style={{ marginTop: 5 }} />}
             </div>
-            <div role="button" aria-label="Close details" onClick={() => setSelected(null)} style={{ width: 32, height: 32, borderRadius: 16, background: CL.card2, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: CL.ink2, flexShrink: 0 }}><X size={16} /></div>
+            <div role="button" aria-label="Close details" onClick={() => setSelected(null)} style={{ width: 32, height: 32, borderRadius: 16, background: pal.stage2, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: pal.ink2, flexShrink: 0 }}><X size={16} /></div>
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
             {tab === 'badge' ? (
               isAdmin ? (
-                <button disabled={busy || sel.equipped} onClick={() => equip('badge', sel.key)} style={{ ...btnStyle(!sel.equipped), flex: 1, cursor: sel.equipped ? 'default' : 'pointer', background: sel.equipped ? 'rgba(61,214,140,0.16)' : CL.accent, color: sel.equipped ? CL.own : '#FFFFFF' }}>{sel.equipped ? 'In use' : 'Use this badge'}</button>
+                <button disabled={busy || sel.equipped} onClick={() => equip('badge', sel.key)} style={{ ...btnStyle(!sel.equipped), flex: 1, cursor: sel.equipped ? 'default' : 'pointer', ...(sel.equipped ? { background: pal.accentSoft, color: CV.own, boxShadow: 'none', textShadow: 'none' } : {}) }}>{sel.equipped ? 'In use' : 'Use this badge'}</button>
               ) : (
-                <div style={{ flex: 1, padding: '12px 14px', borderRadius: 13, background: CL.card2, fontSize: 13.5, fontWeight: 500, color: CL.ink2 }}>You are wearing this badge</div>
+                <div style={{ flex: 1, padding: '12px 14px', borderRadius: 13, background: pal.stage2, fontSize: 13.5, fontWeight: 500, color: pal.ink2 }}>You are wearing this badge</div>
               )
             ) : (
               <>
@@ -3211,7 +3338,7 @@ export function CollectionPanel({ me, rewards, onClose, onEquip, onWear, isAdmin
           </div>
         </div>
       )}
-      {toast && <div className="zchat-pop" role="status" style={{ position: 'absolute', left: '50%', top: 'calc(70px + env(safe-area-inset-top))', transform: 'translateX(-50%)', zIndex: 40, padding: '9px 16px', borderRadius: 18, background: 'rgba(255,255,255,0.95)', color: '#111', fontSize: 13.5, fontWeight: 650, width: 'max-content', maxWidth: 'calc(100% - 32px)', boxSizing: 'border-box', textAlign: 'center' }}>{toast}</div>}
+      {toast && <div className="zchat-pop" role="status" style={{ position: 'absolute', left: '50%', top: 'calc(64px + env(safe-area-inset-top))', transform: 'translateX(-50%)', zIndex: 40, padding: '10px 16px', borderRadius: 14, background: pal.dark ? '#2A2930' : '#111113', color: '#FFFFFF', fontSize: 13.5, fontWeight: 650, boxShadow: '0 6px 20px rgba(0,0,0,0.18)', pointerEvents: 'none', width: 'max-content', maxWidth: 'calc(100% - 32px)', boxSizing: 'border-box', textAlign: 'center' }}>{toast}</div>}
       {tryOn && (() => {
         const rw = rewardFor('charm', tryOn);
         const isEq = me.custom_badge === tryOn;
@@ -6562,33 +6689,35 @@ function WnSegments({ total, at, onArt, dark }) {
   );
 }
 
-const WN_PHOTOS = { lobby579: '/wn579-lobby.webp', city579: '/wn579-city.webp', fort579: '/wn579-fort.webp', pvp578: '/wn578-pvp.webp', mars578: '/wn578-mars.webp', chat574: '/wn574-chat.webp', cards574: '/wn574-cards.webp', shop573: '/wn573-shop.webp', try573: '/wn573-try.webp', cmt573: '/wn573-comments.webp', rally57: '/race-art.webp', set57: '/wn57-set.webp', lay57: '/wn57-lay.webp', bolt57: '/wn57-bolt.webp', hub57: '/wn57-hub.webp', zombies49: '/wn49-zombies.webp', mutant49: '/wn49-mutant.webp', guns50: '/wn50-guns.webp', house50: '/wn50-house.webp', pond50: '/wn50-pond.webp', buttons50: '/wn50-buttons.webp', settings50: '/wn50-settings.webp', pack51: '/wn51-pack.webp', emote51: '/wn51-emote.webp', lobby51: '/wn51-lobby.webp', waves52: '/wn52-waves.webp', sky52: '/wn52-sky.webp', map52: '/wn52-map.webp', boss53: '/wn53-boss.webp', fire53: '/wn53-fire.webp', dog53: '/wn53-dog.webp', train53: '/wn53-train.webp', hud531: '/wn531-hud.webp', moves531: '/wn531-moves.webp', pc531: '/wn531-pc.webp', squad54: '/wn54-squad.webp', boom54: '/wn54-boom.webp', heli54: '/wn54-heli.webp', gas54: '/wn54-gas.webp' , shop55: '/wn55-shop.webp', stall55: '/wn55-stall.webp', boss55: '/wn55-boss.webp', climb55: '/wn55-climb.webp', drop55: '/wn55-drop.webp', squad55: '/wn55-squad.webp', hud55: '/wn55-hud.webp', set55: '/wn55-settings.webp', music55: '/wn55-music.webp', guns55: '/wn55-guns.webp', zj55: '/zombie-art2.webp', bolt55: '/bolt-art2.webp', torch55: '/duo-art.webp' };
+const WN_PHOTOS = { team580: '/wn580-team.webp', login580: '/wn580-login.webp', grave580: '/wn580-grave.webp', heroes580: '/wn580-heroes.webp', servers580: '/wn580-servers.webp', level580: '/wn580-level.webp', invite580: '/wn580-invite.webp', coll580: '/wn580-coll.webp', lobby579: '/wn579-lobby.webp', city579: '/wn579-city.webp', fort579: '/wn579-fort.webp', pvp578: '/wn578-pvp.webp', mars578: '/wn578-mars.webp', chat574: '/wn574-chat.webp', cards574: '/wn574-cards.webp', shop573: '/wn573-shop.webp', try573: '/wn573-try.webp', cmt573: '/wn573-comments.webp', rally57: '/race-art.webp', set57: '/wn57-set.webp', lay57: '/wn57-lay.webp', bolt57: '/wn57-bolt.webp', hub57: '/wn57-hub.webp', zombies49: '/wn49-zombies.webp', mutant49: '/wn49-mutant.webp', guns50: '/wn50-guns.webp', house50: '/wn50-house.webp', pond50: '/wn50-pond.webp', buttons50: '/wn50-buttons.webp', settings50: '/wn50-settings.webp', pack51: '/wn51-pack.webp', emote51: '/wn51-emote.webp', lobby51: '/wn51-lobby.webp', waves52: '/wn52-waves.webp', sky52: '/wn52-sky.webp', map52: '/wn52-map.webp', boss53: '/wn53-boss.webp', fire53: '/wn53-fire.webp', dog53: '/wn53-dog.webp', train53: '/wn53-train.webp', hud531: '/wn531-hud.webp', moves531: '/wn531-moves.webp', pc531: '/wn531-pc.webp', squad54: '/wn54-squad.webp', boom54: '/wn54-boom.webp', heli54: '/wn54-heli.webp', gas54: '/wn54-gas.webp' , shop55: '/wn55-shop.webp', stall55: '/wn55-stall.webp', boss55: '/wn55-boss.webp', climb55: '/wn55-climb.webp', drop55: '/wn55-drop.webp', squad55: '/wn55-squad.webp', hud55: '/wn55-hud.webp', set55: '/wn55-settings.webp', music55: '/wn55-music.webp', guns55: '/wn55-guns.webp', zj55: '/zombie-art2.webp', bolt55: '/bolt-art2.webp', torch55: '/duo-art.webp' };
 const WN_HIGHLIGHTS = [
-  { k: 'lobby579', art: 'lobby579', go: 'siege', cta: 'Play Bolt War', title: 'A new match lobby', text: 'Pick the mode, map, time and score limit, see both teams face off, invite friends who are online and talk before the match starts.' },
-  { k: 'city579', art: 'city579', go: 'siege', cta: 'Play Bolt War', title: 'Downtown and Old fort', text: 'Two new maps in Bolt War. Fight across the streets of Downtown or inside the walls of Old fort. Each mode starts on its own map.' },
+  { k: 'heroes580', art: 'heroes580', go: 'siege', cta: 'Play Bolt War', title: 'Four new heroes', text: 'Tusk swings a giant axe, Bones keeps friends alive, Hex calls down a storm of skulls and Rattle throws fans of bone knives.' },
+  { k: 'servers580', art: 'servers580', go: 'siege', cta: 'Play Bolt War', title: 'Bolt War servers', text: 'Tap Play online and jump into a match on a server near you, any time. Matches keep going even when a player leaves.' },
 ];
 const WN_SECTIONS = [
-  { title: 'Match lobby', items: [
-    { art: 'lobby579', title: 'Match settings', text: 'Set the mode, map, time limit, score limit, team size and bots.' },
-    { art: 'lobby579', title: 'Invite friends', text: 'See who is online and add them to your match with one tap.' },
-    { art: 'lobby579', title: 'Talk in the lobby', text: 'Chat, mic and voice buttons right next to Start match.' },
-    { art: 'lobby579', title: 'Hero card', text: 'Open Loadout to see your hero stats and upgrade them.' },
+  { title: 'Bolt War', items: [
+    { art: 'grave580', title: 'Graveyard', text: 'A new map with graves, a crypt, dead trees and pumpkins under a red sky.' },
+    { art: 'team580', title: 'Tap to switch team', text: 'In the match lobby, tap any open spot on the other team to move there.' },
+    { art: 'level580', title: 'Your Bolt War level', text: 'Earn XP in every match and level up. Your level shows next to your name in the lobby.' },
+    { art: 'grave580', title: 'More monsters', text: 'New monster camps in Team deathmatch and Hardpoint, with skulls that explode and a big pack that gives Guard.' },
+    { art: 'servers580', title: 'Bad connection warning', text: 'A red wifi sign shows next to anyone with a bad connection, and your own ping shows at the top.' },
+    { art: 'servers580', title: 'Voice and game sound', text: 'Turn voices and game sounds up or down from the speaker button in the match.' },
   ] },
-  { title: 'New maps', items: [
-    { art: 'city579', title: 'Downtown', text: 'Streets, cars, shops and crossings, with a plaza in the middle.' },
-    { art: 'fort579', title: 'Old fort', text: 'Castle walls, towers, banners and a great hall.' },
-    { art: 'fort579', title: 'Pick your map', text: 'Team deathmatch starts on Downtown and Hardpoint on Mars outpost. Change it any time.' },
+  { title: 'Invites', items: [
+    { art: 'invite580', title: 'Invite popup', text: 'Game invites pop up on top of what you are doing, with Join and Decline.' },
+    { art: 'invite580', title: 'Live invite cards', text: 'Invite cards in chat show who is in the room, and close when the room ends.' },
   ] },
-  { title: 'In the match', items: [
-    { art: 'city579', title: 'Green heal numbers', text: 'Life steal, healing and health regen pop up as green numbers.' },
-    { art: 'city579', title: 'Scoreboard button', text: 'Check the score any time from the button at the top.' },
-    { art: 'lobby579', title: 'Match results', text: 'A new results screen with the MVP, both teams and your rewards.' },
+  { title: 'Your account', items: [
+    { art: 'login580', title: 'Add a password', text: 'Signed up with Google or Apple? Add a password in Settings, then log in with your email on any phone.' },
+    { art: 'login580', title: 'Reset with a code', text: 'Forgot your password? We email you a code. Type it in and pick a new password.' },
+    { art: 'coll580', title: 'A new Collection', text: 'Your Collection looks like the Shop now, with a Games tab for your boards, tables and cues.' },
   ] },
 ];
 const WN_NEW_COUNT = WN_SECTIONS.reduce((n, sec) => n + sec.items.length, 0);
 const WN_SUMMARY = `${WN_NEW_COUNT} new things to try.`;
 
 const WN_EARLIER = [
+  { title: 'A new match lobby, Downtown and Old fort', text: 'A real match lobby with settings and invites, two new Bolt War maps, green heal numbers, a scoreboard button and a new results screen.' },
   { title: 'Team deathmatch, Hardpoint and Mars outpost', text: 'Two team modes for 1v1 up to 5v5, a new map on Mars, overtime, an MVP badge and new skill icons.' },
   { title: 'Battle skills, level 20 and three new heroes', text: 'Battle skills, a new power at every level, bot difficulty, and the new heroes Arlo, Wren and Nyx.' },
   { title: 'Game chat that turns with you and new upgrade cards', text: 'A big chat panel with a sideways keyboard in every game, and Bolt War cards that show real numbers.' },

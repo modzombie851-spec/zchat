@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
 import ReactDOM from 'react-dom';
 import { Send, Search, Mail, ShieldCheck, ShieldOff, AtSign, LogOut, Eye, EyeOff, Lock, X, Trash2, User, Phone, Image as ImageIcon, Smile, ArrowLeft, Check, CheckCheck, Settings as SettingsIcon, Moon, Sun, UserPlus, FileText, HelpCircle, ChevronRight, Bell, Volume2, Volume1, VolumeX, Palette, Mic, Play, Download, Users, Camera, Reply, Ban, Share2, Type, Pencil, Undo2, BellOff, Link as LinkIcon, ShieldAlert, Heart, Repeat, Clock, Timer, Smartphone, Plus, Megaphone, Database, Activity, MessageSquare } from 'lucide-react';
-import { supabase, setPassword, signInWithPassword, sendMessage } from '../supabaseClient.js';
+import { supabase, signInWithPassword, sendMessage } from '../supabaseClient.js';
 import {
   openPermHelp,
   ACCENT_PALETTES,
@@ -1046,7 +1046,7 @@ export function SettingsPanel({ onOpenWallet, onClose, onOpenPrivacy, onLogout, 
     ] },
     { title: 'Login and security', rows: [
       { icon: <SecGlyph k="checkup" />, label: 'Security checkup', value: checkupLabel(me && me.id), onClick: () => setSubPage('checkup') },
-      { icon: <PasswordGlyph />, label: 'Change password', onClick: () => setSection('password') },
+      { icon: <PasswordGlyph />, label: hasPasswordLogin ? 'Change password' : 'Add a password', onClick: () => setSection('password') },
       { icon: <TwoFactorGlyph />, label: 'Two factor authentication', onClick: () => setSection('twofactor') },
       { icon: <Smartphone />, label: 'Login activity', onClick: () => setSection('sessions') },
       me ? { icon: <LaptopIcon />, label: 'Linked devices', value: (qrDevicesMem.get(me.id) || []).length ? String(qrDevicesMem.get(me.id).length) : undefined, onClick: () => setSection('computers') } : null,
@@ -1094,6 +1094,7 @@ export function SettingsPanel({ onOpenWallet, onClose, onOpenPrivacy, onLogout, 
       { icon: <AxGlyph k="report" />, label: 'Report a problem', onClick: () => setSubPage('report') },
       { icon: <AxGlyph k="labs" />, label: 'ZChat Labs', value: axRow().labs.filter((k) => LABS.some((l) => l.k === k)).length ? `${axRow().labs.filter((k) => LABS.some((l) => l.k === k)).length} on` : undefined, onClick: () => setSubPage('labs') },
       { icon: <HelpCircle />, label: 'About ZChat', value: `Version ${APP_VERSION}`, onClick: () => setSection('about') },
+      onOpenPrivacy ? { icon: <ShieldCheck />, label: 'Privacy policy', find: 'privacy policy game credits licenses terms', onClick: onOpenPrivacy } : null,
     ] },
     { title: 'Login', rows: [
       { icon: <LogOut />, label: 'Log out', bold: true, onClick: onLogout },
@@ -1102,7 +1103,7 @@ export function SettingsPanel({ onOpenWallet, onClose, onOpenPrivacy, onLogout, 
   ];
   const igTerm = igQuery.trim().toLowerCase();
   const igVisible = igGroups
-    .map((g) => ({ ...g, rows: g.rows.filter(Boolean).filter((r) => !igTerm || r.label.toLowerCase().includes(igTerm) || zt(r.label).toLowerCase().includes(igTerm)) }))
+    .map((g) => ({ ...g, rows: g.rows.filter(Boolean).filter((r) => !igTerm || r.label.toLowerCase().includes(igTerm) || zt(r.label).toLowerCase().includes(igTerm) || (r.find && r.find.includes(igTerm))) }))
     .filter((g) => g.rows.length);
   const setWallet = useWallet(me ? me.id : null);
 
@@ -1202,7 +1203,7 @@ export function SettingsPanel({ onOpenWallet, onClose, onOpenPrivacy, onLogout, 
 
         {sec === 'password' && (
           <>
-            <SectionHeader title="Change password" />
+            <SectionHeader title={hasPasswordLogin ? 'Change password' : 'Add a password'} />
             <PageArt k="password" text="Use something long that you do not use on any other app." />
             <ChangePasswordForm email={me && me.email} hasPassword={!!hasPasswordLogin} onDone={() => setSection('main')} />
           </>
@@ -4806,7 +4807,7 @@ function ChangePasswordForm({ email, hasPassword, onDone }) {
         return;
       }
     }
-    const { error } = await setPassword(next);
+    const { error } = await supabase.auth.updateUser({ password: next, data: { zpw: 1 } });
     setBusy(false);
     if (error) { setErr(friendlyError(error, "Couldn't update your password. Try again.")); return; }
     setDone(true);
@@ -4837,14 +4838,14 @@ function ChangePasswordForm({ email, hasPassword, onDone }) {
   return (
     <div>
       <div style={{ fontSize: 12.5, color: theme.muted, lineHeight: 1.5, marginBottom: 14 }}>
-        {hasPassword ? 'Enter your current password, then choose a new one.' : 'You logged in with Google. Add a password to also log in with your email.'}
+        {hasPassword ? 'Enter your current password, then choose a new one.' : 'You signed up with Google or Apple. Add a password so you can also log in with your email on any phone.'}
       </div>
       {hasPassword && field(current, setCurrent, 'Current password', 'current-password')}
       {field(next, setNext, 'New password', 'new-password')}
       {field(again, setAgain, 'Confirm new password', 'new-password')}
       {(problem || err) && <div style={{ color: theme.danger, fontSize: 12.5, marginBottom: 6 }}>{err || problem}</div>}
       <button style={primaryBtn(theme, !ready || busy)} disabled={!ready || busy} onClick={submit}>
-        {busy ? <Spinner /> : 'Update password'}
+        {busy ? <Spinner /> : hasPassword ? 'Update password' : 'Save password'}
       </button>
     </div>
   );

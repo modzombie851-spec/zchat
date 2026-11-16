@@ -4,7 +4,7 @@ import { Eye, X, Image as ImageIcon, ArrowLeft, Check, ChevronRight, ChevronLeft
 import { supabase } from '../supabaseClient.js';
 import { AppPinPad, Avatar, BIRTHDAY_PINK, BigButton, BioKey, CHAR_BUBBLES, CHAR_BUBBLE_KEYS, CUSTOM_BADGES, CX_KINDS, CharmPreview, ChipStartSheet, CoinIcon, CoinPouchArt, CollectionIcon, ConfirmDialog, ConfirmSheet, CrGlyph, CxGiftPicker, DAILY_COINS, DECOR_ALL, DECOR_BY_KEY, DECOR_SETS, DECOR_SI, DECOR_SPRITE, DecorFrameBadge, DecorHero, DecorStill, EDITION_FIRST, EmptyState, FONT, FullPage, GIFT_MAX, GiftIcon, IgHeading, IgRow, IgToggle, LIVE_WALL_BY, LineGlyph, LiveWallCanvas, LoadFail, MonthlyLimitPage, NS_KEYS, NS_OWN_SAMPLE, NS_ROOM, NameBadge, NameStyleArt, OwnStylePage, PROFILE_THEMES, PickPeoplePage, PieceGlyph, PillButton, Portal, ProfileDecorHero, ProfileEffectLayer, RARITY_STYLE, RedeemCodeSheet, SI_KINDS, SI_SOUND_PACKS, SI_STICKER_PACKS, SI_TYPING, STORE_RARITY_ORDER, SUPER_KEYS, SUPER_REACTS, SecGlyph, SegmentedControl, ShopItemArt, SiItemArt, Spinner, SpotArt, StyledName, SuperFace, THEMES, THEME_KEYS, ThemeArt, ThemeCanvas, ThemePreviewPage, TradeArt, TradeIcon, TypingStyleBubble, VERIFIED_TIERS, VerifiedBadge, WideDim, WrapPickerSheet, addSpendSent, adminWords, announceWallet, appSnack, bdayGiftWhat, bioCheck, bioCredId, bubbleKeyOf, claimDailyCoins, coinsText, copyTextToClipboard, countWord, crFirst, crOpen, cxFlag, cxHas, cxKnown, cxNs, cxOwns, cxSpec, cxWord, dailyNext, daysLeft, decorBudgetQueue, decorFamily, decorOwned, decorPartPrice, detailsCardBg, dropOwned, dropPhase, editionOf, fmtDate, formatCount, friendlyError, giftRpc, giftTheirsMem, giftTheirsPend, hapticTap, igPalette, inputStyle, isDecorKey, kitOnInk, laterInputValue, ledgerMem, limitLeft, listText, liveAddGift, liveBurst, liveCid, liveEmit, liveFirst, livePlanById, livePlanEach, livePlanMerge, livePlanSort, livePlanWhy, livePlans, livePlansEmit, liveRpc, liveRt, liveWallBg, liveWallPaid, liveWallVeil, liveWhenLow, loadPayOptions, mixHex, moneyRun, moreCoinsText, nsOwn, nsOwnSaved, payMem, pickCoverFile, playUiSound, readJsonLs, readRingtone, readTone, reducedMotion, reminderWhen, rewardActive, rpcFailText, rpcMissing, santaPut, saveDecorSets, sendPushNotification, shopItemName, shopPing, shopPrice, shortLeft, siOwns, siSpec, siteOrigin, spPlay, spendAuthBus, spendGate, superAccent, themeFallback, tradeItemName, tradeLive, tradeMem, tradeNorm, tradePut, tradeSides, tradeStatusOf, typingStyleMine, useBackClose, useBioReady, useBirthdayOf, useCr, useDecorLoaded, useEdgeSwipeBack, useGfPeople, useSecondTick, useSheetDrag, useShopTick, useTheme, useWallet, useWidthOf, useWishlist, verifyPin, walletAfter, walletMem, walletPatch, walletSpend, writeJsonLs } from '../App.jsx';
 import { GAME_KITS, GAME_KIT_BY, KIT_GAME_NAMES, kitKeyFor, kitSet, gameKitSave, useKit, GameKitArt } from '../games/kits.jsx';
-import { CharBubbleSample, DECOR_PIECES, GIFT_PAPER_EXTRA, GiftBoxIcon, GiftCodeIcon, KitSection, KitSlider, LIVE_WALL_PAID, ShopChatMock, ShopListMock, ShopProfileMock, ThemeMockProfile, WrapBoxArt, buyDeal, buyShopItem, coinTakenBack, dropsMem, giftPaper, giftRibbon, giftWrapText, hexLum, loadMilestones, reasonLine, setTypingStyleMine, shopKindWord, shopKnown, shopMem, shopOwnersMem, shopSave, shopWarm, siWord, useDeal, useDrops, useMoneyToast, useOwnedBubbles, useShopOwners, useSpendLimit } from './shared.jsx';
+import { ShopCoinPill, ShopSky, shopBtn, shopCss2, shopGlow, shopPal, shopRar, shopTint, CharBubbleSample, DECOR_PIECES, GIFT_PAPER_EXTRA, GiftBoxIcon, GiftCodeIcon, KitSection, KitSlider, LIVE_WALL_PAID, ShopChatMock, ShopListMock, ShopProfileMock, ThemeMockProfile, WrapBoxArt, buyDeal, buyShopItem, coinTakenBack, dropsMem, giftPaper, giftRibbon, giftWrapText, hexLum, loadMilestones, reasonLine, setTypingStyleMine, shopKindWord, shopKnown, shopMem, shopOwnersMem, shopSave, shopWarm, siWord, useDeal, useDrops, useMoneyToast, useOwnedBubbles, useShopOwners, useSpendLimit } from './shared.jsx';
 
 function usePayOptions() {
   const [data, setData] = useState(payMem.data);
@@ -1039,11 +1039,7 @@ const SHOP_VIEWS = { new: 'New', popular: 'Popular', wishlist: 'Your wishlist', 
 const SHOP_PIECES = ['frame', 'nameplate', 'effect'];
 const SHOP_CX = ['namestyle', 'theme', 'reaction'];
 const SHOP_INK ={ mythic: ['#FF6B86', '#C81E45'], legendary: ['#F5B829', '#9A6300'], epic: ['#C59BFF', '#8136D8'], rare: ['#6FB0FF', '#1D66D6'] };
-const SHOP_RAR = { rare: ['#3E8EFF', '#1B5BD6', '#123F99'], epic: ['#A562FF', '#6B2EDB', '#481C9C'], legendary: ['#FFB833', '#EE7A0C', '#A84F08'], mythic: ['#FF5C7C', '#D4285C', '#93123E'] };
-function shopRar(r) { return SHOP_RAR[r] || SHOP_RAR.epic; }
 function shopRarFor(kind, k, drop) { return kind === 'drop' ? (drop && drop.kind === 'set' && DECOR_BY_KEY[drop.item_key] ? DECOR_BY_KEY[drop.item_key].rarity : 'rare') : shopRarityOf(kind, k); }
-function shopTint(hex, a) { const n = parseInt(String(hex).slice(1), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`; }
-function shopGlow(pal, a) { return `radial-gradient(circle at 50% 46%, ${pal.stage} 42%, ${shopTint(a, pal.dark ? 0.55 : 0.38)} 100%)`; }
 const SHOP_ON_BAND = { ink3: 'rgba(255,255,255,0.72)' };
 function shopDayNo() { return Math.floor(Date.now() / 86400000); }
 function shopSeeded(seed) {
@@ -1092,10 +1088,6 @@ const SHOP_WHERE = { set: 'Your profile, chats and Vibes', frame: 'Around your p
 const SHOP_SUBS = { set: 'Frame, nameplate and profile effect', frame: 'Around your photo everywhere', nameplate: 'Behind your name on your profile', effect: 'Plays when someone opens your profile', bubble: 'Shows on every message you send', namestyle: 'Your name, drawn your way', theme: 'A moving scene behind your profile', reaction: 'Big reactions that play over the chat', charm: 'Sits next to your name everywhere', stickerpack: 'Animated stickers, yours to keep', soundpack: 'Message tones and ringtones', typing: 'What friends see while you type', wallpaper: 'Moving backgrounds for your chats', gamekit: 'Boards, pieces and tables for your games' };
 const SHOP_BUY_REASONS = ['shop', 'deal', 'drop', 'gift_item', 'refund'];
 
-function shopPal(theme) {
-  if (theme.dark) return { dark: true, bg: '#0B1430', stage: '#16234C', stage2: '#20306A', field: '#142046', line: 'rgba(160,185,255,0.12)', border: 'rgba(160,185,255,0.2)', ink: '#FFFFFF', ink2: '#AFBEE6', ink3: '#7385B8', link: '#FFD54A', accent: '#2FBF64', accentSoft: 'rgba(47,191,100,0.2)', sheet: '#111B3F', danger: theme.danger, edge: '#070D22', gold: '#FFC83A', goldEdge: '#C98A00', sky: ['#13286B', '#0B1430'] };
-  return { dark: false, bg: '#EAF6FF', stage: '#FFFFFF', stage2: '#DCEEFF', field: '#FFFFFF', line: 'rgba(20,60,120,0.1)', border: 'rgba(20,60,120,0.16)', ink: '#10233F', ink2: '#4D6585', ink3: '#8DA0BC', link: '#D97000', accent: '#2FBF64', accentSoft: 'rgba(47,191,100,0.14)', sheet: '#FFFFFF', danger: theme.danger, edge: '#B9D3EE', gold: '#FFC83A', goldEdge: '#D49200', sky: ['#4FB8FF', '#BFE7FF'] };
-}
 function shopKindLabel(kind) {
   return { set: 'Set', frame: 'Frame', nameplate: 'Nameplate', effect: 'Profile effect', bubble: 'Chat bubble', charm: 'Charm', namestyle: 'Name style', theme: 'Profile theme', reaction: 'Super reaction', wallpaper: 'Live wallpaper', stickerpack: 'Sticker pack', soundpack: 'Sound pack', typing: 'Typing style', gamekit: 'Game style', drop: 'Limited drop' }[kind] || 'Item';
 }
@@ -1167,17 +1159,6 @@ function shopDealFor(deal, c, kind, k) {
   if (kind !== 'set') return deal.price;
   const o = c.dec(k);
   return o.any ? Math.max(1, Math.ceil((deal.price * (3 - o.count)) / 3)) : deal.price;
-}
-let shopCssOn2 = false;
-function shopCss2() {
-  if (shopCssOn2 || typeof document === 'undefined') return;
-  shopCssOn2 = true;
-  try {
-    const el = document.createElement('style');
-    el.setAttribute('data-zshop2', '1');
-    el.textContent = '@keyframes zshop-spin { 0%, 70% { transform: rotateY(0deg); } 85% { transform: rotateY(180deg); } 100% { transform: rotateY(360deg); } }\n.zshop-spin { animation: zshop-spin 3.2s ease-in-out infinite; }\n@keyframes zshop-drift { from { transform: translateX(-8px); } to { transform: translateX(8px); } }\n.zshop-cloud { animation: zshop-drift 6s ease-in-out infinite alternate; }\n.zshop-row::-webkit-scrollbar, .zshop-chips::-webkit-scrollbar { display: none; }\n.zshop-input::placeholder { color: inherit; opacity: 0.6; }\n@media (min-width: 1180px) and (min-height: 480px) { .zchat-shop-wide.zchat-wide-page { left: calc(50% - 540px) !important; right: calc(50% - 540px) !important; } }';
-    document.head.appendChild(el);
-  } catch {}
 }
 function ShopCoins({ price, was, size = 14, pal, weight = 700, color }) {
   return (
@@ -1381,31 +1362,6 @@ function ShopHeartGlyph({ on, size = 20, pal }) {
     </svg>
   );
 }
-function ShopSky({ pal }) {
-  const still = reducedMotion();
-  const cloud = (x, y, sc, o, d) => (
-    <g key={`${x}${y}`} transform={`translate(${x} ${y}) scale(${sc})`} opacity={o}>
-      <g className={still ? undefined : 'zshop-cloud'} style={{ animationDelay: `${d}s` }}>
-        <path d="M12 30c-7 0-12-4.5-12-10s5-9.5 11-9.5c1.6-6 7-10.5 14-10.5 7.6 0 13.6 5.2 14.6 12 5.4.4 9.4 4 9.4 8.6 0 5-4.4 9.4-10.2 9.4z" fill={pal.dark ? '#2A3F86' : '#FFFFFF'} />
-      </g>
-    </g>
-  );
-  return (
-    <div aria-hidden="true" style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', background: `linear-gradient(180deg, ${pal.sky[0]} 0%, ${pal.sky[1]} 100%)` }}>
-      <svg width="100%" height="100%" preserveAspectRatio="xMidYMin slice" viewBox="0 0 390 230" style={{ position: 'absolute', inset: 0 }}>
-        {pal.dark && [[30, 22, 1.2], [92, 48, 0.9], [150, 16, 1.1], [210, 60, 0.8], [262, 30, 1.3], [330, 54, 0.9], [366, 18, 1], [56, 90, 0.8], [300, 96, 0.7]].map(([x, y, r]) => <circle key={`${x}`} cx={x} cy={y} r={r} fill="#FFFFFF" opacity="0.75" />)}
-        {pal.dark ? <g><circle cx="318" cy="34" r="15" fill="#FFF3C4" /><circle cx="324" cy="29" r="13" fill={pal.sky[0]} /></g> : <g><circle cx="322" cy="30" r="22" fill="#FFE37A" opacity="0.35" /><circle cx="322" cy="30" r="15" fill="#FFE27A" /></g>}
-        {cloud(18, 54, 0.9, pal.dark ? 0.55 : 0.95, 0)}
-        {cloud(232, 76, 0.7, pal.dark ? 0.45 : 0.85, 1.5)}
-        {cloud(120, 6, 0.55, pal.dark ? 0.4 : 0.8, 3)}
-      </svg>
-      <svg width="100%" height="46" viewBox="0 0 390 46" preserveAspectRatio="none" style={{ position: 'absolute', left: 0, right: 0, bottom: 0 }}>
-        <path d="M0 46V22c40-24 78-30 118-14 34 14 62 12 92-6 36-22 82-22 122 2 22 13 40 18 58 16v26z" fill={pal.dark ? '#13305A' : '#8BDB76'} />
-        <path d="M0 46V32c50-16 96-14 140 0 46 14 92 12 138-4 40-14 78-12 112 4v14z" fill={pal.dark ? '#0F2547' : '#62C653'} />
-      </svg>
-    </div>
-  );
-}
 function ShopAwning({ pal }) {
   const n = 13;
   const a = pal.dark ? '#D9443A' : '#F05A4A';
@@ -1420,14 +1376,6 @@ function ShopAwning({ pal }) {
 }
 function ShopIconBtn({ label, onClick, pal, children, size = 40, soft = true, pressed }) {
   return <div role="button" aria-label={label} aria-pressed={pressed} onClick={onClick} className="zchat-press" style={{ width: size, height: size, borderRadius: size / 2, background: soft ? pal.stage : 'transparent', color: pal.ink, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>{children}</div>;
-}
-function ShopCoinPill({ coins, onOpenWallet, pal }) {
-  return (
-    <div role="button" aria-label={`${formatCount(coins)} coins, open your coins`} onClick={onOpenWallet} className="zchat-press"
-      style={{ display: 'flex', alignItems: 'center', gap: 6, height: 34, padding: '0 13px 0 7px', borderRadius: 17, background: `linear-gradient(180deg, #FFE27A, ${pal.gold})`, color: '#3B2500', fontSize: 15, fontWeight: 900, cursor: 'pointer', flexShrink: 0, fontVariantNumeric: 'tabular-nums', boxShadow: `0 3px 0 ${pal.goldEdge}`, marginBottom: 3 }}>
-      <span className={reducedMotion() ? undefined : 'zshop-spin'} style={{ display: 'flex' }}><CoinIcon size={20} /></span>{formatCount(coins)}
-    </div>
-  );
 }
 function ShopToast({ text, pal, top = 'calc(64px + env(safe-area-inset-top))' }) {
   if (!text) return null;
@@ -1671,12 +1619,6 @@ function ShopPair({ set, me, rewards, wallet, pal, onPick, onWear, onRefresh, fl
       )}
     </div>
   );
-}
-function shopBtn(pal, tone = 'primary', h = 50) {
-  const bg = tone === 'primary' ? `linear-gradient(180deg, #4BDB7E, ${pal.accent})` : tone === 'ink' ? pal.ink : pal.stage;
-  const fg = tone === 'primary' ? '#FFFFFF' : tone === 'ink' ? pal.bg : pal.ink;
-  const edge = tone === 'primary' ? '#1E8E49' : tone === 'ink' ? 'rgba(0,0,0,0.35)' : pal.edge;
-  return { height: h, borderRadius: 16, border: 'none', fontFamily: FONT, fontWeight: 800, fontSize: h >= 48 ? 16.5 : 15, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '0 20px', width: '100%', boxSizing: 'border-box', background: bg, color: fg, whiteSpace: 'nowrap', boxShadow: `0 4px 0 ${edge}`, textShadow: tone === 'primary' ? '0 1px 1px rgba(0,0,0,0.25)' : 'none', marginBottom: 4 };
 }
 function ShopBuySheet({ pal, me, artKind, artKey, drop, name, kindWord, price, was, coins, free, stage, error, canEquip, doneText, coinsInstead, onConfirm, onClose, onCoins, onEquip }) {
   const busy = stage === 'busy';

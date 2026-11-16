@@ -1,9 +1,13 @@
 import { makeSim } from '../../src/games/zsim.js';
+import { makeBoltHost, BOLT_REV } from '../../src/games/siegehost.js';
 
 export const CAP = { siege: 20, race: 12, roll: 8, gulp: 12, duo: 2, zombie: 5 };
 export const REGIONS = { asia: 'apac', usa: 'enam', eu: 'weur' };
 const TICK = 1 / 15;
 export const SIM_REV = 58;
+export { BOLT_REV };
+const BOLT_TICK = 1 / 30;
+const BOLT_HOST_ONLY = new Set(['cfg', 'start', 'menu']);
 
 export function parseName(name) {
   const [kind, game, ...rest] = String(name || '').split(':');
@@ -17,7 +21,10 @@ export class RoomCore {
     const p = parseName(name);
     this.game = p.game;
     this.zombie = p.kind === 'z';
-    this.cap = CAP[this.game] || 20;
+    this.bolt = p.kind === 'b';
+    this.cap = this.bolt ? 12 : CAP[this.game] || 20;
+    this.host = null;
+    this.boltPub = this.bolt && /^[0-9]+$/.test(String(p.rest.split(':')[1] || ''));
     this.sim = null;
     this.loop = null;
     this.snapT = 0;
@@ -40,7 +47,14 @@ export class RoomCore {
     for (const o of this.conns()) if (o.id === c.id && o.ws !== c.ws) { try { this.io.close(o.ws, 4001, 'replaced'); } catch {} }
     const live = this.conns().filter((o) => o.ws !== c.ws && o.id !== c.id);
     if (live.length >= this.cap) { this.sendTo(c, { t: '$full', cap: this.cap }); try { this.io.close(c.ws, 4002, 'full'); } catch {} return false; }
-    if (this.zombie) {
+    if (this.bolt) {
+      this.ensureBolt();
+      this.host.join(c.id, c.m || {});
+      this.sendTo(c, { t: '$hi', me: c.id, at: Date.now(), room: this.name, cap: this.cap, peers: live.map((o) => [o.id, o.m || {}]), srv: 1, rev: BOLT_REV });
+      this.broadcast({ t: '$join', id: c.id, m: c.m || {} }, c.id);
+      this.flushBolt();
+      this.startBoltLoop();
+    } else if (this.zombie) {
       this.ensureSim();
       this.idleAt = 0;
       this.sim.addPlayer(c.id, { n: c.m && c.m.n, sv: c.m && c.m.sv, col: c.m && c.m.col, w: c.m && c.m.w, pet: c.m && c.m.pet, cash: c.m && c.m.cash });
@@ -58,7 +72,11 @@ export class RoomCore {
   close(c) {
     const still = this.conns().some((o) => o.id === c.id && o.ws !== c.ws);
     if (still) return;
-    if (this.zombie && this.sim) {
+    if (this.bolt && this.host) {
+      this.host.leave(c.id);
+      this.broadcast({ t: '$leave', id: c.id }, c.id);
+      this.flushBolt();
+    } else if (this.zombie && this.sim) {
       if (this.sim.awayPlayer) { this.sim.awayPlayer(c.id); if (this.io.away) this.io.away(c.id, this.name, true); }
       else this.sim.removePlayer(c.id);
     } else this.broadcast({ t: '$leave', id: c.id }, c.id);
@@ -92,9 +110,21 @@ export class RoomCore {
       this.io.save(c);
       if (this.zombie && this.sim) this.sim.addPlayer(c.id, c.m);
       else this.broadcast({ t: '$meta', id: c.id, m: c.m }, c.id);
+      if (this.bolt && this.host) { this.host.meta(c.id, c.m); this.flushBolt(); }
       return;
     }
     if (t[0] === '$') return;
+    if (this.bolt) {
+      if (!this.host) this.ensureBolt();
+      if (!BOLT_HOST_ONLY.has(t)) {
+        const out = JSON.stringify({ ...m, from: c.id, at: Date.now() });
+        if (typeof m.to === 'string') { for (const o of this.conns()) if (o.id === m.to) this.sendTo(o, out); }
+        else for (const o of this.conns()) if (o.id !== c.id) this.sendTo(o, out);
+      }
+      try { this.host.msg(c.id, { ...m, at: typeof m.at === 'number' ? m.at : Date.now() }); } catch {}
+      this.flushBolt();
+      return;
+    }
     if (this.zombie) {
       const S = this.sim;
       if (!S) return;
@@ -107,6 +137,40 @@ export class RoomCore {
     const out = JSON.stringify({ ...m, from: c.id, at: Date.now() });
     if (typeof m.to === 'string') { for (const o of this.conns()) if (o.id === m.to) this.sendTo(o, out); return; }
     for (const o of this.conns()) if (o.id !== c.id) this.sendTo(o, out);
+  }
+
+  ensureBolt() {
+    if (this.host) return;
+    this.host = makeBoltHost({ pub: this.boltPub });
+    for (const c of this.conns()) this.host.join(c.id, c.m || {});
+  }
+
+  flushBolt() {
+    if (!this.host) return;
+    const list = this.host.take();
+    if (!list.length) return;
+    const conns = this.conns();
+    for (const [to, msg] of list) {
+      const s = JSON.stringify(msg);
+      if (s.length > 60000) continue;
+      if (to) { for (const c of conns) if (c.id === to) this.sendTo(c, s); }
+      else for (const c of conns) this.sendTo(c, s);
+    }
+  }
+
+  startBoltLoop() {
+    if (this.loop) return;
+    let last = Date.now();
+    this.loop = setInterval(() => {
+      const now = Date.now();
+      let dt = (now - last) / 1000;
+      last = now;
+      if (dt > 0.2) dt = 0.2;
+      if (!this.conns().length) { this.stopLoop(); this.host = null; this.touch(); return; }
+      try { this.host.tick(dt); this.flushBolt(); } catch {}
+      this.boltReportT = (this.boltReportT || 0) - dt;
+      if (this.boltReportT <= 0) { this.boltReportT = 5; this.touch(); }
+    }, Math.round(BOLT_TICK * 1000));
   }
 
   ensureSim() {
@@ -157,6 +221,17 @@ export class RoomCore {
 
   touch(skip) {
     if (!this.io.report) return;
+    if (this.bolt) {
+      if (!this.boltPub) return;
+      const n = this.count(skip);
+      const inf = this.host && n > 0 ? this.host.info() : { gm: '', map: '', ph: 'lobby', left: 0 };
+      const now = Date.now();
+      const k = `${n}:${inf.gm}:${inf.map}:${inf.ph}`;
+      if (this.report && this.report.k === k && now - this.report.at < 20000) return;
+      this.report = { k, at: now, n };
+      this.io.report({ id: this.name, n, cap: this.cap, g: inf.gm, m: inf.map, ph: inf.ph, l: inf.left | 0 });
+      return;
+    }
     const n = this.count(skip);
     const w = this.sim ? this.sim.wave : 0;
     let h = '';

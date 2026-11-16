@@ -2584,6 +2584,145 @@ THEMES.fort = {
   env: { sunDir: [-0.5, 0.74, -0.42], sunCol: [1.62, 1.48, 1.26], skyCol: [0.44, 0.5, 0.6], gndCol: [0.2, 0.22, 0.14], fog: '#B4C2CC', horizon: '#DCE5EA', zenith: '#7FA6CF', fogDen: 0.0032, exposure: 0.95, shadowRange: 30, cloud: [1, 0.98, 0.94], clouds: 0.45 },
 };
 
+const GV = { grass: hx('#56623E'), grassD: hx('#3E482E'), grassL: hx('#6F7A4D'), dirt: hx('#6E5641'), dirtD: hx('#4E3D2F'), stone: hx('#7D8088') };
+function graveGround(F, x, z, k) {
+  const A = F && F.A;
+  const ch = A ? underAt(A, Math.floor(x / TILE), Math.floor(z / TILE)) : 46;
+  const nA = fbm(x * 0.06, z * 0.06, 51, 3), nB = vn(x * 0.9, z * 0.9, 57), nC = fbm(x * 0.13, z * 0.13, 11, 3);
+  let g = lc(GV.grassD, GV.grass, sat(nA * 1.5 - 0.2));
+  g = lc(g, GV.grassL, ss(0.64, 0.88, nB) * 0.3);
+  g = lc(g, lc(GV.dirtD, GV.dirt, nB), ch === 103 ? 0.82 : ss(0.62, 0.74, nC) * 0.7);
+  return k != null ? mc(g, 0.74 + 0.26 * ss(0.05, 1.3, F.solid[k])) : g;
+}
+const GRAVE_PATHS = ['ud_path_A', 'ud_path_B', 'ud_path_C', 'ud_path_D'];
+function gravePlaza(ctx) {
+  const { A, K, kit } = ctx;
+  const has = (k) => kit && kit[k];
+  for (let r = 0; r < A.H; r++) for (let c = 0; c < A.W; c++) {
+    const ch = underAt(A, c, r);
+    if (ch !== 45 && ch !== 61 && ch !== 66 && ch !== 112) continue;
+    const x = (c + 0.5) * TILE, z = (r + 0.5) * TILE, hh = hsh(c, r, 23);
+    const k = GRAVE_PATHS[Math.floor(hh * 4) % 4];
+    if (has(k)) kitPut(K.m('deco', x, z), kit[k], x, -0.07, z, Math.floor(hh * 16) * 1.5708, 1.05, MAT.stone, ch === 112 ? 0.8 : ch === 66 ? 0.98 : 0.9);
+    if (ch === 66) trimRect(K, A, c, r, 66, TRIM);
+  }
+  graveWalls(ctx);
+  const R = rng(5519);
+  for (const g of decoGroups(A)) graveGroup(ctx, g, R);
+}
+function graveWalls(ctx) {
+  const { A, K, kit } = ctx;
+  const isW = (c, r) => { if (c < 0 || r < 0 || c >= A.W || r >= A.H) return false; const v = A.deco[r * A.W + c]; return v === 35 || v === 87; };
+  const kind = new Uint8Array(A.W * A.H);
+  for (let r = 0; r < A.H; r++) for (let c = 0; c < A.W; c++) {
+    if (!isW(c, r)) continue;
+    const L = isW(c - 1, r), Rt = isW(c + 1, r), U = isW(c, r - 1), D = isW(c, r + 1);
+    const edgeR = r === 0 || r === A.H - 1, edgeC = c === 0 || c === A.W - 1;
+    let k;
+    if (edgeR && edgeC) k = 3;
+    else if (edgeR) k = U || D ? 3 : 1;
+    else if (edgeC) k = L || Rt ? 3 : 2;
+    else if ((L || Rt) && !(U || D)) k = L && Rt ? 1 : 3;
+    else if ((U || D) && !(L || Rt)) k = U && D ? 2 : 3;
+    else k = 3;
+    kind[r * A.W + c] = k;
+  }
+  const has = (k) => kit && kit[k];
+  const edgeOf = (c, r) => c === 0 || r === 0 || c === A.W - 1 || r === A.H - 1;
+  const piece = (c, r, n, vert) => {
+    const x = vert ? (c + 0.5) * TILE : (c + n / 2) * TILE, z = vert ? (r + n / 2) * TILE : (r + 0.5) * TILE;
+    const m = K.m('props', x, z), h = hsh(c, r, 7), edge = edgeOf(c, r);
+    const k = edge && h > 0.82 && has('ud_fence_broken') ? 'ud_fence_broken' : 'ud_fence';
+    if (has(k)) kitPut3(m, kit[k], x, 0, z, vert ? Math.PI / 2 : 0, n / 2, edge ? 0.92 : 0.82, 1.5, MAT.stone, 0.9 + h * 0.1);
+    else boxS(m, x - (vert ? 0.5 : n), 0, z - (vert ? n : 0.5), x + (vert ? 0.5 : n), 1.6, z + (vert ? n : 0.5), GV.stone, MAT.stone);
+  };
+  for (let r = 0; r < A.H; r++) for (let c = 0; c < A.W;) {
+    if (kind[r * A.W + c] !== 1) { c++; continue; }
+    let n = 0; while (c + n < A.W && kind[r * A.W + c + n] === 1) n++;
+    let i = 0; for (; i + 1 < n; i += 2) piece(c + i, r, 2, false); if (i < n) piece(c + i, r, 1, false);
+    c += n;
+  }
+  for (let c = 0; c < A.W; c++) for (let r = 0; r < A.H;) {
+    if (kind[r * A.W + c] !== 2) { r++; continue; }
+    let n = 0; while (r + n < A.H && kind[(r + n) * A.W + c] === 2) n++;
+    let i = 0; for (; i + 1 < n; i += 2) piece(c, r + i, 2, true); if (i < n) piece(c, r + i, 1, true);
+    r += n;
+  }
+  for (let r = 0; r < A.H; r++) for (let c = 0; c < A.W; c++) {
+    if (kind[r * A.W + c] !== 3) continue;
+    const x = (c + 0.5) * TILE, z = (r + 0.5) * TILE, m = K.m('props', x, z), edge = edgeOf(c, r);
+    if (has('ud_fence_pillar')) kitPut3(m, kit.ud_fence_pillar, x, 0, z, 0, 2.2, edge ? 1.05 : 0.95, 2.2, MAT.stone, 0.88 + hsh(c, r, 5) * 0.1);
+    else boxS(m, x - 0.6, 0, z - 0.6, x + 0.6, 2.2, z + 0.6, GV.stone, MAT.stone);
+    if (has('ud_lantern_standing') && hsh(c, r, 13) > 0.45) kitPut(m, kit.ud_lantern_standing, x, edge ? 2.31 : 2.09, z, hsh(c, r, 17) * 6.283, 0.8, MAT.paint);
+  }
+}
+function graveGroup(ctx, g, R) {
+  const { A, K, kit } = ctx;
+  if (g.ch === '#' || g.ch === 'W' || g.ch === 'g' || g.ch === '-') return;
+  const m = K.m('props', g.x, g.z);
+  const has = (k) => kit && kit[k];
+  if (!kit) { for (const [c, r] of g.cells) boxS(m, c * TILE + 0.15, 0, r * TILE + 0.15, (c + 1) * TILE - 0.15, g.ch === 'f' ? 0.9 : g.ch === 'H' ? 5 : 1.6, (r + 1) * TILE - 0.15, g.ch === 'T' ? hx('#5A4636') : GV.stone, MAT.stone); return; }
+  const left = g.x < A.wx / 2;
+  if (g.ch === 'H') {
+    const w = (g.c1 - g.c0 + 1) * TILE, d = (g.r1 - g.r0 + 1) * TILE, rot = w > d;
+    const yaw = rot ? (left ? -Math.PI / 2 : Math.PI / 2) : (g.z < A.wz / 2 ? 0 : Math.PI);
+    if (has('ud_crypt')) kitPut3(m, kit.ud_crypt, g.x, 0, g.z, yaw, (rot ? d : w) / 6, 0.82, (rot ? w : d) / 8, MAT.stone, 0.95);
+    if (has('ud_lantern_standing')) for (const s of [-1, 1]) { const ox = rot ? (left ? 1 : -1) * (w / 2 + 0.25) : s * (w / 2 - 0.6), oz = rot ? s * (d / 2 - 0.6) : (g.z < A.wz / 2 ? 1 : -1) * (d / 2 + 0.25); kitPut(m, kit.ud_lantern_standing, g.x + ox, 0, g.z + oz, 0, 0.9, MAT.paint); }
+    return;
+  }
+  for (const [c, r] of g.cells) {
+    const x = (c + 0.5) * TILE, z = (r + 0.5) * TILE, hh = hsh(c, r, 91), wob = (R() - 0.5) * 0.25;
+    if (g.ch === 'f') {
+      const k = hh > 0.78 ? 'ud_grave_A_destroyed' : hh > 0.52 ? 'ud_grave_B' : hh > 0.26 ? 'ud_grave_A' : 'ud_gravestone';
+      const yaw = (left ? Math.PI / 2 : -Math.PI / 2) + wob;
+      if (has(k)) kitPut(m, kit[k], x, 0, z, yaw, k === 'ud_gravestone' ? 0.95 : 0.8, MAT.stone, 0.9 + hh * 0.1);
+      if (has('ud_candle_triple') && hh > 0.62) kitPut(m, kit.ud_candle_triple, x + (left ? 0.75 : -0.75), 0, z + 0.45, R() * 6.283, 0.7, MAT.paint);
+    } else if (g.ch === 'T') {
+      const k = hh > 0.7 && has('ud_tree_dead_large_decorated') ? 'ud_tree_dead_large_decorated' : hh > 0.35 ? 'ud_tree_dead_large' : 'ud_tree_dead_medium';
+      if (has(k)) kitPut(m, kit[k], x, -0.24, z, R() * 6.283, 0.9, MAT.matte);
+      if (has('ud_bone_A') && hh < 0.5) kitPut(m, kit.ud_bone_A, x + 0.6, 0, z - 0.5, R() * 6.283, 0.7, MAT.matte);
+    } else if (g.ch === 'P') {
+      if (hh > 0.45 && has('ud_shrine_candles')) kitPut(m, kit.ud_shrine_candles, x, 0, z, (left ? Math.PI / 2 : -Math.PI / 2), 1.05, MAT.stone);
+      else if (has('ud_post_skull')) kitPut(m, kit.ud_post_skull, x, 0, z, Math.floor(hh * 4) * 1.5708, 0.85, MAT.matte);
+    } else if (g.ch === 'k') {
+      const k = hh > 0.4 && has('ud_coffin_decorated') ? 'ud_coffin_decorated' : 'ud_coffin';
+      if (has(k)) kitPut(m, kit[k], x, 0, z, Math.floor(hh * 4) * 1.5708 + wob * 0.3, 0.62, MAT.matte);
+    } else if (g.ch === 'd') {
+      const k = hh > 0.5 ? 'ud_pumpkin_orange_jackolantern' : 'ud_pumpkin_yellow_jackolantern';
+      if (has(k)) kitPut(m, kit[k], x - 0.2, 0, z - 0.1, (left ? Math.PI / 2 : -Math.PI / 2) + wob, 0.9, MAT.paint);
+      if (has('ud_pumpkin_yellow_small')) kitPut(m, kit.ud_pumpkin_yellow_small, x + 0.55, 0, z + 0.5, R() * 6.283, 0.7, MAT.paint);
+    }
+  }
+}
+function graveOuter(ctx) {
+  const { A, K, kit } = ctx;
+  if (!kit) return;
+  const R = rng(6151);
+  const spots = [];
+  const TREES = ['ud_tree_pine_orange_large', 'ud_tree_pine_yellow_large', 'ud_tree_pine_orange_medium', 'ud_tree_pine_yellow_medium', 'ud_tree_dead_large', 'ud_tree_dead_medium'];
+  for (let n = 0; n < 90 && spots.length < 34; n++) {
+    const sideK = Math.floor(R() * 4), along = 0.04 + R() * 0.92, out = 3.5 + R() * 11;
+    let x, z;
+    if (sideK === 0) { x = along * A.wx; z = -out; } else if (sideK === 1) { x = along * A.wx; z = A.wz + out + 2; } else if (sideK === 2) { x = -out; z = along * A.wz; } else { x = A.wx + out; z = along * A.wz; }
+    if (spots.some((p) => Math.hypot(p[0] - x, p[1] - z) < 4.2)) continue;
+    spots.push([x, z]);
+    const roll = R(), m = K.m('outer', x, z), a = R() * 6.283;
+    if (roll < 0.55) { const k = TREES[Math.floor(R() * TREES.length) % TREES.length]; if (kit[k]) kitPut(m, kit[k], x, k.includes('pine') ? -0.45 : -0.24, z, a, k.includes('pine') ? 0.95 + R() * 0.3 : 1.0, MAT.matte); }
+    else if (roll < 0.75) { const k = R() > 0.5 ? 'ud_grave_A' : 'ud_grave_B'; if (kit[k]) { kitPut(m, kit[k], x, 0, z, a, 0.85, MAT.stone, 0.85); if (kit.ud_gravemarker_A) kitPut(m, kit.ud_gravemarker_A, x + 1.6, 0, z + 0.4, a, 0.9, MAT.matte); } }
+    else if (roll < 0.86 && kit.ud_post_lantern) kitPut(m, kit.ud_post_lantern, x, 0, z, a, 0.9, MAT.matte);
+    else if (roll < 0.94 && kit.ud_pumpkin_orange) { kitPut(m, kit.ud_pumpkin_orange, x, 0, z, a, 1.0, MAT.paint); if (kit.ud_pumpkin_yellow_small) kitPut(m, kit.ud_pumpkin_yellow_small, x + 1, 0, z + 0.6, a, 0.8, MAT.paint); }
+    else if (kit.ud_arch) kitPut(m, kit.ud_arch, x, 0, z, Math.round(a / 1.5708) * 1.5708, 0.85, MAT.stone, 0.9);
+  }
+}
+THEMES.grave = {
+  ground: graveGround, groundMat: MAT.soil, groundS: 1, solidWater: true,
+  outerGround: (x, z) => mc(graveGround(null, x, z, null), 0.9),
+  outerH: (x, z, d) => ss(9, 24, d) * (1.0 + 2.6 * fbm(x * 0.05, z * 0.05, 29, 3)),
+  plazaFn: gravePlaza,
+  wall: () => {}, bush: () => {}, water: () => {}, crates: () => {}, clutter: () => {}, pad: () => {}, home: () => {}, outer: graveOuter,
+  env: { sunDir: [-0.55, 0.6, -0.45], sunCol: [1.8, 1.32, 1.02], skyCol: [0.4, 0.34, 0.5], gndCol: [0.16, 0.14, 0.14], fog: '#7A6080', horizon: '#E79A72', zenith: '#4A4985', fogDen: 0.004, exposure: 1.0, shadowRange: 30, cloud: [1, 0.86, 0.82], clouds: 0.55 },
+};
+
 function crateGroups(A) {
   const seen = new Uint8Array(A.W * A.H), out = [];
   for (let i = 0; i < A.W * A.H; i++) {

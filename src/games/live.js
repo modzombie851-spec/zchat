@@ -60,6 +60,34 @@ export function useGamePrivacy() {
 export const watchAllowed = () => { const p = readPriv(); return p.watch; };
 export const setWatchAllowed = (v) => { setGamePrivacy(v ? { watch: true, show: true } : { watch: false }); };
 
+const liveSubs = new Set();
+export const liveStore = { map: new Map(), at: 0 };
+export function liveStorePut(map) {
+  liveStore.map = map instanceof Map ? new Map(map) : new Map();
+  liveStore.at = Date.now();
+  liveSubs.forEach((fn) => { try { fn(liveStore.map); } catch {} });
+}
+export function useLiveStore() {
+  const [m, setM] = useState(() => liveStore.map);
+  useEffect(() => { liveSubs.add(setM); setM(liveStore.map); return () => { liveSubs.delete(setM); }; }, []);
+  return m;
+}
+export const myRooms = new Map();
+export function roomAlive(row, st, myId) {
+  if (!st) return false;
+  if (st.x === myId) return myRooms.has(String(st.rm || st.id));
+  if (!row) return !liveStore.at || Date.now() - liveStore.at > 120000 ? null : false;
+  return row.game === st.g || (st.g === 'gulpco' && row.game === 'gulp') ? String(row.room) === String(st.rm || st.id) : false;
+}
+function clearNow() {
+  try {
+    const url = supabase.supabaseUrl || supabase.restUrl || '';
+    const key = supabase.supabaseKey || '';
+    const tk = clearNow.tk;
+    if (!url || !key || !tk || typeof fetch === 'undefined') return;
+    fetch(`${String(url).replace(/\/+$/, '')}/rest/v1/rpc/zchat_live_clear`, { method: 'POST', keepalive: true, headers: { apikey: key, Authorization: `Bearer ${tk}`, 'Content-Type': 'application/json' }, body: '{}' }).catch(() => {});
+  } catch {}
+}
 export function useLiveBeacon({ game, room, info, active, allow }) {
   const P = useGamePrivacy();
   const infoRef = useRef(info);
@@ -69,11 +97,21 @@ export function useLiveBeacon({ game, room, info, active, allow }) {
   const key = JSON.stringify(full);
   const sent = useRef('');
   useEffect(() => {
+    if (!active || !room) return undefined;
+    const k = String(room);
+    myRooms.set(k, game);
+    liveStorePut(liveStore.map);
+    return () => { myRooms.delete(k); liveStorePut(liveStore.map); };
+  }, [active, room, game]);
+  useEffect(() => {
     if (!on) return undefined;
     const push = () => { sent.current = JSON.stringify(infoRef.current || {}); call('zchat_live_set', { p_game: game, p_room: room, p_watch: true, p_info: infoRef.current || {} }); };
     push();
-    const iv = setInterval(push, 60000);
-    return () => { clearInterval(iv); call('zchat_live_clear'); };
+    supabase.auth.getSession().then(({ data }) => { clearNow.tk = data && data.session ? data.session.access_token : null; }, () => {});
+    const iv = setInterval(push, 20000);
+    const gone = () => clearNow();
+    window.addEventListener('pagehide', gone);
+    return () => { clearInterval(iv); window.removeEventListener('pagehide', gone); call('zchat_live_clear'); };
   }, [on, room, game]);
   useEffect(() => {
     if (!on || key === sent.current) return undefined;

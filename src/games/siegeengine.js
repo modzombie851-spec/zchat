@@ -86,8 +86,32 @@ export const HEROES = {
     sup: { k: 'wave', n: 9, arc: 0.7, rng: 11, spd: 30, dmg: 520, w: 0.36, kb: 8, need: 3200, name: 'Volley', text: 'Fires a wide fan of bolts that pushes enemies back.' },
     gad: { k: 'mine', rad: 2.4, dmg: 1300, t: 14, name: 'Snare trap', text: 'A hidden trap that bites the first enemy to step on it.' },
   },
+  tusk: {
+    name: 'Tusk', role: 'Berserker', text: 'Swings a huge axe through crowds. Leaps in from far away.', hp: 5400, spd: 5.3, col: '#E8A33D', want: 2.6, stats: [5, 5, 1, 4],
+    atk: { k: 'smash', rng: 3.3, arc: 2.3, dmg: 1120, kb: 4, reload: 1.3, cd: 0.45 },
+    sup: { k: 'blink', rng: 8, rad: 2.6, dmg: 1650, w: 1.3, need: 3100, name: 'Wild leap', text: 'Leaps forward and chops everything on the way.' },
+    gad: { k: 'jet', len: 6.5, t: 0.5, dmg: 900, rad: 2.8, name: 'Axe drop', text: 'Jumps over walls and slams down where he lands.' },
+  },
+  bones: {
+    name: 'Bones', role: 'Guardian', text: 'A tough skeleton knight. Holds the line and keeps friends alive.', hp: 5900, spd: 5.0, col: '#D9C08A', want: 2.5, stats: [5, 3, 1, 3],
+    atk: { k: 'smash', rng: 2.9, arc: 1.4, dmg: 1000, kb: 5, reload: 1.25, cd: 0.45 },
+    sup: { k: 'bloom', rad: 6.5, heal: 1800, dmg: 600, kb: 6, need: 3000, name: 'Second wind', text: 'Heals and revives friends close to him.' },
+    gad: { k: 'charge', len: 6, t: 0.32, dmg: 600, kb: 9, name: 'Shield rush', text: 'Rushes forward behind his shield and knocks enemies aside.' },
+  },
+  hex: {
+    name: 'Hex', role: 'Dark mage', text: 'Throws cursed fire over walls. Calls down a storm of skulls.', hp: 3000, spd: 5.3, col: '#B04CFF', want: 8, stats: [2, 4, 4, 3],
+    atk: { k: 'lob', rng: 11.5, flight: 0.65, rad: 2.2, dmg: 900, reload: 1.5, cd: 0.45 },
+    sup: { k: 'barrage', rng: 12, n: 7, rad: 2.1, dmg: 880, flight: 0.75, need: 3500, name: 'Skull storm', text: 'A storm of burning skulls falls on one spot.' },
+    gad: { k: 'nova', rad: 4.4, dmg: 420, slow: 0.6, slowT: 3, name: 'Grave chill', text: 'A cold burst slows enemies around him.' },
+  },
+  rattle: {
+    name: 'Rattle', role: 'Skirmisher', text: 'Throws bone knives in a wide fan. Hard to pin down.', hp: 3200, spd: 5.8, col: '#3FD3BE', want: 5, stats: [3, 4, 3, 5],
+    atk: { k: 'spread', n: 4, arc: 0.4, rng: 8.4, spd: 30, dmg: 330, w: 0.3, reload: 1.15, cd: 0.36 },
+    sup: { k: 'wave', n: 11, arc: 1.0, rng: 10, spd: 28, dmg: 420, w: 0.34, kb: 8, need: 3000, name: 'Bone fan', text: 'Throws a huge fan of knives that pushes enemies back.' },
+    gad: { k: 'decoy', t: 4.5, name: 'Bone double', text: 'Leaves a fake Rattle behind that enemies chase.' },
+  },
 };
-export const HERO_KEYS = ['blaze', 'pip', 'boom', 'mira', 'rex', 'volt', 'kai', 'ivy', 'nyx', 'arlo', 'wren'];
+export const HERO_KEYS = ['blaze', 'pip', 'boom', 'mira', 'rex', 'volt', 'kai', 'ivy', 'nyx', 'arlo', 'wren', 'tusk', 'bones', 'hex', 'rattle'];
 export const MAX_LEVEL = 10;
 export const levelCost = (lv) => 80 * lv;
 export const levelMods = (lv) => { const L = clamp(lv | 0, 1, MAX_LEVEL); return { hp: 1 + 0.06 * (L - 1), dmg: 1 + 0.05 * (L - 1) }; };
@@ -115,6 +139,10 @@ export const CARDS = {
   nyx: { hero: 'nyx', name: 'Long shadow', text: 'Fade lasts longer and her blades hit harder', icon: 'dash', go: (m) => { m.fade = (m.fade || 1) * 1.35; m.dmg *= 1.06; }, max: 2 },
   arlo: { hero: 'arlo', name: 'Iron wall', text: 'His shield guards more and his bash stuns longer', icon: 'shield', go: (m) => { m.heal *= 1.3; m.stun *= 1.25; }, max: 2 },
   wren: { hero: 'wren', name: 'Sharp bolts', text: 'Bolts go through the first enemy', icon: 'bolt', go: (m) => { m.pierce += 1; }, max: 2 },
+  tusk: { hero: 'tusk', name: 'Heavy swings', text: 'His axe hits harder', icon: 'hammer', go: (m) => { m.dmg *= 1.1; }, max: 2 },
+  bones: { hero: 'bones', name: 'Old bones', text: 'Heals friends more and takes less damage', icon: 'shield', go: (m) => { m.heal *= 1.3; m.armor = Math.min(0.5, (m.armor || 0) + 0.05); }, max: 2 },
+  hex: { hero: 'hex', name: 'Hot curse', text: 'Bigger blasts', icon: 'bomb', go: (m) => { m.rad *= 1.22; }, max: 2 },
+  rattle: { hero: 'rattle', name: 'More knives', text: 'Two more knives each throw', icon: 'flame', go: (m) => { m.extra += 2; }, max: 2 },
   crit: { name: 'Lucky shot', text: 'Some shots hit twice as hard', icon: 'star', go: (m) => { m.crit = Math.min(0.36, (m.crit || 0) + 0.12); }, max: 3, can: (m) => (m.crit || 0) < 0.359 },
   chain: { name: 'Chain blast', text: 'Aliens you take down explode', icon: 'bomb', go: (m) => { m.chain = (m.chain || 0) + 1; }, max: 2 },
   rush: { name: 'Kill rush', text: 'Run faster for a moment after a takedown', icon: 'dash', go: (m) => { m.rush = (m.rush || 0) + 1; }, max: 2 },
@@ -483,7 +511,7 @@ export function hurtHero(W, h, d, src) {
   if (!h || h.st !== 0 || !(d > 0)) return 0;
   if (h.dashT > 0 || h.jump) { emit(W, { k: 'dodge', id: h.id, x: h.x, z: h.z }); return 0; }
   if (W.pvp && (h.spawnT || 0) > 0) return 0;
-  let dd = Math.round(d * (1 - (h.mods ? h.mods.armor : 0)) * (W.domeCut ? W.domeCut(W, h) : 1));
+  let dd = Math.round(d * (1 - (h.mods ? h.mods.armor : 0)) * (W.domeCut ? W.domeCut(W, h) : 1) * (h.buffs && h.buffs.guard > 0 ? 0.85 : 1));
   if (h.shield > 0) { const a = Math.min(h.shield, dd); h.shield -= a; dd -= a; emit(W, { k: 'shieldHit', id: h.id, x: h.x, z: h.z, d: a }); if (dd <= 0) return 0; }
   h.hp -= dd; h.regen = 0; h.flash = 0.12; h.lastBy = src; h.lastHurt = W.t;
   if (W.pvp && typeof src === 'string' && W.heroes[src]) (h.dmgBy || (h.dmgBy = {}))[src] = W.t;
@@ -567,7 +595,7 @@ function killRobot(W, b, by) {
     W.drops.push({ id: W.dropId++, k: kind, x: p.x, z: p.z, life: 14 });
   }
 }
-function bomberBlast(W, b, mul) {
+export function bomberBlast(W, b, mul) {
   b.blown = true;
   const R = ROBOTS.bomber;
   const d = R.dmg * b.dmgMul * mul;

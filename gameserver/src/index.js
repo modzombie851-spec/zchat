@@ -1,5 +1,5 @@
 import { DurableObject } from 'cloudflare:workers';
-import { RoomCore, REGIONS, CAP, parseName } from './core.js';
+import { RoomCore, REGIONS, CAP, parseName, BOLT_REV } from './core.js';
 
 const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, OPTIONS', 'Access-Control-Allow-Headers': 'content-type', 'Timing-Allow-Origin': '*', 'Cache-Control': 'no-store' };
 const json = (obj, status = 200) => new Response(JSON.stringify(obj), { status, headers: { ...CORS, 'content-type': 'application/json' } });
@@ -30,6 +30,10 @@ function roomName(u) {
     return { name: `z:zombie:${reg}:${n}`, reg };
   }
   if (!r) return null;
+  if (g === 'siege' && u.searchParams.get('sv') === '1') {
+    if (/^[0-9]{1,2}$/.test(r)) { const n = Math.max(1, Math.min(12, parseInt(r, 10) || 1)); return { name: `b:siege:${reg}:${n}`, reg }; }
+    return { name: `b:siege:${reg}:${r}`, reg };
+  }
   return { name: `r:${g}:${r}`, reg };
 }
 
@@ -37,14 +41,14 @@ export default {
   async fetch(request, env) {
     const u = new URL(request.url);
     if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
-    if (u.pathname === '/' || u.pathname === '/health') return json({ ok: true, name: 'zchat games' });
+    if (u.pathname === '/' || u.pathname === '/health') return json({ ok: true, name: 'zchat games', bolt: BOLT_REV });
     if (u.pathname === '/ping') {
       const reg = REGIONS[u.searchParams.get('reg')] ? u.searchParams.get('reg') : 'usa';
       const stub = env.PING.get(env.PING.idFromName(`ping:${reg}`), { locationHint: REGIONS[reg] });
       return stub.fetch('https://ping/');
     }
     if (u.pathname === '/rooms') {
-      const stub = env.LOBBY.get(env.LOBBY.idFromName('lobby:zombie'));
+      const stub = env.LOBBY.get(env.LOBBY.idFromName(u.searchParams.get('g') === 'siege' ? 'lobby:siege' : 'lobby:zombie'));
       return stub.fetch('https://lobby/list');
     }
     if (u.pathname === '/mine') {
@@ -87,7 +91,7 @@ export class Room extends DurableObject {
       send: (ws, s) => ws.send(s),
       close: (ws, code, why) => ws.close(code, why),
       save: (c) => { try { c.ws.serializeAttachment({ id: c.id, m: c.m, room: this.roomName }); } catch {} },
-      report: (r) => { if (!r.id.startsWith('z:')) return; try { const stub = this.env.LOBBY.get(this.env.LOBBY.idFromName('lobby:zombie')); this.ctx.waitUntil(stub.fetch('https://lobby/report', { method: 'POST', body: JSON.stringify(r) }).catch(() => {})); } catch {} },
+      report: (r) => { if (!r.id.startsWith('z:') && !r.id.startsWith('b:')) return; try { const stub = this.env.LOBBY.get(this.env.LOBBY.idFromName(r.id.startsWith('b:') ? 'lobby:siege' : 'lobby:zombie')); this.ctx.waitUntil(stub.fetch('https://lobby/report', { method: 'POST', body: JSON.stringify(r) }).catch(() => {})); } catch {} },
       away: (uid, room, on) => { if (!room || !room.startsWith('z:')) return; try { const stub = this.env.LOBBY.get(this.env.LOBBY.idFromName('lobby:zombie')); this.ctx.waitUntil(stub.fetch('https://lobby/away', { method: 'POST', body: JSON.stringify({ u: uid, room, on: !!on }) }).catch(() => {})); } catch {} },
     };
   }
@@ -147,7 +151,7 @@ export class Lobby extends DurableObject {
     if (u.pathname === '/report' && request.method === 'POST') {
       const r = await request.json().catch(() => null);
       if (r && typeof r.id === 'string') {
-        if (r.n > 0) this.rooms[r.id] = { n: r.n | 0, w: r.w | 0, cap: r.cap | 0, h: typeof r.h === 'string' ? r.h.slice(0, 16) : '', b: r.b === 0 ? 0 : 1, o: r.o ? 1 : 0, at: now };
+        if (r.n > 0) this.rooms[r.id] = { n: r.n | 0, w: r.w | 0, cap: r.cap | 0, h: typeof r.h === 'string' ? r.h.slice(0, 16) : '', b: r.b === 0 ? 0 : 1, o: r.o ? 1 : 0, g: typeof r.g === 'string' ? r.g.slice(0, 8) : '', m: typeof r.m === 'string' ? r.m.slice(0, 12) : '', ph: typeof r.ph === 'string' ? r.ph.slice(0, 8) : '', l: r.l | 0, at: now };
         else delete this.rooms[r.id];
         await this.ctx.storage.put('rooms', this.rooms);
       }
@@ -175,7 +179,7 @@ export class Lobby extends DurableObject {
       if (now - r.at > 90000) { delete this.rooms[id]; continue; }
       const p = parseName(id);
       const [reg, n] = p.rest.split(':');
-      if (/^[0-9]+$/.test(n || '')) { if (out[reg]) out[reg].push({ n: Number(n) || 1, p: r.n, w: r.w, cap: r.cap || 50, h: r.h || '' }); continue; }
+      if (/^[0-9]+$/.test(n || '')) { if (out[reg]) out[reg].push({ n: Number(n) || 1, p: r.n, w: r.w, cap: r.cap || 50, h: r.h || '', g: r.g || '', m: r.m || '', ph: r.ph || '', l: r.l | 0 }); continue; }
       if (/^[ox][a-z0-9]{6,12}$/.test(n || '') && out[reg]) open.push({ reg, r: n, p: r.n, w: r.w, cap: r.cap || 50, h: r.h || '', b: r.b === 0 ? 0 : 1 });
     }
     for (const k of Object.keys(out)) out[k].sort((a, b) => a.n - b.n);

@@ -247,6 +247,7 @@ export function useWatchChannel({ room, myId, enabled = true, role = 'player', m
 }
 
 const MESH_FAST = ['gp', 'gs', 'pl'];
+function voiceAll() { try { const v = Number(localStorage.getItem('zchat-voice-all')); return Number.isFinite(v) && localStorage.getItem('zchat-voice-all') != null ? Math.max(0, Math.min(1, v)) : 1; } catch { return 1; } }
 const meshSid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 const iceDone = (pc, ms) => new Promise((res) => {
   if (pc.iceGatheringState === 'complete') { res(); return; }
@@ -265,6 +266,7 @@ export function useMeshRoom({ id, myId, enabled = true, meta, fast, audio = fals
   const [mics, setMics] = useState({});
   const [muted, setMuted] = useState({});
   const [vols, setVols] = useState({});
+  const [vall, setVall] = useState(voiceAll);
   const [ready, setReady] = useState(false);
   const S = useRef(null);
   if (!S.current) S.current = { sid: meshSid(), conns: new Map(), metas: {}, pres: [], seen: new Map(), peers: [], ch: null, ok: false, subs: new Map(), track: null, muted: {}, cloudAt: new Map(), alive: false, ice: null, linkKey: '', needPlay: false, fast: new Set(fast || MESH_FAST) };
@@ -323,7 +325,7 @@ export function useMeshRoom({ id, myId, enabled = true, meta, fast, audio = fals
     c.audio.srcObject = stream;
     talkTap(p, stream);
     c.audio.muted = !!st.muted[p];
-    try { c.audio.volume = st.vols && st.vols[p] != null ? st.vols[p] : 1; } catch {}
+    try { c.audio.volume = (st.vols && st.vols[p] != null ? st.vols[p] : 1) * voiceAll(); } catch {}
     const r = c.audio.play();
     if (r && r.catch) r.catch(() => { st.needPlay = true; });
   };
@@ -568,9 +570,40 @@ export function useMeshRoom({ id, myId, enabled = true, meta, fast, audio = fals
     set.add(fn);
     return () => set.delete(fn);
   }, []);
+  const grabMic = async () => {
+    const st = S.current;
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+    const t = stream.getAudioTracks()[0];
+    if (!st.alive || !st.wantMic) { try { t.stop(); } catch {} return false; }
+    const old = st.track;
+    st.track = t;
+    t.onended = () => { if (S.current.wantMic && S.current.track === t) setTimeout(() => { healMic(); }, 400); };
+    talkTap(myId, stream);
+    for (const c of st.conns.values()) if (c.tr && !c.dead) { try { await c.tr.sender.replaceTrack(t); } catch {} }
+    if (old && old !== t) { try { old.stop(); } catch {} }
+    return true;
+  };
+  const healMic = async () => {
+    const st = S.current;
+    for (const c of st.conns.values()) if (c.audio && c.audio.paused && c.audio.srcObject) { const r = c.audio.play(); if (r && r.catch) r.catch(() => {}); }
+    if (!st.wantMic || !st.alive || st.healing) return;
+    const t = st.track;
+    if (t && t.readyState === 'live') return;
+    st.healing = true;
+    try { if (await grabMic()) setMic({ on: true, err: '' }); } catch { st.wantMic = false; st.track = null; setMic({ on: false, err: 'Allow the microphone to talk' }); }
+    st.healing = false;
+  };
+  const setAllVol = (v) => {
+    const st = S.current;
+    const val = Math.max(0, Math.min(1, Number(v) || 0));
+    try { localStorage.setItem('zchat-voice-all', String(val)); } catch {}
+    for (const [p, c] of st.conns) if (c.audio) { try { c.audio.volume = (st.vols && st.vols[p] != null ? st.vols[p] : 1) * val; } catch {} }
+    setVall(val);
+  };
   const toggleMic = async () => {
     const st = S.current;
     if (st.track) {
+      st.wantMic = false;
       const t = st.track;
       st.track = null;
       for (const c of st.conns.values()) if (c.tr && !c.dead) { try { await c.tr.sender.replaceTrack(null); } catch {} }
@@ -582,12 +615,8 @@ export function useMeshRoom({ id, myId, enabled = true, meta, fast, audio = fals
     }
     if (typeof navigator === 'undefined' || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { setMic({ on: false, err: 'Voice is not available on this device' }); return; }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
-      const t = stream.getAudioTracks()[0];
-      if (!st.alive) { try { t.stop(); } catch {} return; }
-      st.track = t;
-      talkTap(myId, stream);
-      for (const c of st.conns.values()) if (c.tr && !c.dead) { try { await c.tr.sender.replaceTrack(t); } catch {} }
+      st.wantMic = true;
+      if (!(await grabMic())) return;
       setMic({ on: true, err: '' });
       send('mic', { on: true });
       for (const c of st.conns.values()) if (c.audio) { const r = c.audio.play(); if (r && r.catch) r.catch(() => {}); }
@@ -605,10 +634,17 @@ export function useMeshRoom({ id, myId, enabled = true, meta, fast, audio = fals
     const val = Math.max(0, Math.min(1, Number(v) || 0));
     st.vols = { ...(st.vols || {}), [p]: val };
     const c = st.conns.get(p);
-    if (c && c.audio) { try { c.audio.volume = val; } catch {} c.audio.muted = !!st.muted[p] || val === 0; }
+    if (c && c.audio) { try { c.audio.volume = val * voiceAll(); } catch {} c.audio.muted = !!st.muted[p] || val === 0; }
     setVols(st.vols);
   };
-  return useMemo(() => ({ peers, links, metas, send, sendTo, on, me: myId, here: peers.length > 0, ready, mic, mics, muted, vols, toggleMic, toggleMute, setVol }), [peers, links, metas, mic, mics, muted, vols, myId, ready]);
+  useEffect(() => {
+    if (!enabled || !audio) return undefined;
+    const iv = setInterval(() => { healMic(); }, 4000);
+    const vis = () => { if (document.visibilityState === 'visible') healMic(); };
+    document.addEventListener('visibilitychange', vis);
+    return () => { clearInterval(iv); document.removeEventListener('visibilitychange', vis); };
+  }, [enabled, audio, id, myId]);
+  return useMemo(() => ({ peers, links, metas, send, sendTo, on, me: myId, here: peers.length > 0, ready, mic, mics, muted, vols, vall, toggleMic, toggleMute, setVol, setAllVol, healMic }), [peers, links, metas, mic, mics, muted, vols, vall, myId, ready]);
 }
 
 export function useGameLink({ id, myId, peerId, enabled = true, g, fast }) {
@@ -647,21 +683,21 @@ export function useGameLink({ id, myId, peerId, enabled = true, g, fast }) {
   return useMemo(() => ({ here, send, on, me: myId, watch }), [here, on, myId]);
 }
 
-export function useRoomLink({ id, myId, enabled = true, meta, fast, audio = false, cloud = null, reg }) {
+export function useRoomLink({ id, myId, enabled = true, meta, fast, audio = false, cloud = null, reg, sv = false }) {
   const useCl = !!cloud && cloudOn();
-  const cl = useCloudRoom({ g: cloud, id, myId, enabled: enabled && useCl, meta, reg });
+  const cl = useCloudRoom({ g: cloud, id, myId, enabled: enabled && useCl, meta, reg, sv });
   const mesh = useMeshRoom({ id, myId, enabled: enabled && (!useCl || audio), meta, fast, audio, cap: useCl ? 6 : 0 });
   const meshRef = useRef(mesh);
   meshRef.current = mesh;
   const clRef = useRef(cl);
   clRef.current = cl;
   return useMemo(() => {
-    const voice = { mic: mesh.mic, mics: mesh.mics, muted: mesh.muted, vols: mesh.vols, toggleMic: () => meshRef.current.toggleMic(), toggleMute: (p) => meshRef.current.toggleMute(p), setVol: (p, v) => meshRef.current.setVol(p, v) };
+    const voice = { vall: mesh.vall, setAllVol: (v) => meshRef.current.setAllVol(v), healMic: () => meshRef.current.healMic(), mic: mesh.mic, mics: mesh.mics, muted: mesh.muted, vols: mesh.vols, toggleMic: () => meshRef.current.toggleMic(), toggleMute: (p) => meshRef.current.toggleMute(p), setVol: (p, v) => meshRef.current.setVol(p, v) };
     if (useCl) {
       const links = {};
       for (const p of cl.peers) links[p] = 'server';
-      return { peers: cl.peers, send: (t, d) => clRef.current.send(t, d), on: cl.on, me: myId, here: cl.peers.length > 0, links, cloud: true, rtt: cl.rtt, ok: cl.ok, ...voice };
+      return { peers: cl.peers, send: (t, d) => clRef.current.send(t, d), on: cl.on, me: myId, here: cl.peers.length > 0, links, cloud: true, rtt: cl.rtt, ok: cl.ok, srv: cl.srv, ...voice };
     }
     return { peers: mesh.peers, send: (t, d) => mesh.send(t, d), on: mesh.on, me: myId, here: mesh.peers.length > 0, links: mesh.links, ...voice };
-  }, [useCl, cl.peers, cl.on, cl.rtt, cl.ok, mesh.peers, mesh.on, mesh.links, mesh.mic, mesh.mics, mesh.muted, mesh.vols, myId]);
+  }, [useCl, cl.peers, cl.on, cl.rtt, cl.ok, cl.srv, mesh.peers, mesh.on, mesh.links, mesh.mic, mesh.mics, mesh.muted, mesh.vols, mesh.vall, myId]);
 }

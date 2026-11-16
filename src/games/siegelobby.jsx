@@ -17,6 +17,20 @@ export function useLobbyFont() {
     document.head.appendChild(st);
   }, []);
 }
+const RANK_TIERS = [[100, '#FF8FB0', '#9B2A6E'], [60, '#9FEAFF', '#2E7FC4'], [30, '#FFE27A', '#C98A00'], [10, '#E9EDF3', '#8C95A6'], [1, '#E8A374', '#8A5530']];
+export function RankBadge({ lv, size = 22 }) {
+  const L = Math.max(1, Math.min(100, lv | 0));
+  const [, a, b] = RANK_TIERS.find(([min]) => L >= min) || RANK_TIERS[RANK_TIERS.length - 1];
+  const id = `zrk${L >= 100 ? 5 : L >= 60 ? 4 : L >= 30 ? 3 : L >= 10 ? 2 : 1}`;
+  return (
+    <svg width={size} height={Math.round(size * 1.08)} viewBox="0 0 24 26" aria-hidden="true" style={{ display: 'block', flexShrink: 0, filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.55))' }}>
+      <defs><linearGradient id={id} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={a} /><stop offset="1" stopColor={b} /></linearGradient></defs>
+      <path d="M12 1.2L22 6.6v12.8L12 24.8 2 19.4V6.6z" fill={`url(#${id})`} stroke="rgba(8,10,16,0.85)" strokeWidth="1.4" strokeLinejoin="round" />
+      <path d="M12 3.6l7.8 4.3v10.2L12 22.4l-7.8-4.3V7.9z" fill="none" stroke="rgba(255,255,255,0.45)" strokeWidth="0.9" />
+      <text x="12" y="16.6" textAnchor="middle" fontFamily="'Barlow Condensed', 'Arial Narrow', sans-serif" fontWeight="800" fontSize={L >= 100 ? 8.6 : L >= 10 ? 10.5 : 11.5} fill="#16110A">{L}</text>
+    </svg>
+  );
+}
 export function Emblem({ k, size = 40, color = '#FFFFFF', glow }) {
   return <svg width={size} height={size} viewBox="0 0 512 512" aria-hidden="true" style={{ display: 'block', flexShrink: 0, filter: glow ? `drop-shadow(0 0 6px ${glow})` : 'drop-shadow(0 2px 3px rgba(0,0,0,0.5))' }}><path d={EMB[k]} fill={color} /></svg>;
 }
@@ -70,11 +84,19 @@ function TeamBand({ mine, n, cap, right, label }) {
     </div>
   );
 }
-function Slot({ s, tm, w, thumbs, onEmpty }) {
+function Slot({ s, tm, w, thumbs, onEmpty, onMove }) {
   const C = TC[tm == null ? 0 : tm];
   const h = w * 1.18;
   if (!s || s.empty) {
     const canAdd = !!onEmpty;
+    if (onMove) {
+      return (
+        <Btn label="Move to this team" onPress={onMove} style={{ width: w, height: h, borderRadius: 5, flexShrink: 0, background: 'linear-gradient(180deg, rgba(30,36,48,0.78), rgba(14,18,26,0.86))', boxShadow: `inset 0 0 0 1px ${EDGE}`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+          <span style={{ width: 26, height: 26, borderRadius: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.12)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.22)' }}><LineIcon k="swap" size={15} color="#FFD45A" /></span>
+          <span style={{ fontFamily: HF, fontWeight: 700, fontSize: 13.5, color: 'rgba(255,255,255,0.78)', lineHeight: 1 }}>Move here</span>
+        </Btn>
+      );
+    }
     return (
       <Btn label={canAdd ? 'Invite a friend' : s && s.bot ? 'A bot plays here' : 'Open spot'} onPress={onEmpty} off={!canAdd} style={{ width: w, height: h, borderRadius: 5, flexShrink: 0, background: 'linear-gradient(180deg, rgba(30,36,48,0.78), rgba(14,18,26,0.86))', boxShadow: `inset 0 0 0 1px ${EDGE}`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
         <svg width={w * 0.42} height={w * 0.42} viewBox="0 0 512 512" aria-hidden="true"><path d={EMB.person} fill="rgba(255,255,255,0.22)" /></svg>
@@ -90,7 +112,9 @@ function Slot({ s, tm, w, thumbs, onEmpty }) {
         {s.pw ? <span style={{ display: 'flex', alignItems: 'center', gap: 2, fontFamily: HF, fontWeight: 700, fontSize: 12.5, color: '#FFD45A' }}><GIcon k="bolt" size={10} color="#FFD45A" ink="transparent" />{s.pw}</span> : null}
       </div>
       {s.host && <span aria-label="Host" style={{ position: 'absolute', left: 3, top: 3, width: 18, height: 16, borderRadius: 3, background: 'linear-gradient(180deg, #FFE27A, #F5B321)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><GIcon k="crown" size={12} color="#3A2500" ink="transparent" /></span>}
-      {s.talk && <span aria-label="Talking" style={{ position: 'absolute', right: 3, top: 3, width: 16, height: 16, borderRadius: 8, background: 'rgba(20,160,80,0.92)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><LineIcon k="mic" size={11} /></span>}
+      {s.lv ? <span role="img" aria-label={`Level ${s.lv}`} style={{ position: 'absolute', right: 3, top: 3 }}><RankBadge lv={s.lv} size={18} /></span> : null}
+      {s.talk && <span aria-label="Talking" style={{ position: 'absolute', right: 3, top: s.lv ? 25 : 3, width: 16, height: 16, borderRadius: 8, background: 'rgba(20,160,80,0.92)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><LineIcon k="mic" size={11} /></span>}
+      {s.dl && <span style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 25, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, background: 'rgba(4,6,12,0.62)' }}><Spinner size={14} color="#FFFFFF" /><span style={{ fontSize: 10, fontWeight: 800, color: 'rgba(255,255,255,0.86)' }}>Downloading</span></span>}
     </div>
   );
 }
@@ -123,6 +147,52 @@ function OptList({ items, value, onPick, off }) {
   );
 }
 
+const REG = [['asia', 'Asia'], ['usa', 'USA'], ['eu', 'Europe']];
+const GMN = { tdm: 'Team deathmatch', hp: 'Hardpoint' };
+const SERVERS = 6;
+const pingCol = (ms) => (!ms || ms >= 9999 ? 'rgba(255,255,255,0.4)' : ms < 90 ? '#5EE58A' : ms < 180 ? '#FFD45A' : '#FF7C88');
+function ServerList({ S, onJoin, onRefresh }) {
+  const ping = (S && S.ping) || {};
+  const best = REG.reduce((a, [k]) => ((ping[k] || 9999) < (ping[a] || 9999) ? k : a), 'asia');
+  const [reg, setReg] = useState(null);
+  const cur = reg || best;
+  if (!S || S.busy && !S.at) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: 30, color: 'rgba(255,255,255,0.75)', fontSize: 13, fontWeight: 700 }}><Spinner size={16} color="#FFFFFF" />Finding servers</div>;
+  if (!S.on) return <div style={{ padding: '18px 6px', fontSize: 13.5, fontWeight: 700, lineHeight: 1.5, color: 'rgba(255,255,255,0.8)' }}>Public servers are not ready yet. Play a bot match or invite friends for now.</div>;
+  const rooms = (S.rooms && S.rooms[cur]) || [];
+  const rows = Array.from({ length: SERVERS }, (_, i) => rooms.find((r) => r.n === i + 1) || { n: i + 1, p: 0, cap: 10 });
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ display: 'flex', gap: 6 }}>
+        {REG.map(([k, name]) => (
+          <Btn key={k} label={`${name}, ${ping[k] && ping[k] < 9999 ? `${ping[k]} ms` : 'no ping'}`} onPress={() => setReg(k)} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, height: 38, borderRadius: 3, background: cur === k ? 'rgba(242,178,27,0.18)' : 'rgba(255,255,255,0.05)', boxShadow: cur === k ? `inset 0 0 0 1.5px ${GOLD}` : `inset 0 0 0 1px ${EDGE}` }}>
+            <span style={{ fontFamily: HF, fontWeight: 700, fontSize: 17, color: cur === k ? '#FFD45A' : '#FFFFFF' }}>{name}</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 11.5, fontWeight: 800, color: pingCol(ping[k]) }}><LineIcon k="wifi" size={13} color={pingCol(ping[k])} />{ping[k] && ping[k] < 9999 ? `${ping[k]}` : '?'}</span>
+          </Btn>
+        ))}
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+        {rows.map((r) => {
+          const full = r.p >= (r.cap || 10);
+          const state = !r.p ? 'Empty. Bots play with you' : r.ph === 'play' ? `In a match${r.left ? `, ${Math.floor(r.left / 60)}:${String(r.left % 60).padStart(2, '0')} left` : ''}` : r.ph === 'over' ? 'Next match soon' : 'Starting soon';
+          return (
+            <div key={r.n} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 8px 7px 12px', borderRadius: 3, background: 'rgba(255,255,255,0.045)', boxShadow: `inset 0 0 0 1px ${EDGE}` }}>
+              <span style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, lineHeight: 1.15 }}>
+                <span style={{ fontFamily: HF, fontWeight: 700, fontSize: 18.5 }}>{`${REG.find((x) => x[0] === cur)[1]} ${r.n}`}</span>
+                <span style={{ fontSize: 11.5, fontWeight: 700, color: 'rgba(255,255,255,0.62)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.p ? `${GMN[r.gm] || 'Team battle'}${T.MAPS[r.map] ? `, ${T.MAPS[r.map].name}` : ''}. ${state}` : state}</span>
+              </span>
+              <span style={{ fontFamily: HF, fontWeight: 700, fontSize: 17, color: r.p ? '#FFFFFF' : 'rgba(255,255,255,0.45)', minWidth: 46, textAlign: 'right' }}>{`${r.p}/${r.cap || 10}`}</span>
+              <Btn label={full ? 'Full' : `Join ${REG.find((x) => x[0] === cur)[1]} ${r.n}`} off={full} onPress={() => onJoin(cur, r.n)} style={{ height: 34, padding: '0 16px', background: full ? 'rgba(255,255,255,0.1)' : 'linear-gradient(180deg, #FFD84A, #F2A60C)', color: full ? 'rgba(255,255,255,0.6)' : '#1E1300', clipPath: 'polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%)', fontFamily: HF, fontWeight: 800, fontSize: 17 }}>{full ? 'Full' : 'Join'}</Btn>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 11.5, fontWeight: 700, color: 'rgba(255,255,255,0.55)' }}>
+        <span style={{ flex: 1 }}>Matches run on the ZChat server. Bots fill every open spot.</span>
+        <Btn label="Refresh the list" onPress={onRefresh} style={{ height: 30, padding: '0 12px', borderRadius: 3, background: 'rgba(255,255,255,0.08)', boxShadow: `inset 0 0 0 1px ${EDGE}`, fontWeight: 800, fontSize: 12 }}>Refresh</Btn>
+      </div>
+    </div>
+  );
+}
 export function SiegeLobby({ L }) {
   useLobbyFont();
   const [sheet, setSheet] = useState(null);
@@ -151,8 +221,8 @@ export function SiegeLobby({ L }) {
   const blue = team ? L.blue : [], red = team ? L.red : [];
   const myTm = L.myTm === 1 ? 1 : 0;
   const teamRow = (list, tm) => (
-    <div style={{ display: 'flex', gap: 7, justifyContent: tm === myTm ? 'flex-start' : 'flex-end', paddingLeft: tm === myTm ? 40 : 0, paddingRight: tm === myTm ? 0 : 40 }}>
-      {Array.from({ length: cap }, (_, i) => <Slot key={i} s={list[i]} tm={tm === myTm ? 0 : 1} w={slotW} thumbs={L.thumbs} onEmpty={L.onInviteSlot && !(list[i] && list[i].bot) ? L.onInviteSlot : null} />)}
+    <div style={{ display: 'flex', gap: 7, justifyContent: tm === 0 ? 'flex-start' : 'flex-end', paddingLeft: tm === 0 ? 40 : 0, paddingRight: tm === 0 ? 0 : 40 }}>
+      {Array.from({ length: cap }, (_, i) => <Slot key={i} s={list[i]} tm={tm === myTm ? 0 : 1} w={slotW} thumbs={L.thumbs} onEmpty={L.onInviteSlot && !(list[i] && list[i].bot) ? L.onInviteSlot : null} onMove={tm !== myTm && L.onSwap && (!list[i] || list[i].empty || list[i].bot) ? L.onSwap : null} />)}
     </div>
   );
   return (
@@ -169,6 +239,13 @@ export function SiegeLobby({ L }) {
             {L.sub ? <span style={{ fontSize: 11.5, fontWeight: 700, color: 'rgba(255,255,255,0.7)', marginTop: 2 }}>{L.sub}</span> : null}
           </span>
           <span style={{ flex: 1 }} />
+          {L.plv && <span role="img" aria-label={`Level ${L.plv.lv}${L.plv.need ? `, ${L.plv.into} of ${L.plv.need} XP` : ''}`} style={{ display: 'flex', alignItems: 'center', gap: 7, height: 30, padding: '0 10px 0 5px', borderRadius: 4, background: 'rgba(12,16,24,0.78)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.14)' }}>
+            <RankBadge lv={L.plv.lv} size={22} />
+            <span style={{ display: 'flex', flexDirection: 'column', gap: 3, lineHeight: 1 }}>
+              <span style={{ fontFamily: HF, fontWeight: 700, fontSize: 14.5, whiteSpace: 'nowrap' }}>{`Level ${L.plv.lv}`}</span>
+              <span style={{ width: 62, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.16)', overflow: 'hidden' }}><span style={{ display: 'block', height: '100%', width: `${L.plv.need ? Math.round((L.plv.into / L.plv.need) * 100) : 100}%`, background: 'linear-gradient(90deg, #6FC3FF, #B9E6FF)' }} /></span>
+            </span>
+          </span>}
           {L.scrap != null && <span style={{ display: 'flex', alignItems: 'center', gap: 5, height: 30, padding: '0 10px', borderRadius: 4, background: 'rgba(12,16,24,0.78)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.14)', fontFamily: HF, fontWeight: 700, fontSize: 16, color: '#FFD45A' }}><GIcon k="star" size={13} color="#FFD45A" ink="transparent" />{`${L.scrap} scrap`}</span>}
           {L.onWatch && <SqBtn label={L.allowWatch ? 'Friends can watch. Tap to stop' : 'Let friends watch'} icon="eye" on={L.allowWatch} badge={L.watchers || null} onPress={L.onWatch} />}
           {L.onPeople && <SqBtn label="Players and voice" icon="people" onPress={L.onPeople} />}
@@ -184,16 +261,16 @@ export function SiegeLobby({ L }) {
           <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 6 }}>
             {team ? (
               <>
-                <TeamBand mine label={L.watch ? TC[0].name : null} n={(myTm === 0 ? blue : red).filter((s) => s && !s.empty && !s.bot).length} cap={cap} />
-                {teamRow(myTm === 0 ? blue : red, myTm)}
+                <TeamBand mine={L.watch || myTm === 0} label={L.watch ? TC[0].name : null} n={blue.filter((s) => s && !s.empty && !s.bot).length} cap={cap} />
+                {teamRow(blue, 0)}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, height: 34, flexShrink: 0 }}>
                   <span style={{ flex: 1, height: 2, background: `linear-gradient(90deg, rgba(255,255,255,0), ${TC[0].a}AA)` }} />
                   <span style={{ fontFamily: HF, fontStyle: 'italic', fontWeight: 700, fontSize: 36, lineHeight: 1, letterSpacing: 1, textShadow: '0 3px 10px rgba(0,0,0,0.7)' }}>VS</span>
                   <span style={{ flex: 1, height: 2, background: `linear-gradient(90deg, ${TC[1].a}AA, rgba(255,255,255,0))` }} />
                   {L.onSwap && <Btn label="Switch team" onPress={L.onSwap} style={{ display: 'flex', alignItems: 'center', gap: 5, height: 28, padding: '0 10px', borderRadius: 3, background: 'rgba(12,16,24,0.8)', boxShadow: `inset 0 0 0 1px rgba(255,255,255,0.18)`, fontFamily: HF, fontWeight: 700, fontSize: 14.5 }}><LineIcon k="swap" size={15} />Switch team</Btn>}
                 </div>
-                {teamRow(myTm === 0 ? red : blue, 1 - myTm)}
-                <TeamBand label={L.watch ? TC[1].name : null} n={(myTm === 0 ? red : blue).filter((s) => s && !s.empty && !s.bot).length} cap={cap} right />
+                {teamRow(red, 1)}
+                <TeamBand mine={!L.watch && myTm === 1} label={L.watch ? TC[1].name : null} n={red.filter((s) => s && !s.empty && !s.bot).length} cap={cap} right />
               </>
             ) : (
               <>
@@ -252,6 +329,12 @@ export function SiegeLobby({ L }) {
           {L.onMic && <SqBtn label={L.micOn ? 'Turn your mic off' : 'Talk with your mic'} icon={L.micOn ? 'mic' : 'micoff'} on={L.micOn} onPress={L.onMic} size={42} />}
           {L.onPeople && <SqBtn label="Voice volume" icon={L.allMuted ? 'mute' : 'sound'} onPress={L.onPeople} size={42} />}
           {L.micErr ? <span style={{ fontSize: 11.5, fontWeight: 800, color: '#FF9C9C', maxWidth: 160 }}>{L.micErr}</span> : null}
+          {L.onServers && team && (
+            <Btn label="Play online. Join a public server" onPress={() => { L.onServers(); setSheet('servers'); }} style={{ display: 'flex', alignItems: 'center', gap: 8, height: 42, padding: '0 18px 0 12px', background: 'linear-gradient(180deg, #3D8BFF, #1F4FB5)', clipPath: 'polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%)', boxShadow: 'inset 0 -3px 0 rgba(0,0,0,0.25)' }}>
+              <LineIcon k="globe" size={20} />
+              <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1, textAlign: 'left' }}><span style={{ fontFamily: HF, fontWeight: 700, fontSize: 18 }}>Play online</span><span style={{ fontSize: 10.5, fontWeight: 700, color: 'rgba(255,255,255,0.8)', marginTop: 2 }}>Public servers</span></span>
+            </Btn>
+          )}
           <span style={{ flex: 1 }} />
           {!L.watch && <Btn label="Loadout. Pick your hero and skill" onPress={L.onLoadout} style={{ display: 'flex', alignItems: 'center', gap: 8, height: 40, padding: '0 16px 0 10px', background: 'rgba(12,16,24,0.82)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.18)', clipPath: 'polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%)' }}>
             <span style={{ width: 30, height: 30, borderRadius: 3, overflow: 'hidden', background: '#141A2C' }}>{L.thumbs[L.heroKey] ? <img src={L.thumbs[L.heroKey]} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} /> : null}</span>
@@ -274,7 +357,7 @@ export function SiegeLobby({ L }) {
       {sheet === 'mode' && <Sheet title="Match mode" onClose={() => setSheet(null)}><OptList value={team ? L.gm : 'waves'} items={[['tdm', 'Team deathmatch', 'Every takedown is a point for your team'], ['hp', 'Hardpoint', 'Hold the zone to score. It moves every minute'], ['waves', 'Waves', 'Your squad against alien waves']]} onPick={(v) => { L.onPlay(v); setSheet(null); }} /></Sheet>}
       {sheet === 'map' && (
         <Sheet title="Map" width={620} onClose={() => setSheet(null)}>
-          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(3, T.MAP_KEYS.length)}, minmax(0, 1fr))`, gap: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(4, T.MAP_KEYS.length)}, minmax(0, 1fr))`, gap: 8 }}>
             {T.MAP_KEYS.map((mk) => {
               const on = mk === L.map;
               return (
@@ -294,6 +377,7 @@ export function SiegeLobby({ L }) {
       {sheet === 'bots' && <Sheet title="Bots" onClose={() => setSheet(null)}><OptList value={L.bl} items={[[0, 'Easy', 'Slow to react and miss more'], [1, 'Normal', 'A fair fight'], [2, 'Hard', 'Quick and sharp']]} onPick={(v) => { L.onBl(v); setSheet(null); }} /></Sheet>}
       {sheet === 'wbots' && <Sheet title={L.solo ? 'Bot friends' : 'Bots fill empty spots'} onClose={() => setSheet(null)}><OptList value={L.botN} items={L.botItems} onPick={(v) => { L.onBots(v); setSheet(null); }} /></Sheet>}
       {sheet === 'how' && <Sheet title="How to play" width={520} onClose={() => setSheet(null)}>{L.howTo}</Sheet>}
+      {sheet === 'servers' && <Sheet title="Servers" width={600} onClose={() => setSheet(null)}><ServerList S={L.servers} onRefresh={L.onServers} onJoin={(reg, n) => { setSheet(null); L.onServer(reg, n); }} /></Sheet>}
     </div>
   );
 }
@@ -439,6 +523,7 @@ function ResTable({ title, color, score, emb, cols, rows, myK, thumbs, nameOf, m
                 <span style={{ minWidth: 0, fontSize: 13, fontWeight: 800, color: me ? '#FFD45A' : '#FFFFFF', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{me ? 'You' : nameOf(r.id)}</span>
                 {r.id === mvpId && <span style={{ flexShrink: 0, height: 15, padding: '0 5px', borderRadius: 2, background: 'linear-gradient(180deg, #FFE27A, #F5B321)', color: '#2A1D05', fontFamily: HF, fontWeight: 800, fontSize: 12, lineHeight: '15px' }}>MVP</span>}
                 {r.note ? <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.55)' }}>{r.note}</span> : null}
+                {r.nb ? <span aria-label="Bad connection" style={{ flexShrink: 0, display: 'flex' }}><LineIcon k="wifi" size={14} color="#FF4D5E" /></span> : null}
               </span>
               {r.v.map((v, j) => <span key={j} style={{ width: cols[j][1], textAlign: 'right', fontFamily: HF, fontWeight: 700, fontSize: 16, fontVariantNumeric: 'tabular-nums', color: j === 0 && cols[0][0] === 'Lv' ? '#FFD45A' : '#FFFFFF' }}>{v}</span>)}
             </div>
@@ -520,6 +605,17 @@ export function SiegeResult({ R }) {
       <span style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.75)' }}>scrap</span>
     </span>
   );
+  const XR = R.xp && R.xp.got > 0 ? R.xp : null;
+  const xpBox = XR && (
+    <span className="zres-a" role="img" aria-label={XR.ups > 0 ? `Level up, level ${XR.to.lv}, plus ${XR.got} XP` : `Plus ${XR.got} XP`} style={{ display: 'flex', alignItems: 'center', gap: 8, height: 36, padding: '0 12px 0 6px', borderRadius: 3, background: 'rgba(12,16,24,0.82)', boxShadow: XR.ups > 0 ? 'inset 0 0 0 1px rgba(255,212,90,0.75)' : 'inset 0 0 0 1px rgba(120,200,255,0.45)', animation: 'zres-in 0.35s ease-out 0.1s both' }}>
+      <RankBadge lv={XR.to.lv} size={24} />
+      <span style={{ display: 'flex', flexDirection: 'column', gap: 4, lineHeight: 1 }}>
+        <span style={{ fontFamily: HF, fontWeight: 800, fontSize: 17, color: XR.ups > 0 ? '#FFD45A' : '#8FD3FF', whiteSpace: 'nowrap' }}>{XR.ups > 0 ? `Level ${XR.to.lv}` : `+${XR.got} XP`}</span>
+        <span style={{ width: 86, height: 5, borderRadius: 3, background: 'rgba(255,255,255,0.16)', overflow: 'hidden' }}><span style={{ display: 'block', height: '100%', width: `${XR.to.need ? Math.round((XR.to.into / XR.to.need) * 100) : 100}%`, background: XR.ups > 0 ? 'linear-gradient(90deg, #FFD45A, #FFF0B0)' : 'linear-gradient(90deg, #6FC3FF, #B9E6FF)' }} /></span>
+      </span>
+      {XR.ups > 0 && <span style={{ fontSize: 11.5, fontWeight: 800, color: 'rgba(255,255,255,0.8)', whiteSpace: 'nowrap' }}>{`+${XR.got} XP`}</span>}
+    </span>
+  );
   const skew = 'polygon(12px 0, 100% 0, calc(100% - 12px) 100%, 0 100%)';
   const dark = { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, height: 46, padding: '0 22px', background: 'rgba(12,16,24,0.86)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.2)', clipPath: skew, fontFamily: HF, fontWeight: 700, fontSize: 20 };
   const buttons = R.host ? (
@@ -533,7 +629,7 @@ export function SiegeResult({ R }) {
     </>
   ) : (
     <>
-      <span style={{ fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.75)' }}>{`${R.hostName} picks what is next`}</span>
+      <span style={{ fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.75)' }}>{R.waitText || `${R.hostName} picks what is next`}</span>
       <Btn label="Back to chat" onPress={R.onLeave} style={dark}>Back to chat</Btn>
     </>
   );
@@ -551,6 +647,7 @@ export function SiegeResult({ R }) {
           {tables}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, flexWrap: land ? 'nowrap' : 'wrap', justifyContent: 'flex-end' }}>
+          {xpBox}
           {reward}
           {R.info ? <span style={{ minWidth: 0, fontSize: 11.5, fontWeight: 700, color: 'rgba(255,255,255,0.6)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{R.info}</span> : null}
           <span style={{ flex: 1 }} />

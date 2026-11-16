@@ -11,6 +11,8 @@ export const TNAME = ['Blue', 'Red'];
 export const TS_ITEMS = [1, 2, 3, 4, 5].map((n) => [String(n), `${n}v${n}`]);
 export const MODE_ITEMS = [['waves', 'Waves'], ['tdm', 'Team deathmatch'], ['hp', 'Hardpoint']];
 const LI = {
+  globe: 'M12 3.5a8.5 8.5 0 1 0 0 17a8.5 8.5 0 1 0 0-17zM3.5 12h17M12 3.5c2.4 2.3 3.6 5.2 3.6 8.5s-1.2 6.2-3.6 8.5c-2.4-2.3-3.6-5.2-3.6-8.5s1.2-6.2 3.6-8.5z',
+  wifi: 'M4 9.5a11.5 11.5 0 0 1 16 0M7 12.6a7.2 7.2 0 0 1 10 0M10 15.6a3 3 0 0 1 4 0M12 18.5h.01',
   board: 'M5 5.5h3v13H5zM10.5 9h3v9.5h-3zM16 12h3v6.5h-3z',
   chat: 'M4 5.5h16v10H9.5L5.5 19v-3.5H4z',
   mic: 'M12 3.5a3 3 0 0 1 3 3v5a3 3 0 0 1-6 0v-5a3 3 0 0 1 3-3zM6.5 11a5.5 5.5 0 0 0 11 0M12 16.5v3.5',
@@ -63,7 +65,7 @@ const TINTI = new Float32Array([0.75, 0.95, 1.4, 0.553]);
 const TINTSOFT = [new Float32Array([0.74, 0.92, 1.38, 0.553]), new Float32Array([1.38, 0.74, 0.7, 0.553]), new Float32Array([1.08, 0.9, 1.3, 0.553])];
 export const unitCol = (b, my, soft) => (b.flash > 0 ? TINTF : b.stun > 0 || b.stunV ? TINTI : (soft ? TINTSOFT : TINTS)[b.tm == null || b.tm < 0 ? 2 : b.tm === my ? 0 : 1]);
 
-export const SKI = {'blaze.atk': 0, 'blaze.sup': 1, 'blaze.gad': 2, 'pip.atk': 3, 'pip.sup': 4, 'pip.gad': 5, 'boom.atk': 6, 'boom.sup': 7, 'boom.gad': 8, 'mira.atk': 9, 'mira.sup': 10, 'mira.gad': 11, 'rex.atk': 12, 'rex.sup': 13, 'rex.gad': 14, 'volt.atk': 15, 'volt.sup': 16, 'volt.gad': 17, 'kai.atk': 18, 'kai.sup': 19, 'kai.gad': 20, 'ivy.atk': 21, 'ivy.sup': 22, 'ivy.gad': 23, 'nyx.atk': 24, 'nyx.sup': 25, 'nyx.gad': 26, 'arlo.atk': 27, 'arlo.sup': 28, 'arlo.gad': 29, 'wren.atk': 30, 'wren.sup': 31, 'wren.gad': 32, 'sk.blink': 33, 'sk.mend': 34, 'sk.hunter': 35, 'sk.guard': 36, 'sk.sprint': 37, 'sk.shock': 38, 'dash': 39, 'home': 40};
+export const SKI = {'blaze.atk': 0, 'blaze.sup': 1, 'blaze.gad': 2, 'pip.atk': 3, 'pip.sup': 4, 'pip.gad': 5, 'boom.atk': 6, 'boom.sup': 7, 'boom.gad': 8, 'mira.atk': 9, 'mira.sup': 10, 'mira.gad': 11, 'rex.atk': 12, 'rex.sup': 13, 'rex.gad': 14, 'volt.atk': 15, 'volt.sup': 16, 'volt.gad': 17, 'kai.atk': 18, 'kai.sup': 19, 'kai.gad': 20, 'ivy.atk': 21, 'ivy.sup': 22, 'ivy.gad': 23, 'nyx.atk': 24, 'nyx.sup': 25, 'nyx.gad': 26, 'arlo.atk': 27, 'arlo.sup': 28, 'arlo.gad': 29, 'wren.atk': 30, 'wren.sup': 31, 'wren.gad': 32, 'tusk.atk': 12, 'tusk.sup': 25, 'tusk.gad': 20, 'bones.atk': 27, 'bones.sup': 10, 'bones.gad': 14, 'hex.atk': 6, 'hex.sup': 19, 'hex.gad': 23, 'rattle.atk': 0, 'rattle.sup': 31, 'rattle.gad': 5, 'sk.blink': 33, 'sk.mend': 34, 'sk.hunter': 35, 'sk.guard': 36, 'sk.sprint': 37, 'sk.shock': 38, 'dash': 39, 'home': 40};
 export const SKI_URL = '/bolt/skill-icons-v2.webp';
 export const heroIc = (key, slot) => (SKI[`${key}.${slot}`] != null ? `${key}.${slot}` : null);
 export function SkIcon({ k, size = 40, dim, style }) {
@@ -346,7 +348,7 @@ export function TeamHowTo({ gm }) {
   const rows = [
     hp ? ['vortex', 'Stand in the zone to score a point every second. If both teams are inside, nobody scores. The zone moves every minute.'] : ['crosshair', 'Every takedown scores a point for your team. The first team to the goal wins.'],
     ['revive', 'You come back at your base a few seconds after you fall. Your base heals you, and the enemy base hurts you.'],
-    ['flame', 'Monsters live around the map. Beat them for XP. The big ones give Fury and Flow.'],
+    ['flame', 'Monsters live around the map. Beat them for XP. The big ones give Fury, Flow and Guard. Watch out for skulls that explode.'],
     ['sprint', 'Every level up gives you a new power, up to level 20.'],
     ['shield', 'Fair fight. Everyone starts at level 1 with the same stats, and players are split by power.'],
   ];
@@ -417,9 +419,10 @@ export function drawTeamMini(m2, A, W, myK, mini, flip, MW, MH = MW) {
   }
 }
 
-const MINI_BG = { base: 'rgba(166,86,48,0.9)', city: 'rgba(150,154,160,0.92)', fort: 'rgba(92,138,62,0.92)' };
+const MINI_BG = { base: 'rgba(166,86,48,0.9)', city: 'rgba(150,154,160,0.92)', fort: 'rgba(92,138,62,0.92)', grave: 'rgba(78,92,58,0.92)' };
 const MINI_MAP = {
   city: { 35: 'rgba(96,100,108,0.96)', 61: 'rgba(206,208,212,0.9)', 112: 'rgba(206,208,212,0.9)', 80: 'rgba(60,150,70,0.95)', 100: 'rgba(60,140,80,0.95)' },
+  grave: { 35: 'rgba(58,60,66,0.96)', 87: 'rgba(58,60,66,0.96)', 45: 'rgba(170,160,146,0.92)', 61: 'rgba(170,160,146,0.92)', 112: 'rgba(170,160,146,0.92)', 103: 'rgba(110,86,64,0.9)', 72: 'rgba(120,124,132,0.96)', 80: 'rgba(120,124,132,0.95)', 84: 'rgba(84,66,50,0.95)', 102: 'rgba(150,152,158,0.95)', 107: 'rgba(96,72,52,0.95)', 100: 'rgba(230,130,40,0.95)' },
   fort: { 35: 'rgba(66,68,74,0.96)', 61: 'rgba(200,190,172,0.92)', 112: 'rgba(200,190,172,0.92)', 80: 'rgba(150,152,158,0.95)', 100: 'rgba(156,98,58,0.95)', 102: 'rgba(156,98,58,0.95)', 107: 'rgba(176,124,80,0.95)', 113: 'rgba(156,98,58,0.95)', 114: 'rgba(120,112,104,0.95)' },
 };
 const MINI_DECO = { 72: 'rgba(214,150,120,0.96)', 75: 'rgba(90,150,225,0.95)', 100: 'rgba(60,140,80,0.95)', 107: 'rgba(196,156,104,0.95)', 102: 'rgba(120,150,200,0.9)', 113: 'rgba(120,150,200,0.9)', 80: 'rgba(60,150,70,0.95)', 45: 'rgba(70,74,80,0.95)', 103: 'rgba(96,160,80,0.92)', 87: 'rgba(70,72,78,0.96)', 35: 'rgba(84,44,28,0.96)', 114: 'rgba(120,64,38,0.96)', 77: 'rgba(222,226,230,0.96)', 71: 'rgba(222,226,230,0.96)', 76: 'rgba(200,204,210,0.96)', 90: 'rgba(200,204,210,0.96)', 84: 'rgba(214,96,78,0.96)', 120: 'rgba(214,96,78,0.96)', 99: 'rgba(120,150,200,0.9)', 115: 'rgba(120,150,200,0.9)', 61: 'rgba(150,146,142,0.9)', 112: 'rgba(110,108,108,0.92)' };

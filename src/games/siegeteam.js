@@ -131,6 +131,8 @@ const BASE_CAMPS = [
   { k: 'spit', p: [10.5, 21.5], units: [['shooter', -0.7, 0], ['shooter', 0.7, 0.4]], resp: 50 },
   { k: 'fury', p: [4.6, 5.0], units: [['tank', 0, 0]], buff: 'fury', resp: 80 },
   { k: 'flow', p: [4.6, 19.0], units: [['tank', 0, 0]], buff: 'flow', resp: 80 },
+  { k: 'pop', p: [12.5, 3.6], units: [['bomber', -0.7, 0], ['bomber', 0.7, 0.4]], resp: 55 },
+  { k: 'pack', p: [11.5, 19.5], units: [['tank', 0, 0], ['grunt', -1.4, 0.8], ['grunt', 1.4, -0.8]], buff: 'guard', resp: 100 },
 ];
 const CITY_RECTS = [
   ['-', 4, 11, 10, 2], ['-', 4, 3, 10, 2], ['-', 4, 19, 10, 2], ['-', 8, 3, 2, 18], ['=', 1, 8, 4, 8], ['B', 1, 9, 3, 6], ['p', 14, 3, 2, 4], ['p', 14, 10, 2, 4], ['p', 14, 17, 2, 4], ['g', 1, 1, 6, 2], ['g', 1, 21, 6, 2], ['H', 2, 5, 2, 2], ['H', 5, 5, 2, 2], ['H', 11, 6, 2, 2], ['H', 2, 16, 2, 2], ['H', 5, 16, 2, 2], ['H', 11, 15, 2, 2], ['P', 1, 1, 1, 1], ['P', 6, 1, 1, 1], ['P', 1, 21, 1, 1], ['P', 6, 22, 1, 1], ['K', 6, 11, 2, 1], ['K', 11, 10, 2, 1], ['K', 10, 4, 2, 1], ['K', 5, 20, 2, 1], ['d', 4, 7, 1, 1], ['d', 4, 15, 1, 1], ['k', 13, 8, 1, 1], ['k', 13, 14, 1, 1], ['k', 10, 16, 1, 1], ['f', 6, 9, 1, 1], ['f', 10, 9, 1, 1], ['f', 6, 14, 1, 1], ['f', 12, 21, 1, 1], ['f', 12, 1, 1, 1],
@@ -143,12 +145,35 @@ const CITY_CAMPS = [
   { k: 'spit', p: [3.5, 22.0], units: [['shooter', -0.7, 0], ['shooter', 0.7, -0.4]], resp: 50 },
   { k: 'fury', p: [10.5, 8.6], units: [['tank', 0, 0]], buff: 'fury', resp: 80 },
   { k: 'flow', p: [10.5, 14.4], units: [['tank', 0, 0]], buff: 'flow', resp: 80 },
+  { k: 'pop', p: [9.5, 1.6], units: [['bomber', -0.7, 0], ['bomber', 0.7, 0.4]], resp: 55 },
+  { k: 'pack', p: [11.5, 5.4], units: [['tank', 0, 0], ['grunt', -1.4, 0.6], ['grunt', 1.4, -0.6]], buff: 'guard', resp: 100 },
 ];
 const FORT_CAMPS = [
   { k: 'pair', p: [4.0, 2.6], units: [['grunt', -0.7, 0], ['grunt', 0.7, 0.4]], resp: 50 },
   { k: 'spit', p: [4.0, 21.4], units: [['shooter', -0.7, 0], ['shooter', 0.7, -0.4]], resp: 50 },
   { k: 'fury', p: [9.0, 8.6], units: [['tank', 0, 0]], buff: 'fury', resp: 80 },
   { k: 'flow', p: [9.0, 15.4], units: [['tank', 0, 0]], buff: 'flow', resp: 80 },
+  { k: 'pop', p: [11.5, 3.5], units: [['bomber', -0.7, 0], ['bomber', 0.7, 0.4]], resp: 55 },
+  { k: 'pack', p: [11.5, 20.5], units: [['tank', 0, 0], ['grunt', -1.4, 0.6], ['grunt', 1.4, -0.6]], buff: 'guard', resp: 100 },
+];
+const GRAVE_RECTS = [
+  ['=', 1, 8, 5, 8], ['B', 1, 9, 4, 6], ['-', 5, 11, 9, 2], ['-', 7, 4, 7, 1], ['-', 7, 19, 7, 1], ['-', 6, 4, 1, 16],
+  ['p', 14, 3, 2, 4], ['p', 14, 10, 2, 4], ['p', 14, 17, 2, 4],
+  ['W', 1, 7, 4, 1], ['W', 1, 16, 4, 1], ['W', 7, 1, 1, 2], ['W', 7, 21, 1, 2], ['W', 11, 6, 3, 1],
+  ['H', 8, 14, 4, 3],
+  ['g', 1, 1, 5, 5], ['g', 1, 18, 5, 5], ['g', 8, 1, 6, 2],
+  ['f', 2, 2, 1, 1], ['f', 4, 2, 1, 1], ['f', 2, 4, 1, 1], ['f', 4, 4, 1, 1], ['f', 9, 2, 1, 1], ['f', 11, 2, 1, 1], ['f', 13, 1, 1, 1],
+  ['f', 2, 19, 1, 1], ['f', 4, 19, 1, 1], ['f', 2, 21, 1, 1], ['f', 4, 21, 1, 1],
+  ['T', 9, 8, 1, 1], ['T', 12, 9, 1, 1], ['T', 13, 15, 1, 1], ['T', 10, 21, 1, 1], ['T', 8, 6, 1, 1],
+  ['P', 9, 13, 1, 1], ['P', 13, 21, 1, 1], ['k', 10, 9, 1, 1], ['k', 7, 17, 1, 1], ['d', 5, 7, 1, 1], ['d', 3, 17, 1, 1], ['d', 12, 22, 1, 1],
+];
+const GRAVE_CAMPS = [
+  { k: 'pair', p: [3.5, 3.5], units: [['grunt', -0.7, 0], ['grunt', 0.7, 0.4]], resp: 50 },
+  { k: 'spit', p: [3.5, 20.5], units: [['shooter', -0.7, 0], ['shooter', 0.7, -0.4]], resp: 50 },
+  { k: 'fury', p: [11.0, 7.8], units: [['tank', 0, 0]], buff: 'fury', resp: 80 },
+  { k: 'flow', p: [12.5, 17.5], units: [['tank', 0, 0]], buff: 'flow', resp: 80 },
+  { k: 'pop', p: [10.5, 1.5], units: [['bomber', -0.7, 0], ['bomber', 0.7, 0.4]], resp: 55 },
+  { k: 'pack', p: [9.0, 20.6], units: [['tank', 0, 0], ['grunt', -1.4, 0.6], ['grunt', 1.4, -0.6]], buff: 'guard', resp: 100 },
 ];
 export const MAPS = {
   city: { name: 'Downtown', text: 'Streets, cars and shops. Great for Team deathmatch', bg: 'linear-gradient(135deg, #5B6470, #2E343C)', W: 32, H: 24, rects: CITY_RECTS, camps: CITY_CAMPS, fount: [2.5, 12], fr: 5.6,
@@ -160,8 +185,11 @@ export const MAPS = {
   base: { name: 'Mars outpost', text: 'A base on Mars with a mine and a landing pad. Great for Hardpoint', bg: 'linear-gradient(135deg, #B9542A, #6E3A2A)', W: 32, H: 24, rects: BASE_RECTS, camps: BASE_CAMPS, fount: [3, 12], fr: 6.2,
     zones: [{ n: 'Mine', p: [16, 5] }, { n: 'Pad', p: [16, 12] }, { n: 'Depot', p: [16, 19] }],
     roam: [[16, 5], [16, 12], [16, 19], [10, 3.2], [9, 12], [9, 19.5], [23, 4.5], [23, 12], [22, 20.8], [12.5, 8], [19.5, 16]] },
+  grave: { name: 'Graveyard', text: 'Graves, a crypt and dead trees under a red sky', bg: 'linear-gradient(135deg, #6B4A7A, #2A2234)', W: 32, H: 24, rects: GRAVE_RECTS, camps: GRAVE_CAMPS, fount: [3, 12], fr: 6.0,
+    zones: [{ n: 'Gate', p: [16, 5] }, { n: 'Crypt', p: [16, 12] }, { n: 'Shrine', p: [16, 19] }],
+    roam: [[16, 5], [16, 12], [16, 19], [9.5, 4.5], [9.5, 19.5], [11, 12], [21, 12], [22.5, 4.5], [22.5, 19.5], [12, 10.2], [20, 13.8], [13, 17], [19, 7]] },
 };
-export const MAP_KEYS = ['city', 'base', 'fort'];
+export const MAP_KEYS = ['city', 'base', 'fort', 'grave'];
 export const MAP_DEF = { tdm: 'city', hp: 'base' };
 export const validMap = (k) => (MAPS[k] ? k : 'base');
 export const ZONE_R = 3.4;
@@ -214,7 +242,7 @@ export const BOT_LV = [
 ];
 const botLv = (W) => BOT_LV[W.tm && W.tm.bl != null ? W.tm.bl : 1] || BOT_LV[1];
 export const SKILL_KEYS = Object.keys(SKILLS);
-export const BUFFS = { fury: { name: 'Fury', text: '15% more damage', t: 80, col: '#FF8A3D' }, flow: { name: 'Flow', text: 'Super and gadget charge faster', t: 80, col: '#4FC3FF' } };
+export const BUFFS = { fury: { name: 'Fury', text: '15% more damage', t: 80, col: '#FF8A3D' }, flow: { name: 'Flow', text: 'Super and gadget charge faster', t: 80, col: '#4FC3FF' }, guard: { name: 'Guard', text: 'Take 15% less damage', t: 80, col: '#7CF29A' } };
 const isHero = (t) => !!t && typeof t.id === 'string';
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const mins = (W) => (W.tm ? W.tm.t / 60 : 0);
@@ -606,6 +634,10 @@ function alienAttack(W, b, h, dt) {
     } else if (d < Rb.rng + 0.45 && b.cd <= 0) { b.wind = Rb.wind; E.emit(W, { k: 'wind', id: b.id }); }
     else if (d > Rb.rng * 0.8) moveTo(W, b, h.x, h.z, Rb.spd, dt);
     else { E.faceTo(b, h.x, h.z, dt); b.mv = 0; }
+  } else if (b.type === 'bomber') {
+    if (b.fuse > 0) popFuse(W, b, dt);
+    else if (d < 1.9) { b.fuse = Rb.fuse; b.mv = 0; E.net(W, ['f', b.id]); E.emit(W, { k: 'fuse', id: b.id }); }
+    else moveTo(W, b, h.x, h.z, Rb.spd, dt);
   } else if (b.type === 'shooter') {
     if (d < Rb.rng && E.losClear(W.A, b.x, b.z, h.x, h.z, 0.12)) {
       const off = E.faceTo(b, h.x, h.z, dt, 6); b.mv = 0;
@@ -620,7 +652,14 @@ function alienAttack(W, b, h, dt) {
     else { E.faceTo(b, h.x, h.z, dt, 2.2); b.mv = 0; }
   }
 }
+function popFuse(W, b, dt) {
+  b.fuse -= dt; b.mv = 0;
+  if (b.fuse > 0) return;
+  E.bomberBlast(W, b, 1); b.hp = 0;
+  E.emit(W, { k: 'kill', id: b.id, type: b.type, x: b.x, z: b.z, by: null, self: true }); E.net(W, ['k', b.id, '']);
+}
 function stepCamp(W, b, dt) {
+  if (b.fuse > 0) { popFuse(W, b, dt); return; }
   const h = campFoe(W, b);
   if (!h) {
     b.aggro = null;
@@ -1098,7 +1137,7 @@ function pvpGoal(W, h, B, foes, hpF) {
   const tgt = foes.filter((o) => dist(o, h) < 22).sort((a, b) => dist(a, h) - dist(b, h))[0];
   if (tgt && hpF > 0.4) return { x: tgt.x, z: tgt.z, f: tgt };
   let camp = null, cd = S.gm === 'hp' && S.zon ? 7 : 15;
-  for (const b of W.robots) { if (b.hp <= 0 || !b.camp) continue; const d = dist(b, h); if (d < cd) { cd = d; camp = b; } }
+  for (const b of W.robots) { if (b.hp <= 0 || !b.camp) continue; const C = S.camps[b.camp]; if (C && C.cp.side !== h.tm && b.aggro !== h.id) continue; const d = dist(b, h); if (d < cd) { cd = d; camp = b; } }
   if (camp && !tgt) {
     const want = Math.max(2, E.HEROES[h.key].want * 0.9);
     const ux = (camp.x - h.x) / (cd || 1), uz = (camp.z - h.z) / (cd || 1);
@@ -1152,6 +1191,7 @@ export function teamBot(W, h, dt) {
   if (!urgent) for (const s of W.shots) {
     if (s.side === 'h') { const ow = W.heroes[s.own]; if (!ow || ow.tm === h.tm) continue; } else if (s.tm === h.tm) continue;
     if (s.k === 'lob' || s.k === 'mega' || s.k === 'rain') continue;
+    if (!Number.isFinite(s.vx) || !Number.isFinite(s.vz)) continue;
     const sp = Math.hypot(s.vx, s.vz) || 1, ux = s.vx / sp, uz = s.vz / sp;
     const rx = h.x - s.x, rz = h.z - s.z, along = rx * ux + rz * uz;
     if (along < 0 || along > 7) continue;

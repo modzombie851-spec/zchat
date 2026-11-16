@@ -1,11 +1,11 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useMemo, createContext, useContext } from 'react';
 import ReactDOM from 'react-dom';
-import { Send, Search, Mail, ShieldCheck, ShieldOff, AtSign, LogOut, Eye, EyeOff, Lock, Flag, X, Trash2, User, Phone, MoreVertical, Image as ImageIcon, Video as VideoIcon, Pin, Smile, ArrowLeft, Check, CheckCheck, Settings as SettingsIcon, Moon, UserPlus, FileText, HelpCircle, ChevronRight, ChevronLeft, Compass, Bell, Volume2, VolumeX, Mic, Play, Pause, Download, Users, Camera, Reply, Forward, Ban, Edit3, Archive, Bookmark, Share2, Copy, Type, Pencil, BellOff, Link as LinkIcon, ShieldAlert, Heart, Repeat, PhoneOff, MicOff, Clock, Timer, Smartphone, Plus, ThumbsUp, ThumbsDown, LayoutDashboard, Megaphone, Database, Activity, MessageSquare } from 'lucide-react';
-import { supabase, registerWithEmail, verifyOtp, setPassword, signInWithPassword, sendPasswordReset, signOut, getSession, checkUsernameTaken, sendMessage, getConversation, reportUser, uploadMedia as uploadMediaRaw, deleteMessage } from './supabaseClient.js';
+import { ChevronDown, Send, Search, Mail, ShieldCheck, ShieldOff, AtSign, LogOut, Eye, EyeOff, Lock, Flag, X, Trash2, User, Phone, MoreVertical, Image as ImageIcon, Video as VideoIcon, Pin, Smile, ArrowLeft, Check, CheckCheck, Settings as SettingsIcon, Moon, UserPlus, FileText, HelpCircle, ChevronRight, ChevronLeft, Compass, Bell, Volume2, VolumeX, Mic, Play, Pause, Download, Users, Camera, Reply, Forward, Ban, Edit3, Archive, Bookmark, Share2, Copy, Type, Pencil, BellOff, Link as LinkIcon, ShieldAlert, Heart, Repeat, PhoneOff, MicOff, Clock, Timer, Smartphone, Plus, ThumbsUp, ThumbsDown, LayoutDashboard, Megaphone, Database, Activity, MessageSquare } from 'lucide-react';
+import { supabase, registerWithEmail, verifyOtp, setPassword, signInWithPassword, signOut, getSession, checkUsernameTaken, sendMessage, getConversation, reportUser, uploadMedia as uploadMediaRaw, deleteMessage } from './supabaseClient.js';
 import { zLazy, zLazyPrefetch, zLazySetUi } from './lazy.jsx';
 import { GAME_KITS, GAME_KIT_BY, GameKitArt, kitUser, gameKitPull } from './games/kits.jsx';
-import { loadLiveFriends, castMe, liveKind, useJoinWait } from './games/live.js';
-import { cloudOn, pingRegions, bestRegion, readLive } from './games/zcloud.js';
+import { loadLiveFriends, castMe, liveKind, useJoinWait, liveStorePut, useLiveStore, roomAlive } from './games/live.js';
+import { cloudOn, pingRegions, bestRegion, readLive, boltServerOn } from './games/zcloud.js';
 import { ZLANGS, setZLang, useZLang, zlangWanted, zlangOnPick, zlangDirty, zlangClean, zlangStored } from './i18n/index.js';
 export const TrustedFriendsPage = zLazy(() => import('./areas/safety.jsx'), 'TrustedFriendsPage', 'safety');
 export const RecoveryHelpPage = zLazy(() => import('./areas/safety.jsx'), 'RecoveryHelpPage', 'safety');
@@ -3353,36 +3353,65 @@ function LoginStep({ onSuccess, onForgot, onGoRegister }) {
   );
 }
 
-function ForgotStep({ onBack, onFriends }) {
-  const [email, setEmail] = useState('');
+function ForgotStep({ onBack, onFriends, initialEmail = '', onRecovering }) {
+  const [email, setEmail] = useState(initialEmail);
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState('');
+  const [code, setCode] = useState('');
   const cleanEmail = email.trim();
   const valid = /\S+@\S+\.\S+/.test(cleanEmail);
+  const send = async () => {
+    let r;
+    try { r = await supabase.auth.resetPasswordForEmail(cleanEmail, { redirectTo: window.location.origin }); } catch (e) { r = { error: e }; }
+    if (r && r.error) { const w = authWaitText(r.error, "Couldn't send the email. Try again."); setErr(w.text); return { ok: false, wait: w.wait }; }
+    setErr('');
+    return { ok: true };
+  };
   const submit = async () => {
     if (!valid || loading) return;
     setLoading(true);
-    await sendPasswordReset(cleanEmail);
+    const r = await send();
     setLoading(false);
-    setSent(true);
+    if (r.ok) { setCode(''); setSent(true); }
+  };
+  const verify = async (codeOverride) => {
+    const c = codeOverride ?? code;
+    if (c.length < 6 || loading) return;
+    setLoading(true); setErr('');
+    if (onRecovering) onRecovering(true);
+    let r;
+    try { r = await supabase.auth.verifyOtp({ email: cleanEmail, token: c, type: 'recovery' }); } catch (e) { r = { error: e }; }
+    setLoading(false);
+    if (r && r.error) { if (onRecovering) onRecovering(false); setErr('That code is not right or it expired. Check the newest email.'); }
   };
   if (sent) {
     return (
       <div className="zchat-tab-in" key="sent">
-        <AuthArt kind="mail" />
-        <AuthTitle title="Check your email" sub={<>We sent a link to <b style={{ color: AUTH_C.ink, fontWeight: 600 }}>{cleanEmail}</b>. Open it on this phone to pick a new password. It can take a minute to arrive.</>} />
-        <button type="button" className="zchat-press" style={authPrimaryStyle(null, false)} onClick={onBack}>Back to log in</button>
+        <AuthArt kind="mail" height={170} />
+        <AuthTitle title="Check your email" sub={<>We sent an email to <b style={{ color: AUTH_C.ink, fontWeight: 600 }}>{cleanEmail}</b>. Type the 6 digit code from it, or open the link on this phone. Not there? Check your spam folder.</>} />
+        <OtpBoxes value={code} onChange={setCode} onSubmit={verify} />
+        <AuthError text={err} />
+        <ResendRow onResend={send} />
+        <button type="button" className="zchat-press" style={authPrimaryStyle(null, code.length < 6 || loading, { marginTop: 20 })} disabled={code.length < 6 || loading} onClick={() => verify()}>
+          {loading ? <Spinner /> : 'Continue'}
+        </button>
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 22, marginTop: 18 }}>
+          <button type="button" onClick={() => { setSent(false); setCode(''); setErr(''); }} style={authLinkStyle(null)}>Use another email</button>
+          <button type="button" onClick={onBack} style={authLinkStyle(null)}>Back to log in</button>
+        </div>
       </div>
     );
   }
   return (
     <div className="zchat-tab-in" key="ask">
       <AuthArt kind="mail" />
-      <AuthTitle title="Reset password" sub="Type the email you signed up with and we will send you a link to pick a new password." />
+      <AuthTitle title="Reset password" sub="Type the email you signed up with. We will send you a code to pick a new password. This also works if you signed up with Google." />
       <AuthField icon={Mail} type="email" inputMode="email" autoComplete="email" autoCapitalize="none" spellCheck={false} placeholder="Email" aria-label="Email"
-        value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submit()} />
+        value={email} onChange={(e) => { setErr(''); setEmail(e.target.value); }} onKeyDown={(e) => e.key === 'Enter' && submit()} />
+      <AuthError text={err} />
       <button type="button" className="zchat-press" style={authPrimaryStyle(null, !valid || loading, { marginTop: 20 })} disabled={!valid || loading} onClick={submit}>
-        {loading ? <Spinner /> : 'Send link'}
+        {loading ? <Spinner /> : 'Send code'}
       </button>
       <div style={{ textAlign: 'center', marginTop: 20 }}>
         <button type="button" onClick={onBack} style={authLinkStyle(null)}>Back to log in</button>
@@ -3636,6 +3665,13 @@ function OtpBoxes({ value, onChange, onSubmit }) {
   );
 }
 
+export function authWaitText(error, fallback) {
+  const m = String((error && error.message) || '');
+  const sec = /after (\d+) seconds?/i.exec(m);
+  if (sec) return { text: `Wait ${sec[1]} seconds, then tap Send again.`, wait: Number(sec[1]) };
+  if (/rate limit|too many/i.test(m) || (error && error.status === 429)) return { text: 'Too many emails were sent for now. Wait a few minutes and try again.', wait: 60 };
+  return { text: friendlyError(error, fallback), wait: 10 };
+}
 function ResendRow({ onResend }) {
   const CODE_LIFETIME = 120;
   const RESEND_COOLDOWN = 62;
@@ -3653,15 +3689,16 @@ function ResendRow({ onResend }) {
   const fmt = (total) => `${Math.floor(total / 60)}:${(total % 60).toString().padStart(2, '0')}`;
   const handleResend = async () => {
     setSending(true);
-    const ok = await onResend();
+    const res = await onResend();
     setSending(false);
+    const ok = res === true || (res && res.ok);
     if (ok) {
       setSecondsLeft(CODE_LIFETIME);
       setCooldown(RESEND_COOLDOWN);
       setJustSent(true);
       setTimeout(() => setJustSent(false), 2500);
     } else {
-      setCooldown(10);
+      setCooldown(Math.max(5, Math.min(300, (res && res.wait) || 10)));
     }
   };
   return (
@@ -3834,7 +3871,7 @@ function HumanCheck({ onToken, reset = 0 }) {
 }
 const REG_STAGES = ['birthday', 'email', 'otp', 'password', 'username', 'avatar'];
 
-function RegisterFlow({ onDone, onBack, onStart, onStageChange, initialStage = 'email' }) {
+function RegisterFlow({ onDone, onBack, onStart, onStageChange, onForgot, initialStage = 'email' }) {
   const [stage, setStage] = useState(() => {
     if (ageHoldOn()) return 'young';
     if (initialStage === 'email' || initialStage === 'username') return regAgeRead() ? initialStage : 'birthday';
@@ -3907,11 +3944,19 @@ function RegisterFlow({ onDone, onBack, onStart, onStageChange, initialStage = '
       if (!pre.ok) { setLoading(false); setErr(pre.error); setTsToken(''); setTsReset((n) => n + 1); return false; }
       checkedFor.current = cleanEmail.toLowerCase();
     }
-    const { error } = await registerWithEmail(cleanEmail);
+    const { data: made, error } = await registerWithEmail(cleanEmail);
     setLoading(false);
-    if (error) { setErr(signupErrorText(error) || friendlyError(error, "Couldn't send the code. Try again.")); return false; }
+    if (error) { const w = authWaitText(error, "Couldn't send the code. Try again."); setErr(signupErrorText(error) || w.text); return false; }
+    if (made && made.user && Array.isArray(made.user.identities) && made.user.identities.length === 0) { go('exists'); return false; }
     go('otp');
     return true;
+  };
+  const resendCode = async () => {
+    setErr('');
+    let r;
+    try { r = await supabase.auth.resend({ type: 'signup', email: cleanEmail }); } catch (e) { r = { error: e }; }
+    if (r && r.error) { const w = authWaitText(r.error, "Couldn't send a new code. Try again."); setErr(w.text); return { ok: false, wait: w.wait }; }
+    return { ok: true };
   };
   const verify = async (codeOverride) => {
     const c = codeOverride ?? code;
@@ -3978,6 +4023,16 @@ function RegisterFlow({ onDone, onBack, onStart, onStageChange, initialStage = '
     }
     try { sessionStorage.removeItem('zchat-reg-age'); } catch {}
     setNewUserId(userId);
+    go(initialStage === 'username' ? 'gpass' : 'avatar');
+  };
+  const saveSocialPw = async () => {
+    if (pw.length < 6 || pw !== pw2) { setErr('Both passwords need to match and be at least 6 characters.'); return; }
+    if (loading) return;
+    setLoading(true); setErr('');
+    const { error } = await supabase.auth.updateUser({ password: pw, data: { zpw: 1 } });
+    setLoading(false);
+    if (error) { setErr(friendlyError(error, "Couldn't save your password. Try again.")); return; }
+    setPw(''); setPw2('');
     go('avatar');
   };
   const handleAvatarPick = (e) => {
@@ -4000,7 +4055,7 @@ function RegisterFlow({ onDone, onBack, onStart, onStageChange, initialStage = '
     if (avatarUrl && newUserId) await updateProfile(newUserId, { avatar: avatarUrl });
     onDone();
   };
-  const at = Math.max(0, REG_STAGES.indexOf(stage));
+  const at = Math.max(0, REG_STAGES.indexOf(stage === 'gpass' ? 'password' : stage === 'exists' ? 'email' : stage));
   const progress = (
     <div aria-hidden="true" style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
       {REG_STAGES.map((s, i) => (
@@ -4063,15 +4118,51 @@ function RegisterFlow({ onDone, onBack, onStart, onStageChange, initialStage = '
     );
   }
 
+  if (stage === 'exists') {
+    return (
+      <div className="zchat-tab-in" key="exists">
+        {progress}
+        <AuthArt kind="login" height={180} />
+        <AuthTitle title="You already have an account" sub={<><b style={{ color: AUTH_C.ink, fontWeight: 600 }}>{cleanEmail}</b> is already on ZChat. Log in, or reset your password if you do not remember it.</>} />
+        <button type="button" className="zchat-press" style={authPrimaryStyle(null, false, { marginTop: 8 })} onClick={() => (onBack ? onBack() : go('email'))}>Log in</button>
+        {onForgot && <button type="button" className="zchat-press" style={{ ...authPrimaryStyle(null, false, { marginTop: 12 }), background: '#FFFFFF', color: AUTH_C.navy, boxShadow: `inset 0 0 0 1.5px ${AUTH_C.line}` }} onClick={() => onForgot(cleanEmail)}>Reset password</button>}
+        <div style={{ textAlign: 'center', marginTop: 18 }}>
+          <button type="button" onClick={() => { setCode(''); go('email'); }} style={authLinkStyle(null)}>Use another email</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (stage === 'gpass') {
+    const okPw = pw.length >= 6 && pw === pw2;
+    return (
+      <div className="zchat-tab-in" key="gpass">
+        {progress}
+        <AuthArt kind="lock" height={180} />
+        <AuthTitle title="Add a password" sub="So you can also log in with your email on a new phone, even without Google. Use 6 or more characters." />
+        <PasswordInput value={pw} onChange={setPw} placeholder="Password" autoComplete="new-password" style={{ marginBottom: 14 }} />
+        <PasswordInput value={pw2} onChange={setPw2} placeholder="Type it again" ariaLabel="Confirm password" autoComplete="new-password" onEnter={saveSocialPw} />
+        {pw2 && pw !== pw2 && <div style={{ color: AUTH_C.danger, fontSize: 13.5, marginTop: 10, fontWeight: 600, fontFamily: AUTH_FONT }}>The two passwords are not the same</div>}
+        <AuthError text={err} />
+        <button type="button" className="zchat-press" style={authPrimaryStyle(null, !okPw || loading, { marginTop: 20 })} disabled={!okPw || loading} onClick={saveSocialPw}>
+          {loading ? <Spinner /> : 'Save password'}
+        </button>
+        <div style={{ textAlign: 'center', marginTop: 18 }}>
+          <button type="button" onClick={() => { setErr(''); setPw(''); setPw2(''); go('avatar'); }} disabled={loading} style={authLinkStyle(null)}>Skip for now</button>
+        </div>
+      </div>
+    );
+  }
+
   if (stage === 'otp') {
     return (
       <div className="zchat-tab-in" key="otp">
         {progress}
         <AuthArt kind="login" height={180} />
-        <AuthTitle title="Enter the code" sub={<>We sent a 6 digit code to <b style={{ color: AUTH_C.ink, fontWeight: 600 }}>{cleanEmail}</b></>} />
+        <AuthTitle title="Enter the code" sub={<>We sent a 6 digit code to <b style={{ color: AUTH_C.ink, fontWeight: 600 }}>{cleanEmail}</b>. Not there? Check your spam folder.</>} />
         <OtpBoxes value={code} onChange={setCode} onSubmit={verify} />
         <AuthError text={err} />
-        <ResendRow onResend={sendCode} />
+        <ResendRow onResend={resendCode} />
         <button type="button" className="zchat-press" style={authPrimaryStyle(null, code.length < 6 || loading, { marginTop: 20 })} disabled={code.length < 6 || loading} onClick={() => verify()}>
           {loading ? <Spinner /> : 'Verify'}
         </button>
@@ -6319,9 +6410,11 @@ export const restrictedRowsMem = new Map();
 
 export const chosenPeopleMem = new Map();
 
+const GameCreditsLazy = React.lazy(() => import('./games/gcredits.jsx').then((m) => ({ default: m.CreditsTab })));
 function PrivacyPanel({ onBack }) {
   useBackClose(true, onBack);
   const { theme } = useTheme();
+  const [showCredits, setShowCredits] = useState(false);
   const sections = [
     [<Database />, 'What we store', 'Your email, username, name, and the profile details you choose to add, such as photo, bio, pronouns, age, and country. We also store your messages, photos, videos, voice messages, reactions, follows, and group memberships so they can reach the people you send them to.'],
     [<Activity />, 'How it is used', 'Only to run ZChat: showing your profile, delivering messages, sending notifications you allow, and keeping the community safe when someone reports an account. We never sell your data or show ads.'],
@@ -6341,6 +6434,13 @@ function PrivacyPanel({ onBack }) {
         </div>
       ))}
       <div style={{ padding: '18px 2px 0', fontSize: 12.5, color: theme.muted, lineHeight: 1.6, textAlign: 'center' }}>Questions about your data? Write to us from About in Settings.</div>
+      <div style={{ marginTop: 26, padding: '0 2px' }}>
+        <button type="button" onClick={() => setShowCredits((v) => !v)} aria-expanded={showCredits} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderRadius: 14, border: 'none', cursor: 'pointer', background: theme.dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', color: theme.ink, fontFamily: FONT, textAlign: 'left' }}>
+          <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}><span style={{ fontSize: 14.5, fontWeight: 800 }}>Game credits and licenses</span><span style={{ fontSize: 12.5, color: theme.muted }}>The artists and sounds behind ZChat games</span></span>
+          <ChevronDown size={18} style={{ transform: showCredits ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease', color: theme.muted }} />
+        </button>
+        {showCredits && <div style={{ padding: '12px 2px 6px' }}><React.Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', padding: 16 }}><Spinner size={18} color={theme.muted} /></div>}><GameCreditsLazy tone={{ ink: theme.ink, muted: theme.muted, faint: theme.muted, head: theme.coral, box: theme.dark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)', line: theme.dark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)', chip: theme.dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)', chipTxt: theme.muted }} /></React.Suspense></div>}
+      </div>
     </FullPage>
   );
 }
@@ -13526,7 +13626,7 @@ function MessageBubble({ onCard, translation, senderTitle, onOpenLive, onOpenOnc
                       onPlay={() => onPlayDuel && onPlayDuel(gameState)} onRematch={onGameRematch ? () => onGameRematch(gameState) : null} />
                   )}
                   {LIVE_GAME_KEYS.includes(gameState.g) && (
-                    <LiveGameCard state={gameState} myId={myId} peerName={peerName} onOpen={() => onOpenLive && onOpenLive(gameState)} onRematch={onGameRematch ? () => onGameRematch(gameState) : null} />
+                    <LiveGameCard state={gameState} myId={myId} peerName={peerName} at={m.created_at} onOpen={() => onOpenLive && onOpenLive(gameState)} onRematch={onGameRematch ? () => onGameRematch(gameState) : null} />
                   )}
                   {BOARD_CARDS[gameState.g] && React.createElement(BOARD_CARDS[gameState.g], { state: gameState, myId, live: !!gameLive, fresh: gameFresh, peerName, onMove: guardedGameMove, onRematch: onGameRematch ? () => onGameRematch(gameState) : null })}
                   </>)}
@@ -18581,7 +18681,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-export const APP_VERSION = '57.9V';
+export const APP_VERSION = '58.0V';
 const WN_REV = 55;
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
@@ -22741,14 +22841,15 @@ export function collectionStats(rewards) {
 }
 
 export const CL = { bg: '#0B0B0F', card: '#15151A', card2: '#1E1E25', thumb: '#33333C', line: 'rgba(255,255,255,0.07)', ink: '#F4F4F6', ink2: 'rgba(235,235,245,0.62)', ink3: 'rgba(235,235,245,0.38)', accent: '#8B6CFF', own: '#3DD68C', gold: '#F5B829' };
+export const CV = { bg: 'var(--zc-bg, #0B0B0F)', card: 'var(--zc-card, #15151A)', card2: 'var(--zc-card2, #1E1E25)', thumb: 'var(--zc-thumb, #33333C)', line: 'var(--zc-line, rgba(255,255,255,0.07))', ink: 'var(--zc-ink, #F4F4F6)', ink2: 'var(--zc-ink2, rgba(235,235,245,0.62))', ink3: 'var(--zc-ink3, rgba(235,235,245,0.38))', accent: '#8B6CFF', own: 'var(--zc-own, #3DD68C)', gold: 'var(--zc-gold, #F5B829)', use: 'var(--zc-use, #6FB0F7)', track: 'var(--zc-track, rgba(255,255,255,0.08))' };
 
 export function CollSection({ title, sub, right, children, style }) {
   return (
     <section style={{ marginTop: 26, ...(style || {}) }}>
       <div style={{ padding: '0 2px 12px', display: 'flex', alignItems: 'flex-end', gap: 12 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 20, fontWeight: 700, color: CL.ink, letterSpacing: '-0.015em' }}>{title}</div>
-          {sub && <div style={{ fontSize: 13.5, color: CL.ink2, marginTop: 3, lineHeight: 1.4, textWrap: 'pretty' }}>{sub}</div>}
+          <div style={{ fontSize: 20, fontWeight: 700, color: CV.ink, letterSpacing: '-0.015em' }}>{title}</div>
+          {sub && <div style={{ fontSize: 13.5, color: CV.ink2, marginTop: 3, lineHeight: 1.4, textWrap: 'pretty' }}>{sub}</div>}
         </div>
         {right}
       </div>
@@ -22791,13 +22892,13 @@ export function PieceDots({ own, size = 13 }) {
 }
 
 export function CollPrice({ full, wearing, price, was, free, size = 14 }) {
-  if (wearing) return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: size - 1, fontWeight: 600, color: '#6FB0F7' }}><span style={{ width: 6, height: 6, borderRadius: 3, background: '#6FB0F7' }} />Wearing</span>;
-  if (full) return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: size - 1, fontWeight: 600, color: CL.own }}><Check size={size} strokeWidth={2.6} />Owned</span>;
-  if (free) return <span style={{ fontSize: size - 1, fontWeight: 650, color: CL.gold }}>Free</span>;
+  if (wearing) return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: size - 1, fontWeight: 600, color: CV.use }}><span style={{ width: 6, height: 6, borderRadius: 3, background: CV.use }} />Wearing</span>;
+  if (full) return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: size - 1, fontWeight: 600, color: CV.own }}><Check size={size} strokeWidth={2.6} />Owned</span>;
+  if (free) return <span style={{ fontSize: size - 1, fontWeight: 650, color: CV.gold }}>Free</span>;
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: size, fontWeight: 650, color: CL.ink, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: size, fontWeight: 650, color: CV.ink, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
       <CoinIcon size={size + 1} />{formatCount(price)}
-      {was ? <span style={{ fontSize: size - 2, fontWeight: 500, color: CL.ink3, textDecoration: 'line-through', marginLeft: 2 }}>{formatCount(was)}</span> : null}
+      {was ? <span style={{ fontSize: size - 2, fontWeight: 500, color: CV.ink3, textDecoration: 'line-through', marginLeft: 2 }}>{formatCount(was)}</span> : null}
     </span>
   );
 }
@@ -22955,20 +23056,21 @@ export function CxArt({ kind, k, me, size, dark = true }) {
 }
 export function CxTile({ kind, k, me, status, tone, on, onOpen, cols = 2, covered = false, edition = null }) {
   const spec = cxSpec(kind, k);
+  const { theme } = useTheme();
   if (!spec) return null;
   const label = spec.label;
   return (
     <div role="button" aria-label={`${label} ${cxWord(kind)}${status ? `, ${tone === 'coin' ? `${status} coins` : status}` : ''}${edition ? `, number ${Math.floor(edition).toLocaleString()}` : ''}`} onClick={onOpen} className="zchat-press"
-      style={{ position: 'relative', minWidth: 0, borderRadius: 18, padding: kind === 'theme' ? '8px 8px 11px' : kind === 'reaction' ? '14px 6px 11px' : '18px 12px 12px', cursor: 'pointer', background: CL.card, boxShadow: `inset 0 0 0 ${on ? 2 : 1}px ${on ? CL.accent : CL.line}`, display: 'flex', flexDirection: 'column', alignItems: kind === 'namestyle' ? 'stretch' : 'center' }}>
+      style={{ position: 'relative', minWidth: 0, borderRadius: 18, padding: kind === 'theme' ? '8px 8px 11px' : kind === 'reaction' ? '14px 6px 11px' : '18px 12px 12px', cursor: 'pointer', background: CV.card, boxShadow: `inset 0 0 0 ${on ? 2 : 1}px ${on ? CV.accent : CV.line}`, display: 'flex', flexDirection: 'column', alignItems: kind === 'namestyle' ? 'stretch' : 'center' }}>
       {edition ? <EditionTag n={edition} size={11} style={{ position: 'absolute', top: 14, right: 14, zIndex: 2, padding: '3px 6px', borderRadius: 8, background: 'rgba(11,11,15,0.62)' }} /> : null}
-      {kind === 'namestyle' && <div style={{ minHeight: 40, display: 'flex', alignItems: 'center', minWidth: 0 }}><NameStyleArt k={k} name={me && me.name} size={19} width={cols >= 3 ? 110 : 150} /></div>}
+      {kind === 'namestyle' && <div style={{ minHeight: 40, display: 'flex', alignItems: 'center', minWidth: 0 }}><NameStyleArt k={k} name={me && me.name} size={19} width={cols >= 3 ? 110 : 150} dark={!!theme.dark} /></div>}
       {kind === 'theme' && <PtTileArt k={k} me={me} covered={covered} />}
-      {kind === 'reaction' && <div style={{ height: 58, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><SuperFace k={k} size={52} dark /></div>}
+      {kind === 'reaction' && <div style={{ height: 58, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><SuperFace k={k} size={52} dark={!!theme.dark} /></div>}
       <div style={{ alignSelf: 'stretch', display: 'flex', alignItems: kind === 'theme' ? 'flex-start' : 'center', justifyContent: kind === 'reaction' ? 'space-between' : 'flex-start', flex: kind === 'reaction' ? 1 : 'none', gap: kind === 'theme' ? 3 : 6, minWidth: 0, marginTop: kind === 'namestyle' ? 10 : 8, padding: kind === 'theme' ? '0 4px' : 0, flexDirection: kind === 'namestyle' ? 'row' : 'column' }}>
-        <span style={{ flex: kind === 'namestyle' ? 1 : 'none', minWidth: 0, maxWidth: '100%', fontSize: kind === 'reaction' ? 13 : 14, fontWeight: 600, color: CL.ink, overflow: 'hidden', textAlign: kind === 'reaction' ? 'center' : 'left', ...(kind === 'reaction' ? { lineHeight: 1.25, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' } : { whiteSpace: 'nowrap', textOverflow: 'ellipsis' }) }}>{label}</span>
+        <span style={{ flex: kind === 'namestyle' ? 1 : 'none', minWidth: 0, maxWidth: '100%', fontSize: kind === 'reaction' ? 13 : 14, fontWeight: 600, color: CV.ink, overflow: 'hidden', textAlign: kind === 'reaction' ? 'center' : 'left', ...(kind === 'reaction' ? { lineHeight: 1.25, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' } : { whiteSpace: 'nowrap', textOverflow: 'ellipsis' }) }}>{label}</span>
         {tone === 'coin'
           ? <CollPrice price={Number(status)} size={kind === 'reaction' ? 12.5 : 13} />
-          : status ? <span style={{ fontSize: 12.5, fontWeight: 600, color: tone === 'use' ? '#6FB0F7' : tone === 'own' ? CL.own : CL.gold, flexShrink: 0 }}>{status}</span> : null}
+          : status ? <span style={{ fontSize: 12.5, fontWeight: 600, color: tone === 'use' ? CV.use : tone === 'own' ? CV.own : CV.gold, flexShrink: 0 }}>{status}</span> : null}
       </div>
     </div>
   );
@@ -24841,13 +24943,26 @@ function readKeptTextStyle() {
 export function newClientId() {
   try { return crypto.randomUUID(); } catch { return `c${Date.now()}${Math.random().toString(36).slice(2, 12)}`; }
 }
+const SRV_CLOCK = { off: 0, n: 0 };
+export function noteServerTime(iso, sentAt) {
+  const t = Date.parse(iso || '');
+  if (!Number.isFinite(t)) return;
+  const now = Date.now();
+  const local = sentAt && now - sentAt < 8000 ? (sentAt + now) / 2 : now - 150;
+  const o = t - local;
+  if (Math.abs(o) > 7 * 86400000) return;
+  SRV_CLOCK.off = SRV_CLOCK.n ? SRV_CLOCK.off * 0.75 + o * 0.25 : o;
+  SRV_CLOCK.n = Math.min(SRV_CLOCK.n + 1, 50);
+}
+export const serverNow = () => Date.now() + SRV_CLOCK.off;
 const OPTIONAL_MESSAGE_COLUMNS = ['client_id', 'bubble_style', 'text_font', 'topic'];
 async function insertMessageSafe(rowIn) {
   const row = { ...rowIn };
   for (let i = 0; i < 4; i++) {
     let r;
+    const sentAt = Date.now();
     try { r = await supabase.from('messages').insert(row).select().single(); } catch (thrown) { r = { data: null, error: thrown }; }
-    if (r.data) return r;
+    if (r.data) { noteServerTime(r.data.created_at, sentAt); return r; }
     const msg = String((r.error && r.error.message) || '');
     if (r.error && (r.error.code === '23505' || /duplicate key/i.test(msg)) && row.client_id) {
       const { data } = await supabase.from('messages').select('*').eq('sender_id', row.sender_id).eq('client_id', row.client_id).maybeSingle();
@@ -36095,6 +36210,23 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (v) setZombieGame({ at: Date.now(), join: { reg: v.reg, r: v.r, back: true } });
   }, []);
   const [siegePick, setSiegePick] = useState(null);
+  const [invitePop, setInvitePop] = useState(null);
+  const joinFromInvite = (st) => {
+    if (!st) return;
+    setInvitePop(null);
+    setShowGames(false);
+    const rm = st.rm || st.id;
+    if (st.g !== 'siege') setSiegeGame(null);
+    if (st.g !== 'roll') setRollGame(null);
+    if (st.g !== 'race') setRaceGame(null);
+    if (st.g !== 'zombie') setZombieGame(null);
+    if (st.g === 'siege') { setSiegeGame(st.pb && st.reg ? { rm: `pub-${st.reg}-${st.pb}`, host: null, sv: 1, reg: st.reg, pub: { reg: st.reg, n: st.pb | 0 } } : { rm, host: st.x, sv: st.sv ? 1 : 0, reg: st.reg || undefined }); return; }
+    if (st.g === 'roll') { setRollGame({ rm, host: st.x }); return; }
+    if (st.g === 'race') { setRaceGame({ rm, host: st.x }); return; }
+    if (st.g === 'zombie') { const [reg, r] = String(st.rm || '').split(':'); if (reg && r) setZombieGame({ at: Date.now(), join: { reg, r, from: st.x } }); return; }
+    if (st.g === 'gulpco') { if (typeof st.rm === 'string') setGulpRoom({ rm: st.rm }); return; }
+    cachedProfile(st.x).then((p) => { if (p) openChat(p, null); }, () => {});
+  };
   const [watchGame, setWatchGame] = useState(null);
   const [castWatch, setCastWatch] = useState(null);
   const openWatch = async (r) => {
@@ -36118,7 +36250,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [rollPick, setRollPick] = useState(null);
   const [gulpRoom, setGulpRoom] = useState(null);
   const [gulpPick, setGulpPick] = useState(null);
-  if (typeof window !== 'undefined' && window.__zfake) { window.__zopenGulpRoom = (rm) => setGulpRoom({ rm }); window.__zopenZombie = (j) => setZombieGame({ at: Date.now(), join: j || null }); window.__zopenRoll = (rm, host, watch) => setRollGame({ rm, host, watch: !!watch }); window.__zopenRace = (rm, host, watch) => setRaceGame({ rm, host, watch: !!watch }); window.__zraceSolo = () => setRaceGame({ solo: true, rm: 'solo' }); window.__zsiegeSolo = () => setSiegeGame({ solo: true, rm: 'solo' }); window.__zopenSiege = (rm, host, watch) => setSiegeGame({ rm, host, watch: !!watch }); }
+  if (typeof window !== 'undefined' && window.__zfake) { window.__zopenGulpRoom = (rm) => setGulpRoom({ rm }); window.__zopenZombie = (j) => setZombieGame({ at: Date.now(), join: j || null }); window.__zopenRoll = (rm, host, watch) => setRollGame({ rm, host, watch: !!watch }); window.__zopenRace = (rm, host, watch) => setRaceGame({ rm, host, watch: !!watch }); window.__zraceSolo = () => setRaceGame({ solo: true, rm: 'solo' }); window.__zsiegeSolo = () => setSiegeGame({ solo: true, rm: 'solo' }); window.__zopenSiege = (rm, host, watch, extra) => setSiegeGame({ rm, host, watch: !!watch , ...(extra || {}) }); }
   const joinLivePlay = async (r) => {
     const info = (r && r.info) || {};
     if (!r) return;
@@ -36132,12 +36264,13 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     }
     if (r.game === 'roll') { setRollGame({ rm: r.room, host: info.h || r.user_id }); return; }
     if (r.game === 'race') { setRaceGame({ rm: r.room, host: info.h || r.user_id }); return; }
-    if (r.game === 'siege') { setSiegeGame({ rm: r.room, host: info.h || r.user_id }); return; }
+    if (r.game === 'siege') { setSiegeGame(info.pb && info.reg ? { rm: `pub-${info.reg}-${info.pb}`, host: null, sv: 1, reg: info.reg, pub: { reg: info.reg, n: info.pb | 0 } } : { rm: r.room, host: info.h || r.user_id, sv: info.sv ? 1 : 0, reg: info.reg || undefined }); return; }
     if (r.game === 'gulp' && info.co && typeof info.rm === 'string') { setGulpRoom({ rm: info.rm }); return; }
     openWatch(r);
   };
   if (typeof window !== 'undefined' && window.__zfake) { window.__zwatch = (r) => openWatch(r); window.__zjoinLive = (r) => joinLivePlay(r); window.__zgames = (o) => setShowGames({ at: Date.now(), ...(o || {}) }); window.__zstartGame = async (uid, k, extra) => { const p = await cachedProfile(uid); if (p) startGameWith(p, k, extra); }; window.__zduelPlay = (st) => setDuelPlay(st); }
   const [liveByUser, setLiveByUser] = useState(() => new Map());
+  const livePullRef = useRef(null);
   const liveUid = session && session.user ? session.user.id : null;
   castMe.id = liveUid;
   castMe.me = me;
@@ -36147,14 +36280,16 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (!liveUid) return undefined;
     let alive = true;
     const sig = (m) => [...m.entries()].map(([k, v]) => `${k}:${v.game}:${v.room}:${JSON.stringify(v.info || {})}`).join('|');
-    const pull = () => livePlayRows(false).then((rows) => {
+    const pull = (force) => livePlayRows(!!force).then((rows) => {
       if (!alive) return;
       const m = new Map();
       for (const r of rows || []) if (r && r.user_id && !m.has(r.user_id)) m.set(r.user_id, r);
       setLiveByUser((prev) => (sig(prev) === sig(m) ? prev : m));
+      liveStorePut(m);
     });
+    livePullRef.current = () => pull(true);
     pull();
-    const iv = setInterval(() => { if (document.visibilityState === 'visible') pull(); }, 40000);
+    const iv = setInterval(() => { if (document.visibilityState === 'visible') pull(); }, 20000);
     const vis = () => { if (document.visibilityState === 'visible') pull(); };
     document.addEventListener('visibilitychange', vis);
     return () => { alive = false; clearInterval(iv); document.removeEventListener('visibilitychange', vis); };
@@ -36200,12 +36335,43 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       try { await sendGameStateTo(p, st, { quiet: false }); } catch {}
     }
   };
-  const startSiegeWith = async (profiles, rmIn) => {
+  const inviteAtRef = useRef(new Map());
+  const inviteGate = (p, g) => {
+    const k = `${g}:${p.id}`;
+    const last = inviteAtRef.current.get(k) || 0;
+    const wait = Math.ceil((10000 - (Date.now() - last)) / 1000);
+    if (wait > 0) { showSnack(`Wait ${wait} seconds before inviting ${String(p.name || 'them').split(' ')[0]} again`); return false; }
+    inviteAtRef.current.set(k, Date.now());
+    return true;
+  };
+  const endOldInvites = async (match) => {
+    try {
+      const since = new Date(serverNow() - 3 * 3600 * 1000).toISOString();
+      let q = supabase.from('messages').select('id, content, receiver_id').eq('sender_id', session.user.id).like('content', 'zgame:%').gt('created_at', since).order('created_at', { ascending: false }).limit(40);
+      if (match.to) q = q.eq('receiver_id', match.to);
+      const { data } = await q;
+      for (const row of data || []) {
+        const st = parseGameMessage(row.content);
+        if (!st || st.st !== 'wait' || (match.g && st.g !== match.g) || (match.rm && String(st.rm || st.id) !== String(match.rm)) || (match.keep && String(st.rm || st.id) === String(match.keep))) continue;
+        const next = { ...st, st: 'gone' };
+        const content = encodeGameMessage(next);
+        setMessages((prev) => prev.map((x) => (x.id === row.id ? { ...x, content } : x)));
+        supabase.from('messages').update({ content }).eq('id', row.id).eq('sender_id', session.user.id).then(() => {}, () => {});
+      }
+    } catch {}
+  };
+  roomInviteEnd.fn = (g, rm) => { if (rm) endOldInvites({ g, rm }); };
+  const startSiegeWith = async (profiles, rmIn, info) => {
+    const list = (profiles || []).filter((p) => p && !p.is_bot && inviteGate(p, 'siege'));
+    if (!list.length && profiles && profiles.length) return;
+    const sv = rmIn ? !!(siegeGame && siegeGame.sv) : await boltServerOn();
+    let reg = rmIn && siegeGame ? siegeGame.reg : null;
+    if (sv && !reg) { try { reg = bestRegion(await pingRegions()) || 'asia'; } catch { reg = 'asia'; } }
     const rm = rmIn || newClientId();
-    if (!rmIn) setSiegeGame({ rm, host: session.user.id });
-    for (const p of profiles || []) {
-      if (!p || p.is_bot) continue;
-      const st = { g: 'siege', id: newClientId(), x: session.user.id, o: p.id, w: null, n: 0, st: 'wait', exp: Date.now() + LIVE_INVITE_MS, sx: 0, so: 0, rm };
+    if (!rmIn) setSiegeGame({ rm, host: session.user.id, sv: sv ? 1 : 0, reg: reg || undefined });
+    for (const p of list) {
+      endOldInvites({ g: 'siege', to: p.id, keep: rm });
+      const st = { g: 'siege', id: newClientId(), x: session.user.id, o: p.id, w: null, n: 0, st: 'wait', ts: Date.now(), exp: Date.now() + 3 * 60 * 1000, sx: 0, so: 0, rm, sv: sv ? 1 : undefined, reg: sv ? reg : undefined, pb: rmIn && siegeGame && siegeGame.pub ? siegeGame.pub.n : undefined, md: info && info.md ? String(info.md).slice(0, 24) : undefined };
       try { await sendGameStateTo(p, st, { quiet: false }); } catch {}
     }
   };
@@ -36228,7 +36394,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (st.x !== session.user.id && st.o !== session.user.id) return;
     if (st.g === 'roll') { setRollGame({ rm: st.rm || st.id, host: st.x }); return; }
     if (st.g === 'race') { setRaceGame({ rm: st.rm || st.id, host: st.x }); return; }
-    if (st.g === 'siege') { setSiegeGame({ rm: st.rm || st.id, host: st.x }); return; }
+    if (st.g === 'siege') { setSiegeGame(st.pb && st.reg ? { rm: `pub-${st.reg}-${st.pb}`, host: null, sv: 1, reg: st.reg, pub: { reg: st.reg, n: st.pb | 0 } } : { rm: st.rm || st.id, host: st.x, sv: st.sv ? 1 : 0, reg: st.reg || undefined }); return; }
     if (st.g === 'zombie') { const [reg, r] = String(st.rm || '').split(':'); if (reg && r) { setShowGames(false); setZombieGame({ at: Date.now(), join: { reg, r, from: st.x !== session.user.id ? st.x : null } }); } return; }
     if (st.g === 'gulpco') { if (typeof st.rm === 'string') setGulpRoom({ rm: st.rm }); return; }
     setLiveGame({ state: st, messageId: msg.id, peer });
@@ -37055,6 +37221,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const { data: profsRaw, error: profErr } = fast && Array.isArray(fast.profiles) ? { data: fast.profiles, error: null } : await fetchProfilesView(otherIds.length ? otherIds : noIds);
     if (profErr || !profsRaw) return;
     const profs = sanitizeAvatarList(profsRaw, myId);
+    const nowCap = serverNow() + 3000;
     const mergedAll = visible
       .map((c) => {
         const otherId = c.user_a === myId ? c.user_b : c.user_a;
@@ -37064,8 +37231,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         const profile = foundProfile || { id: otherId, name: 'Deleted Account', username: 'deleted', avatar: '', is_deleted: true };
         const baseName = theirAlias ? theirAlias.alias : profile.name;
         const last = lastByOther[otherId];
-        const convTime = c.last_message_at ? new Date(c.last_message_at).getTime() : 0;
-        const msgTime = last ? new Date(last.created_at).getTime() : 0;
+        const convTime = c.last_message_at ? Math.min(new Date(c.last_message_at).getTime() || 0, nowCap) : 0;
+        const msgTime = last ? Math.min(new Date(last.created_at).getTime() || 0, nowCap) : 0;
         const top = newestAny[otherId];
         const topHidden = !!top && top !== last && isHid(top) && new Date(top.created_at).getTime() >= convTime - 1500;
         const useStored = !topHidden && !c.disappear_secs && (!last || (c.last_message && convTime - msgTime > 1500));
@@ -37123,14 +37290,15 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       : type === 'system' ? text
       : 'Video';
     await supabase.from('conversations').upsert(
-      { user_a: a, user_b: b, last_message: preview, last_message_at: new Date().toISOString(), last_sender_id: session.user.id },
+      { user_a: a, user_b: b, last_message: preview, last_message_at: new Date(serverNow()).toISOString(), last_sender_id: session.user.id },
       { onConflict: 'user_a,user_b' }
     );
   };
 
   const listHoldRef = useRef({ dm: {}, dmf: {}, g: {}, gf: {}, gone: {} });
+  const listNewTimerRef = useRef(0);
   const LIST_HOLD_MS = 30000;
-  const msgTimeOf = (m) => { const t = m && m.created_at ? new Date(m.created_at).getTime() : 0; return Number.isFinite(t) ? t : 0; };
+  const msgTimeOf = (m) => { if (m && (m.queued || String(m.id || '').startsWith('temp-'))) return serverNow(); const t = m && m.created_at ? new Date(m.created_at).getTime() : 0; return Number.isFinite(t) ? Math.min(t, serverNow() + 3000) : 0; };
   const previewSig = (p) => (p ? `${p.kind}|${p.text}` : '');
   const sortConvRows = (list) => list.slice().sort((x, y) => {
     const px = isPinnedByMe(x) ? 1 : 0;
@@ -37138,7 +37306,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (px !== py) return py - px;
     return (y.sortTime || 0) - (x.sortTime || 0);
   });
-  const sortGroupRows = (list) => list.slice().sort((a, b) => new Date(b.last_message_at) - new Date(a.last_message_at));
+  const sortGroupRows = (list) => { const cap = serverNow() + 3000; const at = (g) => Math.min(new Date(g.last_message_at).getTime() || 0, cap); return list.slice().sort((a, b) => at(b) - at(a)); };
   const findConvRow = (otherId) => conversationsRef.current.find((c) => c.otherProfile && c.otherProfile.id === otherId) || archivedConversationsRef.current.find((c) => c.otherProfile && c.otherProfile.id === otherId) || null;
   const dmFieldsFor = (m, keepTime, row) => {
     const mine = !!m && m.sender_id === session.user.id;
@@ -37376,8 +37544,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const listNoteIncomingGroup = (row) => {
     const g = groupsRef.current.find((x) => x.id === row.group_id);
     if (!g || g.lastId === row.id) return;
+    noteServerTime(row.created_at);
     const t = msgTimeOf(row);
-    if (t < (g.last_message_at ? new Date(g.last_message_at).getTime() : 0) - 1500) return;
+    if (t < (g.last_message_at ? new Date(g.last_message_at).getTime() : 0) - 1500 && serverNow() - t > 60000) return;
     const apply = (nm) => {
       const f = groupFieldsFor(row);
       if (row.type !== 'system') f.previewPrefix = `${String(nm || 'Someone').split(' ')[0]}: `;
@@ -37389,11 +37558,13 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     else cachedProfile(row.sender_id).then((p) => apply(p ? p.name : null), () => apply(null));
   };
   const listNoteIncomingDm = (msg) => {
+    noteServerTime(msg.created_at);
     const row = findConvRow(msg.sender_id);
-    if (!row || row.lastId === msg.id) return;
-    const t = msgTimeOf(msg);
-    if (t < (row.sortTime || 0) - 1500) return;
-    putDmPreview(msg.sender_id, dmFieldsFor(msg, false, row), t, null);
+    if (!row) { if (reloadListsRef.current) { clearTimeout(listNewTimerRef.current); listNewTimerRef.current = setTimeout(() => reloadListsRef.current && reloadListsRef.current(), 400); } return; }
+    if (row.lastId === msg.id) return;
+    const t = Math.max(msgTimeOf(msg), serverNow() - 1000);
+    if (t < (row.sortTime || 0) - 1500 && serverNow() - msgTimeOf(msg) > 60000) return;
+    putDmPreview(msg.sender_id, { ...dmFieldsFor(msg, false, row), sortTime: t }, t, null);
     setUnreadCounts((prev) => ({ ...prev, [msg.sender_id]: (prev[msg.sender_id] || 0) + 1 }));
   };
   const listForgetTemp = (kind, id, tempId) => {
@@ -38121,6 +38292,13 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       const current = activeProfileRefForCalls.current;
       if (msg.sender_id !== me.id) {
         if (blockedRef.current.has(msg.sender_id)) return;
+        if (typeof msg.content === 'string' && msg.content.indexOf('zgame:') === 0) {
+          const ist = parseGameMessage(msg.content);
+          if (ist && LIVE_GAME_KEYS.includes(ist.g) && ist.st === 'wait' && ist.o === me.id && (!ist.exp || ist.exp > Date.now() + 5000)) {
+            if (livePullRef.current) livePullRef.current();
+            cachedProfile(msg.sender_id).then((p) => setInvitePop({ st: ist, from: p || { id: msg.sender_id, name: 'A friend' }, at: Date.now(), id: msg.id }), () => setInvitePop({ st: ist, from: { id: msg.sender_id, name: 'A friend' }, at: Date.now(), id: msg.id }));
+          }
+        }
         unhideChatLocally(msg.sender_id);
         const inView = msg.sender_id === (current && current.id) && mobileShowChatRef.current;
         if (!inView || document.visibilityState !== 'visible') {
@@ -46755,7 +46933,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           hasPasswordLogin={(() => {
             const meta = session.user.app_metadata || {};
             const provs = Array.isArray(meta.providers) ? meta.providers : (meta.provider ? [meta.provider] : []);
-            return provs.length === 0 || provs.includes('email');
+            return provs.length === 0 || provs.includes('email') || !!(session.user.user_metadata && session.user.user_metadata.zpw);
           })()}
           onOpenDelete={() => { setShowSettings(false); setShowDeleteAccount(true); }}
           sessionForLinks={session} onOpenWhatsNew={() => setShowWhatsNew(true)} onOpenWallet={() => setWalletOpen(true)}
@@ -47473,7 +47651,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onOpenProfile={(p) => { setFeedOpen(false); setProfileOf(sanitizeAvatar(p, session.user.id)); }} />
       )}
       {collectionOpen && me && (
-        <PageGuard name="collection" onClose={() => setCollectionOpen(false)}><CollectionPanel me={me} rewards={myRewards} isAdmin={isZAdmin} startSet={typeof collectionOpen === 'string' ? collectionOpen : null} onClose={() => setCollectionOpen(false)} onEquip={equipReward} onWear={equipDecor} onOpenWallet={() => setWalletOpen(true)} onGift={(kind, key) => setGiftPick({ kind, key })} onRewardsChanged={reloadMyRewards} onOpenShop={(t) => { setCollectionOpen(false); setTimeout(() => setShopOpen(t === 'styles' ? 'tab:styles' : true), 30); }} /></PageGuard>
+        <PageGuard name="collection" onClose={() => setCollectionOpen(false)}><CollectionPanel me={me} rewards={myRewards} isAdmin={isZAdmin} startSet={typeof collectionOpen === 'string' ? collectionOpen : null} onClose={() => setCollectionOpen(false)} onEquip={equipReward} onWear={equipDecor} onOpenWallet={() => setWalletOpen(true)} onGift={(kind, key) => setGiftPick({ kind, key })} onRewardsChanged={reloadMyRewards} onOpenShop={(t) => { setCollectionOpen(false); setTimeout(() => setShopOpen(typeof t === 'string' && /^[a-z]+$/.test(t) ? `tab:${t}` : true), 30); }} /></PageGuard>
       )}
       {shopOpen && me && (
         <PageGuard name="shop" onClose={() => setShopOpen(false)}><ShopPage me={me} rewards={myRewards} startSet={typeof shopOpen === 'string' ? shopOpen : null} onClose={() => setShopOpen(false)} onWear={equipDecor} onEquip={equipReward} onOpenWallet={() => setWalletOpen(true)} onGift={(kind, key) => setGiftPick({ kind, key })} onRewardsChanged={reloadMyRewards} onOpenCollection={() => { setShopOpen(false); setTimeout(() => setCollectionOpen(true), 30); }} /></PageGuard>
@@ -47889,10 +48067,12 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       )}
       {siegeGame && me && (
         <SiegeGamePage key={siegeGame.rm} solo={!!siegeGame.solo} room={siegeGame.solo ? null : siegeGame} me={me} myId={session.user.id} watch={!!siegeGame.watch}
-          onClose={() => { const back = !!siegeGame.watch || !!siegeGame.solo; setSiegeGame(null); if (back) setShowGames(true); }}
+          onClose={() => { const back = !!siegeGame.watch || !!siegeGame.solo; if (!siegeGame.solo && !siegeGame.watch && siegeGame.host === session.user.id) roomInviteEnd.fn('siege', siegeGame.rm); setSiegeGame(null); if (back) setShowGames(true); }}
           onInvite={!siegeGame.solo && siegeGame.host === session.user.id ? (n, side) => setSiegePick({ rm: siegeGame.rm, n, side: !!side }) : null}
-          friends={gameFriends} online={onlineIds} onInviteOne={!siegeGame.watch && (siegeGame.solo || siegeGame.host === session.user.id) ? (p) => startSiegeWith([p], siegeGame.solo ? null : siegeGame.rm) : null} />
+          friends={gameFriends} online={onlineIds} onInviteOne={!siegeGame.watch && (siegeGame.pub || siegeGame.solo || siegeGame.host === session.user.id) ? (p, info) => startSiegeWith([p], siegeGame.solo ? null : siegeGame.rm, info) : null}
+          onServer={(reg, n) => { setSiegeGame({ rm: `pub-${reg}-${n}`, host: null, sv: 1, reg, pub: { reg, n } }); }} />
       )}
+      {invitePop && <InvitePopup pop={invitePop} myId={session.user.id} onJoin={() => joinFromInvite(invitePop.st)} onClose={() => setInvitePop(null)} />}
       {siegePick && (
         <SiegeInviteSheet friends={gameFriends} already={siegePick.n} side={!!siegePick.side} onClose={() => setSiegePick(null)}
           onInvite={(ps) => { const rm = siegePick.rm; setSiegePick(null); setShowGames(false); startSiegeWith(ps, rm); }} />
@@ -59372,6 +59552,7 @@ function Ga2Host({ myId, me, group, members, post }) {
 
 FRIEND_GAME_GROUPS.unshift(['Play live now', LIVE_GAME_KEYS.filter((k) => k !== 'zombie' || cloudOn())]);
 const LIVE_INVITE_MS = 10 * 60 * 1000;
+const roomInviteEnd = { fn: () => {} };
 
 function liveStatusFor(state, myId, peerName) {
   const host = state.x === myId;
@@ -59384,49 +59565,126 @@ function liveStatusFor(state, myId, peerName) {
   return host ? `Waiting for ${first}` : 'Wants to play now';
 }
 
-function LiveGameCard({ state, myId, peerName, onOpen, onRematch }) {
+function InvitePopup({ pop, myId, onJoin, onClose }) {
+  const live = useLiveStore();
+  const [, tick] = useState(0);
+  useEffect(() => { const iv = setInterval(() => tick((n) => n + 1), 500); return () => clearInterval(iv); }, []);
+  const st = pop.st;
+  const SHOW = 30000;
+  const left = Math.max(0, Math.min(SHOW - (Date.now() - pop.at), st.exp ? st.exp - Date.now() : SHOW));
+  const gone = inviteRoomGone(st, live, myId, null);
+  useEffect(() => { if (left <= 0 || gone) { const t = setTimeout(onClose, gone ? 1600 : 0); return () => clearTimeout(t); } return undefined; }, [left <= 0, gone]);
+  const first = String((pop.from && pop.from.name) || 'A friend').split(' ')[0];
+  const frac = left / SHOW;
+  const R = 15, Ci = 2 * Math.PI * R;
+  return ReactDOM.createPortal(
+    <div role="dialog" aria-label={`${first} invited you to ${GAME_TITLES[st.g] || 'a game'}`} style={{ position: 'fixed', left: '50%', top: 'max(10px, env(safe-area-inset-top, 0px))', transform: 'translateX(-50%)', zIndex: 2147483000, width: 'min(380px, calc(100vw - 20px))', fontFamily: FONT, color: '#FFFFFF' }}>
+      <div style={{ animation: 'zchat-pop-in 0.25s ease-out', display: 'flex', alignItems: 'center', gap: 11, padding: '10px 10px 10px 12px', borderRadius: 16, background: 'linear-gradient(180deg, rgba(22,27,38,0.97), rgba(12,15,22,0.97))', boxShadow: '0 12px 30px rgba(0,0,0,0.45), inset 0 0 0 1px rgba(255,255,255,0.09)' }}>
+        <div style={{ position: 'relative', width: 44, height: 44, flexShrink: 0 }}>
+          <GameArt k={st.g} width={44} height={44} radius={11} />
+          <span style={{ position: 'absolute', right: -5, bottom: -5, borderRadius: '50%', boxShadow: '0 0 0 2px #10131B' }}><Avatar emoji={pop.from && pop.from.avatar} name={first} size={22} /></span>
+        </div>
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
+          <span style={{ fontSize: 14, fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{gone ? 'Room closed' : `${first} invited you`}</span>
+          <span style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.7)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{`${GAME_TITLES[st.g] || 'Game'}, ${inviteSub(st)}`}</span>
+        </div>
+        {!gone && (
+          <>
+            <button type="button" aria-label="Decline" onClick={onClose} style={{ width: 38, height: 38, borderRadius: 12, border: 'none', cursor: 'pointer', background: 'rgba(255,255,255,0.1)', color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" /></svg>
+            </button>
+            <button type="button" onClick={onJoin} style={{ position: 'relative', height: 40, padding: '0 16px 0 12px', borderRadius: 12, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0, fontFamily: FONT, fontSize: 14.5, fontWeight: 900, color: '#04220F', background: 'linear-gradient(180deg, #5EE58A, #22B45A)', boxShadow: 'inset 0 -3px 0 rgba(0,0,0,0.18)' }}>
+              <svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true" style={{ margin: '-4px 0 -4px -4px' }}><circle cx="17" cy="17" r={R} fill="none" stroke="rgba(4,34,15,0.2)" strokeWidth="3" /><circle cx="17" cy="17" r={R} fill="none" stroke="#04220F" strokeWidth="3" strokeLinecap="round" strokeDasharray={Ci} strokeDashoffset={Ci * (1 - frac)} transform="rotate(-90 17 17)" /><text x="17" y="21.5" textAnchor="middle" fontSize="12" fontWeight="900" fill="#04220F" fontFamily={FONT}>{Math.ceil(left / 1000)}</text></svg>
+              Join
+            </button>
+          </>
+        )}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+const LIVE_ROOM_GAMES = ['siege', 'roll', 'race'];
+const seenLiveRooms = new Set();
+const INV_GM = { tdm: 'Team deathmatch', hp: 'Hardpoint', waves: 'Waves' };
+const INV_MAP = { city: 'Downtown', base: 'Mars outpost', fort: 'Old fort' };
+const INV_SUB = { race: 'Race up to eight friends', roll: 'Roll with up to four friends', zombie: 'Hold the town together', gulpco: 'Swim with up to ten friends', duo: 'Escape the temple together', siege: 'Team battles and alien waves' };
+function inviteSub(state) {
+  if (state.g === 'siege' && typeof state.md === 'string') {
+    const [gm, map] = state.md.split(':');
+    if (INV_GM[gm]) return `${INV_GM[gm]}${INV_MAP[map] ? `, ${INV_MAP[map]}` : ''}`;
+  }
+  return INV_SUB[state.g] || 'Play together now';
+}
+export function inviteRoomGone(state, live, myId, at) {
+  if (!state || state.st !== 'wait' || !LIVE_ROOM_GAMES.includes(state.g)) return false;
+  const k = `${state.x}:${state.rm || state.id}`;
+  const a = roomAlive(live.get(state.x), state, myId);
+  if (a === true) { seenLiveRooms.add(k); return false; }
+  const sentAt = state.ts || (at ? Date.parse(at) : 0) || 0;
+  if (a !== false || Date.now() - sentAt < 20000) return false;
+  return state.x === myId || seenLiveRooms.has(k);
+}
+function LiveGameCard({ state, myId, peerName, onOpen, onRematch, at }) {
   const { theme } = useTheme();
+  const live = useLiveStore();
   const host = state.x === myId;
-  const waiting = state.st === 'wait' && (!state.exp || Date.now() <= state.exp);
-  useTicker(waiting, 1000);
+  const gone = inviteRoomGone(state, live, myId, at);
+  const waiting = state.st === 'wait' && (!state.exp || Date.now() <= state.exp) && !gone;
+  useTicker(waiting || (state.st === 'wait' && !gone), 1000);
   const left = state.exp ? Math.max(0, Math.round((state.exp - Date.now()) / 1000)) : 0;
   const first = String(peerName || 'They').split(' ')[0];
-  const mine = host ? state.sx || 0 : state.so || 0;
-  const theirs = host ? state.so || 0 : state.sx || 0;
-  const status = liveStatusFor(state, myId, peerName);
-  const hot = waiting && !host;
   const ended = state.st === 'done' || state.st === 'gone' || (state.st === 'wait' && !waiting);
-  return (
-    <GameCardShell k={state.g} width={236} live title={GAME_TITLES[state.g]} status={status} hot={hot}>
-      {state.g === 'race' ? (
-        <div style={{ textAlign: 'center', fontSize: 13, fontWeight: 800, color: theme.ink, padding: '2px 0 4px' }}>Race in 3D, up to eight friends</div>
-      ) : state.g === 'siege' ? (
-        <div style={{ textAlign: 'center', fontSize: 13, fontWeight: 800, color: theme.ink, padding: '2px 0 4px' }}>Fight robot waves, up to ten friends</div>
-      ) : state.g === 'zombie' ? (
-        <div style={{ textAlign: 'center', fontSize: 13, fontWeight: 800, color: theme.ink, padding: '2px 0 4px' }}>Hold the town against zombies together</div>
-      ) : state.g === 'roll' ? (
-        <div style={{ textAlign: 'center', fontSize: 13, fontWeight: 800, color: theme.ink, padding: '2px 0 4px' }}>Roll together, up to four friends</div>
-      ) : state.g === 'gulpco' ? (
-        <div style={{ textAlign: 'center', fontSize: 13, fontWeight: 800, color: theme.ink, padding: '2px 0 4px' }}>Swim together, up to ten friends</div>
-      ) : state.g === 'duo' ? (
-        <div style={{ textAlign: 'center', fontSize: 13, fontWeight: 800, color: theme.ink, padding: '2px 0 4px' }}>{state.sx ? `${state.sx} ${state.sx === 1 ? 'level' : 'levels'} cleared together` : 'Escape the temple together'}</div>
-      ) : (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '2px 0 4px' }}>
-        <span style={{ fontSize: 12.5, fontWeight: 800, color: theme.muted }}>You</span>
-        <span style={{ fontSize: 24, fontWeight: 900, color: theme.ink, fontVariantNumeric: 'tabular-nums' }}>{mine} : {theirs}</span>
-        <span style={{ fontSize: 12.5, fontWeight: 800, color: theme.muted, maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{first}</span>
+  const title = GAME_TITLES[state.g] || 'Game';
+  const row = live.get(state.x);
+  const players = row && LIVE_ROOM_GAMES.includes(state.g) && String(row.room) === String(state.rm || state.id) ? Math.max(1, Number(row.info && row.info.n) || 1) : 0;
+  if (ended && state.g !== 'gulpco' && state.st !== 'done') {
+    return (
+      <div onClick={(e) => e.stopPropagation()} style={{ width: 236, boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: 10, padding: 8, borderRadius: 16, background: theme.dark ? '#1A1D24' : '#F2F3F6', boxShadow: `inset 0 0 0 1px ${theme.dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)'}` }}>
+        <span style={{ filter: 'grayscale(0.85)', opacity: 0.8, display: 'flex' }}><GameArt k={state.g} width={40} height={40} radius={10} /></span>
+        <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+          <span style={{ fontSize: 13.5, fontWeight: 800, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</span>
+          <span style={{ fontSize: 12, fontWeight: 600, color: theme.muted }}>{state.st === 'gone' || gone ? (host ? 'You left the room' : 'Room closed') : 'Invite ended'}</span>
+        </span>
+        {onRematch && <button type="button" className="zchat-press" onClick={onRematch} style={{ flexShrink: 0, height: 30, padding: '0 12px', borderRadius: 15, border: 'none', cursor: 'pointer', background: theme.dark ? '#2A2E38' : '#FFFFFF', color: theme.ink, fontFamily: FONT, fontSize: 12.5, fontWeight: 800, boxShadow: theme.dark ? 'none' : '0 1px 2px rgba(0,0,0,0.12)' }}>{host ? 'Invite again' : 'Play'}</button>}
       </div>
-      )}
-      {waiting && state.g !== 'gulpco' && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: theme.muted, marginTop: 2 }}>
-          <span className="zchat-live-dot" style={{ width: 7, height: 7, borderRadius: '50%', background: '#EF4444' }} />
-          {`Open for ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`}
+    );
+  }
+  if (state.st === 'done') {
+    return (
+      <GameCardShell k={state.g} width={236} live title={title} status={liveStatusFor(state, myId, peerName)}>
+        {onRematch && <GameAgainButton onClick={onRematch} label={state.g !== 'duo' ? 'Rematch' : 'Play again'} color="green" />}
+      </GameCardShell>
+    );
+  }
+  const total = Math.max(1, (state.exp || 0) - (state.ts || ((state.exp || 0) - LIVE_INVITE_MS)));
+  const frac = state.exp ? Math.max(0, Math.min(1, (state.exp - Date.now()) / total)) : 1;
+  const playing = state.st === 'live';
+  return (
+    <div onClick={(e) => e.stopPropagation()} style={{ width: 248, boxSizing: 'border-box', borderRadius: 18, overflow: 'hidden', background: '#11141B', color: '#FFFFFF', fontFamily: FONT, boxShadow: '0 6px 18px rgba(0,0,0,0.22), inset 0 0 0 1px rgba(255,255,255,0.07)' }}>
+      <div style={{ position: 'relative', height: 92 }}>
+        <GameArt k={state.g} width={248} height={92} radius={0} />
+        <div aria-hidden="true" style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(10,12,18,0.05) 20%, rgba(10,12,18,0.88) 100%)' }} />
+        <span style={{ position: 'absolute', left: 10, top: 9, display: 'flex', alignItems: 'center', gap: 5, height: 22, padding: '0 9px', borderRadius: 11, background: 'rgba(10,12,18,0.72)', fontSize: 11.5, fontWeight: 800 }}>
+          <span className="zchat-live-dot" style={{ width: 7, height: 7, borderRadius: '50%', background: '#EF4444' }} />{playing ? 'Playing now' : 'Live invite'}
+        </span>
+        {players > 0 && <span style={{ position: 'absolute', right: 10, top: 9, height: 22, padding: '0 9px', borderRadius: 11, background: 'rgba(10,12,18,0.72)', fontSize: 11.5, fontWeight: 800, display: 'flex', alignItems: 'center' }}>{`${players} in the room`}</span>}
+        <div style={{ position: 'absolute', left: 12, right: 12, bottom: 8 }}>
+          <div style={{ fontSize: 18, fontWeight: 900, letterSpacing: '-0.01em', lineHeight: 1.1, textShadow: '0 2px 6px rgba(0,0,0,0.5)' }}>{title}</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.82)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{inviteSub(state)}</div>
         </div>
-      )}
-      {state.st === 'live' && <div style={{ textAlign: 'center', fontSize: 12, fontWeight: 700, color: theme.muted }}>A round is happening right now</div>}
-      {!ended && <GameAgainButton onClick={onOpen} label={state.g === 'gulpco' ? (host ? 'Open the room' : 'Join the room') : host ? 'Open the game' : 'Join now'} color={host ? 'gold' : 'green'} />}
-      {ended && onRematch && <GameAgainButton onClick={onRematch} label={state.st === 'done' && state.g !== 'duo' ? 'Rematch' : 'Play again'} color="green" />}
-    </GameCardShell>
+      </div>
+      <div style={{ padding: '10px 12px 12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, fontSize: 12.5, fontWeight: 700, color: 'rgba(255,255,255,0.78)' }}>
+          <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{host ? `You invited ${first}` : `${first} invited you`}</span>
+          {state.exp && state.g !== 'gulpco' ? <span style={{ flexShrink: 0, fontVariantNumeric: 'tabular-nums', color: left <= 30 ? '#FCA5A5' : 'rgba(255,255,255,0.6)' }}>{`${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`}</span> : null}
+        </div>
+        {state.exp && state.g !== 'gulpco' ? <div style={{ height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.1)', marginTop: 7, overflow: 'hidden' }}><div style={{ width: `${frac * 100}%`, height: '100%', borderRadius: 2, background: left <= 30 ? '#F87171' : '#4ADE80', transition: 'width 1s linear' }} /></div> : null}
+        <button type="button" className="zchat-press" onClick={onOpen} style={{ width: '100%', height: 42, marginTop: 11, border: 'none', borderRadius: 12, cursor: 'pointer', fontFamily: FONT, fontSize: 15, fontWeight: 900, color: host ? '#1E1300' : '#04220F', background: host ? 'linear-gradient(180deg, #FFD84A, #F2A60C)' : 'linear-gradient(180deg, #5EE58A, #22B45A)', boxShadow: 'inset 0 -3px 0 rgba(0,0,0,0.18)' }}>
+          {state.g === 'gulpco' ? (host ? 'Open the room' : 'Join the room') : host ? 'Open the game' : 'Join'}
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -62271,6 +62529,7 @@ function AppInner() {
   const authBackRef = useRef(null);
   const [needsProfile, setNeedsProfile] = useState(false);
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
   const [recCancel, setRecCancel] = useState(() => { try { const t = new URLSearchParams(window.location.search).get('recovery_cancel'); return t && /^[A-Za-z0-9_-]{43}$/.test(t) ? t : null; } catch { return null; } });
   const [switchingAccountId, setSwitchingAccountId] = useState(null);
   const [switchTo, setSwitchTo] = useState(null);
@@ -62647,10 +62906,10 @@ function AppInner() {
         {shownScreen === 'login' && (
           <LoginStep onSuccess={setSession} onForgot={() => setScreen('forgot')} onGoRegister={() => setScreen('register')} />
         )}
-        {shownScreen === 'forgot' && <ForgotStep onBack={() => setScreen('login')} onFriends={() => setScreen('friends')} />}
+        {shownScreen === 'forgot' && <ForgotStep key={forgotEmail} initialEmail={forgotEmail} onRecovering={setIsPasswordRecovery} onBack={() => setScreen('login')} onFriends={() => setScreen('friends')} />}
         {shownScreen === 'friends' && <FriendsRecoveryStep onBack={() => setScreen('forgot')} onSuccess={setSession} />}
         {shownScreen === 'register' && (
-          <RegisterFlow onStageChange={setRegStage} onStart={() => setRegistering(true)} onDone={() => { setRegistering(false); setScreen('login'); }} onBack={() => setScreen('login')} />
+          <RegisterFlow onStageChange={setRegStage} onStart={() => setRegistering(true)} onDone={() => { setRegistering(false); setScreen('login'); }} onBack={() => setScreen('login')} onForgot={(em) => { setForgotEmail(em || ''); setScreen('forgot'); }} />
         )}
       </AuthShell>
     );
