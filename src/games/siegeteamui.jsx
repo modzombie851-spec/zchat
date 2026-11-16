@@ -9,7 +9,20 @@ import { parseSBM } from './siegechar.js';
 export const TCOL = T.TEAM_COL;
 export const TNAME = ['Blue', 'Red'];
 export const TS_ITEMS = [1, 2, 3, 4, 5].map((n) => [String(n), `${n}v${n}`]);
-export const MODE_ITEMS = [['waves', 'Waves'], ['team', 'Team battle']];
+export const MODE_ITEMS = [['waves', 'Waves'], ['tdm', 'Team deathmatch'], ['hp', 'Hardpoint']];
+export function ModePick({ value, onPick, disabled }) {
+  return (
+    <div role="radiogroup" aria-label="Game mode" style={{ display: 'flex', flexWrap: 'wrap', gap: 4, padding: 4, borderRadius: 13, background: 'rgba(0,0,0,0.45)', boxShadow: `inset 0 2px 5px rgba(0,0,0,0.5), 0 0 0 2px ${INK}` }}>
+      {MODE_ITEMS.map(([k, t]) => {
+        const on = value === k;
+        return (
+          <button key={k} type="button" role="radio" aria-checked={on} className="zgk-btn" disabled={!!disabled && !on} {...pressProps(() => { if (!disabled && !on) onPick(k); })}
+            style={{ flex: '1 0 auto', height: 34, border: 'none', borderRadius: 9, padding: '0 10px', fontFamily: FONT, fontSize: 13, fontWeight: 900, cursor: disabled ? 'default' : 'pointer', whiteSpace: 'nowrap', background: on ? 'linear-gradient(180deg, #FFE868 0%, #F5B21E 100%)' : 'transparent', color: on ? '#3A2500' : 'rgba(255,255,255,0.84)', boxShadow: on ? `0 0 0 2px ${INK}, inset 0 -3px 0 rgba(150,90,0,0.45), inset 0 2px 0 rgba(255,255,255,0.55)` : 'none', textShadow: on ? '0 1px 0 rgba(255,255,255,0.5)' : 'none', opacity: disabled && !on ? 0.45 : 1 }}>{t}</button>
+        );
+      })}
+    </div>
+  );
+}
 export const mmss = (s) => { const v = Math.max(0, Math.floor(s)); return `${Math.floor(v / 60)}:${String(v % 60).padStart(2, '0')}`; };
 
 export const TLOOK = {
@@ -27,8 +40,8 @@ const TINTI = new Float32Array([0.75, 0.95, 1.4, 0.553]);
 const TINTSOFT = [new Float32Array([0.74, 0.92, 1.38, 0.553]), new Float32Array([1.38, 0.74, 0.7, 0.553]), new Float32Array([1.08, 0.9, 1.3, 0.553])];
 export const unitCol = (b, my, soft) => (b.flash > 0 ? TINTF : b.stun > 0 || b.stunV ? TINTI : (soft ? TINTSOFT : TINTS)[b.tm == null || b.tm < 0 ? 2 : b.tm === my ? 0 : 1]);
 
-export const SKI = {'blaze.atk': 0, 'blaze.sup': 1, 'blaze.gad': 2, 'pip.atk': 3, 'pip.sup': 4, 'pip.gad': 5, 'boom.atk': 6, 'boom.sup': 7, 'boom.gad': 8, 'mira.atk': 9, 'mira.sup': 10, 'mira.gad': 11, 'rex.atk': 12, 'rex.sup': 13, 'rex.gad': 14, 'volt.atk': 15, 'volt.sup': 16, 'volt.gad': 17, 'kai.atk': 18, 'kai.sup': 19, 'kai.gad': 20, 'ivy.atk': 21, 'ivy.sup': 22, 'ivy.gad': 23, 'nyx.atk': 24, 'nyx.sup': 25, 'nyx.gad': 26, 'arlo.atk': 27, 'arlo.sup': 28, 'arlo.gad': 29, 'tusk.atk': 30, 'tusk.sup': 31, 'tusk.gad': 32, 'wren.atk': 33, 'wren.sup': 34, 'wren.gad': 35, 'sk.blink': 36, 'sk.mend': 37, 'sk.hunter': 38, 'sk.guard': 39, 'sk.sprint': 40, 'sk.shock': 41, 'dash': 42, 'home': 43};
-export const SKI_URL = '/bolt/skill-icons-v1.webp';
+export const SKI = {'blaze.atk': 0, 'blaze.sup': 1, 'blaze.gad': 2, 'pip.atk': 3, 'pip.sup': 4, 'pip.gad': 5, 'boom.atk': 6, 'boom.sup': 7, 'boom.gad': 8, 'mira.atk': 9, 'mira.sup': 10, 'mira.gad': 11, 'rex.atk': 12, 'rex.sup': 13, 'rex.gad': 14, 'volt.atk': 15, 'volt.sup': 16, 'volt.gad': 17, 'kai.atk': 18, 'kai.sup': 19, 'kai.gad': 20, 'ivy.atk': 21, 'ivy.sup': 22, 'ivy.gad': 23, 'nyx.atk': 24, 'nyx.sup': 25, 'nyx.gad': 26, 'arlo.atk': 27, 'arlo.sup': 28, 'arlo.gad': 29, 'wren.atk': 30, 'wren.sup': 31, 'wren.gad': 32, 'sk.blink': 33, 'sk.mend': 34, 'sk.hunter': 35, 'sk.guard': 36, 'sk.sprint': 37, 'sk.shock': 38, 'dash': 39, 'home': 40};
+export const SKI_URL = '/bolt/skill-icons-v2.webp';
 export const heroIc = (key, slot) => (SKI[`${key}.${slot}`] != null ? `${key}.${slot}` : null);
 export function SkIcon({ k, size = 40, dim, style }) {
   const i = SKI[k];
@@ -97,39 +110,34 @@ export function TeamScore({ hud, onPress }) {
   const t = hud.tm;
   if (!t) return null;
   const a = t.sc[t.my === 1 ? 1 : 0], b = t.sc[t.my === 1 ? 0 : 1];
+  const left = t.gm ? Math.max(0, t.tlim - t.t) : t.t;
+  const sub = t.od ? 'Overtime' : t.goal ? `First to ${t.goal}` : `${t.k} ${t.d} ${t.a}`;
   return (
     <button type="button" className="zgk-btn" aria-label={`Your team ${a}, enemy team ${b}. Open the scoreboard`} {...pressProps(() => { kitTap(); onPress(); })}
-      style={{ pointerEvents: 'auto', display: 'flex', alignItems: 'stretch', height: 30, padding: 0, border: 'none', borderRadius: 9, overflow: 'hidden', cursor: 'pointer', fontFamily: FONT, color: '#FFFFFF', boxShadow: '0 3px 8px rgba(0,0,0,0.3), 0 0 0 1.5px rgba(255,255,255,0.16)', background: 'rgba(10,14,26,0.78)' }}>
-      <span style={{ minWidth: 34, padding: '0 8px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(180deg, ${TCOL[0]}, #1F5FD0)`, fontSize: 17, fontWeight: 900, textShadow: `0 2px 0 ${INK}` }}>{a}</span>
-      <span style={{ minWidth: 50, padding: '0 7px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', lineHeight: 1.05 }}>
-        <span style={{ fontSize: 12.5, fontWeight: 900, fontVariantNumeric: 'tabular-nums' }}>{mmss(t.t)}</span>
-        <span style={{ fontSize: 9, fontWeight: 800, color: 'rgba(255,255,255,0.65)', fontVariantNumeric: 'tabular-nums' }}>{`${t.k} ${t.d} ${t.a}`}</span>
+      style={{ pointerEvents: 'auto', display: 'flex', alignItems: 'stretch', height: 34, padding: 0, border: 'none', borderRadius: 8, overflow: 'hidden', cursor: 'pointer', fontFamily: FONT, color: '#FFFFFF', boxShadow: '0 2px 6px rgba(0,0,0,0.3)', background: 'rgba(8,12,22,0.62)' }}>
+      <span style={{ minWidth: 38, padding: '0 8px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(180deg, #3D8BFF, #2364D6)', fontSize: 18, fontWeight: 900, fontVariantNumeric: 'tabular-nums', textShadow: '0 1px 2px rgba(0,0,0,0.45)' }}>{a}</span>
+      <span style={{ minWidth: 58, padding: '0 7px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', lineHeight: 1.1 }}>
+        <span style={{ fontSize: 13, fontWeight: 900, fontVariantNumeric: 'tabular-nums', color: t.gm && left < 60 && !t.od ? '#FFD45A' : '#FFFFFF' }}>{t.od ? '0:00' : mmss(left)}</span>
+        <span style={{ fontSize: 9, fontWeight: 800, color: t.od ? '#FFD45A' : 'rgba(255,255,255,0.7)', whiteSpace: 'nowrap' }}>{sub}</span>
       </span>
-      <span style={{ minWidth: 34, padding: '0 8px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(180deg, ${TCOL[1]}, #C42639)`, fontSize: 17, fontWeight: 900, textShadow: `0 2px 0 ${INK}` }}>{b}</span>
+      <span style={{ minWidth: 38, padding: '0 8px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(180deg, #FF4D5E, #CC2B3C)', fontSize: 18, fontWeight: 900, fontVariantNumeric: 'tabular-nums', textShadow: '0 1px 2px rgba(0,0,0,0.45)' }}>{b}</span>
     </button>
   );
 }
 
-export function TeamRoster({ hud, myK, nameOf, thumbs }) {
+export function ZoneChip({ hud }) {
   const t = hud.tm;
-  if (!t || !t.ros || t.ros.length < 2) return null;
-  const mine = t.ros.filter((r) => r.tm === t.my), foes = t.ros.filter((r) => r.tm !== t.my);
-  const row = (r, ally) => (
-    <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 4, height: 17, opacity: r.st === 2 ? 0.62 : 1 }}>
-      <span style={{ width: 15, height: 15, borderRadius: 8, flexShrink: 0, overflow: 'hidden', display: 'block', background: ally ? '#1E3F7A' : '#7A1E2A', boxShadow: `0 0 0 1.2px ${ally ? '#5AA2FF' : '#FF5C6C'}` }}>{thumbs && thumbs[r.key] ? <img src={thumbs[r.key]} alt="" style={{ width: 15, height: 15, objectFit: 'cover', display: 'block', filter: r.st === 2 ? 'grayscale(1)' : 'none' }} /> : null}</span>
-      <span style={{ width: 13, fontSize: 9.5, fontWeight: 900, color: '#FFE15A', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{r.tl}</span>
-      <span style={{ width: 60, fontSize: 10.5, fontWeight: 900, color: ally ? '#8EC5FF' : '#FF8E99', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textShadow: '0 1px 2px rgba(0,0,0,0.8)' }}>{r.id === myK ? 'You' : nameOf(r.id)}</span>
-      {r.st === 2 ? <span style={{ width: 26, fontSize: 9.5, fontWeight: 900, color: '#FFFFFF', fontVariantNumeric: 'tabular-nums' }}>{`${Math.max(1, Math.ceil(r.resp))}s`}</span>
-        : r.f != null ? <span style={{ width: 26, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.18)', overflow: 'hidden', display: 'block' }}><span style={{ display: 'block', height: '100%', width: `${Math.round(r.f * 100)}%`, background: ally ? '#4FA3FF' : '#FF5C6C' }} /></span>
-          : <span style={{ width: 26 }} />}
-    </div>
-  );
+  if (!t || !t.zn) return null;
+  const z = t.zn;
+  const col = !z.on ? '#FFFFFF' : z.hold === t.my ? '#62B0FF' : z.hold === 2 ? '#FFD45A' : z.hold >= 0 ? '#FF6B78' : '#E8EAF0';
+  const word = !z.on ? 'opens in' : z.hold === t.my ? 'ours' : z.hold === 2 ? 'contested' : z.hold >= 0 ? 'theirs' : 'empty';
   return (
-    <div aria-label="Players" style={{ display: 'flex', flexDirection: 'column', gap: 1, padding: '4px 6px 5px', borderRadius: 9, background: 'rgba(8,12,22,0.5)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.08)', pointerEvents: 'none' }}>
-      {mine.map((r) => row(r, true))}
-      <span style={{ height: 1, margin: '2px 0', background: 'rgba(255,255,255,0.14)', display: 'block' }} />
-      {foes.map((r) => row(r, false))}
-    </div>
+    <span aria-live="polite" style={{ display: 'flex', alignItems: 'center', gap: 6, height: 24, padding: '0 9px', borderRadius: 7, background: 'rgba(8,12,22,0.62)', boxShadow: `inset 0 0 0 1.5px ${col}55`, fontSize: 11.5, fontWeight: 900, whiteSpace: 'nowrap', pointerEvents: 'none' }}>
+      <span style={{ width: 9, height: 9, borderRadius: 2, transform: 'rotate(45deg)', background: col, boxShadow: z.on && z.hold === 2 ? `0 0 6px ${col}` : 'none' }} />
+      <span>{z.n}</span>
+      <span style={{ color: col }}>{word}</span>
+      <span style={{ fontVariantNumeric: 'tabular-nums', color: 'rgba(255,255,255,0.8)' }}>{mmss(z.t)}</span>
+    </span>
   );
 }
 
@@ -148,7 +156,7 @@ export function TeamMe({ hud, powers }) {
   const f = t.tl >= T.TL_MAX ? 1 : Math.max(0, Math.min(1, t.xp / Math.max(1, t.need)));
   const C = 2 * Math.PI * 17;
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
       <span aria-label={`Level ${t.tl}`} style={{ position: 'relative', width: 40, height: 40, display: 'block', flexShrink: 0 }}>
         <svg width="40" height="40" viewBox="0 0 40 40" style={{ position: 'absolute', inset: 0, transform: 'rotate(-90deg)' }} aria-hidden="true">
           <circle cx="20" cy="20" r="17" fill="rgba(10,14,26,0.82)" stroke="rgba(255,255,255,0.16)" strokeWidth="3.5" />
@@ -169,14 +177,20 @@ export function TeamMe({ hud, powers }) {
   );
 }
 
-export const TXT_COL = ['#AFCBFF', '#FFB3BB'];
+export const TXT_COL = ['#62B0FF', '#FF6B78'];
 export function KillFeed({ items }) {
   if (!items.length) return null;
   return (
-    <div aria-live="polite" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, pointerEvents: 'none' }}>
+    <div aria-live="polite" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 3, pointerEvents: 'none' }}>
       {items.map((it) => (
-        <span key={it.id} style={{ display: 'flex', alignItems: 'center', gap: 5, height: 22, padding: '0 9px', borderRadius: 11, background: it.good ? 'rgba(20,50,110,0.74)' : 'rgba(110,22,30,0.74)', fontSize: 11.5, fontWeight: 800, whiteSpace: 'nowrap', animation: 'zgk-pop 0.22s ease-out' }}>
-          {it.parts.map(([t, c], i) => <span key={i} style={{ color: c || 'rgba(255,255,255,0.85)', fontWeight: c ? 900 : 800 }}>{t}</span>)}
+        <span key={it.id} style={{ display: 'flex', alignItems: 'center', gap: 5, height: 20, padding: '0 8px', borderRadius: 6, background: 'rgba(8,12,22,0.5)', fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap', textShadow: '0 1px 2px rgba(0,0,0,0.6)', animation: 'zgk-pop 0.22s ease-out' }}>
+          {it.kill ? (
+            <>
+              <span style={{ color: it.kill[1], fontWeight: 900, maxWidth: 92, overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.kill[0]}</span>
+              {it.ic && SKI[it.ic] != null ? <SkIcon k={it.ic} size={15} /> : <GGlyph k="crosshair" size={12} color="#FFFFFF" />}
+              <span style={{ color: it.kill[3], fontWeight: 900, maxWidth: 92, overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.kill[2]}</span>
+            </>
+          ) : it.parts.map(([t, c], i) => <span key={i} style={{ color: c || 'rgba(255,255,255,0.85)', fontWeight: c ? 900 : 800 }}>{t}</span>)}
         </span>
       ))}
     </div>
@@ -233,6 +247,8 @@ export function TeamSlots({ list, ts, thumbs, myK, onSwap, canSwap, botsOn, host
 }
 
 export function TeamBoard({ GS, rows, myK, myTeam, thumbs, nameOf, score, onClose, title = 'Scoreboard' }) {
+  const rate = (r) => r.k * 3 + r.a * 1.2 - r.d * 0.6 + (r.dmg || 0) / 2500;
+  const mvp = !onClose && rows.length > 1 ? rows.reduce((a, b) => (rate(b) > rate(a) ? b : a), rows[0]).id : null;
   const head = <div style={{ display: 'flex', gap: 6, padding: '0 8px', fontSize: 10.5, fontWeight: 900, color: 'rgba(255,255,255,0.6)' }}><span style={{ flex: 1 }}>Hero</span><span style={{ width: 28, textAlign: 'right' }}>Lv</span><span style={{ width: 62, textAlign: 'right' }}>K D A</span><span style={{ width: 44, textAlign: 'right' }}>Damage</span></div>;
   const side = (tm) => {
     const mine = tm === myTeam, c = mine ? 0 : 1;
@@ -247,7 +263,10 @@ export function TeamBoard({ GS, rows, myK, myTeam, thumbs, nameOf, score, onClos
       {rows.filter((r) => r.tm === tm).map((r) => (
         <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px', borderRadius: 10, background: r.id === myK ? 'rgba(255,194,61,0.2)' : 'rgba(255,255,255,0.06)', minWidth: 0, opacity: r.dead ? 0.6 : 1 }}>
           <span style={{ width: 24, height: 24, borderRadius: 12, overflow: 'hidden', flexShrink: 0, background: '#141A2C', boxShadow: `0 0 0 1.5px ${TCOL[c]}` }}>{thumbs[r.key] ? <img src={thumbs[r.key]} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} /> : null}</span>
-          <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.id === myK ? 'You' : nameOf(r.id)}{r.dead && r.resp > 0 ? `, back in ${Math.ceil(r.resp)}` : ''}</span>
+          <span style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ minWidth: 0, fontSize: 12.5, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.id === myK ? 'You' : nameOf(r.id)}{r.dead && r.resp > 0 ? `, back in ${Math.ceil(r.resp)}` : ''}</span>
+            {r.id === mvp && <span style={{ flexShrink: 0, height: 17, padding: '0 6px', borderRadius: 5, background: 'linear-gradient(180deg, #FFE27A, #F5B321)', color: '#2A1D05', fontSize: 10, fontWeight: 900, display: 'flex', alignItems: 'center' }}>MVP</span>}
+          </span>
           <span style={{ width: 28, textAlign: 'right', fontSize: 12.5, fontWeight: 900, fontVariantNumeric: 'tabular-nums', color: '#FFD45A' }}>{r.tl}</span>
           <span style={{ width: 62, textAlign: 'right', fontSize: 12.5, fontWeight: 900, fontVariantNumeric: 'tabular-nums' }}>{`${r.k} ${r.d} ${r.a}`}</span>
           <span style={{ width: 44, textAlign: 'right', fontSize: 12.5, fontWeight: 900, fontVariantNumeric: 'tabular-nums' }}>{r.dmg >= 10000 ? `${Math.round(r.dmg / 1000)}k` : r.dmg >= 1000 ? `${(r.dmg / 1000).toFixed(1)}k` : r.dmg}</span>
@@ -284,27 +303,28 @@ export function TeamSettings({ ts, onTs, disabled, bl, onBl }) {
   );
 }
 
-export function TeamMapCard({ img, ts, isHost, onPress }) {
+export function TeamMapCard({ img, ts, isHost, onPress, gm }) {
+  const mode = T.GM_NAME[T.validGm(gm)];
   return (
-    <button type="button" className="zgk-btn" aria-label={`Map Nebula Valley, ${ts}v${ts}`} {...pressProps(() => { kitTap(); if (onPress) onPress(); })}
+    <button type="button" className="zgk-btn" aria-label={`Map ${E.ARENAS.base.name}, ${mode}, ${ts}v${ts}`} {...pressProps(() => { kitTap(); if (onPress) onPress(); })}
       style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 5, border: 'none', borderRadius: 12, background: 'rgba(255,255,255,0.07)', cursor: onPress ? 'pointer' : 'default', color: '#FFFFFF', fontFamily: FONT, textAlign: 'left' }}>
-      <span style={{ width: 92, aspectRatio: '16 / 9', borderRadius: 8, overflow: 'hidden', display: 'block', background: 'linear-gradient(135deg, #24605A, #3F3770)', flexShrink: 0 }}>{img ? <img src={img} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} /> : null}</span>
+      <span style={{ width: 92, aspectRatio: '16 / 9', borderRadius: 8, overflow: 'hidden', display: 'block', background: 'linear-gradient(135deg, #B9542A, #6E3A2A)', flexShrink: 0 }}>{img ? <img src={img} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} /> : null}</span>
       <span style={{ flex: 1, minWidth: 0 }}>
-        <span style={{ display: 'block', fontSize: 15, fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Nebula Valley</span>
-        <span style={{ display: 'block', fontSize: 11.5, fontWeight: 700, color: 'rgba(255,255,255,0.72)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{`Team battle, ${ts}v${ts}`}</span>
+        <span style={{ display: 'block', fontSize: 15, fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{E.ARENAS.base.name}</span>
+        <span style={{ display: 'block', fontSize: 11.5, fontWeight: 700, color: 'rgba(255,255,255,0.72)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{`${ts}v${ts}, ${mode}`}</span>
       </span>
       {onPress && <span style={{ height: 26, padding: '0 10px', borderRadius: 13, background: isHost ? 'linear-gradient(180deg, #FFE27A, #F5B321)' : 'rgba(10,14,26,0.7)', color: isHost ? '#2A1D05' : '#FFFFFF', fontSize: 11.5, fontWeight: 900, display: 'flex', alignItems: 'center', flexShrink: 0 }}>{isHost ? 'Change' : 'Details'}</span>}
     </button>
   );
 }
 
-export function TeamHowTo() {
+export function TeamHowTo({ gm }) {
+  const hp = gm === 'hp';
   const rows = [
-    ['vortex', 'Break the towers in a lane, then the guardian, then the enemy core to win.'],
-    ['sprint', 'Bolt bots walk every lane. Stay behind them when you push a tower.'],
-    ['dash', 'Stand on a pad in your base to jump to your lane. The river portals link the two sides.'],
-    ['flame', 'Wild monsters live in the jungle. The big ones give Fury and Flow buffs. The Hive Ship pushes for the team that takes it.'],
-    ['revive', 'Tap Home to go back to your base and heal. Every level up gives you a new power, up to level 20.'],
+    hp ? ['vortex', 'Stand in the zone to score a point every second. If both teams are inside, nobody scores. The zone moves every minute.'] : ['crosshair', 'Every takedown scores a point for your team. The first team to the goal wins.'],
+    ['revive', 'You come back at your base a few seconds after you fall. Your base heals you, and the enemy base hurts you.'],
+    ['flame', 'Monsters live around the map. Beat them for XP. The big ones give Fury and Flow.'],
+    ['sprint', 'Every level up gives you a new power, up to level 20.'],
     ['shield', 'Fair fight. Everyone starts at level 1 with the same stats, and players are split by power.'],
   ];
   return (
@@ -328,15 +348,27 @@ export function RespawnBox({ t, bottom }) {
   );
 }
 
-export function drawTeamMini(m2, A, W, myK, mini, flip, MW) {
+const spotted = (W, o, tm) => W.t - (o.seen || -9) < 1.6 || E.heroList(W).some((a) => a.st === 0 && a.tm === tm && Math.hypot(a.x - o.x, a.z - o.z) < 17);
+export function drawTeamMini(m2, A, W, myK, mini, flip, MW, MH = MW) {
   const sx = MW / A.wx;
-  const P = (x, z) => (flip ? [MW - x * sx, MW - z * sx] : [x * sx, z * sx]);
+  const P = (x, z) => (flip ? [MW - x * sx, MH - z * sx] : [x * sx, z * sx]);
   m2.save();
-  if (flip) { m2.translate(MW, MW); m2.rotate(Math.PI); }
-  m2.drawImage(mini, 0, 0, MW, MW);
+  if (flip) { m2.translate(MW, MH); m2.rotate(Math.PI); }
+  m2.drawImage(mini, 0, 0, MW, MH);
   m2.restore();
   const me = W.heroes[myK];
   const myTm = me ? me.tm : 0;
+  const S = W.tm;
+  if (S && S.gm === 'hp') {
+    const Z = T.zoneNow(W), N2 = T.zoneNext(W);
+    if (S.zon && Z) {
+      const [x, y] = P(Z.x, Z.z);
+      const col = S.zh === myTm ? '#62B0FF' : S.zh === 2 ? '#FFD45A' : S.zh >= 0 ? '#FF6B78' : '#FFFFFF';
+      m2.globalAlpha = 0.35; m2.fillStyle = col; m2.beginPath(); m2.arc(x, y, T.ZONE_R * sx * 1.15, 0, Math.PI * 2); m2.fill(); m2.globalAlpha = 1;
+      m2.strokeStyle = col; m2.lineWidth = 1.5; m2.beginPath(); m2.arc(x, y, T.ZONE_R * sx * 1.15, 0, Math.PI * 2); m2.stroke();
+    }
+    if (N2 && (!S.zon || S.zt < 10)) { const [x, y] = P(N2.x, N2.z); m2.setLineDash([2, 2]); m2.strokeStyle = 'rgba(255,255,255,0.85)'; m2.lineWidth = 1; m2.beginPath(); m2.arc(x, y, T.ZONE_R * sx * 1.15, 0, Math.PI * 2); m2.stroke(); m2.setLineDash([]); }
+  }
   for (const b of W.robots) {
     if (b.hp <= 0) continue;
     const [x, y] = P(b.x, b.z);
@@ -347,13 +379,13 @@ export function drawTeamMini(m2, A, W, myK, mini, flip, MW) {
       continue;
     }
     if (b.type === 'shp') { m2.fillStyle = b.ally ? TCOL[b.tm === myTm ? 0 : 1] : '#B88CFF'; m2.strokeStyle = '#0E1018'; m2.lineWidth = 1; m2.beginPath(); m2.arc(x, y, 3.6, 0, Math.PI * 2); m2.fill(); m2.stroke(); continue; }
-    m2.fillStyle = b.tm == null || b.tm < 0 ? '#E8D27A' : b.tm === myTm ? '#8FB8FF' : '#FF9AA4';
-    m2.fillRect(x - 1, y - 1, 2, 2);
+    m2.fillStyle = b.tm == null || b.tm < 0 ? '#F2D35C' : b.tm === myTm ? '#8FB8FF' : '#FF9AA4';
+    m2.fillRect(x - 1.2, y - 1.2, 2.4, 2.4);
   }
   for (const k of W.order) {
     const h = W.heroes[k];
     if (!h || h.st !== 0) continue;
-    if (h.tm !== myTm && !E.seenBy(W, h, myTm)) continue;
+    if (h.tm !== myTm && (!E.seenBy(W, h, myTm) || (S && S.gm && !spotted(W, h, myTm)))) continue;
     const [x, y] = P(h.x, h.z);
     const isMe = k === myK;
     m2.fillStyle = isMe ? '#FFE15A' : TCOL[h.tm === myTm ? 0 : 1];
@@ -362,10 +394,20 @@ export function drawTeamMini(m2, A, W, myK, mini, flip, MW) {
   }
 }
 
+const MINI_DECO = { 35: 'rgba(84,44,28,0.96)', 114: 'rgba(120,64,38,0.96)', 77: 'rgba(222,226,230,0.96)', 71: 'rgba(222,226,230,0.96)', 76: 'rgba(200,204,210,0.96)', 90: 'rgba(200,204,210,0.96)', 84: 'rgba(214,96,78,0.96)', 120: 'rgba(214,96,78,0.96)', 99: 'rgba(120,150,200,0.9)', 115: 'rgba(120,150,200,0.9)', 61: 'rgba(150,146,142,0.9)', 112: 'rgba(110,108,108,0.92)' };
 export function teamMiniBase(A, myTm = 0) {
   const oc = document.createElement('canvas');
   oc.width = A.W * 4; oc.height = A.H * 4;
   const o2 = oc.getContext('2d');
+  if (A.deco) {
+    o2.fillStyle = 'rgba(166,86,48,0.9)'; o2.fillRect(0, 0, oc.width, oc.height);
+    for (let r = 0; r < A.H; r++) for (let c = 0; c < A.W; c++) {
+      const ch = A.deco[r * A.W + c];
+      const col = ch === 66 ? (c < A.W / 2 === (myTm === 0) ? 'rgba(61,139,255,0.75)' : 'rgba(255,77,94,0.75)') : MINI_DECO[ch];
+      if (col) { o2.fillStyle = col; o2.fillRect(c * 4, r * 4, 4, 4); }
+    }
+    return oc;
+  }
   o2.fillStyle = 'rgba(28,62,58,0.92)'; o2.fillRect(0, 0, oc.width, oc.height);
   const CC = { [E.C_WALL]: 'rgba(14,16,26,0.92)', [E.C_BUSH]: 'rgba(110,80,170,0.85)', [E.C_RIVER]: 'rgba(60,150,200,0.95)', [E.C_LANE]: 'rgba(196,170,128,0.95)', [E.C_BASE]: 'rgba(120,132,148,0.95)' };
   for (let r = 0; r < A.H; r++) for (let c = 0; c < A.W; c++) { const v = A.cells[r * A.W + c]; if (CC[v]) { o2.fillStyle = CC[v]; o2.fillRect(c * 4, r * 4, 4, 4); } }
@@ -391,11 +433,11 @@ export function teamHudOf(W, myK) {
   if (sh) ship = sh.ally ? { k: sh.tm === myTm ? 'ours' : 'theirs' } : { k: 'here' };
   else if (S.shipT > 0 && S.shipT < 60) ship = { k: 'wait', t: S.shipT };
   return {
-    my: myTm, sc: S.score.slice(), t: S.t, k: kd.k, d: kd.d, a: kd.a, tl, xp: me ? me.xp || 0 : 0, need: T.xpNeed(tl),
+    my: myTm, sc: S.score.slice(), t: S.t, k: kd.k, d: kd.d, a: kd.a, tl, xp: me ? me.xp || 0 : 0, need: T.xpNeed(tl, !!S.gm),
     buffs, ship, resp: me && me.st === 2 ? me.respT || 0 : 0, rec: me && me.recT > 0 ? 1 - me.recT / 4.5 : -1,
     sk: me ? me.sk : 'blink', skCD: me ? Math.ceil((me.skCD || 0) * 10) / 10 : 0, skMax: me && T.SKILLS[me.sk] ? T.SKILLS[me.sk].cd : 1,
-    gate: me && me.gate ? Math.max(0, me.gate.t - W.t) : 0, bl: S.bl,
-    ros: W.order.map((k) => { const h = W.heroes[k]; const vis = h.tm === myTm || (h.st === 0 && E.seenBy(W, h, myTm)); return { id: k, tm: h.tm, key: h.key, tl: h.tl || 1, st: h.st, resp: h.respT || 0, f: h.st === 0 && vis ? Math.max(0, Math.min(1, h.hp / Math.max(1, h.max))) : null }; }),
+    gate: me && me.gate ? Math.max(0, me.gate.t - W.t) : 0, bl: S.bl, gm: S.gm, goal: S.goal, tlim: S.tlim, od: S.od,
+    zn: S.gm === 'hp' ? (() => { const Z = S.zon ? T.zoneNow(W) : T.zoneNext(W); return Z ? { n: Z.n, on: !!S.zon, hold: S.zon ? S.zh : -1, t: S.zt } : null; })() : null,
   };
 }
 

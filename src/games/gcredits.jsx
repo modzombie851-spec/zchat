@@ -80,8 +80,9 @@ const GROUPS = [
       ['German Shepherd dog', 'RetroStyle Games', 'https://retrostylegames.artstation.com/store/5Y6zX/german-shepherd-3d-model', 'ArtStation standard license'],
       ['Bolt War heroes, mechs, aliens, power ups, rovers, towers, the Hive Ship and the Nebula Valley trees, rocks and buildings, Ultimate Space Kit', 'Quaternius', 'https://quaternius.com', 'CC0'],
       ['Bolt War heroes Arlo, Wren, Nyx and Ivy, KayKit Character Pack Adventurers', 'Kay Lousberg', 'https://kaylousberg.itch.io/kaykit-adventurers', 'CC0'],
+      ['Bolt War Mars outpost habitats, landers, trucks, cargo, cliffs and the mine, KayKit Space Base Bits', 'Kay Lousberg', 'https://kaylousberg.itch.io/space-base-bits', 'CC0'],
       ['Bolt War bolt bots, Animated Mech Pack', 'Quaternius', 'https://opengameart.org/content/animated-mech-pack', 'CC0'],
-      ['Bolt War jungle monsters, Textured Cute Monster Pack', 'Quaternius', 'https://opengameart.org/content/textured-cute-monster-pack', 'CC0'],
+      ['Bolt War monsters, Textured Cute Monster Pack', 'Quaternius', 'https://opengameart.org/content/textured-cute-monster-pack', 'CC0'],
     ],
   },
   {

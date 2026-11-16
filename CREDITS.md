@@ -54,8 +54,9 @@ From Sketchfab, CC BY 4.0
 - Survivors, zombies and their animations, by Mixamo by Adobe (Mixamo license): https://www.mixamo.com
 - Bolt War heroes, mechs, aliens, power ups, rovers, towers, the Hive Ship and the Nebula Valley trees, rocks and buildings, Ultimate Space Kit by Quaternius (CC0): https://quaternius.com
 - Bolt War heroes Arlo, Wren, Nyx and Ivy, KayKit Character Pack Adventurers by Kay Lousberg (CC0): https://kaylousberg.itch.io/kaykit-adventurers
+- Bolt War Mars outpost habitats, landers, trucks, cargo, cliffs and the mine, KayKit Space Base Bits by Kay Lousberg (CC0): https://kaylousberg.itch.io/space-base-bits
 - Bolt War bolt bots, Animated Mech Pack by Quaternius (CC0): https://opengameart.org/content/animated-mech-pack
-- Bolt War jungle monsters, Textured Cute Monster Pack by Quaternius (CC0): https://opengameart.org/content/textured-cute-monster-pack
+- Bolt War monsters, Textured Cute Monster Pack by Quaternius (CC0): https://opengameart.org/content/textured-cute-monster-pack
 
 ## Icons
 CC BY 3.0

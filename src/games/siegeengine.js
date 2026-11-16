@@ -238,6 +238,7 @@ const ARENA_DEF = {
 export const ARENA_KEYS = ['yard', 'ruins', 'frost', 'lava', 'docks'];
 export const ARENAS = Object.fromEntries(ARENA_KEYS.map((k) => [k, { name: ARENA_DEF[k].name, theme: ARENA_DEF[k].theme }]));
 ARENAS.rift = { name: 'Nebula Valley', theme: 'rift' };
+ARENAS.base = { name: 'Mars outpost', theme: 'base' };
 export const ARENA_BUILD = {};
 const CODE = { '.': 0, '#': 1, x: 2, b: 3, w: 4, S: 5, P: 6 };
 export const C_FLOOR = 0, C_WALL = 1, C_CRATE = 2, C_BUSH = 3, C_WATER = 4, C_PAD = 5, C_HOME = 6, C_RIVER = 7, C_LANE = 8, C_BASE = 9;

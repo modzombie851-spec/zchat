@@ -162,6 +162,7 @@ function makeFields(A) {
   return { S, nx, nz, solid, water, bush, shore, path, inner, river, lines, at };
 }
 function pathLines(A) {
+  if (A.deco) return [];
   if (A.lanes) return A.lanes.map((L) => { const out = []; for (let i = 0; i < L.length - 1; i++) { const a = L[i], b = L[i + 1], n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 2)); for (let k = 0; k < n; k++) out.push([a[0] + ((b[0] - a[0]) * k) / n, a[1] + ((b[1] - a[1]) * k) / n]); } out.push(L[L.length - 1]); return out; });
   const W = A.W, H = A.H;
   const walk = (c, r) => c >= 0 && r >= 0 && c < W && r < H && !solidC(A.cells[r * W + c]) && A.cells[r * W + c] !== C_WATER;
@@ -321,7 +322,7 @@ function buildGround(ctx) {
     const up = [0, 1, 0];
     for (let i = 0; i < nz; i++) for (let j = 0; j < nx; j++) {
       const x = cx + (j + 0.5) * S, z = cz + (i + 0.5) * S;
-      if (cellAt(A, Math.floor(x / TILE), Math.floor(z / TILE)) === C_WATER) continue;
+      if (!T.solidWater && cellAt(A, Math.floor(x / TILE), Math.floor(z / TILE)) === C_WATER) continue;
       const a = P[i][j], b = P[i + 1][j], c = P[i + 1][j + 1], d = P[i][j + 1];
       const na = NN ? NN[i][j] : up, nb = NN ? NN[i + 1][j] : up, nc = NN ? NN[i + 1][j + 1] : up, nd = NN ? NN[i][j + 1] : up;
       const mt = T.groundMat;
@@ -2052,6 +2053,214 @@ THEMES.rift = {
   plazaFn: riftBases,
   wall: riftWall, bush: riftBush, water: jungleWater, river: riftSpark, crates: () => {}, clutter: riftClutter, pad: () => {}, home: () => {}, outer: riftOuter,
   env: { sunDir: [-0.38, 0.82, -0.42], sunCol: [2.05, 1.9, 1.75], skyCol: [0.36, 0.38, 0.5], gndCol: [0.14, 0.16, 0.2], fog: '#8C93B8', horizon: '#B9B6D8', zenith: '#4C5FA8', fogDen: 0.0032, exposure: 1.02, shadowRange: 30, cloud: [1, 0.95, 1], clouds: 0.5 },
+};
+
+const MR = {
+  sand: hx('#C45D2B'), sandL: hx('#D26C35'), sandD: hx('#A54B24'), haze: hx('#B5562E'),
+  conc: hx('#999CA1'), concL: hx('#A7AAAE'), concD: hx('#86898E'), seam: hx('#5E6066'),
+  rock: hx('#E47535'), white: hx('#E6E8EA'), crate: hx('#C9443C'), panel: hx('#2E5DA8'),
+};
+const TRIM = hx('#E3B341');
+function kitPutS(m, M, x, y, z, yaw, s, sy, mt = MAT.matte, tint = 1) {
+  const c = Math.cos(yaw), sn = Math.sin(yaw);
+  const P = M.P, N = M.N, C = M.C, I = M.I, v = m.v;
+  const ky = s / sy;
+  for (let i = 0; i < I.length; i++) {
+    const j = I[i] * 3;
+    const px = P[j], py = P[j + 1], pz = P[j + 2];
+    let nx = N[j], ny = N[j + 1] * ky, nz = N[j + 2];
+    const l = Math.hypot(nx, ny, nz) || 1; nx /= l; ny /= l; nz /= l;
+    v.push(x + (px * c + pz * sn) * s, y + py * sy, z + (-px * sn + pz * c) * s, nx * c + nz * sn, ny, -nx * sn + nz * c, Math.min(1, C[j] * tint), Math.min(1, C[j + 1] * tint), Math.min(1, C[j + 2] * tint), mt);
+  }
+}
+function boxS(m, x0, y0, z0, x1, y1, z1, col, mt) {
+  const t = mc(col, 1.06), sd = mc(col, 0.86);
+  quadC(m, [x0, y1, z0], [x0, y1, z1], [x1, y1, z1], [x1, y1, z0], t, t, t, t, mt);
+  quadC(m, [x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1], sd, sd, sd, sd, mt);
+  quadC(m, [x1, y0, z0], [x0, y0, z0], [x0, y1, z0], [x1, y1, z0], sd, sd, sd, sd, mt);
+  quadC(m, [x1, y0, z1], [x1, y0, z0], [x1, y1, z0], [x1, y1, z1], col, col, col, col, mt);
+  quadC(m, [x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0], col, col, col, col, mt);
+}
+const decoAt = (A, c, r) => (c < 0 || r < 0 || c >= A.W || r >= A.H ? 35 : A.deco[r * A.W + c]);
+function decoGroups(A) {
+  const seen = new Uint8Array(A.W * A.H), out = [];
+  for (let i = 0; i < A.W * A.H; i++) {
+    const ch = A.deco[i];
+    if (seen[i] || ch === 46 || ch === 61 || ch === 66 || ch === 112) continue;
+    const list = [], q = [i]; seen[i] = 1;
+    while (q.length) {
+      const k = q.pop(), c = k % A.W, r = (k / A.W) | 0;
+      list.push([c, r]);
+      for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const c2 = c + dc, r2 = r + dr;
+        if (c2 < 0 || r2 < 0 || c2 >= A.W || r2 >= A.H) continue;
+        const k2 = r2 * A.W + c2;
+        if (!seen[k2] && A.deco[k2] === ch) { seen[k2] = 1; q.push(k2); }
+      }
+    }
+    let c0 = 1e9, r0 = 1e9, c1 = -1, r1 = -1;
+    for (const [c, r] of list) { c0 = Math.min(c0, c); r0 = Math.min(r0, r); c1 = Math.max(c1, c); r1 = Math.max(r1, r); }
+    out.push({ ch: String.fromCharCode(ch), cells: list, c0, r0, c1, r1, x: ((c0 + c1 + 1) / 2) * TILE, z: ((r0 + r1 + 1) / 2) * TILE });
+  }
+  return out;
+}
+function baseGround(F, x, z, k) {
+  const nA = fbm(x * 0.05, z * 0.05, 13, 3), nB = fbm(x * 0.21, z * 0.21, 29, 3), nC = vn(x * 1.1, z * 1.1, 41);
+  let g = lc(MR.sandD, MR.sand, sat(nB * 1.5 - 0.15));
+  g = lc(g, MR.sandL, ss(0.56, 0.8, nA) * 0.55);
+  g = lc(g, MR.haze, ss(0.62, 0.85, nC) * 0.25);
+  if (k != null) g = mc(g, 0.8 + 0.2 * ss(0.05, 1.3, F.solid[k]));
+  return g;
+}
+const SPAWN_PAD = 2.3, ZONE_PAD = 3.0;
+const MODS = ['ud_basemodule_A', 'ud_basemodule_B', 'ud_basemodule_C', 'ud_basemodule_D', 'ud_basemodule_E'];
+const CRATES = ['ud_cargo_A_stacked', 'ud_cargo_B_stacked', 'ud_cargo_A_stacked', 'ud_cargo_B_packed'];
+const BARRELS = ['ud_containers_A', 'ud_containers_B', 'ud_containers_C', 'ud_containers_D'];
+function basePlaza(ctx) {
+  const { A, K, kit } = ctx;
+  for (let r = 0; r < A.H; r++) for (let c = 0; c < A.W; c++) {
+    const ch = decoAt(A, c, r);
+    if (ch !== 61 && ch !== 66 && ch !== 112) continue;
+    const x0 = c * TILE + 0.05, z0 = r * TILE + 0.05, x1 = x0 + TILE - 0.1, z1 = z0 + TILE - 0.1;
+    const h = hsh(c, r, 77);
+    const col = ch === 112 ? mc(MR.concD, 0.95 + h * 0.08) : lc(MR.conc, h > 0.5 ? MR.concL : MR.concD, Math.abs(h - 0.5) * 0.5);
+    const y = 0.012;
+    quadC(K.m('deco', x0 + 1, z0 + 1), [x0, y, z0], [x0, y, z1], [x1, y, z1], [x1, y, z0], col, col, col, col, MAT.asphalt);
+    if (ch === 66) {
+      const tc = TRIM;
+      const m = K.m('deco', x0 + 1, z0 + 1), w = 0.22, y2 = 0.016;
+      if (decoAt(A, c, r - 1) !== 66) quadC(m, [x0, y2, z0], [x0, y2, z0 + w], [x1, y2, z0 + w], [x1, y2, z0], tc, tc, tc, tc, MAT.flat);
+      if (decoAt(A, c, r + 1) !== 66) quadC(m, [x0, y2, z1 - w], [x0, y2, z1], [x1, y2, z1], [x1, y2, z1 - w], tc, tc, tc, tc, MAT.flat);
+      if (decoAt(A, c + 1, r) !== 66) quadC(m, [x1 - w, y2, z0], [x1 - w, y2, z1], [x1, y2, z1], [x1, y2, z0], tc, tc, tc, tc, MAT.flat);
+      if (decoAt(A, c - 1, r) !== 66) quadC(m, [x0, y2, z0], [x0, y2, z1], [x0 + w, y2, z1], [x0 + w, y2, z0], tc, tc, tc, tc, MAT.flat);
+    }
+  }
+  const T0 = A.team || {};
+  if (kit && kit.ud_landingpad_large) {
+    for (const f of T0.founts || []) kitPut(K.m('deco', f.x, f.z), kit.ud_landingpad_large, f.x, 0.02 - 0.5 * SPAWN_PAD, f.z, Math.PI / 8, SPAWN_PAD, MAT.paint);
+    for (const zn of T0.zones || []) kitPut(K.m('deco', zn.x, zn.z), kit.ud_landingpad_large, zn.x, 0.02 - 0.5 * ZONE_PAD, zn.z, Math.PI / 8, ZONE_PAD, MAT.paint);
+  }
+  const R = rng(5150);
+  for (const g of decoGroups(A)) baseGroup(ctx, g, R);
+}
+function baseGroup(ctx, g, R) {
+  const { A, K, kit } = ctx;
+  const left = g.x < A.wx / 2, yaw0 = left ? 0 : Math.PI;
+  const m = K.m('props', g.x, g.z);
+  const has = (k) => kit && kit[k];
+  const h = hsh(g.c0, g.r0, 31);
+  if (g.ch === '#') { for (const [c, r] of g.cells) baseRock(ctx, c, r); return; }
+  if (!kit) {
+    const cols = { r: MR.rock, M: MR.white, G: MR.white, L: MR.white, Z: MR.white, T: MR.white, x: MR.crate, c: MR.crate, s: MR.panel };
+    const tall = { s: 0.6, c: 0.7, T: 1.3, x: 1.6, r: 1.1 };
+    for (const [c, r] of g.cells) boxS(m, c * TILE + 0.12, 0, r * TILE + 0.12, (c + 1) * TILE - 0.12, tall[g.ch] || 1.7, (r + 1) * TILE - 0.12, cols[g.ch] || MR.white, MAT.paint);
+    return;
+  }
+  if (g.ch === 'M' || g.ch === 'G') {
+    const k = g.ch === 'G' ? 'ud_basemodule_garage' : MODS[Math.floor(h * MODS.length) % MODS.length];
+    if (has(k)) kitPut(m, kit[k], g.x, 0, g.z, yaw0, 1.78, MAT.paint);
+    if (has('ud_roofmodule_solarpanels') && g.ch === 'M' && h > 0.55) kitPut(m, kit.ud_roofmodule_solarpanels, g.x, 1.78, g.z, yaw0, 1.2, MAT.paint);
+  } else if (g.ch === 'L') {
+    if (has('ud_landingpad_small')) kitPut(m, kit.ud_landingpad_small, g.x, 0, g.z, yaw0 + Math.PI / 8, 1.9, MAT.paint);
+    const k = h > 0.5 ? 'ud_lander_A' : 'ud_lander_B';
+    if (has(k)) kitPut(m, kit[k], g.x, 0.92, g.z, yaw0 + 0.6, 1.5, MAT.paint);
+  } else if (g.ch === 'Z') {
+    if (g.z < A.wz / 2) {
+      if (has('ud_drill_structure')) kitPut(m, kit.ud_drill_structure, g.x, 0, g.z, 0.3, 1.3, MAT.paint);
+      if (has('ud_rocks_A')) { kitPut(m, kit.ud_rocks_A, g.x - 1.55, 0, g.z + 0.2, 1.1, 0.9, MAT.stone); kitPut(m, kit.ud_rocks_A, g.x + 1.55, 0, g.z - 0.1, 4.2, 0.85, MAT.stone); }
+    } else {
+      if (has('ud_cargodepot_B')) kitPut(m, kit.ud_cargodepot_B, g.x - 0.6, 0, g.z, Math.PI, 1.15, MAT.paint);
+      if (has('ud_cargo_B_packed')) kitPut(m, kit.ud_cargo_B_packed, g.x + 1.45, 0, g.z + 0.1, 0.4, 1.7, MAT.paint);
+    }
+  } else if (g.ch === 'T') {
+    const vert = g.r1 > g.r0;
+    const a = (vert ? 0 : Math.PI / 2) + (h > 0.5 ? Math.PI : 0), o = 0.055 * 3.25;
+    if (has('ud_spacetruck_large')) kitPut(m, kit.ud_spacetruck_large, g.x + Math.sin(a) * o, 0, g.z + Math.cos(a) * o, a, 3.25, MAT.paint);
+  } else if (g.ch === 'x') {
+    for (const [c, r] of g.cells) {
+      const hh = hsh(c, r, 53), x = (c + 0.5) * TILE, z = (r + 0.5) * TILE;
+      const k = CRATES[Math.floor(hh * CRATES.length) % CRATES.length];
+      const a = Math.floor(hh * 97) % 4 * (Math.PI / 2) + (hh - 0.5) * 0.12;
+      if (k === 'ud_cargo_B_packed') { if (has(k)) { kitPut(m, kit[k], x - 0.45, 0, z - 0.42, a, 1.75, MAT.paint); kitPut(m, kit[k], x + 0.47, 0, z + 0.4, a + 0.1, 1.75, MAT.paint); if (has('ud_cargo_A')) kitPut(m, kit.ud_cargo_A, x - 0.4, 0, z + 0.48, a, 1.7, MAT.paint); } }
+      else if (has(k)) kitPut(m, kit[k], x, 0, z, a, 1.74, MAT.paint);
+    }
+  } else if (g.ch === 'c') {
+    for (const [c, r] of g.cells) { const hh = hsh(c, r, 61), k = BARRELS[Math.floor(hh * 4) % 4]; if (has(k)) kitPut(m, kit[k], (c + 0.5) * TILE, 0, (r + 0.5) * TILE, hh * 6.283, 3.4, MAT.paint); }
+  } else if (g.ch === 's') {
+    for (const [c, r] of g.cells) if (has('ud_roofmodule_solarpanels')) kitPut(m, kit.ud_roofmodule_solarpanels, (c + 0.5) * TILE, 0, (r + 0.5) * TILE, 0, 1.36, MAT.paint);
+  } else if (g.ch === 'r') {
+    for (const [c, r] of g.cells) {
+      const x = (c + 0.5) * TILE, z = (r + 0.5) * TILE;
+      if (has('ud_rocks_B')) kitPut(m, kit.ud_rocks_B, x, 0, z, R() * 6.283, 1.05, MAT.stone);
+      if (has('ud_rock_A')) kitPut(m, kit.ud_rock_A, x + (R() - 0.5) * 1.2, 0, z + 0.75, R() * 6.283, 1.4, MAT.stone);
+    }
+  }
+}
+function baseRock(ctx, c, r) {
+  const { A, K, kit } = ctx;
+  const x = (c + 0.5) * TILE, z = (r + 0.5) * TILE;
+  const edgeX = c === 0 || c === A.W - 1, edgeZ = r === 0 || r === A.H - 1;
+  const open = (dc, dr) => { const cc = c + dc, rr = r + dr; return cc >= 0 && rr >= 0 && cc < A.W && rr < A.H && decoAt(A, cc, rr) !== 35; };
+  const sy = edgeX ? 1 : edgeZ ? 0.6 : 0.5;
+  const m = K.m('props', x, z);
+  if (!kit || !kit.ud_terrain_tall) { boxS(m, c * TILE, 0, r * TILE, (c + 1) * TILE, 2 * sy, (r + 1) * TILE, MR.rock, MAT.stone); return; }
+  const W0 = open(-1, 0), E0 = open(1, 0), N0 = open(0, -1), S0 = open(0, 1);
+  let k = 'ud_terrain_tall', yaw = 0;
+  if (!edgeX && !edgeZ) {
+    if (W0 && S0 && !E0 && !N0) { k = 'ud_terrain_tall_curved'; yaw = 0; }
+    else if (E0 && S0 && !W0 && !N0) { k = 'ud_terrain_tall_curved'; yaw = Math.PI / 2; }
+    else if (E0 && N0 && !W0 && !S0) { k = 'ud_terrain_tall_curved'; yaw = Math.PI; }
+    else if (W0 && N0 && !E0 && !S0) { k = 'ud_terrain_tall_curved'; yaw = -Math.PI / 2; }
+  }
+  kitPutS(m, kit[k] || kit.ud_terrain_tall, x, 0, z, yaw, 1, sy, MAT.stone, 0.88);
+}
+function baseOuter(ctx) {
+  const { A, K, kit } = ctx;
+  if (!kit) return;
+  const R = rng(7331);
+  for (let i = -1; i <= A.W; i++) for (let j = -1; j <= A.H; j++) {
+    if (i >= 0 && j >= 0 && i < A.W && j < A.H) continue;
+    for (let ring = 0; ring < 2; ring++) {
+      const c = i < 0 ? -1 - ring : i >= A.W ? A.W + ring : i, r = j < 0 ? -1 - ring : j >= A.H ? A.H + ring : j;
+      if (ring === 1 && i >= 0 && i < A.W && j >= 0 && j < A.H) continue;
+      const x = (c + 0.5) * TILE, z = (r + 0.5) * TILE;
+      const side = i < 0 || i >= A.W;
+      const n = vn(c * 0.45, r * 0.45, 17);
+      const sy = side ? (ring === 0 ? 1 : n > 0.5 ? 1.5 : 1) : ring === 0 ? 0.6 : n > 0.55 ? 1.1 : 0.6;
+      kitPutS(K.m('outer', x, z), kit.ud_terrain_tall, x, 0, z, 0, 1, sy, MAT.stone, 0.84);
+    }
+  }
+  const spots = [];
+  for (let n = 0; n < 46; n++) {
+    const a = R() * 6.283, along = R();
+    const sideK = Math.floor(R() * 4);
+    const out = 6.5 + R() * 11;
+    let x, z;
+    if (sideK === 0) { x = along * (A.wx + 40) - 20; z = -out; } else if (sideK === 1) { x = along * (A.wx + 40) - 20; z = A.wz + out; } else if (sideK === 2) { x = -out; z = along * (A.wz + 40) - 20; } else { x = A.wx + out; z = along * (A.wz + 40) - 20; }
+    if (spots.some((p) => Math.hypot(p[0] - x, p[1] - z) < 4.5)) continue;
+    spots.push([x, z]);
+    const roll = R(), m = K.m('outer', x, z);
+    const near = Math.min(Math.abs(z), Math.abs(z - A.wz)) < 12 && (sideK < 2);
+    if (roll < 0.22) { kitPutS(m, kit.ud_terrain_tall, x, 0, z, 0, 1.6 + R() * 0.8, (near ? 0.6 : 1.2) + R() * 0.8, MAT.stone); if (kit.ud_terrain_tall_curved) kitPutS(m, kit.ud_terrain_tall_curved, x + 3.2, 0, z, a > 3 ? 0 : Math.PI / 2, 1.6, 0.8 + R() * 0.5, MAT.stone); }
+    else if (roll < 0.42) { if (kit.ud_rocks_B) kitPut(m, kit.ud_rocks_B, x, 0, z, a, 1.2 + R() * 1.3, MAT.stone); if (kit.ud_rock_B) kitPut(m, kit.ud_rock_B, x + 1.6, 0, z + 0.8, a + 1, 1.4 + R(), MAT.stone); }
+    else if (roll < 0.54 && !near) { if (kit.ud_windturbine_tall) kitPut(m, kit.ud_windturbine_tall, x, 0, z, a, 2.2, MAT.paint); }
+    else if (roll < 0.64) { for (let q = 0; q < 3; q++) if (kit.ud_solarpanel) kitPut(m, kit.ud_solarpanel, x + q * 2.1, 0, z, 0, 2.2, MAT.paint); }
+    else if (roll < 0.72 && !near) { if (kit.ud_structure_tall) kitPut(m, kit.ud_structure_tall, x, 0, z, a, 1.6, MAT.paint); }
+    else if (roll < 0.8) { if (kit.ud_landingpad_small) kitPut(m, kit.ud_landingpad_small, x, 0, z, a, 1.8, MAT.paint); if (kit.ud_lander_base && !near) kitPut(m, kit.ud_lander_base, x, 0.9, z, a + 0.5, 1.6, MAT.paint); }
+    else if (roll < 0.88) { if (kit.ud_windturbine_low) kitPut(m, kit.ud_windturbine_low, x, 0, z, a, 1.7, MAT.paint); }
+    else if (kit.ud_basemodule_C) { kitPut(m, kit.ud_basemodule_C, x, 0, z, a, 1.9, MAT.paint); if (kit.ud_tunnel_straight_A) kitPut(m, kit.ud_tunnel_straight_A, x + 3.5 * Math.cos(a), 0.15, z - 3.5 * Math.sin(a), a + Math.PI / 2, 1.8, MAT.paint); }
+  }
+}
+THEMES.base = {
+  ground: baseGround,
+  groundMat: MAT.sand,
+  groundS: 1,
+  solidWater: true,
+  outerGround: (x, z) => { const n = fbm(x * 0.05, z * 0.05, 13, 3); return mc(lc(MR.sandD, MR.sand, sat(n * 1.5 - 0.15)), 0.92); },
+  outerH: () => 0,
+  plazaFn: basePlaza,
+  wall: () => {}, bush: () => {}, water: () => {}, crates: () => {}, clutter: () => {}, pad: () => {}, home: () => {}, outer: baseOuter,
+  env: { sunDir: [-0.42, 0.8, -0.36], sunCol: [1.72, 1.52, 1.32], skyCol: [0.46, 0.43, 0.48], gndCol: [0.24, 0.14, 0.1], fog: '#C98D6E', horizon: '#E6B996', zenith: '#9A6F69', fogDen: 0.0038, exposure: 0.96, shadowRange: 30, cloud: [1, 0.92, 0.86], clouds: 0.25 },
 };
 
 function crateGroups(A) {

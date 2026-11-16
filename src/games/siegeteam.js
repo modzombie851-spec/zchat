@@ -113,13 +113,56 @@ export function buildRift() {
 }
 E.ARENA_BUILD.rift = buildRift;
 
+export const BW = 32, BH = 24;
+const BCODE = { '#': E.C_WALL, r: E.C_WALL, M: E.C_WALL, G: E.C_WALL, L: E.C_WALL, Z: E.C_WALL, T: E.C_CRATE, x: E.C_CRATE, c: E.C_WATER, s: E.C_WATER, '=': C_LANE, B: C_BASE, p: C_LANE };
+const BASE_RECTS = [
+  ['=', 1, 8, 5, 8], ['B', 1, 9, 4, 6], ['=', 5, 11, 9, 2], ['=', 6, 5, 8, 1], ['=', 6, 18, 8, 1],
+  ['p', 14, 3, 2, 4], ['p', 14, 10, 2, 4], ['p', 14, 17, 2, 4],
+  ['#', 1, 1, 4, 1], ['#', 1, 2, 2, 1], ['#', 1, 3, 1, 1], ['#', 1, 22, 4, 1], ['#', 1, 21, 2, 1], ['#', 1, 20, 1, 1],
+  ['#', 11, 1, 3, 1], ['#', 12, 2, 2, 1], ['#', 11, 22, 3, 1], ['#', 12, 21, 2, 1],
+  ['Z', 15, 1, 1, 1], ['Z', 15, 22, 1, 1], ['L', 1, 5, 2, 2], ['L', 1, 17, 2, 2],
+  ['s', 5, 2, 3, 1], ['s', 8, 4, 2, 1], ['M', 6, 7, 2, 2], ['G', 9, 7, 2, 2], ['x', 11, 8, 1, 1],
+  ['T', 7, 11, 1, 2], ['x', 12, 10, 1, 1], ['x', 12, 13, 1, 1],
+  ['c', 4, 20, 1, 1], ['T', 6, 20, 2, 1], ['x', 9, 20, 1, 1], ['x', 9, 21, 1, 1],
+  ['M', 6, 15, 2, 2], ['M', 9, 15, 2, 2], ['x', 11, 15, 1, 1],
+  ['r', 13, 6, 1, 1], ['r', 13, 17, 1, 1], ['x', 14, 8, 1, 1], ['x', 14, 15, 1, 1],
+];
+const BASE_CAMPS = [
+  { k: 'pair', p: [9.8, 2.3], units: [['grunt', -0.7, 0], ['grunt', 0.7, 0.4]], resp: 50 },
+  { k: 'spit', p: [10.5, 21.5], units: [['shooter', -0.7, 0], ['shooter', 0.7, 0.4]], resp: 50 },
+  { k: 'fury', p: [4.6, 5.0], units: [['tank', 0, 0]], buff: 'fury', resp: 80 },
+  { k: 'flow', p: [4.6, 19.0], units: [['tank', 0, 0]], buff: 'flow', resp: 80 },
+];
+export const ZONES = [{ n: 'Mine', p: [16, 5] }, { n: 'Pad', p: [16, 12] }, { n: 'Depot', p: [16, 19] }];
+export const ZONE_R = 3.4;
+const ZONE_ORDER = [1, 0, 2];
+export function buildBase() {
+  const cells = new Uint8Array(BW * BH).fill(C_FLOOR);
+  const deco = new Uint8Array(BW * BH).fill(46);
+  const put = (c, r, ch) => { for (const [cc, rr] of [[c, r], [BW - 1 - c, BH - 1 - r]]) { cells[rr * BW + cc] = BCODE[ch] != null ? BCODE[ch] : C_FLOOR; deco[rr * BW + cc] = ch.charCodeAt(0); } };
+  for (let i = 0; i < BW; i++) put(i, 0, '#');
+  for (let r = 0; r < BH; r++) put(0, r, '#');
+  for (const [ch, c0, r0, w, h] of BASE_RECTS) for (let r = r0; r < r0 + h; r++) for (let c = c0; c < c0 + w; c++) put(c, r, ch);
+  const A = { key: 'base', name: E.ARENAS.base.name, theme: 'base', W: BW, H: BH, cells, deco, pads: [], homes: [], bushes: [], wx: BW * TILE, wz: BH * TILE, flows: new Map() };
+  A.clusters = [];
+  const side = (tm, p) => WU(tm === 0 ? p : [BW - p[0], BH - p[1]]);
+  A.team = {
+    towers: [], guards: [], cores: [], pads: [], portals: [], fr: 6.2,
+    founts: [0, 1].map((tm) => ({ tm, ...side(tm, [3, 12]) })),
+    camps: [0, 1].flatMap((tm) => BASE_CAMPS.map((cp) => ({ ...cp, side: tm, key: `${cp.k}${tm}`, ...side(tm, cp.p), units: cp.units.map((u) => [u[0], tm === 0 ? u[1] : -u[1], tm === 0 ? u[2] : -u[2]]) }))),
+    zones: ZONES.map((zn, i) => ({ i, n: zn.n, ...WU(zn.p) })),
+  };
+  return A;
+}
+E.ARENA_BUILD.base = buildBase;
+
 const R = E.ROBOTS;
 const STILL = E.STILL_TYPES;
 export const WAVE_GAP = 30;
 export const SHIP_AT = 180;
 export const SHIP_RESP = 180;
 export const TL_MAX = 20;
-export const xpNeed = (L) => 60 + 52 * (L - 1);
+export const xpNeed = (L, pv) => (pv ? 45 + 34 * (L - 1) : 60 + 52 * (L - 1));
 export const respawnFor = (h) => Math.min(25, 4 + 1.12 * ((h.tl || 1) - 1));
 export const CARD_LV = new Set(Array.from({ length: TL_MAX - 1 }, (_, i) => i + 2));
 export const GATE_T = 10;
@@ -143,13 +186,41 @@ const isHero = (t) => !!t && typeof t.id === 'string';
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const mins = (W) => (W.tm ? W.tm.t / 60 : 0);
 
+export const GM_KEYS = ['tdm', 'hp'];
+export const GM_NAME = { tdm: 'Team deathmatch', hp: 'Hardpoint' };
+export const TIME_LIM = 480;
+export const OVER_T = 60;
+export const ZONE_T = 60;
+export const ZONE_WAIT = 10;
+export const goalFor = (gm, size) => (gm === 'hp' ? 150 : [12, 20, 30, 40, 50][clamp(size | 0, 1, 5) - 1]);
+export const respawnPvp = (h) => 4 + 0.2 * ((h.tl || 1) - 1);
+export const validGm = (g) => (GM_KEYS.includes(g) ? g : 'tdm');
+export function zoneNow(W) {
+  const S = W.tm, Z = W.A.team && W.A.team.zones;
+  if (!S || S.gm !== 'hp' || !Z) return null;
+  return Z[ZONE_ORDER[S.zk % ZONE_ORDER.length]];
+}
+export const zoneByK = (k) => ZONES[ZONE_ORDER[Math.max(0, k | 0) % ZONE_ORDER.length]];
+export function zoneNext(W) {
+  const S = W.tm, Z = W.A.team && W.A.team.zones;
+  if (!S || S.gm !== 'hp' || !Z) return null;
+  return Z[ZONE_ORDER[(S.zk + (S.zon ? 1 : 0)) % ZONE_ORDER.length]];
+}
+
 export function setupTeamWorld(W, cfg) {
   const T = W.A.team;
+  const gm = T.zones ? validGm(cfg && cfg.gm) : null;
   W.mode = 'team'; W.pvp = true;
-  W.teamStep = stepTeam; W.onKill = onKill; W.onHit = onHit; W.onNet = onNet; W.respawnFor = respawnFor;
+  W.teamStep = gm ? stepPvp : stepTeam; W.onKill = onKill; W.onHit = onHit; W.onNet = onNet; W.respawnFor = gm ? respawnPvp : respawnFor;
   const bl = cfg && cfg.bl != null ? clamp(cfg.bl | 0, 0, 2) : 1;
-  W.tm = { t: 0, score: [0, 0], waveN: 0, waveT: 14, shipT: SHIP_AT, shipTeam: -1, camps: {}, dead: new Set(), kd: {}, struct: [], protT: 0, flows: new Map(), over: null, fb: false, an: [], size: cfg && cfg.ts ? cfg.ts : 3, bl };
+  const size = cfg && cfg.ts ? clamp(cfg.ts | 0, 1, 5) : 3;
+  W.tm = { t: 0, score: [0, 0], waveN: 0, waveT: 14, shipT: SHIP_AT, shipTeam: -1, camps: {}, dead: new Set(), kd: {}, struct: [], protT: 0, flows: new Map(), over: null, fb: false, an: [], size, bl, gm, goal: gm ? goalFor(gm, size) : 0, tlim: TIME_LIM, od: 0, zk: 0, zon: false, zt: ZONE_WAIT, zh: -1, zacc: 0 };
   W.bdm = BOT_LV[bl].dmg; W.bseen = BOT_LV[bl].seen; W.domes = []; W.domeCut = domeCut;
+  if (gm) {
+    W.nextId = 100;
+    for (const cp of T.camps) W.tm.camps[cp.key] = { t: cp.buff ? 30 : 12, ids: [], cp };
+    return;
+  }
   let id = 1;
   const mk = (type, p, extra) => {
     const b = E.mkRobot(id++, type, p.x, p.z, null);
@@ -236,6 +307,60 @@ function stepTeam(W, dt) {
   for (let i = W.robots.length - 1; i >= 0; i--) if (W.robots[i].hp <= 0) W.robots.splice(i, 1);
   S.protT -= dt;
   if (S.protT <= 0) { S.protT = 0.3; refreshProtect(W); }
+}
+
+function stepPvp(W, dt) {
+  const S = W.tm;
+  S.t += dt;
+  if (!W.host) {
+    for (const b of W.robots) { b.flash = Math.max(0, b.flash - dt); if (b.sp > 0) b.sp -= dt; b.atkT2 = Math.max(0, (b.atkT2 || 0) - dt); }
+    if (S.gm === 'hp' && !S.over) S.zt = Math.max(0, S.zt - dt);
+    return;
+  }
+  if (S.over) return;
+  for (const key of Object.keys(S.camps)) {
+    const C = S.camps[key];
+    if (C.ids.length) { C.ids = C.ids.filter((i) => W.robots.some((b) => b.id === i && b.hp > 0)); if (!C.ids.length) C.t = C.cp.resp; continue; }
+    C.t -= dt;
+    if (C.t <= 0) spawnCamp(W, C);
+  }
+  for (const b of W.robots) if (b.hp > 0) stepUnit(W, b, dt);
+  separateUnits(W);
+  for (let i = W.robots.length - 1; i >= 0; i--) if (W.robots[i].hp <= 0) W.robots.splice(i, 1);
+  if (S.gm === 'hp') stepZone(W, dt);
+  pvpEnd(W);
+}
+
+function stepZone(W, dt) {
+  const S = W.tm;
+  S.zt -= dt;
+  if (S.zt <= 0) {
+    if (!S.zon) S.zon = true; else S.zk += 1;
+    S.zt = ZONE_T; S.zh = -1; S.zacc = 0; S.zlast = -1;
+    E.net(W, ['an', S.zk === 0 ? 'zone' : 'zmove', S.zk]); E.emit(W, { k: 'tan', a: S.zk === 0 ? 'zone' : 'zmove', b: S.zk });
+  }
+  if (!S.zon) return;
+  const Z = zoneNow(W);
+  const n = [0, 0];
+  for (const h of E.heroList(W)) if (h.st === 0 && !h.jump && Math.hypot(h.x - Z.x, h.z - Z.z) < ZONE_R) n[h.tm === 1 ? 1 : 0] += 1;
+  const hold = n[0] && n[1] ? 2 : n[0] ? 0 : n[1] ? 1 : -1;
+  if (hold !== S.zh) { S.zacc = 0; if ((hold === 0 || hold === 1) && hold !== S.zlast) { S.zlast = hold; E.net(W, ['an', 'zhold', hold]); E.emit(W, { k: 'tan', a: 'zhold', b: hold }); } }
+  S.zh = hold;
+  if (hold === 0 || hold === 1) { S.zacc += dt; while (S.zacc >= 1) { S.zacc -= 1; S.score[hold] += 1; } }
+}
+
+function pvpEnd(W) {
+  const S = W.tm;
+  const [a, b] = S.score;
+  let win = null;
+  if (a >= S.goal || b >= S.goal) win = a > b ? 0 : b > a ? 1 : null;
+  if (win == null && S.t >= S.tlim) {
+    if (a !== b) win = a > b ? 0 : 1;
+    else if (S.t >= S.tlim + OVER_T) win = 2;
+    else if (!S.od) { S.od = 1; E.net(W, ['an', 'od', 0]); E.emit(W, { k: 'tan', a: 'od', b: 0 }); }
+  }
+  if (win == null) return;
+  S.over = { team: win }; W.over = { won: true, team: win }; E.emit(W, { k: 'over', won: true, team: win });
 }
 
 function spawnWave(W) {
@@ -560,8 +685,9 @@ export function xpMul(W, h) {
 export function addXP(W, h, n, raw) {
   if (!h || !(n > 0) || (h.tl || 1) >= TL_MAX) return;
   h.xp = (h.xp || 0) + (raw ? n : n * xpMul(W, h));
-  while ((h.tl || 1) < TL_MAX && h.xp >= xpNeed(h.tl || 1)) {
-    h.xp -= xpNeed(h.tl || 1);
+  const pv = !!(W.tm && W.tm.gm);
+  while ((h.tl || 1) < TL_MAX && h.xp >= xpNeed(h.tl || 1, pv)) {
+    h.xp -= xpNeed(h.tl || 1, pv);
     const L = (h.tl || 1) + 1;
     h.tl = L;
     const k1 = (1 + 0.045 * (L - 1)) / (1 + 0.045 * (L - 2)), k2 = (1 + 0.035 * (L - 1)) / (1 + 0.035 * (L - 2));
@@ -609,7 +735,7 @@ function onKill(W, b, by) {
   if (b.camp) {
     const C = S.camps[b.camp];
     if (hero) {
-      const base = b.buffK ? 150 : C && C.cp.k === 'river' ? 70 : 60;
+      const base = S.gm ? (b.buffK ? 120 : 50) : b.buffK ? 150 : C && C.cp.k === 'river' ? 70 : 60;
       xpTo(W, hero.id, base, 3);
       for (const h of E.heroList(W)) if (h !== hero && h.tm === hero.tm && h.st === 0 && dist(h, b) < 11) xpTo(W, h.id, base * 0.5, 3);
       if (b.buffK) { E.net(W, ['bf', hero.id, b.buffK]); if (W.local && W.local.has(hero.id)) giveBuff(W, hero, b.buffK); }
@@ -668,16 +794,16 @@ export function applyKill(W, m) {
     K.k += 1; K.st += 1;
     K.mk = W.t - K.mkAt < 11 ? K.mk + 1 : 1; K.mkAt = W.t;
     out.multi = K.mk; out.streak = K.st;
-    S.score[W.heroes[m.k].tm] += 1;
+    if (S.gm !== 'hp') S.score[W.heroes[m.k].tm] += 1;
     if (!S.fb) { S.fb = true; out.first = true; }
     const killer = W.heroes[m.k];
-    if (killer && W.local && W.local.has(killer.id)) addXP(W, killer, 110 + 22 * (v.tl || 1) + (shut ? 60 : 0));
-  } else S.score[1 - v.tm] += 1;
+    if (killer && W.local && W.local.has(killer.id)) addXP(W, killer, S.gm ? 50 + 10 * (v.tl || 1) + (shut ? 40 : 0) : 110 + 22 * (v.tl || 1) + (shut ? 60 : 0));
+  } else if (!S.gm || (S.gm === 'tdm' && m.by === 'fount')) S.score[1 - v.tm] += 1;
   for (const a of (m.as || []).slice(0, 4)) {
     const hh = W.heroes[a];
     if (!hh || a === m.k || hh.tm === v.tm) continue;
     kd(a).a += 1; out.as.push(a);
-    if (W.local && W.local.has(a)) addXP(W, hh, 60 + 12 * (v.tl || 1));
+    if (W.local && W.local.has(a)) addXP(W, hh, S.gm ? 25 + 5 * (v.tl || 1) : 60 + 12 * (v.tl || 1));
   }
   out.ace = E.heroList(W).filter((o) => o.tm === v.tm).every((o) => o.st === 2);
   return out;
@@ -726,10 +852,12 @@ export function stepLocal(W, h, dt, inp) {
   }
   if (h.st === 2) { h.respT = Math.max(0, (h.respT || 0) - dt); if (h.respT <= 0) respawn(W, h); return; }
   if (h.st !== 0) return;
-  const F = T.founts[h.tm], EF = T.founts[1 - h.tm];
-  h.inBase = dist(h, F) < FOUNT_R + 3;
-  if (dist(h, F) < FOUNT_R) { h.hp = Math.min(h.max, h.hp + h.max * 0.16 * dt); h.ammo = Math.min(h.mods.ammo, h.ammo + dt * 2); h.regen = 4; }
-  if (dist(h, EF) < FOUNT_R + 0.8) { h.fountAcc = (h.fountAcc || 0) + dt; if (h.fountAcc > 0.25) { h.fountAcc = 0; h.spawnT = 0; E.hurtHero(W, h, 550, 'fount'); E.emit(W, { k: 'fzap', id: h.id, x: EF.x, z: EF.z, tx: h.x, tz: h.z }); } }
+  const F = T.founts[h.tm], EF = T.founts[1 - h.tm], FR = T.fr || FOUNT_R;
+  h.inBase = dist(h, F) < FR + 3;
+  if (dist(h, F) < FR) { h.hp = Math.min(h.max, h.hp + h.max * 0.16 * dt); h.ammo = Math.min(h.mods.ammo, h.ammo + dt * 2); h.regen = 4; }
+  const Z = zoneNow(W);
+  if (Z && W.tm.zon && W.tm.zh === h.tm && (h.tl || 1) < TL_MAX && Math.hypot(h.x - Z.x, h.z - Z.z) < ZONE_R) { h.zxp = (h.zxp || 0) + dt * 3; if (h.zxp >= 6) { h.zxp -= 6; addXP(W, h, 6); } }
+  if (dist(h, EF) < FR + 0.8) { h.fountAcc = (h.fountAcc || 0) + dt; if (h.fountAcc > 0.25) { h.fountAcc = 0; h.spawnT = 0; E.hurtHero(W, h, 550, 'fount'); E.emit(W, { k: 'fzap', id: h.id, x: EF.x, z: EF.z, tx: h.x, tz: h.z }); } }
   const mv = inp ? Math.hypot(inp.mx || 0, inp.mz || 0) > 0.15 : false;
   if (h.recT > 0) {
     if (mv || h.lastHurt > h.recAt || h.jump || h.dashT > 0) { h.recT = 0; E.emit(W, { k: 'recall', id: h.id, stop: true }); }
@@ -755,7 +883,7 @@ export function stepLocal(W, h, dt, inp) {
 }
 
 export function startRecall(W, h) {
-  if (!h || h.st !== 0 || h.recT > 0) return false;
+  if (!h || h.st !== 0 || h.recT > 0 || (W.tm && W.tm.gm)) return false;
   h.recT = 4.5; h.recAt = W.t;
   E.emit(W, { k: 'recall', id: h.id, x: h.x, z: h.z });
   return true;
@@ -834,6 +962,7 @@ export const domeCut = (W, h) => {
 
 export function snapTeam(W) {
   const S = W.tm;
+  if (S.gm) return { t: Math.round(S.t * 10), sc: S.score, kd: Object.entries(S.kd).map(([id, v]) => [id, v.k, v.d, v.a]), zn: [S.zk, S.zon ? 1 : 0, S.zh, Math.round(S.zt * 10), S.od ? 1 : 0] };
   const tw = S.struct.map((id) => { const b = W.robots.find((o) => o.id === id); return b && b.hp > 0 ? [Math.round(b.hp), (b.inv ? 1 : 0) | (b.atkT2 > 0 ? 2 : 0), Math.round(b.yaw * 100), b.tg != null && typeof b.tg === 'string' ? b.tg : b.tg != null ? +b.tg : null] : 0; });
   const ship = W.robots.find((b) => b.type === 'shp' && b.hp > 0);
   return { t: Math.round(S.t * 10), sc: S.score, tw, sh: [ship ? (ship.ally ? 2 + ship.tm : 1) : 0, Math.round(S.shipT)], wn: S.waveN, kd: Object.entries(S.kd).map(([id, v]) => [id, v.k, v.d, v.a]) };
@@ -845,6 +974,7 @@ export function applySnapTeam(W, s) {
   if (Array.isArray(s.sc) && s.sc.length === 2) S.score = [s.sc[0] | 0, s.sc[1] | 0];
   if (Array.isArray(s.sh)) { S.shipState = s.sh[0] | 0; S.shipT = +s.sh[1] || 0; }
   if (typeof s.wn === 'number') S.waveN = s.wn;
+  if (Array.isArray(s.zn) && s.zn.length >= 5) { S.zk = Math.max(0, s.zn[0] | 0); S.zon = !!s.zn[1]; S.zh = clamp(s.zn[2] | 0, -1, 2); S.zt = Math.max(0, (s.zn[3] | 0) / 10); S.od = s.zn[4] ? 1 : 0; }
   if (Array.isArray(s.kd)) for (const r of s.kd) { if (!Array.isArray(r) || typeof r[0] !== 'string') continue; const v = S.kd[r[0]] || (S.kd[r[0]] = { k: 0, d: 0, a: 0, st: 0, mk: 0, mkAt: -99 }); v.k = r[1] | 0; v.d = r[2] | 0; v.a = r[3] | 0; }
   if (Array.isArray(s.tw)) s.tw.forEach((v, i) => {
     const id = S.struct[i];
@@ -911,13 +1041,45 @@ export function assignRoles(list, size) {
   list.forEach((h, i) => { const r = order[i % order.length]; h.jg = r === 3; h.ln = r === 3 ? 0 : r; });
 }
 
+const ROAM = [[16, 5], [16, 12], [16, 19], [10, 3.2], [9, 12], [9, 19.5], [23, 4.5], [23, 12], [22, 20.8], [12.5, 8], [19.5, 16]];
+function pvpGoal(W, h, B, foes, hpF) {
+  const S = W.tm;
+  if (S.gm === 'hp') {
+    const Z = S.zon && S.zt > 6 ? zoneNow(W) : zoneNext(W);
+    if (Z) {
+      if (B.zoT <= 0) { B.zoT = 2.5 + W.rnd() * 2.5; const a = W.rnd() * Math.PI * 2, r = W.rnd() * ZONE_R * 0.6; B.zo = [Math.sin(a) * r, Math.cos(a) * r]; }
+      const fz = foes.filter((o) => Math.hypot(o.x - Z.x, o.z - Z.z) < ZONE_R + 5).sort((a, b) => dist(a, h) - dist(b, h))[0];
+      if (fz && dist(fz, h) < 12) return { x: fz.x, z: fz.z, f: fz };
+      return { x: Z.x + B.zo[0], z: Z.z + B.zo[1] };
+    }
+  }
+  const tgt = foes.filter((o) => dist(o, h) < 22).sort((a, b) => dist(a, h) - dist(b, h))[0];
+  if (tgt && hpF > 0.4) return { x: tgt.x, z: tgt.z, f: tgt };
+  let camp = null, cd = S.gm === 'hp' && S.zon ? 7 : 15;
+  for (const b of W.robots) { if (b.hp <= 0 || !b.camp) continue; const d = dist(b, h); if (d < cd) { cd = d; camp = b; } }
+  if (camp && !tgt) {
+    const want = Math.max(2, E.HEROES[h.key].want * 0.9);
+    const ux = (camp.x - h.x) / (cd || 1), uz = (camp.z - h.z) / (cd || 1);
+    const k = cd > want + 1 ? 1 : cd < want - 1 ? -1 : 0;
+    return { x: h.x + ux * k * 3 - uz * B.strafe * 0.85, z: h.z + uz * k * 3 + ux * B.strafe * 0.85, f: camp };
+  }
+  if (!B.rp || B.rpT <= 0 || dist(B.rp, h) < 3) {
+    B.rpT = 9 + W.rnd() * 6;
+    const far = (p) => (h.tm === 0 ? p[0] : BW - p[0]);
+    const L = ROAM.map((p) => ({ p, w: 0.4 + far(p) / BW + W.rnd() * 0.9 })).sort((a, b) => b.w - a.w);
+    const q = L[0].p;
+    B.rp = { x: q[0] * TILE, z: q[1] * TILE };
+  }
+  return B.rp;
+}
 export function teamBot(W, h, dt) {
   const inp = { mx: 0, mz: 0, fire: null };
   if (h.st !== 0 || h.jump || !W.tm) return inp;
   const H = E.HEROES[h.key], T = W.A.team;
   const P = botLv(W);
-  const B = h.tb || (h.tb = { t: 0, st: h.jg ? 'jungle' : 'lane', gT: 1 + W.rnd(), dT: 0.5, skT: 1, flipT: 0, strafe: 1, F: null, Fx: -99, Fz: -99, shipAt: 30, shipUntil: 0, seeT: 0, seen: null });
-  B.t -= dt; B.gT -= dt; B.dT -= dt; B.flipT -= dt; B.skT -= dt;
+  const S0 = W.tm, PV = !!S0.gm;
+  const B = h.tb || (h.tb = { t: 0, st: PV ? 'go' : h.jg ? 'jungle' : 'lane', gT: 1 + W.rnd(), dT: 0.5, skT: 1, flipT: 0, strafe: 1, F: null, Fx: -99, Fz: -99, shipAt: 30, shipUntil: 0, seeT: 0, seen: null, rp: null, rpT: 0, zo: [0, 0], zoT: 0 });
+  B.t -= dt; B.gT -= dt; B.dT -= dt; B.flipT -= dt; B.skT -= dt; B.zoT -= dt; B.rpT -= dt;
   if (B.flipT <= 0) { B.flipT = P.flip + W.rnd() * 1.6; B.strafe = (W.rnd() < 0.5 ? -1 : 1) * P.strafe; }
   const hpF = h.hp / Math.max(1, h.max);
   const F = T.founts[h.tm];
@@ -928,8 +1090,9 @@ export function teamBot(W, h, dt) {
   if (near[0] && near[0].id !== B.seen) { B.seen = near[0].id; B.seeT = W.t; }
   else if (!near[0]) B.seen = null;
   const aware = !near[0] || W.t - B.seeT > P.react * 0.8;
+  const FR = T.fr || FOUNT_R;
   if (B.st !== 'back' && hpF < P.back && !(near[0] && near[0].hp < near[0].max * 0.18)) B.st = 'back';
-  if (B.st === 'back' && hpF > 0.93 && dist(h, F) < FOUNT_R) B.st = h.jg ? 'jungle' : 'lane';
+  if (B.st === 'back' && (hpF > 0.93 || (PV && hpF > 0.75 && !near.length && h.regen > 3)) && (PV || dist(h, F) < FR)) B.st = PV ? 'go' : h.jg ? 'jungle' : 'lane';
   if (B.st === 'ship' && (!ship || W.t > B.shipUntil)) B.st = h.jg ? 'jungle' : 'lane';
   if (ship && B.st !== 'back' && B.st !== 'ship' && W.t > B.shipAt) {
     B.shipAt = W.t + 25;
@@ -962,8 +1125,12 @@ export function teamBot(W, h, dt) {
   if (!urgent) {
     if (B.st === 'back') {
       gx = F.x; gz = F.z;
-      if (!near.length && dist(h, F) > 26 && !(h.recT > 0)) inp.recall = true;
+      if (PV) { if (!near.length && h.regen > 3 && dist(h, F) > FR) { gx = null; gz = null; } }
+      else if (!near.length && dist(h, F) > 26 && !(h.recT > 0)) inp.recall = true;
       if (h.recT > 0 || inp.recall) { gx = null; gz = null; }
+    } else if (PV) {
+      const g = pvpGoal(W, h, B, foes, hpF);
+      if (g) { gx = g.x; gz = g.z; if (g.f) focus = g.f; }
     } else if (B.st === 'ship' && ship) {
       focus = ship;
       const d = dist(h, ship), want = Math.max(4.5, H.want);
