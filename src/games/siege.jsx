@@ -45,12 +45,12 @@ const HLOOK = {
   kai: { kind: 'm', body: 'um_bee', tex: 't_umech', band: [32, 56, 42, 0.45], sc: 0.95, atk: 'shoot', sup: 'big', gad: 'jump' },
   ivy: { kind: 'k', body: 'kk_ivy', tex: 't_kmage', band: [225, 262, 242, 0.25], sc: 0.94, atk: 'cast', sup: 'castl', gad: 'raise' },
   nyx: { kind: 'k', body: 'kk_nyx', tex: 't_krogue', band: [135, 185, 158, 0.25], sc: 1.02, atk: 'slash2', sup: 'stab2', gad: 'interact' },
-  arlo: { kind: 'k', body: 'kk_arlo', tex: 't_kknight', band: [330, 3, 348, 0.42], sc: 1.0, atk: 'chop1', sup: 'chop2', gad: 'block' },
-  wren: { kind: 'k', body: 'kk_wren', tex: 't_krogue', band: [135, 185, 158, 0.25], keep: 1, sc: 1.02, atk: 'shoot2', sup: 'shoot2', gad: 'throw' },
-  tusk: { kind: 'k', body: 'kk_tusk', tex: 't_kbarb', band: [195, 228, 210, 0.3], sc: 1.05, atk: 'chop2', sup: 'spin', gad: 'chop2' },
-  bones: { kind: 'k', body: 'kk_bones', tex: 't_kskel', band: [328, 4, 346, 0.3], sc: 1.0, atk: 'chop1', sup: 'raise', gad: 'block' },
+  arlo: { kind: 'k', body: 'kk_arlo', tex: 't_kknight', band: [330, 3, 348, 0.42], sc: 1.0, atk: 'stab2', sup: 'block', gad: 'raise' },
+  wren: { kind: 'k', body: 'kk_wren', tex: 't_krogue', band: [135, 185, 158, 0.25], keep: 1, sc: 1.02, atk: 'shoot2', sup: 'shoot2', gad: 'jump' },
+  tusk: { kind: 'k', body: 'kk_tusk', tex: 't_kbarb', band: [195, 228, 210, 0.3], sc: 1.05, atk: 'spin', sup: 'raise', gad: 'throw' },
+  bones: { kind: 'k', body: 'kk_bones', tex: 't_kskel', band: [328, 4, 346, 0.3], sc: 1.0, atk: 'chop1', sup: 'raise', gad: 'chop2' },
   hex: { kind: 'k', body: 'kk_hex', tex: 't_kskel', band: [328, 4, 346, 0.3], sc: 0.97, atk: 'cast', sup: 'castl', gad: 'raise' },
-  rattle: { kind: 'k', body: 'kk_rattle', tex: 't_kskel', band: [328, 4, 346, 0.3], sc: 0.98, atk: 'throw', sup: 'slash2', gad: 'interact' },
+  rattle: { kind: 'k', body: 'kk_rattle', tex: 't_kskel', band: [328, 4, 346, 0.3], sc: 0.98, atk: 'throw', sup: 'throw', gad: 'interact' },
 };
 const ALIEN_BAND = [78, 112, 94, 0.4];
 const RLOOK = {
@@ -63,7 +63,7 @@ const RLOOK = {
 const PLOOK = { hp: { m: 'up_health', s: 0.62 }, pw: { m: 'up_sphere', s: 0.62 }, su: { m: 'up_thunder', s: 0.66 }, sh: { m: 'up_jar', s: 0.6, hue: 190 }, rf: { m: 'up_bullets', s: 0.58 }, sp: { m: 'up_jar', s: 0.6, hue: 105 } };
 const COLD = new Float32Array([1.15, 0.92, 0.7, 0]), COLN = new Float32Array([1, 1, 1, 0.14]), COLF = new Float32Array([1.9, 1.9, 1.9, 0.14]), COLG = new Float32Array([1, 1, 1, 0.22]);
 const COLR = new Float32Array([1, 1, 1, 0.553]), COLRF = new Float32Array([1.9, 1.9, 1.9, 0.553]), COLRI = new Float32Array([0.75, 0.95, 1.4, 0.553]);
-const COLK = new Float32Array([0.42, 0.34, 0.78, 0.14]), COLP = new Float32Array([1.05, 0.85, 1.5, 0.553]);
+const COLK = new Float32Array([0.42, 0.34, 0.78, 0.14]), COLP = new Float32Array([1.05, 0.85, 1.5, 0.553]), COLRG = new Float32Array([1.32, 0.86, 0.78, 0.14]);
 const hueOfHex = (hex) => { const n = parseInt(hex.slice(1), 16); const r = ((n >> 16) & 255) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255; const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn; if (d < 1e-6) return 0; let h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; h *= 60; return h < 0 ? h + 360 : h; };
 function stillSkin(M) { const P = newPose(M.nb); P.q.set(M.restQ); P.t.set(M.restT); skinPose(M, P); return P.S; }
 function skUpload(R, d, heroesOnly) {
@@ -160,9 +160,9 @@ function skThumbs(d) {
 const DROP_TINT_HEX = { hp: '#6CFFD4', pw: '#FF7AD9', su: '#FFD24A', sh: '#7FE9FF', rf: '#FFB067', sp: '#7BF27B' };
 const DROP_TEXT = { hp: 'Health', pw: 'Power up', su: 'Super charged', sh: 'Shield', rf: 'Rapid fire', sp: 'Speed' };
 const DROP_COL = { hp: '#6BF26B', pw: '#FF7AD9', su: '#FFE15A', sh: '#9FE6FF', rf: '#FFB067', sp: '#9BF29B' };
-const ATK_GI = { blaze: 'flame', pip: 'electric', boom: 'bomb', mira: 'heal', rex: 'hammer', volt: 'lightning', kai: 'rocket', ivy: 'snowflake', nyx: 'knife' };
-const GAD_GI = { ring: 'firering', decoy: 'ghost', mine: 'mine', bubble: 'shield', charge: 'shield', over: 'lightning', jet: 'jetpack', nova: 'freeze', vanish: 'ghost' };
-const SUP_GI = { wave: 'sonic', beam: 'laser', mega: 'megabomb', bloom: 'heal', slam: 'stomp', turret: 'tesla', barrage: 'missiles', freeze: 'freeze', blink: 'vortex' };
+const ATK_GI = { blaze: 'flame', pip: 'electric', boom: 'bomb', mira: 'heal', rex: 'hammer', volt: 'lightning', kai: 'rocket', ivy: 'snowflake', nyx: 'knife', arlo: 'sword', wren: 'crossbow', tusk: 'axe', bones: 'skull', hex: 'skull', rattle: 'knife' };
+const GAD_GI = { ring: 'firering', decoy: 'ghost', mine: 'mine', bubble: 'shield', charge: 'shield', over: 'lightning', jet: 'jetpack', nova: 'freeze', vanish: 'ghost' , taunt: 'shield', roll: 'dash', hook: 'hook', spikes: 'spikes', blight: 'poison', smoke: 'ghost'};
+const SUP_GI = { wave: 'sonic', beam: 'laser', mega: 'megabomb', bloom: 'heal', slam: 'stomp', turret: 'tesla', barrage: 'missiles', freeze: 'freeze', blink: 'vortex' , fortress: 'shield', net: 'net', rage: 'flame', undying: 'heal', vortex: 'vortex', boomerang: 'boomerang'};
 const PREF = { mode: 'zchat-siege-mode', ts: 'zchat-siege-ts', sk: 'zchat-siege-skill', hero: 'zchat-siege-hero', arena: 'zchat-siege-arena', lv: 'zchat-siege-level', bots: 'zchat-siege-bots', gfx: 'zchat-siege-gfx', end: 'zchat-siege-endless', nums: 'zchat-siege-nums', bars: 'zchat-siege-bars', map: 'zchat-siege-map', shake: 'zchat-siege-shake' };
 const BEST_KEY = (uid, a, lv) => `zchat-siege-best-${uid || 'me'}-${a}-${lv}`;
 const readPref = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : v; } catch { return d; } };
@@ -351,30 +351,49 @@ const mul = m4.mul;
 function scl(M, sx, sy, sz) { const o = new Float32Array(M); for (let i = 0; i < 3; i++) { o[i] *= sx; o[4 + i] *= sy; o[8 + i] *= sz; } return o; }
 
 const BOLT = {"pellet":[0.1,0.5],"bolt":[0.74,0.75],"beam":[1.63,0.7927],"eshot":[2.5627,0.2444],"tshot":[2.9472,0.2518],"orb":[3.339,0.5499],"lob":[4.0289,0.4528],"swing":[4.6217,0.5],"boom":[5.2617,0.7775],"bigboom":[6.1792,1.6],"stomp":[7.9192,0.9966],"crunch":[9.0558,1.1],"clank":[10.2958,0.1405],"hit":[10.5763,0.3],"hurt":[11.0163,0.2843],"heal":[11.4406,1.1],"pick":[12.6806,0.6],"super":[13.4206,0.9],"shield":[14.4606,1.2],"laser":[15.8006,1.7],"spawn":[17.6406,0.8],"fuse":[18.5806,0.1166],"wind":[18.8372,0.4],"dash":[19.3772,0.55],"jump":[20.0672,0.6],"fireball":[20.8072,1.0],"frost":[21.9472,0.8],"shock":[22.8872,0.7491],"skill":[23.7763,0.6],"poof":[24.5163,0.7],"pdie":[25.3563,0.4123],"alert":[25.9086,0.8696],"star":[26.9182,0.4966],"coin":[27.5548,0.6954],"pop":[28.3902,0.0928],"cp":[28.623,0.5279],"combo":[29.2909,0.4847],"win":[29.9156,1.0824],"lose":[31.1379,1.6147],"rocket":[32.8927,0.7],"shard":[33.7326,0.6],"blast":[34.4726,0.9],"build":[35.5126,0.3153],"freeze":[35.968,1.1258],"over":[37.2338,1.0],"decoy":[38.3738,0.8],"zapl":[39.3138,0.7],"barrage":[40.1538,0.9],"splat":[41.1938,0.3472]};
+const BOLT2 = {"thrust":[0.0,0.4419],"whirl":[0.5619,0.5834],"drain":[1.2652,1.0],"roar":[2.3852,1.7],"undying":[4.2052,1.6],"wall":[5.9252,1.3],"warcry":[7.3452,1.2],"netshot":[8.6652,0.3008],"netpop":[9.0861,0.4671],"roll":[9.6731,0.5806],"chain":[10.3737,0.3473],"spikes":[10.841,0.8],"skull":[11.761,0.9],"skullhit":[12.781,1.0],"vortex":[13.901,1.2517],"blight":[15.2727,1.5],"smoke":[16.8927,1.3],"knife":[18.3127,0.2246],"boomer":[18.6573,0.5891],"cheer":[19.3663,3.0],"vo_fight":[22.4863,0.72],"vo_ready":[23.3263,0.9309],"vo_prep":[24.3773,1.62],"vo_win1":[26.1173,1.0894],"vo_win2":[27.3266,1.3448],"vo_win3":[28.7915,1.2336],"vo_flawless":[30.1451,1.6975],"vo_lose1":[31.9626,1.2541],"vo_lose2":[33.3367,1.6407],"vo_lose3":[35.0974,1.0858],"vo_tie":[36.3032,1.2954],"vo_final":[37.7186,1.5729],"vo_sudden":[39.4115,1.311],"vo_multi":[40.8426,1.3531],"vo_combo":[42.3156,1.0181],"vo_hurry":[43.4538,0.6628],"vo_level":[44.2366,0.7929],"vo_tower":[45.1495,1.3005],"vo_backup":[46.57,0.9942],"vo_best":[47.6841,1.2096],"vo_congrats":[49.0138,1.5058],"vo_go":[50.6396,0.9556]};
 const BS = { buf: null, job: null, at: {} };
-function boltLoad() {
+const BS2 = { buf: null, job: null, at: {} };
+function sprLoad(S, url) {
   const ac = Sfx.ctx();
-  if (!ac || BS.buf || BS.job) return;
-  BS.job = fetch('/sounds/bolt/sfx-v2.mp3').then((r) => (r.ok ? r.arrayBuffer() : null)).then((b) => (b ? new Promise((res, rej) => ac.decodeAudioData(b, res, rej)) : null)).then((buf) => { BS.buf = buf; if (!buf) BS.job = null; }).catch(() => { BS.job = null; });
+  if (!ac || S.buf || S.job) return;
+  S.job = fetch(url).then((r) => (r.ok ? r.arrayBuffer() : null)).then((b) => (b ? new Promise((res, rej) => ac.decodeAudioData(b, res, rej)) : null)).then((buf) => { S.buf = buf; if (!buf) S.job = null; }).catch(() => { S.job = null; });
 }
-function zap(kind, vol = 1, rate = 1) {
+function boltLoad() { sprLoad(BS, '/sounds/bolt/sfx-v2.mp3'); sprLoad(BS2, '/sounds/bolt/sfx3-v1.mp3'); }
+function sprPlay(S, map, kind, vol, rate) {
   const B = Sfx.bus();
-  const seg = BOLT[kind];
-  if (!B || !seg || vol <= 0.02) return;
-  if (!BS.buf) { boltLoad(); return; }
+  const seg = map[kind];
+  if (!B || !seg || vol <= 0.02) return false;
+  if (!S.buf) { boltLoad(); return false; }
   const { ac, out } = B;
   const t = ac.currentTime;
-  if ((BS.at[kind] || -1) > t - 0.05) return;
-  BS.at[kind] = t;
+  if ((S.at[kind] || -1) > t - 0.05) return false;
+  S.at[kind] = t;
   try {
     const src = ac.createBufferSource();
-    src.buffer = BS.buf;
+    src.buffer = S.buf;
     src.playbackRate.value = rate;
     const g = ac.createGain();
     g.gain.value = Math.min(1.2, vol);
     src.connect(g); g.connect(out);
     src.start(t, Math.max(0, seg[0] - 0.004), seg[1] + 0.01);
-  } catch {}
+  } catch { return false; }
+  return true;
+}
+function zap(kind, vol = 1, rate = 1) { sprPlay(BS, BOLT, kind, vol, rate); }
+function zap2(kind, vol = 1, rate = 1) { sprPlay(BS2, BOLT2, kind, vol, rate); }
+const VO = { fight: ['vo_fight', 'vo_go'], ready: ['vo_ready', 'vo_prep'], win: ['vo_win1', 'vo_win2', 'vo_win3'], flawless: ['vo_flawless'], lose: ['vo_lose1', 'vo_lose2', 'vo_lose3'], tie: ['vo_tie'], final: ['vo_final'], sudden: ['vo_sudden'], multi: ['vo_multi'], combo: ['vo_combo'], hurry: ['vo_hurry'], level: ['vo_level'], tower: ['vo_tower'], backup: ['vo_backup'], best: ['vo_best'], congrats: ['vo_congrats'] };
+const VOG = { until: 0 };
+function say(k, vol = 0.95, delay = 0, force = false) {
+  const L = VO[k];
+  if (!L || !L.length) return;
+  const go = () => {
+    const now = performance.now();
+    if (!force && now < VOG.until) return;
+    const pick = L[Math.floor(Math.random() * L.length)];
+    if (sprPlay(BS2, BOLT2, pick, vol, 1)) VOG.until = now + BOLT2[pick][1] * 1000 + 150;
+  };
+  if (delay > 0) setTimeout(go, delay); else go();
 }
 
 const KIT_SRC = { base: ['/bolt/base-pack-v1.bin', '/bolt/t_kspace.webp'], city: ['/bolt/city-pack-v1.bin', '/bolt/t_kcity.webp'], fort: ['/bolt/fort-pack-v1.bin', '/bolt/t_kfort.webp'], grave: ['/bolt/grave-pack-v1.bin', '/bolt/t_kgrave.webp'] };
@@ -869,7 +888,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
     g.botMeta = {};
     for (const b of cfg.bots || []) { g.botMeta[b.id] = { n: b.n }; if (isHost) W.local.add(b.id); }
     g.W = W; g.rid = cfg.rid; g.ids = cfg.ids.slice(); g.bots = (cfg.bots || []).map((b) => b.id);
-    g.parts = []; g.nums = []; g.beams = []; g.zaps = []; g.seq = 0; g.hsq = 0; g.lastSeq = -1; g.lastSnapAt = performance.now(); g.waveSeen = 0; g.stSeen = ''; g.claimed = new Set(); g.over = false; g.cam = null; g.shake = 0; g.fireQ = []; g.aim = { on: false }; g.cardDone = 0; g.kill = null; g.gadQ = []; g.dashQ = []; g.myKills = 0; g.pend = []; g.pickId = 0;
+    g.downs = 0; g.parts = []; g.nums = []; g.beams = []; g.zaps = []; g.seq = 0; g.hsq = 0; g.lastSeq = -1; g.lastSnapAt = performance.now(); g.waveSeen = 0; g.stSeen = ''; g.claimed = new Set(); g.over = false; g.cam = null; g.shake = 0; g.fireQ = []; g.aim = { on: false }; g.cardDone = 0; g.kill = null; g.gadQ = []; g.dashQ = []; g.myKills = 0; g.pend = []; g.pickId = 0;
     g.skQ = []; g.recQ = []; g.tbeams = []; g.feedId = 0; g.riftRebuild = false; g.waveTold = 0; g.cardTold = false; g.reroll = 3; g.gates = {}; g.domes = []; g.drones = {}; g.minTold = false;
     const meT = W.heroes[kindOf()];
     g.flip = !!(team && meT && meT.tm === 1);
@@ -886,8 +905,8 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
       const rid0 = cfg.rid;
       try { supabase.rpc('zchat_siege_begin', { p_mode: team ? (W.tm.gm === 'hp' ? 'hp' : 'tdm') : 'waves' }).then(({ data, error }) => { if (!error && data && data.ok && typeof data.id === 'string' && G.current.rid === rid0) G.current.ticket = data.id; }, () => {}); } catch {}
     }
-    if (team) showBanner(T.GM_NAME[W.tm.gm] || 'Team deathmatch', W.tm.gm === 'hp' ? `Hold the zone. First to ${W.tm.goal} wins` : `First team to ${W.tm.goal} kills wins`, 'blue', 3);
-    else showBanner('Get ready', `${E.ARENAS[ak].name}, ${E.LEVELS[W.lv].name}`, 'blue', 2.6);
+    if (team) { showBanner(T.GM_NAME[W.tm.gm] || 'Team deathmatch', W.tm.gm === 'hp' ? `Hold the zone. First to ${W.tm.goal} wins` : `First team to ${W.tm.goal} kills wins`, 'blue', 3); say('fight', 0.95, 900, true); }
+    else { showBanner('Get ready', `${E.ARENAS[ak].name}, ${E.LEVELS[W.lv].name}`, 'blue', 2.6); say('ready', 0.95, 700, true); }
     J.reset();
     Sfx.init();
   };
@@ -1007,10 +1026,11 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
       sendFinish({ won, kills: kd.k | 0, assists: kd.a | 0, wave: 0 });
     }
     setTimeout(() => { if (G.current.over) setPhase('done'); }, res.lost ? 600 : 2600);
+    const scE = Array.isArray(res.sc) ? res.sc : W && W.tm ? W.tm.score : null;
     if (res.lost) zap('lose', 0.6);
-    else if (draw) { zap('over', 0.7); showBanner('Draw', 'Both teams ended on the same score', 'blue', 2.6); }
-    else if (won) { zap('win', 0.85); showBanner('Victory', gmK === 'hp' ? 'Your team held the zones' : 'Your team got the most kills', 'gold', 2.6); try { window.dispatchEvent(new CustomEvent('zchat-screen-fx', { detail: 'confetti' })); } catch {} }
-    else { zap('lose', 0.75); showBanner(meH ? 'Defeat' : 'Game over', meH ? (gmK === 'hp' ? 'The enemy held the zones' : 'The enemy got more kills') : `${TNAME[res.team] || 'A'} team won`, 'red', 2.6); }
+    else if (draw) { zap('over', 0.7); say('tie', 1, 500, true); showBanner('Draw', 'Both teams ended on the same score', 'blue', 2.6); }
+    else if (won) { zap('win', 0.85); zap2('cheer', 0.55); say(scE && (scE[1 - myTeam] | 0) === 0 ? 'flawless' : 'win', 1, 550, true); showBanner('Victory', gmK === 'hp' ? 'Your team held the zones' : 'Your team got the most kills', 'gold', 2.6); try { window.dispatchEvent(new CustomEvent('zchat-screen-fx', { detail: 'confetti' })); } catch {} }
+    else { zap('lose', 0.75); if (meH) say('lose', 1, 550, true); showBanner(meH ? 'Defeat' : 'Game over', meH ? (gmK === 'hp' ? 'The enemy held the zones' : 'The enemy got more kills') : `${TNAME[res.team] || 'A'} team won`, 'red', 2.6); }
   };
   const finishUp = (res) => {
     const g = G.current;
@@ -1031,8 +1051,10 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
       sendFinish({ won: !!res.won, kills: meH ? meH.stats.kills | 0 : 0, assists: 0, wave: wave | 0 });
     }
     setTimeout(() => { if (G.current.over) setPhase('done'); }, res.won ? 1400 : g.kill && performance.now() - g.kill.at < 2400 ? 2600 : 1300);
-    if (res.won) { zap('win', 0.85); try { window.dispatchEvent(new CustomEvent('zchat-screen-fx', { detail: 'confetti' })); } catch {} }
-    else zap('lose', 0.75);
+    if (res.won) { zap('win', 0.85); zap2('cheer', 0.55); say(g.downs ? 'win' : 'flawless', 1, 550, true); try { window.dispatchEvent(new CustomEvent('zchat-screen-fx', { detail: 'confetti' })); } catch {} }
+    else if (!res.lost) { zap('lose', 0.75); say('lose', 1, 550, true); }
+    else zap('lose', 0.6);
+    if (!res.lost && inGame() && reached > prev && prev > 0) say('best', 0.9, 2400, true);
   };
   const pickCard = (k) => {
     const g = G.current, W = g.W;
@@ -1098,10 +1120,10 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
     const sup = f.kind === 'sup';
     if (sup ? h.sup < 1 : !E.canFire(h)) return false;
     const S = sup ? H.sup : H.atk;
-    const lob = S.k === 'lob' || S.k === 'mega' || S.k === 'barrage';
+    const lob = E.LOB_KINDS.has(S.k);
     let a = f.a, dist = f.dist;
     if (f.auto || a == null) {
-      const rng = S.k === 'turret' ? 9 : S.k === 'slam' || S.k === 'freeze' || S.k === 'bloom' ? H.atk.rng : S.rng || S.rad || H.atk.rng;
+      const rng = S.k === 'turret' ? 9 : E.SELF_SUP.has(S.k) ? H.atk.rng : S.rng || S.rad || H.atk.rng;
       const t = E.autoAim(W, h, rng, !lob);
       if (t) {
         const b = W.robots.find((r) => r.id === t.id);
@@ -1128,7 +1150,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
     let a = f && f.a != null ? f.a : null, dist = f && f.dist != null ? f.dist : null;
     if (a == null) {
       if (GD.k === 'jet') { const mv = Math.hypot(h.vx, h.vz); a = mv > 0.5 ? Math.atan2(h.vx, h.vz) : h.yaw; dist = GD.len; }
-      else { const t = E.autoAim(W, h, GD.k === 'charge' ? GD.len + 1 : 10, true); a = t ? t.a : h.yaw; dist = t ? t.d : null; }
+      else { const t = E.autoAim(W, h, GD.k === 'charge' ? GD.len + 1 : GD.k === 'hook' ? GD.rng + 0.5 : 10, true); a = t ? t.a : h.yaw; dist = t ? t.d : null; }
     }
     if (f && f.mag != null && GD.k === 'jet') dist = Math.max(2, f.mag * GD.len);
     const r = E.useGadget(W, h, a, dist);
@@ -1591,10 +1613,10 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
     if (r.k === myK) { popNum(v.x, v.z, 'Takedown', '#FFE15A', true); zap('combo', 0.6); }
     else if (r.as.includes(myK)) { popNum(v.x, v.z, 'Assist', '#9FD0FF', false); zap('coin', 0.45); }
     const tone = good ? 'gold' : 'red';
-    if (r.ace) showBanner('Team wipe', good ? 'The whole enemy team is down' : 'Your whole team is down', tone, 2.4);
-    else if (r.multi >= 3) showBanner(r.multi === 3 ? 'Triple takedown' : r.multi === 4 ? 'Quad takedown' : 'Unstoppable', nm(r.k), tone, 2.2);
+    if (r.ace) { showBanner('Team wipe', good ? 'The whole enemy team is down' : 'Your whole team is down', tone, 2.4); if (good) say('multi', 0.95, 250); }
+    else if (r.multi >= 3) { showBanner(r.multi === 3 ? 'Triple takedown' : r.multi === 4 ? 'Quad takedown' : 'Unstoppable', nm(r.k), tone, 2.2); if (good) say('multi', 0.95, 250); }
     else if (r.first) { showBanner('First takedown', r.k ? nm(r.k) : null, tone, 2.2); zap('alert', 0.45); }
-    else if (r.multi === 2 && (r.k === myK || good)) showBanner('Double takedown', nm(r.k), tone, 1.8);
+    else if (r.multi === 2 && (r.k === myK || good)) { showBanner('Double takedown', nm(r.k), tone, 1.8); if (r.k === myK) say('combo', 0.9, 250); }
   };
   const handleEvents = (W, now) => {
     const g = G.current;
@@ -1630,6 +1652,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
             if (!e.quiet) {
               const ours = e.b === myTm;
               if (a !== 'cor') showBanner(ours ? `Our ${TOW_NAME[a]} fell` : `We broke their ${TOW_NAME[a]}`, a === 'tow' ? `${T.LANE_NAME[e.c] || 'Mid'} lane` : null, ours ? 'red' : 'green', 2.2);
+              if (a !== 'cor') say(ours ? 'backup' : 'tower', 0.9, 400);
               feedAdd({ good: !ours, parts: [[ours ? 'Enemy team' : 'Your team', TXT_COL[ours ? 1 : 0]], [`broke a ${TOW_NAME[a]}`]] });
             }
           } else if (a === 'ship') { showBanner('The Hive Ship is here', 'Beat it and it fights for your team', 'gold', 2.8); zap('alert', 0.7); }
@@ -1637,14 +1660,14 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
           else if (a === 'river') { const ours = e.b === myTm; feedAdd({ good: ours, parts: [[ours ? 'Your team' : 'Enemy team', TXT_COL[ours ? 0 : 1]], ['cleared the river aliens']] }); if (ours) pushNote('River aliens cleared. XP for the whole team', 'join'); }
           else if (a === 'zone' || a === 'zmove') { const zn = T.zoneByK(W, e.b) || { n: 'zone' }; showBanner(a === 'zone' ? 'The zone is open' : 'The zone moved', `Hold the ${zn.n.toLowerCase()}`, 'gold', 2.2); zap(a === 'zone' ? 'alert' : 'cp', 0.6); }
           else if (a === 'zhold') { const ours = e.b === myTm; feedAdd({ good: ours, parts: [[ours ? 'Your team' : 'Enemy team', TXT_COL[ours ? 0 : 1]], ['took the zone']] }); zap(ours ? 'pick' : 'alert', 0.4); }
-          else if (a === 'od') { showBanner('Overtime', W.tm && W.tm.gm === 'hp' ? 'The next point wins' : 'The next kill wins', 'gold', 2.4); zap('alert', 0.7); }
+          else if (a === 'od') { showBanner('Overtime', W.tm && W.tm.gm === 'hp' ? 'The next point wins' : 'The next kill wins', 'gold', 2.4); zap('alert', 0.7); say('sudden', 1, 350, true); }
           else if (a === 'wave' && !g.waveTold) { g.waveTold = 1; showBanner('Bolt bots are coming', 'They walk every lane', 'blue', 2.2); zap('cp', 0.5); }
           continue;
         }
         if (k === 'lvl') {
           const h = W.heroes[e.id];
           if (h) { P3({ x: h.x, y: 0.1, z: h.z, max: 0.6, s0: 0.8, s1: 3, a0: 0.8, type: 13, flat: 1 }); for (let i = 0; i < 10; i++) { const an = R0(0, 6.283); P3({ x: h.x + Math.cos(an) * 0.6, y: R0(0.2, 1.4), z: h.z + Math.sin(an) * 0.6, vy: R0(1.2, 2.6), max: R0(0.5, 0.9), s0: 0.3, s1: 0.05, a0: 1, type: 7 }); } }
-          if (e.id === myK) { popNum(h ? h.x : e.x, h ? h.z : e.z, `Level ${e.lv}`, '#FFE15A', true); zap('star', 0.7); if (e.card) { addPick(); if (!g.cardTold) { g.cardTold = true; pushNote('New power ready. Tap New power to pick it', 'join'); } } }
+          if (e.id === myK) { popNum(h ? h.x : e.x, h ? h.z : e.z, `Level ${e.lv}`, '#FFE15A', true); zap('star', 0.7); if ((e.lv | 0) >= 2) say('level', 0.75, 200); if (e.card) { addPick(); if (!g.cardTold) { g.cardTold = true; pushNote('New power ready. Tap New power to pick it', 'join'); } } }
           else if (isHost && h && h.bot && e.card) { const ch = E.cardChoices(h, Math.random, E.TEAM_SKIP_CARDS); if (ch.length) E.applyCard(h, ch[Math.floor(Math.random() * ch.length)]); }
           continue;
         }
@@ -1723,6 +1746,101 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
         if (k === 'vanish') zap('poof', e.id === myK ? 0.7 : volAt(e.x, e.z) * 0.5);
         continue;
       }
+      if (k === 'thrust') {
+        const ux = Math.sin(e.a), uz = Math.cos(e.a), mine = e.id === myK;
+        for (let d = 0.5; d < e.len; d += 0.3) P3({ x: e.x + ux * d, y: R0(0.85, 1.05), z: e.z + uz * d, vx: ux * 5, vz: uz * 5, max: R0(0.14, 0.24), s0: 0.34, s1: 0.06, a0: 0.95, type: 9 });
+        P3({ x: e.x + ux * e.len, y: 0.95, z: e.z + uz * e.len, max: 0.12, s0: 0.4, s1: 1.2, a0: 0.9, type: 16 });
+        sparks(e.x + ux * e.len, 0.95, e.z + uz * e.len, 5, 4, 5);
+        zap2('thrust', mine ? 0.8 : volAt(e.x, e.z) * 0.55);
+        if (mine) g.shake = Math.max(g.shake, 0.12);
+        continue;
+      }
+      if (k === 'cleave') {
+        const mine = e.id === myK;
+        P3({ x: e.x, y: 0.12, z: e.z, max: 0.38, s0: 1, s1: e.r * 2.2, a0: 0.8, type: 13, flat: 1 });
+        for (let i = 0; i < 24; i++) { const an = (i / 24) * 6.283; P3({ x: e.x + Math.cos(an) * e.r * 0.8, y: R0(0.6, 1.1), z: e.z + Math.sin(an) * e.r * 0.8, vx: -Math.sin(an) * 6, vz: Math.cos(an) * 6, max: R0(0.16, 0.28), s0: 0.42, s1: 0.08, a0: 0.9, type: i % 2 ? 9 : 7 }); }
+        zap2('whirl', mine ? 0.8 : volAt(e.x, e.z) * 0.55);
+        if (mine) g.shake = Math.max(g.shake, 0.18);
+        continue;
+      }
+      if (k === 'drain') {
+        const ux = Math.sin(e.a), uz = Math.cos(e.a), mine = e.id === myK;
+        P3({ x: e.x + ux * 1.6, y: 0.1, z: e.z + uz * 1.6, max: 0.4, s0: 1, s1: 3.4, a0: 0.7, type: 13, flat: 1 });
+        for (let i = 0; i < 8; i++) { const a = e.a + R0(-0.6, 0.6), d = R0(1, e.r); P3({ x: e.x + Math.sin(a) * d, y: 0.25, z: e.z + Math.cos(a) * d, vx: Math.sin(a) * R0(1, 2.5), vy: R0(1.5, 3), vz: Math.cos(a) * R0(1, 2.5), g: 10, max: R0(0.35, 0.6), s0: 0.35, s1: 0.8, a0: 0.55, type: 2 }); }
+        zap('swing', mine ? 0.7 : volAt(e.x, e.z) * 0.5); zap2('drain', mine ? 0.45 : volAt(e.x, e.z) * 0.3);
+        if (mine) g.shake = Math.max(g.shake, 0.16);
+        continue;
+      }
+      if (k === 'drainHeal') {
+        for (let i = 0; i < 10; i++) { const a = R0(0, 6.283), d = R0(1.2, 2.6); P3({ x: e.x + Math.cos(a) * d, y: R0(0.6, 1.4), z: e.z + Math.sin(a) * d, vx: -Math.cos(a) * d * 2.4, vy: R0(0.2, 0.8), vz: -Math.sin(a) * d * 2.4, max: 0.42, s0: 0.3, s1: 0.08, a0: 0.95, type: 3 }); }
+        continue;
+      }
+      if (k === 'rage') {
+        P3({ x: e.x, y: 0.12, z: e.z, max: 0.5, s0: 1, s1: 6, a0: 0.8, type: 13, flat: 1 });
+        for (let i = 0; i < 24; i++) { const a = R0(0, 6.283); P3({ x: e.x + Math.cos(a) * 0.6, y: R0(0.3, 1.8), z: e.z + Math.sin(a) * 0.6, vx: Math.cos(a) * R0(1, 3), vy: R0(1, 3), vz: Math.sin(a) * R0(1, 3), max: R0(0.4, 0.7), s0: 0.4, s1: 0.08, a0: 1, type: 8 }); }
+        zap2('roar', e.id === myK ? 0.9 : volAt(e.x, e.z) * 0.7);
+        if (e.id === myK) { g.shake = Math.max(g.shake, 0.35); showBanner('Berserk', null, 'red', 1.2); }
+        continue;
+      }
+      if (k === 'undying') {
+        P3({ x: e.x, y: 0.12, z: e.z, max: 0.8, s0: 1, s1: e.r * 2.1, a0: 0.85, type: 32, flat: 1 });
+        for (const id of e.ids || []) { const o = W.heroes[id]; if (!o) continue; for (let i = 0; i < 10; i++) { const a = R0(0, 6.283); P3({ x: o.x + Math.cos(a) * 0.7, y: R0(0.2, 1.6), z: o.z + Math.sin(a) * 0.7, vy: R0(1, 2.4), max: R0(0.5, 0.9), s0: 0.32, s1: 0.06, a0: 1, type: 3 }); } }
+        zap2('undying', volAt(e.x, e.z) * 0.85);
+        if ((e.ids || []).includes(myK) && e.id !== myK) pushNote(`${nameOf(e.id)} made you undying`, 'join');
+        continue;
+      }
+      if (k === 'undy') { sparks(e.x, 1, e.z, 4, 3, 4); if (e.id === myK) popNum(e.x, e.z, 'Undying', '#7BF2C8'); continue; }
+      if (k === 'fortress') {
+        const px = Math.cos(e.a), pz = -Math.sin(e.a);
+        for (let d = -e.len / 2; d <= e.len / 2; d += 0.35) P3({ x: e.x + px * d, y: R0(0.2, 1.8), z: e.z + pz * d, vy: R0(0.5, 1.5), max: R0(0.4, 0.7), s0: 0.45, s1: 0.1, a0: 0.9, type: 6 });
+        P3({ x: e.x, y: 0.12, z: e.z, max: 0.5, s0: 1, s1: e.len * 1.2, a0: 0.75, type: 14, flat: 1 });
+        zap2('wall', volAt(e.x, e.z) * 0.85); zap('stomp', volAt(e.x, e.z) * 0.4);
+        if (e.id === myK) g.shake = Math.max(g.shake, 0.25);
+        continue;
+      }
+      if (k === 'wallBlock') { sparks(e.x, 1, e.z, 5, 6, 5); P3({ x: e.x, y: 1, z: e.z, max: 0.18, s0: 0.4, s1: 1.1, a0: 0.9, type: 6 }); if (volAt(e.x, e.z) > 0.3) zap('clank', volAt(e.x, e.z) * 0.35); continue; }
+      if (k === 'wallEnd') { const px = Math.cos(e.a), pz = -Math.sin(e.a); for (let d = -e.len / 2; d <= e.len / 2; d += 0.6) P3({ x: e.x + px * d, y: R0(0.4, 1.4), z: e.z + pz * d, vy: R0(-0.5, 0.5), max: 0.4, s0: 0.4, s1: 0.05, a0: 0.8, type: 6 }); continue; }
+      if (k === 'vortex' || k === 'blight' || k === 'smoke') {
+        if (k === 'smoke') { for (let i = 0; i < 26; i++) { const a = R0(0, 6.283), d = R0(0, e.r); P3({ x: e.x + Math.cos(a) * d, y: R0(0.2, 1.6), z: e.z + Math.sin(a) * d, vx: Math.cos(a) * 0.6, vy: R0(0.1, 0.5), vz: Math.sin(a) * 0.6, max: R0(1.2, 2), s0: R0(1, 1.6), s1: R0(2, 2.8), a0: 0.85, type: 18 }); } zap2('smoke', e.id === myK ? 0.85 : volAt(e.x, e.z) * 0.7); }
+        else { P3({ x: e.x, y: 0.12, z: e.z, max: 0.55, s0: 1, s1: e.r * 2.2, a0: 0.85, type: 14, flat: 1 }); zap2(k, e.id === myK ? 0.85 : volAt(e.x, e.z) * 0.7); }
+        continue;
+      }
+      if (k === 'fieldTick') {
+        if (e.f === 'vortex') sparks(e.x, 0.8, e.z, 3, 10, 3);
+        else if (e.f === 'blight') for (let i = 0; i < 5; i++) { const a = R0(0, 6.283), d = R0(0, e.r); P3({ x: e.x + Math.cos(a) * d, y: 0.15, z: e.z + Math.sin(a) * d, vy: R0(0.6, 1.4), max: 0.6, s0: 0.25, s1: 0.45, a0: 0.8, type: 25 }); }
+        continue;
+      }
+      if (k === 'fieldEnd') { for (let i = 0; i < 8; i++) P3({ x: e.x + R0(-0.8, 0.8), y: R0(0.2, 1), z: e.z + R0(-0.8, 0.8), vy: R0(0.3, 1), max: 0.6, s0: 0.4, s1: 1, a0: 0.4, type: e.f === 'smoke' ? 18 : 11 }); continue; }
+      if (k === 'netpop') {
+        P3({ x: e.x, y: 0.12, z: e.z, max: 0.45, s0: 0.6, s1: e.r * 2.1, a0: 0.85, type: 13, flat: 1 });
+        for (let i = 0; i < 16; i++) { const a = (i / 16) * 6.283; P3({ x: e.x, y: 1, z: e.z, vx: Math.cos(a) * e.r * 2.2, vy: R0(-0.5, 0.6), vz: Math.sin(a) * e.r * 2.2, max: 0.4, s0: 0.22, s1: 0.1, a0: 1, type: 2, st: 0.04 }); }
+        zap2('netpop', volAt(e.x, e.z) * 0.85);
+        continue;
+      }
+      if (k === 'hookOut') { zap2('chain', e.id === myK ? 0.85 : volAt(e.x, e.z) * 0.6); continue; }
+      if (k === 'hooked') {
+        const hh = W.heroes[e.id];
+        sparks(e.x, 1, e.z, 6, 4, 5);
+        if (hh) { const L = Math.hypot(hh.x - e.x, hh.z - e.z) || 1; for (let d = 0; d < L; d += 0.3) P3({ x: e.x + (hh.x - e.x) * d / L, y: 1, z: e.z + (hh.z - e.z) * d / L, max: 0.25, s0: 0.2, s1: 0.05, a0: 0.9, type: 0 }); }
+        zap('clank', volAt(e.x, e.z) * 0.7);
+        continue;
+      }
+      if (k === 'spikesGo') { zap2('spikes', e.id === myK ? 0.85 : volAt(e.x, e.z) * 0.6); continue; }
+      if (k === 'spike') {
+        P3({ x: e.x, y: 0.1, z: e.z, max: 0.3, s0: 0.5, s1: e.r * 2, a0: 0.7, type: 13, flat: 1 });
+        for (let i = 0; i < 5; i++) P3({ x: e.x + R0(-0.35, 0.35), y: 0.1, z: e.z + R0(-0.35, 0.35), vy: R0(4, 7), g: 18, max: R0(0.35, 0.5), s0: 0.22, s1: 0.12, a0: 1, type: 0, st: 0.05 });
+        for (let i = 0; i < 4; i++) P3({ x: e.x + R0(-0.5, 0.5), y: 0.2, z: e.z + R0(-0.5, 0.5), vy: R0(0.8, 2), max: 0.6, s0: 0.4, s1: 1, a0: 0.5, type: 2 });
+        continue;
+      }
+      if (k === 'taunt') {
+        P3({ x: e.x, y: 0.12, z: e.z, max: 0.6, s0: 1, s1: e.r * 2, a0: 0.75, type: 13, flat: 1 });
+        for (let i = 0; i < 14; i++) { const a = R0(0, 6.283); P3({ x: e.x, y: 1.4, z: e.z, vx: Math.cos(a) * 6, vy: R0(-0.5, 0.5), vz: Math.sin(a) * 6, max: 0.45, s0: 0.3, s1: 0.06, a0: 1, type: 8, st: 0.04 }); }
+        zap2('warcry', e.id === myK ? 0.9 : volAt(e.x, e.z) * 0.7);
+        if (e.id === myK) g.shake = Math.max(g.shake, 0.2);
+        continue;
+      }
+      if (k === 'roll') { const ux = Math.sin(e.a), uz = Math.cos(e.a); for (let d = 0; d < e.len; d += 0.45) P3({ x: e.x + ux * d, y: 0.2, z: e.z + uz * d, vy: R0(0.3, 1), max: R0(0.4, 0.7), s0: 0.45, s1: 1.1, a0: 0.5, type: 2 }); zap2('roll', e.id === myK ? 0.8 : volAt(e.x, e.z) * 0.5); if (e.id === myK) popNum(e.x, e.z, 'Reloaded', '#CFEFFF'); continue; }
+      if (k === 'boomerBack') { sparks(e.x, 1, e.z, 3, 9, 3); continue; }
       if (k === 'fire') {
         const H = E.HEROES[e.hero];
         const hh = W.heroes[e.id], HL = HLOOK[e.hero];
@@ -1745,6 +1863,11 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
         else if (sk === 'zap') zap('zapl', v * 0.5);
         else if (sk === 'turret') zap('build', v * 0.8);
         else if (sk === 'blade') { zap('swing', v * 0.8, 1.3); P3({ x: fx, y: 0.95, z: fz, max: 0.1, s0: 0.45, s1: 1, a0: 0.9, type: 10 }); }
+        else if (sk === 'burst') { zap('bolt', v * 0.8, 1.15); setTimeout(() => zap('bolt', v * 0.75, 1.2), 95); setTimeout(() => zap('bolt', v * 0.7, 1.25), 190); P3({ x: fx, y: 0.95, z: fz, max: 0.09, s0: 0.4, s1: 0.9, a0: 0.9, type: 3 }); }
+        else if (sk === 'net') { zap2('netshot', v); P3({ x: fx, y: 1, z: fz, max: 0.12, s0: 0.4, s1: 1, a0: 0.8, type: 2 }); }
+        else if (sk === 'skull') { zap2('skull', v * 0.8); P3({ x: fx, y: 1.1, z: fz, max: 0.14, s0: 0.4, s1: 1.1, a0: 0.9, type: 25 }); }
+        else if (sk === 'ricochet') { zap2('knife', v); P3({ x: fx, y: 0.95, z: fz, max: 0.08, s0: 0.35, s1: 0.8, a0: 0.9, type: 9 }); }
+        else if (sk === 'boomerang') zap2('boomer', v);
         if (mine) g.shake = Math.max(g.shake, e.kind === 'sup' ? 0.35 : 0.08);
       } else if (k === 'beam') {
         g.beams.push({ x: e.x, z: e.z, a: e.a, len: e.len, t: 0, max: 0.4 });
@@ -1785,6 +1908,11 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
       else if (k === 'bloom') {
         P3({ x: e.x, y: 0.12, z: e.z, max: 0.7, s0: 1, s1: e.r * 2.1, a0: 0.9, type: 14, flat: 1 });
         for (let i = 0; i < 22; i++) { const a = R0(0, 6.283), d = R0(0, e.r); P3({ x: e.x + Math.cos(a) * d, y: R0(0.2, 1), z: e.z + Math.sin(a) * d, vy: R0(1, 2.6), max: R0(0.6, 1.1), s0: R0(0.25, 0.45), s1: 0.05, a0: 0.9, type: 3 }); }
+      } else if (k === 'blast' && e.hex) {
+        P3({ x: e.x, y: 0.12, z: e.z, max: 0.4, s0: 0.6, s1: e.r * 2.2, a0: 0.8, type: 14, flat: 1 });
+        for (let i = 0; i < 14; i++) { const a = R0(0, 6.283), sp = R0(2, 5); P3({ x: e.x, y: R0(0.6, 1.2), z: e.z, vx: Math.cos(a) * sp, vy: R0(1, 3), vz: Math.sin(a) * sp, max: R0(0.3, 0.55), s0: 0.4, s1: 0.06, a0: 1, type: i % 2 ? 25 : 10 }); }
+        P3({ x: e.x, y: 0.8, z: e.z, max: 0.2, s0: 0.6, s1: e.r * 1.6, a0: 0.7, type: 10 });
+        zap2('skullhit', volAt(e.x, e.z) * 0.8);
       } else if (k === 'blast') {
         blast(e.x, 0.5, e.z, e.big, e.big ? 1.25 : 0.75);
         zap(e.big ? 'bigboom' : 'boom', volAt(e.x, e.z) * (e.big ? 1 : 0.8));
@@ -1836,6 +1964,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
         const hh = W.heroes[e.id];
         if (e.id === myK || e.by === myK || (hh && W.heroes[myK] && hh.tm === W.heroes[myK].tm && hh.tm != null && !e.q)) { popSum(`h${e.id}`, hh ? hh.x : e.x, hh ? hh.z : e.z, e.n, '#5BF26E', false, '+'); if (e.id === myK && !e.q) zap('heal', 0.5); }
       } else if (k === 'down') {
+        g.downs = (g.downs || 0) + 1;
         if (e.id === myK) {
           zap('pdie', 0.7);
           const kb = typeof e.by === 'number' ? W.robots.find((r) => r.id === e.by) : e.by === 'laser' || e.by === 'stomp' || e.by === 'mis' ? W.robots.find((r) => r.type === 'boss') : null;
@@ -1955,6 +2084,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
           if (v) { h.x = v[0]; h.z = v[1]; }
           h.aimT = Math.max(0, (h.aimT || 0) - step);
           h.ocT = Math.max(0, h.ocT - step); h.rfT = Math.max(0, h.rfT - step); h.spT = Math.max(0, h.spT - step);
+          E.heroTimers(h, step);
           if (h.clkT > 0) h.clkT = Math.max(0, h.clkT - step);
           if (h.jump) { h.jump.t += step; if (h.jump.t >= h.jump.T) h.jump = null; }
           const wantYaw = h.aimT > 0 ? h.aimA : v ? v[2] : h.yaw;
@@ -1974,8 +2104,8 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
         } else if (W.wave.n > g.waveSeen) {
           g.waveSeen = W.wave.n;
           const spec = E.waveSpec(W.wave.n, 1, W.lv, 1);
-          if (spec.boss) { showBanner('Boss wave', `${E.ROBOTS.boss.name} is coming`, 'red', 2.8); zap('alert', 0.6); }
-          else { showBanner(`Wave ${W.wave.n}`, W.wave.n === 1 ? 'Aliens incoming' : W.endless || W.wave.n < E.WIN_WAVE ? null : 'Last wave', 'gold', 2); zap('cp', 0.6); }
+          if (spec.boss) { showBanner('Boss wave', `${E.ROBOTS.boss.name} is coming`, 'red', 2.8); zap('alert', 0.6); say(!W.endless && W.wave.n >= E.WIN_WAVE ? 'final' : 'ready', 0.95, 450, true); }
+          else { showBanner(`Wave ${W.wave.n}`, W.wave.n === 1 ? 'Aliens incoming' : W.endless || W.wave.n < E.WIN_WAVE ? null : 'Last wave', 'gold', 2); zap('cp', 0.6); if (W.wave.n === 1) say('fight', 0.95, 350, true); else if (!W.endless && W.wave.n >= E.WIN_WAVE) say('final', 0.95, 350, true); }
           for (const id of W.local) { const h = W.heroes[id]; if (h && h.st === 2) { const p = E.heroSpawn(W.A, W.order.indexOf(id)); h.x = p.x; h.z = p.z; h.st = 0; h.hp = h.max; h.ammo = 3; h.downT = 0; W.ev.push({ k: 'revive', id, x: h.x, z: h.z }); } }
         }
         if (W.mode !== 'team' && W.wave.st === 'break' && E.cardWave(W.wave.n) && g.cardDone !== W.wave.n && !g.over) {
@@ -2043,12 +2173,15 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
           const Pz = skPoseHero(st.sk, h, key, o, step);
           const hs = heroScale(key);
           const Ms = scl(m4.pose(x, jy, z, yaw), hs, hs, hs);
-          skHeroItems(st.sk, h, key, Ms, Pz, h.flash > 0 ? COLF : o.cloak ? COLK : o.tint ? COLD : COLN, items);
+          skHeroItems(st.sk, h, key, Ms, Pz, h.flash > 0 ? COLF : o.cloak ? COLK : o.tint ? COLD : (h.rageT || 0) > 0 ? COLRG : COLN, items);
           if (o.down) return;
           if (J && fx) { discAt(J.x1, J.z1, 1.1, TINT.cyan, 0.25); if (Math.random() < 0.8) P3({ x: x, y: jy + 0.5, z: z, vy: -1.5, max: 0.35, s0: 0.35, s1: 0.1, a0: 0.9, type: 1 }); }
           if ((h.shield || 0) > 0 && fx) items.push({ mesh: fx.bubble, model: scl(m4.pose(x, 0.95 + jy, z, tsec * 0.6), 0.95, 1.12, 0.95), blend: 1, alpha: 0.55 });
           if ((h.dashT || 0) > 0 || h.dashNet) { if (Math.random() < 0.9) P3({ x: x + R0(-0.2, 0.2), y: R0(0.3, 1.2), z: z + R0(-0.2, 0.2), max: 0.3, s0: 0.5, s1: 0.1, a0: 0.5, type: 9 }); }
           if ((h.ocT || 0) > 0 && Math.random() < 0.3) bolts(x, 1, z, 0.7, 1);
+          if ((h.rageT || 0) > 0 && Math.random() < 0.55) P3({ x: x + R0(-0.35, 0.35), y: R0(0.3, 1.7), z: z + R0(-0.35, 0.35), vy: R0(1, 2.2), max: 0.45, s0: 0.3, s1: 0.05, a0: 1, type: 8 });
+          if ((h.undT || 0) > 0) { ringAt(x, z, 0.95, TINT.mint, 0.75); if (Math.random() < 0.3) P3({ x: x + R0(-0.4, 0.4), y: R0(0.2, 1.4), z: z + R0(-0.4, 0.4), vy: R0(0.8, 1.6), max: 0.6, s0: 0.25, s1: 0.05, a0: 0.9, type: 3 }); }
+          if ((h.tauntT || 0) > 0) { ringAt(x, z, 1.05 + Math.sin(tsec * 9) * 0.08, TINT.red, 0.6); if (Math.random() < 0.25) P3({ x, y: 2.1, z, vy: 0.5, max: 0.4, s0: 0.35, s1: 0.1, a0: 0.9, type: 8 }); }
           return;
         }
         const HM = heroMesh(`${key}:${h.hc | 0}`);
@@ -2292,7 +2425,39 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
         drawHero(fake, dc.hero, dc.x, dc.z, dc.yaw + Math.sin(tsec * 3) * 0.15, { idle: true, tint: TINT.card, tintA: 0.6 });
         ringAt(dc.x, dc.z, 0.75, TINT.gold, 0.3 + 0.2 * Math.sin(tsec * 6));
       }
+      for (const L of W.walls) {
+        const px = Math.cos(L.a), pz = -Math.sin(L.a), f = clamp(L.t / 0.4, 0, 1) * clamp((L.max - L.t) / 0.15, 0, 1), mine = !team || L.tm === myTm;
+        const yawW = Math.atan2(px, pz), sx = L.x - px * L.len / 2, sz = L.z - pz * L.len / 2;
+        if (fx) { items.push({ mesh: mine ? fx.beamB : fx.beamR, model: scl(m4.pose(sx, 0.85, sz, yawW, 0), 0.2, 1.45, L.len), blend: 2, alpha: (0.3 + 0.06 * Math.sin(tsec * 6)) * f }); items.push({ mesh: fx.beamW, model: scl(m4.pose(sx, 0.85, sz, yawW, 0), 0.05, 1.05, L.len), blend: 2, alpha: 0.22 * f }); }
+        for (const q of [-1, 1]) parts.push({ x: L.x + px * q * L.len / 2, y: 0.9, z: L.z + pz * q * L.len / 2, size: 0.9, alpha: 0.5 * f, type: mine ? 6 : 8 });
+        if (Math.random() < 0.5) { const d = R0(-L.len / 2, L.len / 2); P3({ x: L.x + px * d, y: 0.1, z: L.z + pz * d, vy: R0(1, 2.2), max: 0.6, s0: 0.22, s1: 0.04, a0: 0.9, type: mine ? 6 : 8 }); }
+      }
+      for (const F of W.fields) {
+        const f = clamp(F.t / 0.4, 0, 1);
+        if (F.k === 'vortex') {
+          discAt(F.x, F.z, F.rad, TINT.violet, 0.16 * f); ringAt(F.x, F.z, F.rad, TINT.violet, 0.75 * f);
+          parts.push({ x: F.x, y: 0.7, z: F.z, size: 1.4 + Math.sin(tsec * 8) * 0.2, alpha: 0.6 * f, type: 10 });
+          for (let i = 0; i < 2; i++) { const a = tsec * 3 + i * 3.14 + R0(0, 0.6), d = F.rad * R0(0.5, 1); P3({ x: F.x + Math.cos(a) * d, y: R0(0.2, 1.2), z: F.z + Math.sin(a) * d, vx: -Math.cos(a) * d * 1.6 - Math.sin(a) * 3, vy: 0.3, vz: -Math.sin(a) * d * 1.6 + Math.cos(a) * 3, max: 0.5, s0: 0.35, s1: 0.06, a0: 0.9, type: 10 }); }
+        } else if (F.k === 'blight') {
+          discAt(F.x, F.z, F.rad, TINT.me, 0.14 * f); ringAt(F.x, F.z, F.rad, TINT.me, 0.55 * f);
+          if (Math.random() < 0.45) { const a = R0(0, 6.283), d = R0(0, F.rad); P3({ x: F.x + Math.cos(a) * d, y: 0.1, z: F.z + Math.sin(a) * d, vy: R0(0.5, 1.2), max: 0.7, s0: 0.2, s1: 0.4, a0: 0.8, type: 25 }); }
+        } else if (F.k === 'smoke') {
+          if (Math.random() < 0.5) { const a = R0(0, 6.283), d = R0(0, F.rad * 0.85); P3({ x: F.x + Math.cos(a) * d, y: R0(0.2, 1.4), z: F.z + Math.sin(a) * d, vx: Math.cos(a) * 0.3, vy: R0(0.05, 0.3), vz: Math.sin(a) * 0.3, max: R0(1.2, 1.8), s0: 1.2, s1: 2.4, a0: 0.7 * f, type: 18 }); }
+          if (F.own === myK || (team && W.heroes[F.own] && W.heroes[F.own].tm === myTm) || !team) ringAt(F.x, F.z, F.rad, TINT.white, 0.25 * f);
+        }
+      }
       for (const s of W.shots) {
+        if (s.wait > 0) continue;
+        if (s.k === 'net') { parts.push({ x: s.x, y: s.y, z: s.z, size: 0.8, alpha: 0.95, type: 2 }); parts.push({ x: s.x, y: s.y, z: s.z, size: 0.5, alpha: 0.7, type: 7 }); if (Math.random() < 0.5) P3({ x: s.x, y: s.y, z: s.z, max: 0.3, s0: 0.3, s1: 0.06, a0: 0.8, type: 2 }); continue; }
+        if (s.k === 'skull') { parts.push({ x: s.x, y: s.y, z: s.z, size: 0.9, alpha: 0.95, type: 10 }); parts.push({ x: s.x, y: s.y, z: s.z, size: 0.55, alpha: 1, type: 25 }); if (Math.random() < 0.7) P3({ x: s.x, y: s.y, z: s.z, vy: 0.6, max: 0.4, s0: 0.4, s1: 0.08, a0: 0.9, type: 25 }); continue; }
+        if (s.k === 'knife') { const sp2 = Math.hypot(s.vx, s.vz) || 1; parts.push({ x: s.x, y: s.y, z: s.z, size: 0.34, alpha: 1, type: 9, dx: s.vx, dy: 0, dz: s.vz, dw: 0.5 + sp2 * 0.02 }); continue; }
+        if (s.k === 'boomer') { const a = tsec * 22; parts.push({ x: s.x, y: s.y, z: s.z, size: 1.1, alpha: 0.9, type: 0, dx: Math.sin(a), dy: 0, dz: Math.cos(a), dw: 1.3 }); parts.push({ x: s.x, y: s.y, z: s.z, size: 0.7, alpha: 0.6, type: 9 }); if (Math.random() < 0.5) P3({ x: s.x, y: s.y, z: s.z, max: 0.3, s0: 0.5, s1: 0.1, a0: 0.5, type: 9 }); continue; }
+        if (s.k === 'hook') {
+          const ow = W.heroes[s.own];
+          parts.push({ x: s.x, y: s.y, z: s.z, size: 0.45, alpha: 1, type: 9 });
+          if (ow) { const L = Math.hypot(s.x - ow.x, s.z - ow.z) || 1; for (let d = 0.4; d < L; d += 0.35) parts.push({ x: ow.x + (s.x - ow.x) * d / L, y: 1, z: ow.z + (s.z - ow.z) * d / L, size: 0.18, alpha: 0.95, type: 0 }); }
+          continue;
+        }
         if (s.k === 'rain') {
           const u = clamp(s.t / s.T, 0, 1), dist = Math.hypot(s.x1 - s.x0, s.z1 - s.z0) || 1;
           const pitch = -Math.atan2(5.5 * 4 * (1 - 2 * u) - 0.6, dist);
@@ -2417,6 +2582,13 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
             discAt(tx, tz, S.rad, tint, al * 0.7); ringAt(tx, tz, S.rad, tint, 0.9);
             for (let j = 1; j < 9; j++) { const u = j / 9; parts.push({ x: myH.x + ux * d * u, y: 0.9 + (S.k === 'mega' ? 4.2 : 3.2) * 4 * u * (1 - u) * 0.6, z: myH.z + uz * d * u, size: 0.28, alpha: 0.8, type: 9 }); }
           } else if (S.k === 'bloom') { discAt(myH.x, myH.z, S.rad, TINT.mint, 0.18); ringAt(myH.x, myH.z, S.rad, TINT.mint, 0.85); }
+          else if (S.k === 'burst' || S.k === 'ricochet' || S.k === 'skull' || S.k === 'net' || S.k === 'boomerang' || S.k === 'thrust') {
+            const reach = E.rayWall(A, myH.x, myH.z, ux, uz, S.rng);
+            items.push({ mesh: fx.strip, model: scl(m4.pose(myH.x, 0.04, myH.z, show.a), S.k === 'boomerang' ? 1.8 : S.k === 'thrust' ? 1.3 : S.k === 'net' ? 1.2 : S.k === 'skull' ? 1 : 0.7, 1, S.k === 'ricochet' ? S.rng * 0.6 : reach), blend: 3, alpha: al, tint });
+            if (S.k === 'net') ringAt(myH.x + ux * reach, myH.z + uz * reach, S.rad, tint, 0.7);
+          } else if (S.k === 'cleave' || S.k === 'undying' || S.k === 'rage') { const r = S.rad || 1.3; discAt(myH.x, myH.z, r, S.k === 'undying' ? TINT.mint : S.k === 'rage' ? TINT.red : tint, 0.16); ringAt(myH.x, myH.z, r, S.k === 'undying' ? TINT.mint : S.k === 'rage' ? TINT.red : tint, 0.85); }
+          else if (S.k === 'vortex') { const d = Math.max(1.5, show.mag * S.rng); const tx = myH.x + ux * d, tz = myH.z + uz * d; discAt(tx, tz, S.rad, TINT.violet, al * 0.7); ringAt(tx, tz, S.rad, TINT.violet, 0.9); }
+          else if (S.k === 'fortress') { const off = Math.max(0.6, Math.min(S.off, E.rayWall(A, myH.x, myH.z, ux, uz, S.off + 0.4) - 0.4)); items.push({ mesh: fx.strip, model: scl(m4.pose(myH.x + ux * (off - 0.2), 0.04, myH.z + uz * (off - 0.2), show.a), S.len, 1, 0.4), blend: 3, alpha: al + 0.15, tint: TINT.cyan }); }
         }
         if (myH.sup >= 1) parts.push({ x: myH.x, y: 0.15, z: myH.z, size: 1.6 + Math.sin(tsec * 6) * 0.15, alpha: 0.35, type: 7, dw: -1 });
       }
@@ -2614,7 +2786,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
         if (W.mode === 'team') {
           const allies = W.order.filter((k) => W.heroes[k] && W.heroes[k].tm === myTm).map((k) => { const h = W.heroes[k]; return { id: k, key: h.key, hp: Math.ceil(h.hp), max: h.max, st: h.st, dt: Math.ceil(h.respT || 0) }; });
           const tmH = teamHudOf(W, myK);
-          if (W.tm.gm && !g.minTold && !W.tm.over && W.tm.t > 30 && W.tm.tlim - W.tm.t < 60) { g.minTold = true; showBanner('One minute left', null, 'gold', 1.8); zap('alert', 0.5); }
+          if (W.tm.gm && !g.minTold && !W.tm.over && W.tm.t > 30 && W.tm.tlim - W.tm.t < 60) { g.minTold = true; showBanner('One minute left', null, 'gold', 1.8); zap('alert', 0.5); say('hurry', 0.9, 300); }
           setHud({ wave: 0, st: 'fight', t: 0, left: 0, score: 0, team: allies, boss: null, tm: tmH, me: meH ? { team: true, st: meH.st, sup: meH.sup >= 1, dt: 0, key: meH.key, pw: false, gad: meH.gad, gadCD: Math.ceil(meH.gadCD * 10) / 10, dashCD: Math.ceil(meH.dashCD * 10) / 10, dashMax: E.DASH.cd * meH.mods.dashCd, oc: meH.ocT > 0, rf: false, sp: meH.spT > 0 || meH.sprT > 0, sh: meH.shield > 0, ammoMax: meH.mods.ammo, lv: meH.lv, cards: meH.cards.length, sk: meH.sk, skCD: tmH.skCD, skMax: tmH.skMax, gate: tmH.gate, clk: (meH.clkT || 0) > 0 } : null });
           return;
         }
@@ -2626,7 +2798,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
   }, []);
 
   const finish = () => { Sfx.stopAll(); onClose(); };
-  const leave = () => { if (phase === 'play' && !solo && !watch) { setLeaveAsk(true); return; } finish(); };
+  const leave = () => { const k = watch ? null : phase === 'play' && !G.current.over ? 'match' : phase === 'menu' ? 'lobby' : null; if (k) { setLeaveAsk(k); return; } finish(); };
   useBackClose(true, () => { if (layEd) { layEnd('siege', false); setLayEd(false); setCtl(true); } else if (chatOpen) setChatOpen(false); else if (board) setBoard(false); else if (mapSheet) setMapSheet(false); else if (powSheet) setPowSheet(false); else if (ctl) setCtl(false); else if (optSheet) setOptSheet(false); else if (arenaSheet) setArenaSheet(false); else if (people) setPeople(false); else if (quick) setQuick(false); else if (leaveAsk) setLeaveAsk(false); else if (paused) setPaused(false); else if (phase === 'play' && solo) setPaused(true); else leave(); });
   const sendEmote = (e) => { setBubbles((p) => ({ ...p, [kindOf()]: { e, at: Date.now() } })); if (!solo) relay.send('emo', { e }); setQuick(false); zap('pop', 0.5); };
   useEffect(() => {
@@ -2691,7 +2863,7 @@ export function SiegeGamePage({ solo = false, room, me, myId, onClose, onInvite,
     onPeople: !solo ? () => setPeople(true) : null, onWatch: !solo && isHost && !watch ? toggleWatch : null, allowWatch, watchers: watchers.length,
     onSettings: () => setCtl(true), onLoadout: () => { kitTap(); setLobView('hero'); }, howTo: mode === 'team' ? <TeamHowTo gm={gm} /> : <div style={{ fontSize: 13, fontWeight: 700, lineHeight: 1.5, color: 'rgba(255,255,255,0.85)' }}>{`Fight ${E.WIN_WAVE} waves of aliens with your squad. A boss comes every 5 waves. Every few waves you pick a power, and friends who fall can be revived.`}</div>,
     ready: ready && !failed && !pubRoom, failed, readyText: pubRoom ? pubText : `Loading ${mode === 'team' ? (T.MAPS[tmap] ? T.MAPS[tmap].name : 'map') : E.ARENAS[arena].name}`, onStart: startGame,
-    waitText: pubRoom ? pubText : mode === 'team' ? `${hostName} starts the match` : `${hostName} starts the fight`, onClose: finish, closeLabel: solo ? 'Leave' : pubRoom ? 'Leave server' : 'Back to chat',
+    waitText: pubRoom ? pubText : mode === 'team' ? `${hostName} starts the match` : `${hostName} starts the fight`, onClose: leave, closeLabel: solo ? 'Leave' : pubRoom ? 'Leave server' : 'Back to chat',
     scrap: prog ? prog.scrap : null, plv: prog ? plvOf(prog.xp) : null, best: mode !== 'team' ? best : 0,
     onServers: onServer && solo && !watch && cloudOn() ? loadServers : null, servers: srvList, onServer: (reg, n) => { kitTap(); if (onServer) onServer(reg, n); },
   };
@@ -2948,7 +3120,7 @@ const powersBtn = (() => {
                   <GPill text="Restart" icon="replay" color="white" small wide onPress={() => { setPaused(false); toMenu(true); setTimeout(startGame, 50); }} style={{ flex: 1 }} />
                   <GPill text="Settings" icon="gear" color="white" small wide onPress={() => setCtl(true)} style={{ flex: 1 }} />
                 </div>
-                <GPill text="Leave" color="red" small wide onPress={finish} />
+                <GPill text="Leave" color="red" small wide onPress={leave} />
               </GPanel>
             </div>
           )}
@@ -3037,7 +3209,7 @@ const powersBtn = (() => {
           })()}
           {board && teamOn && G.current.W && <SiegeBoard B={{ GS, rows: teamRows(G.current.W).map((r) => { const h = G.current.W.heroes[r.id]; return { ...r, nb: !!h && !solo && (r.id === kindOf() ? !!(netMine && netMine.bad) : netBadOf(h, performance.now())) }; }), my: hud.tm.my, sc: hud.tm.sc, myK: kindOf(), thumbs, nameOf, info: `${T.GM_NAME[G.current.W.tm.gm] || ''}${G.current.W.A && G.current.W.A.name ? ` on ${G.current.W.A.name}` : ''}`, onClose: () => setBoard(false) }} />}
           {leaveAsk && (
-            <Sheet title="Leave the game?" text="Your squad can keep fighting without you." onClose={() => setLeaveAsk(false)}>
+            <Sheet title={leaveAsk === 'lobby' ? (solo ? 'Leave Bolt War?' : pubRoom ? 'Leave this server?' : 'Leave the room?') : 'Leave the match?'} text={leaveAsk === 'lobby' ? null : solo ? 'You lose this match.' : 'Your squad can keep fighting without you.'} onClose={() => setLeaveAsk(false)}>
               <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
                 <GPill text="Stay" color="white" small onPress={() => setLeaveAsk(false)} style={{ flex: 1 }} wide />
                 <GPill text="Leave" color="red" small onPress={() => { setLeaveAsk(false); finish(); }} style={{ flex: 1 }} wide />

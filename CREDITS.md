@@ -70,7 +70,7 @@ From Sketchfab, CC BY 4.0
 CC BY 3.0
 
 - Skill and button icons, by Lorc, Delapouite, Skoll, Zeromancer, Carl Olsen and Sbed (CC BY 3.0): https://game-icons.net
-- Bolt War painted skill buttons, Painterly Spell Icons by J. W. Bjerk (eleazzaar), www.jwbjerk.com/art, found on OpenGameArt.org (CC BY 3.0): https://opengameart.org/content/painterly-spell-icons-part-1
+- Bolt War painted skill buttons, Painterly Spell Icons parts 1 to 4 by J. W. Bjerk (eleazzaar), www.jwbjerk.com/art, found on OpenGameArt.org (CC BY 3.0): https://opengameart.org/content/painterly-spell-icons-part-1
 
 ## Sounds
 
@@ -81,6 +81,8 @@ CC BY 3.0
 - Grenade, dog and older zombie sounds, by freesound.org and OpenGameArt creators (CC0): https://getzchat.com/sounds/dead/CREDITS.txt
 - Bolt War sound effects and announcer, by Kenney (CC0): https://kenney.nl/assets/sci-fi-sounds
 - Bolt War skill sounds, Sci Fi Pack Vol 1 and Fantasy SFX Pack Vol 1 by JC Sounds (CC BY 4.0): https://opengameart.org/content/jc-sounds-sci-fi-pack-vol-1
+- Bolt War announcer, Voiceover Pack and Voiceover Pack Fighter by Kenney (CC0): https://kenney.nl/assets/voiceover-pack-fighter
+- Bolt War victory claps, by freesound community on Pixabay (Pixabay license): https://pixabay.com/sound-effects/
 
 ## Music
 

@@ -1463,7 +1463,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
   }, []);
 
   const finish = () => { const g = G.current; if (g.eng) { g.eng.stop(); g.eng = null; } if (g.siren) { g.siren.stop(); g.siren = null; } Sfx.stopAll(); onClose(); };
-  const leave = () => { if ((phase === 'race' || phase === 'count') && !solo && !watch) { setLeaveAsk(true); return; } finish(); };
+  const leave = () => { const k = watch ? null : phase === 'race' || phase === 'count' ? 'match' : phase === 'menu' ? 'lobby' : null; if (k) { setLeaveAsk(k); return; } finish(); };
   useBackClose(true, () => { if (layEd) { layEnd('rally', false); setLayEd(false); setCtl(true); } else if (chatOpen) setChatOpen(false); else if (ctl) setCtl(false); else if (optSheet) setOptSheet(false); else if (mapSheet) setMapSheet(false); else if (people) setPeople(false); else if (quick) setQuick(false); else if (leaveAsk) setLeaveAsk(false); else if (paused) setPaused(false); else if (phase === 'race' && solo) setPaused(true); else leave(); });
   const sendEmote = (e) => { setBubbles((p) => ({ ...p, [kindOf()]: { e, at: Date.now() } })); if (!solo) relay.send('emo', { e }); setQuick(false); Sfx.play('pop', { vol: 0.5 }); };
   useEffect(() => {
@@ -1562,7 +1562,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
   useEffect(() => () => Sfx.music(null, false), []);
   const toggleWatchR = () => { const v = !allowWatch; setAllowWatch(v); setWatchAllowed(v); kitTap(); };
   const lobbyUi = phase !== 'menu' ? null : (
-    <GLobby GS={GS} title="Island Rally" onClose={finish} closeLabel={solo ? 'Leave' : 'Back to chat'} tint="rgba(8,12,24,0.6)"
+    <GLobby GS={GS} title="Island Rally" onClose={leave} closeLabel={solo ? 'Leave' : 'Back to chat'} tint="rgba(8,12,24,0.6)"
       sub={watch ? `Watching ${hostName} and friends` : null}
       badge={bestLap ? <GChip style={{ height: 34, gap: 6 }}><GIcon k="flag" size={14} color="#FFD84E" />{`Best lap ${fmtRace(bestLap)}`}</GChip> : null}
       tools={(
@@ -1804,7 +1804,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
                   <GPill text="Restart" icon="replay" color="white" small wide onPress={() => { setPaused(false); toMenu(true); setTimeout(startRace, 50); }} style={{ flex: 1 }} />
                   <GPill text="Settings" icon="gear" color="white" small wide onPress={() => setCtl(true)} style={{ flex: 1 }} />
                 </div>
-                <GPill text="Leave" color="red" small wide onPress={finish} />
+                <GPill text="Leave" color="red" small wide onPress={leave} />
               </GPanel>
             </div>
           )}
@@ -1884,7 +1884,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
           )}
           {chatOpen && <ChatSheet title="Talk to the room" chat={chat} onEmote={sendEmote} at={GS.at} onClose={() => setChatOpen(false)} />}
           {leaveAsk && (
-            <Sheet title="Leave the race?" text="Your friends can keep racing without you." onClose={() => setLeaveAsk(false)}>
+            <Sheet title={leaveAsk === 'lobby' ? (solo ? 'Leave Island Rally?' : 'Leave the room?') : 'Leave the race?'} text={leaveAsk === 'lobby' ? null : solo ? 'You lose this race.' : 'Your friends can keep racing without you.'} onClose={() => setLeaveAsk(false)}>
               <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
                 <GPill text="Stay" color="white" small onPress={() => setLeaveAsk(false)} style={{ flex: 1 }} wide />
                 <GPill text="Leave" color="red" small onPress={() => { setLeaveAsk(false); finish(); }} style={{ flex: 1 }} wide />

@@ -5,7 +5,7 @@ import {
   useTheme, FONT, Avatar, GameArt, GAME_TITLES, FRIEND_GAME_GROUPS, FRIEND_GAME_SUBS, SOLO_GAMES, SOLO_HIDDEN, LIVE_GAME_KEYS, GAME_ART_BG, DuoGamePage, GulpGamePage, RollGamePage,
   GameInfoButton, HowToPlaySheet, SoloGame, readBest, formatGameScore, loadMyGames, gameNet, gameNetMissing, isSoloGameKey,
   useBackClose, useSheetDrag, playUiSound, hapticTap, reducedMotion, FullPage, HeaderIconButton, TrophyIcon, CrownIcon, NameBadge,
-  LoadFail, ghBotCan, ghBotLevel, GamepadIcon, GameButton, SegmentedControl, botPicUrl, LiveStatCtx, SoloFit, ThemeContext, THEMES,
+  LoadFail, ghBotCan, ghBotLevel, GamepadIcon, GameButton, SegmentedControl, botPicUrl, LiveStatCtx, SoloFit, ThemeContext, THEMES, runGuardOn, holdRuns, ConfirmSheet, Portal,
 } from '../App.jsx';
 import { useLiveCast, useRaceLink, CastEye, CastLayer, CastSheet, injectCastCss } from './livecast.jsx';
 import { useMyLevels, useLevels, LEVEL_GAMES, readRecent, noteRecent } from './levels.jsx';
@@ -228,7 +228,10 @@ export function GamesPage({ onClose, onChallenge, onShareScore, initialGame, fri
   const mine = useMyGameStats();
   const levels = useMyLevels();
   const [game, setGame] = useState(() => (initialGame && isSoloGameKey(initialGame) ? initialGame : null));
-  useBackClose(!!game, () => setGame(null));
+  const [soloAsk, setSoloAsk] = useState(false);
+  useEffect(() => { if (!soloAsk) return undefined; holdRuns(true); return () => holdRuns(false); }, [soloAsk]);
+  const closeSolo = () => { if (runGuardOn()) { setSoloAsk(true); return; } setGame(null); };
+  useBackClose(!!game, closeSolo);
   const soloRoot = useRef(null);
   const soloRoom = useMemo(() => (game ? `${game}-${String(myId || '').slice(0, 8)}-${Date.now().toString(36)}` : null), [game]);
   const soloCast = useLiveCast({ game, room: soloRoom, myId, me, active: !!game && game !== 'squish', rootRef: soloRoot, solo: true });
@@ -467,7 +470,7 @@ export function GamesPage({ onClose, onChallenge, onShareScore, initialGame, fri
         </div>
       </FullPage>
       {game && (
-        <FullPage title={GAME_TITLES[game]} subtitle={raceLine || (game === 'sudoku' ? 'Easy to expert' : bestOf(game) ? `Best ${formatGameScore(game, bestOf(game))}` : 'No score yet')} onBack={() => setGame(null)} zIndex={61}
+        <FullPage title={GAME_TITLES[game]} subtitle={raceLine || (game === 'sudoku' ? 'Easy to expert' : bestOf(game) ? `Best ${formatGameScore(game, bestOf(game))}` : 'No score yet')} onBack={closeSolo} zIndex={61}
           bodyStyle={SOLO_SCENE[game] ? { backgroundColor: '#0E0C16', backgroundImage: `linear-gradient(180deg, rgba(8,8,16,0.5) 0%, rgba(8,8,16,0.62) 55%, rgba(8,8,16,0.8) 100%), url("${sceneUrl(SOLO_SCENE[game])}")`, backgroundSize: 'cover', backgroundPosition: 'center top' } : { background: `linear-gradient(170deg, ${(GAME_ART_BG[game] || ['#3B2F63', '#1B1530'])[0]}${theme.dark ? '55' : '33'} 0%, ${(GAME_ART_BG[game] || ['#3B2F63', '#1B1530'])[1]}${theme.dark ? '33' : '1F'} 45%, transparent 85%)` }}
           right={<>{game !== 'squish' && <CastEye cast={soloCast} glass={false} size={36} onOpen={() => setCastOpen(true)} />}<GameInfoButton k={game} header />{onOpenLeaderboard && !NO_BOARD.includes(game) && <HeaderIconButton label="Leaderboard" onClick={() => onOpenLeaderboard(game)}><TrophyIcon size={19} /></HeaderIconButton>}{onShareScore && !NO_BOARD.includes(game) && <HeaderIconButton label="Share score" onClick={() => onShareScore(game, bestOf(game))}><ShareGlyph /></HeaderIconButton>}</>}>
           <div aria-hidden="true" ref={(n) => { soloRoot.current = n ? (n.closest('.zchat-wide-page') || n.parentElement) : null; }} style={{ display: 'none' }} />
@@ -480,6 +483,7 @@ export function GamesPage({ onClose, onChallenge, onShareScore, initialGame, fri
           {castOpen && <CastSheet cast={soloCast} z={68} onClose={() => setCastOpen(false)} />}
         </FullPage>
       )}
+      {game && soloAsk && <Portal><ConfirmSheet title="Leave the game?" text="Your current game ends." confirmLabel="Leave" zIndex={90} onCancel={() => setSoloAsk(false)} onConfirm={() => { setSoloAsk(false); setGame(null); }} /></Portal>}
       {rulesFor && <HowToPlaySheet k={rulesFor} onClose={() => setRulesFor(null)} />}
       {duoSolo && <DuoGamePage solo me={me} myId={myId} onClose={() => setDuoSolo(false)} />}
       {gulpSolo && <GulpGamePage solo me={me} myId={myId} onClose={() => setGulpSolo(false)} />}

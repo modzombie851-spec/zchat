@@ -190,10 +190,10 @@ export function makeBoltHost(opt = {}) {
     const sup = f.kind === 'sup';
     if (sup ? h.sup < 1 : !E.canFire(h)) return false;
     const S = sup ? HD.sup : HD.atk;
-    const lob = S.k === 'lob' || S.k === 'mega' || S.k === 'barrage';
+    const lob = E.LOB_KINDS.has(S.k);
     let a = f.a, dist = f.dist;
     if (f.auto || a == null) {
-      const rng = S.k === 'turret' ? 9 : S.k === 'slam' || S.k === 'freeze' || S.k === 'bloom' ? HD.atk.rng : S.rng || S.rad || HD.atk.rng;
+      const rng = S.k === 'turret' ? 9 : E.SELF_SUP.has(S.k) ? HD.atk.rng : S.rng || S.rad || HD.atk.rng;
       const t = E.autoAim(W, h, rng, !lob);
       if (t) {
         const b = W.robots.find((r) => r.id === t.id);
@@ -217,7 +217,7 @@ export function makeBoltHost(opt = {}) {
     let a = f && f.a != null ? f.a : null, dist = f && f.dist != null ? f.dist : null;
     if (a == null) {
       if (GD.k === 'jet') { const mv = Math.hypot(h.vx, h.vz); a = mv > 0.5 ? Math.atan2(h.vx, h.vz) : h.yaw; dist = GD.len; }
-      else { const t = E.autoAim(W, h, GD.k === 'charge' ? GD.len + 1 : 10, true); a = t ? t.a : h.yaw; dist = t ? t.d : null; }
+      else { const t = E.autoAim(W, h, GD.k === 'charge' ? GD.len + 1 : GD.k === 'hook' ? GD.rng + 0.5 : 10, true); a = t ? t.a : h.yaw; dist = t ? t.d : null; }
     }
     const r = E.useGadget(W, h, a, dist);
     send('f', { r: H.rid, h: h.id, c: 'g', a: +a.toFixed(3), d: dist == null ? null : +dist.toFixed(2), x: r2(h.x), z: r2(h.z), k: modsPack(h), tx: r ? r2(r.x1) : undefined, tz: r ? r2(r.z1) : undefined });
@@ -337,6 +337,7 @@ export function makeBoltHost(opt = {}) {
         h.vx = dt > 0 ? (h.x - ox) / dt : 0; h.vz = dt > 0 ? (h.z - oz) / dt : 0;
       }
       h.ocT = Math.max(0, (h.ocT || 0) - dt); h.rfT = Math.max(0, (h.rfT || 0) - dt); h.spT = Math.max(0, (h.spT || 0) - dt);
+      E.heroTimers(h, dt);
       if (h.clkT > 0) h.clkT = Math.max(0, h.clkT - dt);
       if (h.jump) { h.jump.t += dt; if (h.jump.t >= h.jump.T) h.jump = null; }
       if (tNow - (h.netAt || tNow) > 5000 && h.st === 0) { h.st = 2; h.gone = true; }

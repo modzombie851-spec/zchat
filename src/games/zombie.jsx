@@ -737,7 +737,7 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
   const J = useJoystick(wrapRef, { radius: () => (GS.land ? 40 : 38) * (G.current.joyS || 1), rot: () => GS.side, zone: (x, y, b) => x < b.width * 0.42 && y > b.height * 0.3, enabled: () => phase === 'play', noCapture: true });
   const canInvite = cloudOn() && !!onInvite;
 
-  useBackClose(true, () => { if (sheet) setSheet(null); else if (phase === 'play') { setSheet('pause'); setLeaveAsk(true); } else onClose(); });
+  useBackClose(true, () => { if (sheet) setSheet(null); else if (phase === 'play') { setSheet('pause'); setLeaveAsk(true); } else if (phase === 'menu') setSheet('leave'); else onClose(); });
   useEffect(() => { if (sheet !== 'pause') setLeaveAsk(false); }, [sheet]);
   useEffect(() => { if (sheet === 'shop' && hud && !hud.shop) setSheet(null); }, [sheet, hud && hud.shop]);
 
@@ -3827,7 +3827,7 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
     server: REGION_NAMES[regNow] || 'Server', ping: pings ? pings[regNow] : null,
     servers: REGION_KEYS.map((k0) => ({ k: k0, n: REGION_NAMES[k0], ping: pings ? pings[k0] : null, on: k0 === regNow })),
     pickServer: (k0) => { kitTap(); setReg(k0); if (!invited.size) setMyRoom(null); },
-    onServer: () => setLobbyTab('server'), onFriends: () => setSheet('invite'), onSettings: () => setSheet('gfx'), onClose,
+    onServer: () => setLobbyTab('server'), onFriends: () => setSheet('invite'), onSettings: () => setSheet('gfx'), onClose: () => setSheet('leave'),
     modes: lobbyModes, mode: modeNow,
     setMode: (k0) => { kitTap(); if (k0 === 'custom') { setSheet('room'); return; } setLobbyMode(k0); if (k0 === 'friends') ensureRoom(); },
     rooms: openRooms, onRoom: (o) => { kitTap(); start({ reg: o.reg, r: o.r }); },
@@ -4383,6 +4383,14 @@ export function ZombieGamePage({ me, myId, onClose, join = null, friends = [], o
                 </div>
               </div>
             ) : <GPill text="Leave the town" color="red" wide small onPress={() => setLeaveAsk(true)} />}
+          </div>
+        </GLobbySheet>
+      )}
+      {sheet === 'leave' && (
+        <GLobbySheet GS={GS} title="Leave Zombie Junction?" onClose={() => setSheet(null)} width={360}>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <GPill text="Stay" color="white" small wide style={{ flex: 1 }} onPress={() => setSheet(null)} />
+            <GPill text="Leave" color="red" small wide style={{ flex: 1 }} onPress={() => { setSheet(null); onClose(); }} />
           </div>
         </GLobbySheet>
       )}

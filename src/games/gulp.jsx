@@ -595,7 +595,7 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
     return () => clearTimeout(t);
   }, [phase, here]);
 
-  const leave = () => { if (phase === 'play' && isDuel) { setLeaveAsk(true); return; } finish(); };
+  const leave = () => { const k = isWatch ? null : phase === 'play' ? 'match' : phase === 'menu' ? 'lobby' : null; if (k) { setLeaveAsk(k); return; } finish(); };
   const finish = () => {
     if (isDuel) {
       relay.send('bye', {});
@@ -996,7 +996,7 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
   useEffect(() => { if (phase === 'menu' || phase === 'lobby' || phase === 'join') { Sfx.init(); Sfx.music('lobbyGulp', true); } }, [phase]);
   const waitingPeer = phase === 'lobby' || !here;
   const lobbyUi = phase !== 'menu' && phase !== 'lobby' ? null : (
-    <GLobby GS={GS} title="Gulp" onClose={finish} closeLabel={isSolo ? 'Leave' : 'Back to chat'} tint="rgba(2,14,32,0.62)"
+    <GLobby GS={GS} title="Gulp" onClose={leave} closeLabel={isSolo ? 'Leave' : 'Back to chat'} tint="rgba(2,14,32,0.62)"
       sub={isWatch ? `Watching ${hostFirst} and ${peerFirst}` : isDuel ? (waitingPeer ? `Waiting for ${peerFirst} to open the game` : `Round ${score.x + score.o + 1} with ${peerFirst}`) : null}
       badge={isSolo ? <GChip style={{ gap: 5, height: 34 }}><GIcon k="star" size={15} color="#FFD23F" />{`${totalStars}/${GULP_LEVELS.length * 3}`}</GChip> : !isWatch ? <GChip style={{ height: 34, gap: 6 }}>{`You ${mySc} : ${theirSc} ${peerFirst}`}</GChip> : <GChip style={{ height: 34 }}>{`${hostFirst} ${score.x} : ${score.o} ${peerFirst}`}</GChip>}
       tools={(
@@ -1190,7 +1190,7 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
                 {Lv && <GPill text="Restart level" icon="replay" color="white" small wide onPress={() => startLevel(Lv.i)} />}
                 <div style={{ display: 'flex', gap: 8 }}>
                   <GPill text={Lv ? 'Levels' : 'Menu'} icon={Lv ? 'map' : 'home'} color="white" small wide onPress={() => { toMenu(); if (Lv) setSheet({ k: 'levels' }); }} style={{ flex: 1 }} />
-                  <GPill text="Leave" color="red" small wide onPress={finish} style={{ flex: 1 }} />
+                  <GPill text="Leave" color="red" small wide onPress={leave} style={{ flex: 1 }} />
                 </div>
               </GPanel>
             </div>
@@ -1354,7 +1354,7 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
           )}
 
           {leaveAsk && (
-            <Sheet title="Leave the game?" text={`${peerFirst} wins this round if you leave.`} onClose={() => setLeaveAsk(false)}>
+            <Sheet title={leaveAsk === 'lobby' ? (isSolo ? 'Leave Gulp?' : 'Leave the room?') : 'Leave the game?'} text={leaveAsk === 'lobby' ? null : isDuel ? `${peerFirst} wins this round if you leave.` : isSolo ? 'You lose your progress in this round.' : 'Your friends can keep playing without you.'} onClose={() => setLeaveAsk(false)}>
               <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
                 <GPill text="Stay" color="white" small onPress={() => setLeaveAsk(false)} style={{ flex: 1 }} wide />
                 <GPill text="Leave" color="red" small onPress={() => { setLeaveAsk(false); finish(); }} style={{ flex: 1 }} wide />

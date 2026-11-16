@@ -539,6 +539,7 @@ function unitHit(W, b, t, dmg) {
 }
 
 function minionTarget(W, b, rad) {
+  if (b.taunt && b.taunt.until > W.t) { const th = W.heroes[b.taunt.id]; if (th && th.st === 0 && th.tm !== b.tm && Math.hypot(th.x - b.x, th.z - b.z) < rad + 2) return th.id; }
   let best = null, bs = 1e9;
   for (const o of W.robots) {
     if (!foeOfUnit(W, b, o)) continue;
@@ -1287,10 +1288,12 @@ export function teamBot(W, h, dt) {
     inp.aiming = true; inp.aimA = a;
     const supR = H.sup.rng || H.sup.rad || 8;
     const cnt = W.robots.filter((r) => r.hp > 0 && E.foeTo(h, r) && !STILL.has(r.type) && Math.hypot(r.x - h.x, r.z - h.z) < supR * 0.85).length + near.filter((o) => dist(o, h) < supR * 0.85).length * 2;
-    if (h.sup >= 1 && H.sup.k !== 'bloom' && B.t <= 0 && W.rnd() < P.sup && (cnt >= 3 || (tgt.hero && tgt.d < supR * 0.85) || (focus && focus.type === 'shp'))) { inp.fire = { kind: 'sup', a, dist: d2 }; B.t = P.react; }
+    if (h.sup >= 1 && H.sup.k !== 'bloom' && H.sup.k !== 'undying' && B.t <= 0 && W.rnd() < P.sup && (cnt >= 3 || (tgt.hero && tgt.d < supR * 0.85) || (focus && focus.type === 'shp'))) { inp.fire = { kind: 'sup', a, dist: d2 }; B.t = P.react; }
     else if (E.canFire(h) && d2 < H.atk.rng * (H.atk.k === 'lob' ? 1 : 0.98) && B.t <= 0) { inp.fire = { kind: 'atk', a, dist: d2 }; B.t = P.react + W.rnd() * P.jit; }
   }
   if (h.sup >= 1 && H.sup.k === 'bloom' && allies.some((o) => dist(o, h) < H.sup.rad && o.hp < o.max * 0.55)) inp.fire = { kind: 'sup', a: h.yaw, dist: 0 };
+  if (h.sup >= 1 && H.sup.k === 'rage' && near.length > 0 && dist(near[0], h) < 5 && hpF > 0.3) inp.fire = { kind: 'sup', a: h.yaw, dist: 0 };
+  if (h.sup >= 1 && H.sup.k === 'undying' && near.length > 0 && (hpF < 0.4 || allies.some((o) => dist(o, h) < H.sup.rad && o.hp < o.max * 0.4))) inp.fire = { kind: 'sup', a: h.yaw, dist: 0 };
   if (B.gT <= 0 && E.canGadget(h)) {
     B.gT = (0.8 + W.rnd() * 0.9) / Math.max(0.3, P.gad);
     const G = H.gad;
@@ -1304,6 +1307,12 @@ export function teamBot(W, h, dt) {
     else if (G.k === 'over') use = near.length > 0 || close >= 2;
     else if (G.k === 'jet' && near.length && hpF < (W.tm.bl === 2 ? 0.35 : 0.22)) { use = W.tm.bl > 0; ga = Math.atan2(h.x - near[0].x, h.z - near[0].z); gd = G.len; }
     else if (G.k === 'vanish') use = (hpF < 0.4 && near.length > 0 && W.rnd() < 0.5) || (W.tm.bl === 2 && !!tgt && tgt.hero && tgt.d > 4.5 && tgt.d < 9 && hpF > 0.6 && W.rnd() < 0.5);
+    else if (G.k === 'taunt') use = close >= 1.5 || (near.length > 0 && allies.some((o) => dist(o, h) < 6 && o.hp < o.max * 0.4));
+    else if (G.k === 'roll') use = near.length > 0 && hpF < 0.6;
+    else if (G.k === 'hook') { const o = near.find((q) => dist(q, h) > 3 && dist(q, h) < G.rng && E.losClear(W.A, h.x, h.z, q.x, q.z, 0)); use = !!o; if (o) { ga = Math.atan2(o.x - h.x, o.z - h.z); gd = dist(o, h); } }
+    else if (G.k === 'spikes') use = !!tgt && tgt.d < G.n * G.gap && (tgt.hero || close >= 1.5);
+    else if (G.k === 'blight') use = close >= 1 || (!!tgt && tgt.hero && tgt.d < 4.5);
+    else if (G.k === 'smoke') use = hpF < 0.45 && near.length > 0;
     if (use && W.rnd() < Math.max(0.35, P.gad)) inp.gad = { a: ga, dist: gd };
   }
   if (B.skT <= 0 && !(h.skCD > 0)) {

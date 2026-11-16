@@ -96,13 +96,15 @@ const GROUPS = [
   {
     t: 'Icons',
     note: 'CC BY 3.0',
-    items: [['Skill and button icons', 'Lorc, Delapouite, Skoll, Zeromancer, Carl Olsen and Sbed', 'https://game-icons.net', 'CC BY 3.0'], ['Bolt War painted skill buttons, Painterly Spell Icons', 'J. W. Bjerk (eleazzaar), www.jwbjerk.com/art, found on OpenGameArt.org', 'https://opengameart.org/content/painterly-spell-icons-part-1', 'CC BY 3.0']],
+    items: [['Skill and button icons', 'Lorc, Delapouite, Skoll, Zeromancer, Carl Olsen and Sbed', 'https://game-icons.net', 'CC BY 3.0'], ['Bolt War painted skill buttons, Painterly Spell Icons parts 1 to 4', 'J. W. Bjerk (eleazzaar), www.jwbjerk.com/art, found on OpenGameArt.org', 'https://opengameart.org/content/painterly-spell-icons-part-1', 'CC BY 3.0']],
   },
   {
     t: 'Sounds',
     items: [
       ['Impact, interface, UI, RPG, digital and sci fi sounds', 'Kenney', 'https://kenney.nl/assets', 'CC0'],
       ['Bolt War skill sounds, Sci Fi Pack and Fantasy SFX Pack', 'JC Sounds', 'https://opengameart.org/content/jc-sounds-sci-fi-pack-vol-1', 'CC BY 4.0'],
+      ['Bolt War announcer, Voiceover Pack and Voiceover Pack Fighter', 'Kenney', 'https://kenney.nl/assets/voiceover-pack-fighter', 'CC0'],
+      ['Bolt War victory claps', 'freesound community on Pixabay', 'https://pixabay.com/sound-effects/', 'Pixabay license'],
       ['Authentic gun sounds, packs one and two', 'Snake, F8 Studios', 'https://f8studios.itch.io/snakes-authentic-gun-sounds', 'Free license'],
       ['The Free Firearm Sound Library', 'Ben Jaszczak, Brian Nelson, Kevin Heras and Matthew Nanney', 'https://opengameart.org/content/the-free-firearm-sound-library', 'CC0'],
       ['Zombie sound effects', 'EditingCorp', 'https://www.editingcorp.com/zombie-sound-effects-pack-free-download/', 'Royalty free'],

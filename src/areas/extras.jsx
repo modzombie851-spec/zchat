@@ -6689,34 +6689,33 @@ function WnSegments({ total, at, onArt, dark }) {
   );
 }
 
-const WN_PHOTOS = { team580: '/wn580-team.webp', login580: '/wn580-login.webp', grave580: '/wn580-grave.webp', heroes580: '/wn580-heroes.webp', servers580: '/wn580-servers.webp', level580: '/wn580-level.webp', invite580: '/wn580-invite.webp', coll580: '/wn580-coll.webp', lobby579: '/wn579-lobby.webp', city579: '/wn579-city.webp', fort579: '/wn579-fort.webp', pvp578: '/wn578-pvp.webp', mars578: '/wn578-mars.webp', chat574: '/wn574-chat.webp', cards574: '/wn574-cards.webp', shop573: '/wn573-shop.webp', try573: '/wn573-try.webp', cmt573: '/wn573-comments.webp', rally57: '/race-art.webp', set57: '/wn57-set.webp', lay57: '/wn57-lay.webp', bolt57: '/wn57-bolt.webp', hub57: '/wn57-hub.webp', zombies49: '/wn49-zombies.webp', mutant49: '/wn49-mutant.webp', guns50: '/wn50-guns.webp', house50: '/wn50-house.webp', pond50: '/wn50-pond.webp', buttons50: '/wn50-buttons.webp', settings50: '/wn50-settings.webp', pack51: '/wn51-pack.webp', emote51: '/wn51-emote.webp', lobby51: '/wn51-lobby.webp', waves52: '/wn52-waves.webp', sky52: '/wn52-sky.webp', map52: '/wn52-map.webp', boss53: '/wn53-boss.webp', fire53: '/wn53-fire.webp', dog53: '/wn53-dog.webp', train53: '/wn53-train.webp', hud531: '/wn531-hud.webp', moves531: '/wn531-moves.webp', pc531: '/wn531-pc.webp', squad54: '/wn54-squad.webp', boom54: '/wn54-boom.webp', heli54: '/wn54-heli.webp', gas54: '/wn54-gas.webp' , shop55: '/wn55-shop.webp', stall55: '/wn55-stall.webp', boss55: '/wn55-boss.webp', climb55: '/wn55-climb.webp', drop55: '/wn55-drop.webp', squad55: '/wn55-squad.webp', hud55: '/wn55-hud.webp', set55: '/wn55-settings.webp', music55: '/wn55-music.webp', guns55: '/wn55-guns.webp', zj55: '/zombie-art2.webp', bolt55: '/bolt-art2.webp', torch55: '/duo-art.webp' };
+const WN_PHOTOS = { arlo581: '/wn581-arlo.webp', wren581: '/wn581-wren.webp', tusk581: '/wn581-tusk.webp', bones581: '/wn581-bones.webp', hex581: '/wn581-hex.webp', rattle581: '/wn581-rattle.webp', voice581: '/wn581-voice.webp', leave581: '/wn581-leave.webp', team580: '/wn580-team.webp', login580: '/wn580-login.webp', grave580: '/wn580-grave.webp', heroes580: '/wn580-heroes.webp', servers580: '/wn580-servers.webp', level580: '/wn580-level.webp', invite580: '/wn580-invite.webp', coll580: '/wn580-coll.webp', lobby579: '/wn579-lobby.webp', city579: '/wn579-city.webp', fort579: '/wn579-fort.webp', pvp578: '/wn578-pvp.webp', mars578: '/wn578-mars.webp', chat574: '/wn574-chat.webp', cards574: '/wn574-cards.webp', shop573: '/wn573-shop.webp', try573: '/wn573-try.webp', cmt573: '/wn573-comments.webp', rally57: '/race-art.webp', set57: '/wn57-set.webp', lay57: '/wn57-lay.webp', bolt57: '/wn57-bolt.webp', hub57: '/wn57-hub.webp', zombies49: '/wn49-zombies.webp', mutant49: '/wn49-mutant.webp', guns50: '/wn50-guns.webp', house50: '/wn50-house.webp', pond50: '/wn50-pond.webp', buttons50: '/wn50-buttons.webp', settings50: '/wn50-settings.webp', pack51: '/wn51-pack.webp', emote51: '/wn51-emote.webp', lobby51: '/wn51-lobby.webp', waves52: '/wn52-waves.webp', sky52: '/wn52-sky.webp', map52: '/wn52-map.webp', boss53: '/wn53-boss.webp', fire53: '/wn53-fire.webp', dog53: '/wn53-dog.webp', train53: '/wn53-train.webp', hud531: '/wn531-hud.webp', moves531: '/wn531-moves.webp', pc531: '/wn531-pc.webp', squad54: '/wn54-squad.webp', boom54: '/wn54-boom.webp', heli54: '/wn54-heli.webp', gas54: '/wn54-gas.webp' , shop55: '/wn55-shop.webp', stall55: '/wn55-stall.webp', boss55: '/wn55-boss.webp', climb55: '/wn55-climb.webp', drop55: '/wn55-drop.webp', squad55: '/wn55-squad.webp', hud55: '/wn55-hud.webp', set55: '/wn55-settings.webp', music55: '/wn55-music.webp', guns55: '/wn55-guns.webp', zj55: '/zombie-art2.webp', bolt55: '/bolt-art2.webp', torch55: '/duo-art.webp' };
 const WN_HIGHLIGHTS = [
-  { k: 'heroes580', art: 'heroes580', go: 'siege', cta: 'Play Bolt War', title: 'Four new heroes', text: 'Tusk swings a giant axe, Bones keeps friends alive, Hex calls down a storm of skulls and Rattle throws fans of bone knives.' },
-  { k: 'servers580', art: 'servers580', go: 'siege', cta: 'Play Bolt War', title: 'Bolt War servers', text: 'Tap Play online and jump into a match on a server near you, any time. Matches keep going even when a player leaves.' },
+  { k: 'hex581', art: 'hex581', go: 'siege', cta: 'Play Bolt War', title: 'New hero powers', text: 'Arlo, Wren, Tusk, Bones, Hex and Rattle got their own new attacks, supers and gadgets. No two heroes share a power now.' },
+  { k: 'voice581', art: 'voice581', go: 'siege', cta: 'Play Bolt War', title: 'An announcer for Bolt War', text: 'A voice calls the fight, big takedowns, overtime, victory and defeat, with claps when your team wins.' },
 ];
 const WN_SECTIONS = [
+  { title: 'Bolt War heroes', items: [
+    { art: 'arlo581', title: 'Arlo', text: 'Sword thrust through a whole line, Iron wall that blocks enemy shots, and War cry that draws aliens and bots to him.' },
+    { art: 'wren581', title: 'Wren', text: 'Triple shot, a Hunter net that holds enemies in place, and Tumble that rolls back and reloads every shot.' },
+    { art: 'tusk581', title: 'Tusk', text: 'Whirlwind all around him, Berserk that makes him hit harder and heal, and a Chain hook that drags enemies in.' },
+    { art: 'bones581', title: 'Bones', text: 'Soul strike that heals friends, Undying so friends near him cannot fall, and Bone spikes that burst from the ground.' },
+    { art: 'hex581', title: 'Hex', text: 'Cursed skulls that chase enemies, a Soul vortex that pulls them in, and Blight on the ground.' },
+    { art: 'rattle581', title: 'Rattle', text: 'Knives that bounce off walls, a Bone boomerang that comes back, and a Smoke bomb that hides his friends.' },
+  ] },
   { title: 'Bolt War', items: [
-    { art: 'grave580', title: 'Graveyard', text: 'A new map with graves, a crypt, dead trees and pumpkins under a red sky.' },
-    { art: 'team580', title: 'Tap to switch team', text: 'In the match lobby, tap any open spot on the other team to move there.' },
-    { art: 'level580', title: 'Your Bolt War level', text: 'Earn XP in every match and level up. Your level shows next to your name in the lobby.' },
-    { art: 'grave580', title: 'More monsters', text: 'New monster camps in Team deathmatch and Hardpoint, with skulls that explode and a big pack that gives Guard.' },
-    { art: 'servers580', title: 'Bad connection warning', text: 'A red wifi sign shows next to anyone with a bad connection, and your own ping shows at the top.' },
-    { art: 'servers580', title: 'Voice and game sound', text: 'Turn voices and game sounds up or down from the speaker button in the match.' },
+    { art: 'voice581', title: 'Health refills while you fight', text: 'Your health keeps filling while you attack. It only stops when you get hit.' },
+    { art: 'voice581', title: 'More win and loss sounds', text: 'Victory, defeat, draw, double takedowns, towers, overtime and the last wave all have their own voice lines.' },
   ] },
-  { title: 'Invites', items: [
-    { art: 'invite580', title: 'Invite popup', text: 'Game invites pop up on top of what you are doing, with Join and Decline.' },
-    { art: 'invite580', title: 'Live invite cards', text: 'Invite cards in chat show who is in the room, and close when the room ends.' },
-  ] },
-  { title: 'Your account', items: [
-    { art: 'login580', title: 'Add a password', text: 'Signed up with Google or Apple? Add a password in Settings, then log in with your email on any phone.' },
-    { art: 'login580', title: 'Reset with a code', text: 'Forgot your password? We email you a code. Type it in and pick a new password.' },
-    { art: 'coll580', title: 'A new Collection', text: 'Your Collection looks like the Shop now, with a Games tab for your boards, tables and cues.' },
+  { title: 'All games', items: [
+    { art: 'leave581', title: 'Leave game message', text: 'Every game asks before you leave a match or a room, so you do not quit by mistake.' },
   ] },
 ];
 const WN_NEW_COUNT = WN_SECTIONS.reduce((n, sec) => n + sec.items.length, 0);
 const WN_SUMMARY = `${WN_NEW_COUNT} new things to try.`;
 
 const WN_EARLIER = [
+  { title: 'Four new heroes, servers and a graveyard', text: 'Tusk, Bones, Hex and Rattle, Bolt War servers, the Graveyard map, tap to switch team, your Bolt War level, invite popups and a new Collection.' },
   { title: 'A new match lobby, Downtown and Old fort', text: 'A real match lobby with settings and invites, two new Bolt War maps, green heal numbers, a scoreboard button and a new results screen.' },
   { title: 'Team deathmatch, Hardpoint and Mars outpost', text: 'Two team modes for 1v1 up to 5v5, a new map on Mars, overtime, an MVP badge and new skill icons.' },
   { title: 'Battle skills, level 20 and three new heroes', text: 'Battle skills, a new power at every level, bot difficulty, and the new heroes Arlo, Wren and Nyx.' },

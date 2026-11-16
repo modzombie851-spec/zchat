@@ -297,7 +297,7 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
   const watchList = useMemo(() => watchers.map((id) => ({ id, n: names[id] || 'Friend' })), [watchers, names]);
   useWatchNotices(watchList, pushNote, !solo && !watch);
 
-  const leave = () => { if (phase === 'play' && !solo && !watch) { setLeaveAsk(true); return; } finish(); };
+  const leave = () => { const k = watch ? null : phase === 'play' ? 'match' : phase === 'menu' ? 'lobby' : null; if (k) { setLeaveAsk(k); return; } finish(); };
   const finish = () => { Sfx.stopAll(); onClose(); };
   useBackClose(true, () => { if (layEd) { layEnd('roll', false); setLayEd(false); setCtl(true); } else if (chatOpen) setChatOpen(false); else if (lvSheet) setLvSheet(false); else if (ctl) setCtl(false); else if (people) setPeople(false); else if (quick) setQuick(false); else if (leaveAsk) setLeaveAsk(false); else if (paused) setPaused(false); else if (phase === 'play' && solo) setPaused(true); else if (phase !== 'menu') { if (solo || isHost) toMenu(); else leave(); } else leave(); });
   const toMenu = () => { setPhase('menu'); Sfx.music('lobbyRoll', true); WR.current = null; if (!solo && isHost) relay.send('menu', {}); };
@@ -570,7 +570,7 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
   const openLay = () => { setCtl(false); setQuick(false); layOpen('roll'); setLayEd(true); };
   const closeLay = () => { setLayEd(false); setCtl(true); };
   const lobby = phase !== 'menu' ? null : (
-    <GLobby GS={GS} title="Roll Squad" onClose={finish} closeLabel={solo ? 'Leave' : 'Back to chat'}
+    <GLobby GS={GS} title="Roll Squad" onClose={leave} closeLabel={solo ? 'Leave' : 'Back to chat'}
       sub={watch ? `Watching ${hostName} and friends` : null}
       badge={<GChip style={{ gap: 5, height: 34 }}><GIcon k="star" size={15} color="#FFD23F" />{`${totalStars}/${LEVEL_N * 3}`}</GChip>}
       tools={(
@@ -741,7 +741,7 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <GPill text="Levels" icon="map" color="white" small wide onPress={toMenu} style={{ flex: 1 }} />
-                <GPill text="Leave" color="red" small wide onPress={finish} style={{ flex: 1 }} />
+                <GPill text="Leave" color="red" small wide onPress={leave} style={{ flex: 1 }} />
               </div>
             </GPanel>
           </div>
@@ -807,7 +807,7 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
         )}
         {chatOpen && <ChatSheet title="Talk to the room" chat={chat} onEmote={sendEmote} at={GS.at} onClose={() => setChatOpen(false)} />}
         {leaveAsk && (
-          <Sheet title="Leave the game?" text="Your friends can keep playing without you." onClose={() => setLeaveAsk(false)}>
+          <Sheet title={leaveAsk === 'lobby' ? (solo ? 'Leave Roll Squad?' : 'Leave the room?') : 'Leave the game?'} text={leaveAsk === 'lobby' ? null : solo ? 'You lose your progress in this level.' : 'Your friends can keep playing without you.'} onClose={() => setLeaveAsk(false)}>
             <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
               <GPill text="Stay" color="white" small onPress={() => setLeaveAsk(false)} style={{ flex: 1 }} wide />
               <GPill text="Leave" color="red" small onPress={() => { setLeaveAsk(false); finish(); }} style={{ flex: 1 }} wide />

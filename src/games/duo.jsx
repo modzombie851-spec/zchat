@@ -300,7 +300,8 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
   }, [phase, here]);
 
   const leave = () => {
-    if (phase === 'play' && !solo && !watch) { setLeaveAsk(true); return; }
+    const k = watch ? null : phase === 'play' ? 'match' : phase === 'pick' || phase === 'lobby' ? 'lobby' : null;
+    if (k) { setLeaveAsk(k); return; }
     finish();
   };
   const finish = () => {
@@ -710,7 +711,7 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
   const waiting = phase === 'lobby';
   const torchArt = (k) => <TorchHero kind={k} size={42} dir={k === 'sun' ? 'right' : 'left'} />;
   const lobbyUi = phase !== 'pick' && phase !== 'lobby' ? null : (
-    <GLobby GS={GS} title="Torchbound" onClose={finish} closeLabel={solo ? 'Leave' : 'Back to chat'}
+    <GLobby GS={GS} title="Torchbound" onClose={leave} closeLabel={solo ? 'Leave' : 'Back to chat'}
       sub={solo ? null : watch ? `Watching ${hostFirst} and ${peerFirst}` : waiting ? `Waiting for ${peerFirst} to open the game` : host ? `Pick where to go with ${peerFirst}` : `${peerFirst} picks where to go`}
       badge={<GChip style={{ gap: 5, height: 34 }}><GIcon k="star" size={15} color="#FFD23F" />{`${storyStars}/${STORY_N * 3}`}</GChip>}
       tools={(
@@ -990,7 +991,7 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
           </Sheet>
         )}
         {leaveAsk && (
-          <Sheet title="Leave the game?" text={`${peerFirst} stays in the level but cannot finish it without you.`} onClose={() => setLeaveAsk(false)}>
+          <Sheet title={leaveAsk === 'lobby' ? (solo ? 'Leave Torchbound?' : 'Leave the room?') : 'Leave the game?'} text={leaveAsk === 'lobby' ? null : solo ? 'You lose your progress in this level.' : `${peerFirst} stays in the level but cannot finish it without you.`} onClose={() => setLeaveAsk(false)}>
             <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
               <GPill text="Stay" color="white" small onPress={() => setLeaveAsk(false)} style={{ flex: 1 }} wide />
               <GPill text="Leave" color="red" small onPress={() => { setLeaveAsk(false); finish(); }} style={{ flex: 1 }} wide />
@@ -1027,7 +1028,7 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
                 <GPill text="Restart" icon="replay" color="white" small wide onPress={() => { setPaused(false); startLevel(li, undefined, false, rs); }} style={{ flex: 1 }} />
                 <GPill text="Settings" icon="gear" color="white" small wide onPress={() => setCtl(true)} style={{ flex: 1 }} />
               </div>
-              <GPill text="Leave" color="red" small wide onPress={() => { setPaused(false); finish(); }} />
+              <GPill text="Leave" color="red" small wide onPress={leave} />
             </GPanel>
           </div>
         )}

@@ -412,7 +412,7 @@ export function SiegeLoadout({ D }) {
   const short = D.scrap != null ? Math.max(0, cost - D.scrap) : 0;
   const leftW = W0 >= 900 ? 320 : 292, rightW = W0 >= 900 ? 300 : 270;
   const tileW = Math.floor((leftW - 24 - 3 * 6) / 4);
-  const abil = [['atk', 'Attack', H.atkName || 'Main attack', H.text], ['sup', 'Super', H.sup.name, H.sup.text], ['gad', 'Gadget', H.gad.name, `${H.gad.text} ${E.GADGETS} uses each game.`]];
+  const abil = [['atk', 'Attack', H.atkName || 'Main attack', H.atkText || H.text], ['sup', 'Super', H.sup.name, H.sup.text], ['gad', 'Gadget', H.gad.name, `${H.gad.text} ${E.GADGETS} uses each game.`]];
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 6, overflow: 'hidden', fontFamily: FONT, color: '#FFFFFF' }}>
       <div aria-hidden="true" style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: 'linear-gradient(90deg, rgba(3,5,9,0.86) 0%, rgba(3,5,9,0.25) 36%, rgba(3,5,9,0.25) 62%, rgba(3,5,9,0.86) 100%)' }} />

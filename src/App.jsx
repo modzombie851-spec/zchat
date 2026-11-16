@@ -1008,7 +1008,7 @@ function navOnPop(e) {
   const d = navStateDepth(e && e.state);
   if (navCtl.silent > 0) { navCtl.silent -= 1; navCtl.depth = d; navSync(); return; }
   if (d >= navCtl.depth) { navCtl.depth = d; navSync(); return; }
-  const steps = navCtl.depth - d;
+  const steps = Math.min(1, navCtl.depth - d);
   navCtl.depth = d;
   navCtl.lastBackAt = Date.now();
   if (navCtl.swipeActive) { navSync(); return; }
@@ -1128,7 +1128,7 @@ function fallbackPopAnimation() {
   } catch { return null; }
 }
 function runWithTransition(fn, dir) {
-  if (swipeBackSkipVT) { fn(); return; }
+  if (swipeBackSkipVT || (dir === 'pop' && runGuardOn())) { fn(); return; }
   if (uaBackAnim && dir === 'pop') { try { ReactDOM.flushSync(() => { fn(); }); } catch {} return; }
   try {
     if (dir === 'pop' && !reducedMotion() && window.innerWidth < 900 && !fallbackPopBusy && !sheetOrDialogShowing()) {
@@ -18681,7 +18681,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-export const APP_VERSION = '58.0V';
+export const APP_VERSION = '58.1V';
 const WN_REV = 55;
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
@@ -25247,6 +25247,66 @@ function installEdgeTouchWatch() {
 function nativeSwipeBack() {
   return IOS_NATIVE_SWIPE && Date.now() - edgeTouch.at < 6000 && (edgeTouch.active || edgeTouch.cancelled);
 }
+const ghostTaps = new Map();
+const GHOST_SEL = 'button, a[href], input, select, textarea, label, summary, [role="button"], [role="tab"], [role="radio"], [role="checkbox"], [role="switch"], [role="menuitem"], [role="option"], [role="listitem"], [role="slider"], [contenteditable="true"]';
+function ghostRecFor(e) {
+  let best = null;
+  const now = Date.now();
+  ghostTaps.forEach((r, id) => {
+    if (!r.up) { if (now - r.at > 8000) ghostTaps.delete(id); return; }
+    if (now - r.up > 2500) { ghostTaps.delete(id); return; }
+    if (Math.abs(r.x - e.clientX) > 56 || Math.abs(r.y - e.clientY) > 56) return;
+    if (!best || r.up > best.up) best = r;
+  });
+  return best;
+}
+function ghostHit(r, e) {
+  const el = r.el;
+  if (!el || !el.isConnected) return true;
+  const t = e.target;
+  if (t && t.nodeType === 1 && el.contains(t)) return false;
+  let at = null;
+  try { at = document.elementFromPoint(r.x, r.y); } catch {}
+  return !(at && el.contains(at));
+}
+let ghostShieldOn = false;
+function installGhostClickShield() {
+  if (ghostShieldOn || typeof window === 'undefined' || typeof document === 'undefined') return;
+  ghostShieldOn = true;
+  const soft = { capture: true, passive: true };
+  window.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse') { ghostTaps.clear(); return; }
+    ghostTaps.forEach((r, id) => { if (r.up) ghostTaps.delete(id); });
+    const t = e.target;
+    let el = t;
+    try { el = (t && t.closest && t.closest(GHOST_SEL)) || t; } catch {}
+    ghostTaps.set(e.pointerId, { id: e.pointerId, el, x: e.clientX, y: e.clientY, at: Date.now(), up: 0 });
+  }, soft);
+  window.addEventListener('pointerup', (e) => { const r = ghostTaps.get(e.pointerId); if (r) r.up = Date.now(); }, soft);
+  window.addEventListener('pointercancel', (e) => { ghostTaps.delete(e.pointerId); }, soft);
+  const block = (e) => {
+    if (e.cancelable) e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+  };
+  window.addEventListener('click', (e) => {
+    if (!e.isTrusted || !e.detail || !ghostTaps.size) return;
+    const r = ghostRecFor(e);
+    if (!r) return;
+    ghostTaps.delete(r.id);
+    if (ghostHit(r, e)) block(e);
+  }, true);
+  const mouse = (e) => {
+    if (!e.isTrusted || !ghostTaps.size) return;
+    const caps = e.sourceCapabilities;
+    if (caps && caps.firesTouchEvents === false) return;
+    const r = ghostRecFor(e);
+    if (r && ghostHit(r, e)) block(e);
+  };
+  window.addEventListener('mousedown', mouse, true);
+  window.addEventListener('mouseup', mouse, true);
+}
+installGhostClickShield();
 let backTapGuardOn = false;
 function installBackTapGuard() {
   if (backTapGuardOn || typeof document === 'undefined') return;
@@ -25328,7 +25388,7 @@ export function useEdgeSwipeBack(enabled, onBack, opts) {
       const ne = e.nativeEvent;
       if (ne && ne.__zswipe) { ref.current = null; return; }
       if (ne) ne.__zswipe = true;
-      if (navCtl.swipeActive) { ref.current = null; return; }
+      if (navCtl.swipeActive || runGuardOn()) { ref.current = null; return; }
       const t = e.touches && e.touches[0];
       if (!t || e.touches.length > 1 || window.innerWidth >= 900) { ref.current = null; return; }
       const edgeOnly = !!(optsRef.current && optsRef.current.edgeOnly);
@@ -36412,7 +36472,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   };
   const gameFriends = conversations.map((c) => c.otherProfile).filter((pp) => pp && !pp.is_bot && !pp.is_deleted);
   const [duelPlay, setDuelPlay] = useState(null);
-  useBackClose(!!duelPlay, () => setDuelPlay(null));
+  const [duelAsk, setDuelAsk] = useState(false);
+  useEffect(() => { if (!duelAsk) return undefined; holdRuns(true); return () => holdRuns(false); }, [duelAsk]);
+  const closeDuel = () => { if (runGuardOn()) { setDuelAsk(true); return; } setDuelPlay(null); };
+  useBackClose(!!duelPlay, closeDuel);
   const lastGameStartRef = useRef(0);
   const startGameWith = async (profile, kindIn, extraIn) => {
     if (!profile) return;
@@ -48094,7 +48157,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         <BlobGame key={duelPlay.id} seed={duelPlay.id} duelTitle={gameTitle(duelPlay)} onDuelFinish={(v) => finishDuel(duelPlay, v)} onClose={() => setDuelPlay(null)} />
       )}
       {duelPlay && activeProfile && !(duelPlay.g === 'sd' && duelPlay.k === 'squish') && (
-        <DuelRoomPage st={duelPlay} title={gameTitle(duelPlay)} me={me} peer={activeProfile} myId={session.user.id} rules={getRules(duelPlay.g === 'sd' ? `sd:${duelPlay.k}` : duelPlay.g)} onClose={() => setDuelPlay(null)}>
+        <DuelRoomPage st={duelPlay} title={gameTitle(duelPlay)} me={me} peer={activeProfile} myId={session.user.id} rules={getRules(duelPlay.g === 'sd' ? `sd:${duelPlay.k}` : duelPlay.g)} onClose={closeDuel}>
           <SoloFit room>
           {duelPlay.g === 'wduel' && <WordGame key={duelPlay.id} duelWord={duelPlay.sw} onDuelFinish={(v) => finishDuel(duelPlay, v)} />}
           {duelPlay.g === 'rduel' && <ReflexGame key={duelPlay.id} duel onDuelFinish={(v) => finishDuel(duelPlay, v)} />}
@@ -48105,6 +48168,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           </SoloFit>
         </DuelRoomPage>
       )}
+      {duelPlay && duelAsk && <Portal><ConfirmSheet title="Leave the game?" text="Your current game ends." confirmLabel="Leave" zIndex={120} onCancel={() => setDuelAsk(false)} onConfirm={() => { setDuelAsk(false); setDuelPlay(null); }} /></Portal>}
       {me && <G1Host me={me} myId={session.user.id} messages={messages} peer={activeProfile} group={activeGroup} members={groupMembers} sendDm={sendGameStateTo} sendGroup={(c) => sendGroupMessage('text', c)} openChat={openChat} notify={notifyUser} patchMessage={(id, c) => setMessages((prev) => prev.map((x) => (String(x.id) === String(id) ? { ...x, content: c } : x)))} onRematchGame={rematchGame} />}
       {screenEffect && <ScreenEffect key={screenEffect.key} kind={screenEffect.kind} onDone={() => setScreenEffect(null)} />}
       {editsFor && (() => { const em = messages.find((x) => x.id === editsFor.id) || editsFor; return <EditHistorySheet m={em} isMine={em.sender_id === session.user.id && !em.bot_reply} senderName={activeGroup ? labelForSender(em.sender_id) : (activeProfile ? activeProfile.name : '')} chatTheme={activeChatTheme} onClose={() => setEditsFor(null)} />; })()}
@@ -50879,6 +50943,7 @@ function Game2048() {
   const [score, setScore] = useState(0);
   const [best, setBest] = useState(() => readBest('2048'));
   const [over, setOver] = useState(false);
+  useRunGuard(score > 0 && !over);
   const touch = useRef(null);
   const canMove = (g) => { if (g.includes(0)) return true; for (let i = 0; i < 16; i++) { if (i % 4 < 3 && g[i] === g[i + 1]) return true; if (i < 12 && g[i] === g[i + 4]) return true; } return false; };
   const move = (dir) => {
@@ -51042,6 +51107,7 @@ function SnakeGame({ seed, onDuelFinish } = {}) {
   const [score, setScore] = useState(0);
   const [best, setBest] = useState(() => readBest('snake'));
   const [phase, setPhase] = useState('ready');
+  useRunGuard(phase === 'playing');
   const phaseRef = useRef(phase);
   phaseRef.current = phase;
   const N = SNAKE_N;
@@ -51173,7 +51239,8 @@ function SnakeGame({ seed, onDuelFinish } = {}) {
     let raf = 0;
     const frame = (now) => {
       const st = stateRef.current;
-      if (phaseRef.current === 'playing' && st && !st.dead) {
+      if (runHold > 0 && st) st.at = now;
+      else if (phaseRef.current === 'playing' && st && !st.dead) {
         let n = 0;
         while (phaseRef.current === 'playing' && !st.dead && now - st.at >= st.tick && n < 3) { st.at += st.tick; if (!stepRef.current(st)) break; n += 1; }
         if (n >= 3) st.at = now;
@@ -53765,6 +53832,7 @@ function TowerStackGame({ seed, onDuelFinish } = {}) {
   if (hueRef.current == null) hueRef.current = Math.floor(rnd() * 360);
   const hue0 = hueRef.current;
   const [phase, setPhase] = useState('ready');
+  useRunGuard(phase === 'playing');
   const [score, setScore] = useState(0);
   const [best, setBest] = useState(() => readBest('stack'));
   const W = 320;
@@ -53903,6 +53971,7 @@ function DashGame({ seed, onDuelFinish } = {}) {
   const canvasRef = useRef(null);
   const st = useRef(null);
   const [phase, setPhase] = useState('ready');
+  useRunGuard(phase === 'playing');
   const [score, setScore] = useState(0);
   const [best, setBest] = useState(() => readBest('dash'));
   const W = 320;
@@ -54035,6 +54104,7 @@ function FruitCatchGame({ seed, onDuelFinish } = {}) {
   const boxRef = useRef(null);
   const st = useRef(null);
   const [phase, setPhase] = useState('ready');
+  useRunGuard(phase === 'playing');
   const [score, setScore] = useState(0);
   const [lives, setLives] = useState(3);
   const [best, setBest] = useState(() => readBest('catch'));
@@ -54190,6 +54260,7 @@ function ColourTrapGame({ seed, onDuelFinish } = {}) {
   const { theme } = useTheme();
   const rnd = useGameRng(seed, 'ctrap');
   const [phase, setPhase] = useState('ready');
+  useRunGuard(phase === 'playing');
   const [score, setScore] = useState(0);
   const [best, setBest] = useState(() => readBest('ctrap'));
   const [round, setRound] = useState(null);
@@ -54243,6 +54314,7 @@ function OddOneOutGame({ seed, onDuelFinish } = {}) {
   const { theme } = useTheme();
   const rnd = useGameRng(seed, 'odd');
   const [phase, setPhase] = useState('ready');
+  useRunGuard(phase === 'playing');
   const [level, setLevel] = useState(0);
   const [board, setBoard] = useState(null);
   const [best, setBest] = useState(() => readBest('odd'));
@@ -54294,6 +54366,7 @@ function HigherLowerGame({ seed, onDuelFinish } = {}) {
   const { theme } = useTheme();
   const rnd = useGameRng(seed, 'hilo');
   const [phase, setPhase] = useState('ready');
+  useRunGuard(phase === 'playing');
   const [cur, setCur] = useState(50);
   const [streak, setStreak] = useState(0);
   const [history, setHistory] = useState([]);
@@ -54665,7 +54738,7 @@ function MathSprint({ seed, onDuelFinish }) {
       const ans = op === '+' ? a + b : op === '-' ? a - b : a * b;
       const opts = new Set([ans]);
       while (opts.size < 3) { const d = ans + (Math.floor(rnd() * 11) - 5); if (d !== ans && d >= 0) opts.add(d); }
-      return { q: `${a} ${op} ${b}`, ans, opts: seededShuffle([...opts], `${seed}:${a}:${b}:${op}`) };
+      return { q: `${a} ${op === '-' ? '\u2212' : op} ${b}`, ans, opts: seededShuffle([...opts], `${seed}:${a}:${b}:${op}`) };
     });
   }, [seed]);
   const [at, setAt] = useState(0);
@@ -55109,6 +55182,7 @@ function runFixedLoop(tick, draw, hz = 60) {
   let raf = 0;
   let alive = true;
   const frame = (now) => {
+    if (runHold > 0) { last = now; acc = 0; draw(); raf = requestAnimationFrame(frame); return; }
     acc += Math.min(250, Math.max(0, now - last));
     last = now;
     while (acc >= STEP && alive) { acc -= STEP; alive = tick() !== false; }
@@ -57594,6 +57668,13 @@ export const QRD_LOG = new Uint8Array(256);
 })();
 
 export const LiveStatCtx = React.createContext(null);
+const runGuards = new Set();
+function useRunGuard(on) {
+  useEffect(() => { if (!on) return undefined; const tok = {}; runGuards.add(tok); return () => { runGuards.delete(tok); }; }, [!!on]);
+}
+export function runGuardOn() { return runGuards.size > 0; }
+let runHold = 0;
+export function holdRuns(on) { runHold = Math.max(0, runHold + (on ? 1 : -1)); }
 function GameStats({ items, right }) {
   const { theme } = useTheme();
   const liveStat = useContext(LiveStatCtx);
@@ -57628,6 +57709,7 @@ function SkyHopGame({ seed, onDuelFinish } = {}) {
   const canvasRef = useRef(null);
   const st = useRef(null);
   const [phase, setPhase] = useState('ready');
+  useRunGuard(phase === 'playing');
   const [score, setScore] = useState(0);
   const [best, setBest] = useState(() => readBest('sky'));
   const W = 320;
@@ -57719,6 +57801,7 @@ function BricksGame({ seed, onDuelFinish } = {}) {
   const canvasRef = useRef(null);
   const st = useRef(null);
   const [phase, setPhase] = useState('ready');
+  useRunGuard(phase === 'playing');
   const [score, setScore] = useState(0);
   const [lives, setLives] = useState(3);
   const [level, setLevel] = useState(1);
@@ -58092,6 +58175,7 @@ function EchoGame({ seed, onDuelFinish } = {}) {
   const [seq, setSeq] = useState([]);
   const [lit, setLit] = useState(-1);
   const [phase, setPhase] = useState('idle');
+  useRunGuard(phase === 'show' || phase === 'input');
   const [best, setBest] = useState(() => readBest('echo'));
   const inputRef = useRef([]);
   const timers = useRef([]);
