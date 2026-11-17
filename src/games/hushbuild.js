@@ -52,21 +52,35 @@ class Batch {
   build(R) {
     if (!this.v) return null;
     const vb = new Float32Array(this.v * 6);
+    const lay = new Uint8Array(vb.buffer);
     let n = 0;
     for (const p of this.parts) n += p.idx.length;
     const big = this.v > 65535;
-    const ib = big ? new Uint32Array(n) : new Uint16Array(n);
-    let k = 0;
+    const A = big ? new Uint32Array(n) : new Uint16Array(n), B = big ? new Uint32Array(n) : new Uint16Array(n);
+    let a = 0, b = 0;
+    for (const p of this.parts) vb.set(p.out, p.base * 6);
     for (const p of this.parts) {
-      vb.set(p.out, p.base * 6);
       const I = p.idx;
-      if (p.flip) for (let i = 0; i < I.length; i += 3) { ib[k++] = I[i] + p.base; ib[k++] = I[i + 2] + p.base; ib[k++] = I[i + 1] + p.base; }
-      else for (let i = 0; i < I.length; i++) ib[k++] = I[i] + p.base;
+      for (let i = 0; i < I.length; i += 3) {
+        const i0 = I[i] + p.base, i1 = (p.flip ? I[i + 2] : I[i + 1]) + p.base, i2 = (p.flip ? I[i + 1] : I[i + 2]) + p.base;
+        if (lay[i0 * 24 + 23] < SMALL0) { A[a++] = i0; A[a++] = i1; A[a++] = i2; } else { B[b++] = i0; B[b++] = i1; B[b++] = i2; }
+      }
     }
+    const ib = big ? new Uint32Array(a + b) : new Uint16Array(a + b);
+    ib.set(A.subarray(0, a), 0); ib.set(B.subarray(0, b), a);
     const c = [(this.min[0] + this.max[0]) / 2, (this.min[1] + this.max[1]) / 2, (this.min[2] + this.max[2]) / 2];
     const r = Math.hypot(this.max[0] - c[0], this.max[1] - c[1], this.max[2] - c[2]);
-    return { mesh: R.staticMesh(vb, ib), c, r, tris: n / 3 };
+    return { mesh: R.staticMesh(vb, ib), c, r, tris: n / 3, nBig: a, nSmall: b };
   }
+}
+
+export const SMALL0 = 7;
+export function meshItems(m, extra) {
+  if (!m) return [];
+  const out = [];
+  if (m.nBig) out.push({ mesh: m.mesh, c: m.c, r: m.r, grp: 0, first: 0, count: m.nBig, ...extra });
+  if (m.nSmall) out.push({ mesh: m.mesh, c: m.c, r: m.r, grp: 1, first: m.nBig, count: m.nSmall, ...extra });
+  return out;
 }
 
 function sc(M, sx, sy, sz) {
@@ -175,4 +189,46 @@ export function buildWorld(R, lv, G, opt = {}) {
     pieceMesh[k] = b.build(R);
   }
   return { chunks, tris, lampMesh, pieceMesh, pillars };
+}
+
+export function buildAO(lv, K = 6) {
+  const w = lv.W * 2 * K, h = lv.H * 2 * K;
+  const INF = 1e9;
+  const dw = new Float32Array(w * h).fill(INF), dp = new Float32Array(w * h).fill(INF);
+  const under = new Uint8Array(w * h);
+  const mark = (s, arr, inside) => {
+    const x0 = Math.max(0, Math.floor(s[0] * K)), x1 = Math.min(w - 1, Math.ceil(s[2] * K) - 1);
+    const z0 = Math.max(0, Math.floor(s[1] * K)), z1 = Math.min(h - 1, Math.ceil(s[3] * K) - 1);
+    for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) { arr[z * w + x] = 0; if (inside) under[z * w + x] = 1; }
+  };
+  for (const s of lv.solid) { if (s[4]) continue; if (s[5]) mark(s, dp, true); else mark(s, dw, false); }
+  const chamfer = (d) => {
+    const a = 1, b = Math.SQRT2;
+    for (let z = 0; z < h; z++) for (let x = 0; x < w; x++) {
+      let v = d[z * w + x];
+      if (x > 0) v = Math.min(v, d[z * w + x - 1] + a);
+      if (z > 0) { v = Math.min(v, d[(z - 1) * w + x] + a); if (x > 0) v = Math.min(v, d[(z - 1) * w + x - 1] + b); if (x < w - 1) v = Math.min(v, d[(z - 1) * w + x + 1] + b); }
+      d[z * w + x] = v;
+    }
+    for (let z = h - 1; z >= 0; z--) for (let x = w - 1; x >= 0; x--) {
+      let v = d[z * w + x];
+      if (x < w - 1) v = Math.min(v, d[z * w + x + 1] + a);
+      if (z < h - 1) { v = Math.min(v, d[(z + 1) * w + x] + a); if (x < w - 1) v = Math.min(v, d[(z + 1) * w + x + 1] + b); if (x > 0) v = Math.min(v, d[(z + 1) * w + x - 1] + b); }
+      d[z * w + x] = v;
+    }
+  };
+  chamfer(dw); chamfer(dp);
+  const raw = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) {
+    const a = 1 - 0.62 * Math.exp(-(dw[i] / K) / 0.34);
+    const b = under[i] ? 0.5 : 1 - 0.32 * Math.exp(-(dp[i] / K) / 0.22);
+    raw[i] = a * b;
+  }
+  const out = new Uint8Array(w * h);
+  for (let z = 0; z < h; z++) for (let x = 0; x < w; x++) {
+    let s = 0, n = 0;
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) { const xx = x + dx, zz = z + dz; if (xx < 0 || zz < 0 || xx >= w || zz >= h) continue; s += raw[zz * w + xx]; n++; }
+    out[z * w + x] = Math.round(255 * Math.max(0, Math.min(1, s / n)));
+  }
+  return { data: out, w, h, x0: 0, z0: 0, sx: lv.W * 2, sz: lv.H * 2 };
 }

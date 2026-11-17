@@ -1,4 +1,5 @@
 import React, { memo, useRef } from 'react';
+import { GI } from './gicons.js';
 
 const CUT = '#14171C';
 const rot = (a) => `rotate(${a} 32 32)`;
@@ -174,6 +175,8 @@ function Parts({ list, mode }) {
   });
 }
 
+const giIcon = (k) => [{ parts: [{ d: GI[k] }], tf: 'scale(0.125)' }];
+Object.assign(MI, { h_use: giIcon('hand'), h_run: giIcon('sprint'), h_torch: giIcon('flashlight') });
 export const hasMIcon = (k) => !!MI[k];
 
 export function MIconG({ k, x, y, s, fill, shadow = true }) {

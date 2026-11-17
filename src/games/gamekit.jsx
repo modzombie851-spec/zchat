@@ -19,7 +19,6 @@ export const GC = {
 
 const SKIN0 = { k: '', shape: 'round', face: ['rgba(74,80,116,0.92)', 'rgba(40,44,72,0.92)'], lip: 'rgba(8,8,22,0.75)', edge: INK, ico: '#FFFFFF', gloss: 0.42, panel: 'linear-gradient(90deg, rgba(0,0,0,0.46), rgba(0,0,0,0.26))', pr: 8, pEdge: 'none', note: 'rgba(10,12,18,0.82)', nr: 17, feed: 'rgba(8,10,18,0.6)', name: '#FFD27A' };
 export const SKINS = {
-  hush: { ...SKIN0, k: 'hush' },
   rally: { k: 'rally', dark: ['#3A4566', '#232B45', '#0E1426'], shape: 'sq', face: ['#323C5A', '#161D33'], lip: '#060912', lipEdge: '#060912', edge: 'rgba(255,255,255,0.82)', ico: '#FFFFFF', gloss: 0.16, panel: 'linear-gradient(180deg, rgba(16,24,48,0.84), rgba(8,13,30,0.84))', pr: 5, pEdge: 'inset 3px 0 0 #FFC93C', note: 'rgba(10,16,34,0.92)', nr: 6, feed: 'rgba(10,16,34,0.66)', name: '#FFC93C', joyRing: 'rgba(255,255,255,0.6)', joyKnob: 'rgba(255,255,255,0.45)' },
   siege: { k: 'siege', dark: ['#6E7884', '#434B57', '#1E232B'], shape: 'plate', btnShape: 'plate', face: ['#7C8794', '#434C59'], lip: '#16191F', edge: '#0E1116', ico: '#F4F6F8', gloss: 0.26, rivets: true, panel: 'linear-gradient(180deg, rgba(50,57,68,0.9), rgba(25,29,37,0.9))', pr: 3, pEdge: 'inset 0 2px 0 #F2B21B, inset 0 0 0 1px rgba(255,255,255,0.07)', note: 'rgba(28,32,40,0.95)', nr: 3, feed: 'rgba(24,28,36,0.72)', name: '#F2B21B', joyRing: 'rgba(242,178,27,0.75)', joyKnob: 'rgba(196,204,214,0.5)' },
   roll: { k: 'roll', shape: 'round', face: ['#FFFFFF', '#E2E8F6'], lip: '#8090C8', edge: '#3A3352', ico: '#3A3352', gloss: 0, panel: 'rgba(54,40,100,0.6)', pr: 16, pEdge: 'inset 0 0 0 2px rgba(255,255,255,0.36)', note: 'rgba(54,40,100,0.88)', nr: 18, feed: 'rgba(54,40,100,0.6)', name: '#FFE27A' },
@@ -27,6 +26,7 @@ export const SKINS = {
   duo: { k: 'duo', dark: ['#6A5644', '#43362A', '#1E1610'], shape: 'tab', face: ['#5E4C3B', '#33281F'], lip: '#160F0A', edge: '#C99A45', ico: '#FBE6B8', gloss: 0.12, panel: 'linear-gradient(180deg, rgba(46,35,25,0.9), rgba(26,19,13,0.9))', pr: 4, pEdge: 'inset 0 0 0 1px rgba(217,165,72,0.55)', note: 'rgba(32,24,16,0.95)', nr: 4, feed: 'rgba(32,24,16,0.7)', name: '#F2C46A', joyRing: 'rgba(242,196,106,0.7)', joyKnob: 'rgba(251,230,184,0.4)' },
   zombie: { k: 'zombie', tac: true, dark: ['#3A3F45', '#23272B', '#111316'], shape: 'round', face: ['#2C3035', '#16191C'], lip: '#08090A', edge: 'rgba(255,255,255,0.22)', ico: '#F2F2EE', gloss: 0.08, panel: 'linear-gradient(180deg, rgba(22,25,28,0.9), rgba(11,13,15,0.92))', pr: 14, pEdge: 'inset 0 0 0 1px rgba(255,255,255,0.12)', note: 'rgba(16,18,20,0.92)', nr: 14, feed: 'rgba(14,16,18,0.6)', name: '#E0A85A', joyRing: 'rgba(255,255,255,0.55)', joyKnob: 'rgba(255,255,255,0.3)' },
 };
+SKINS.hush = { ...SKINS.zombie, k: 'hush', name: '#E8D9B8' };
 const SkinCtx = createContext(null);
 export function GSkin({ k, children }) { return <SkinCtx.Provider value={SKINS[k] || null}>{children}</SkinCtx.Provider>; }
 export function useSkin() { return useContext(SkinCtx) || SKIN0; }
@@ -755,6 +755,10 @@ export function GSettings({ onClose, sideways = true, tabs = [], audioExtra = nu
   const P = setPal(g);
   const all = [...tabs, { k: 'controls', label: 'Controls', body: <>{controlsExtra}{buttons ? ctlTab(g, v, sideways, preview || ['dash', 'suck'], layout) : null}{keysPart(keys)}</> }, { k: 'audio', label: 'Audio', body: <><GSetHead>Volume</GSetHead><AudioTab extra={audioExtra} /></> }];
   const [cur, setCur] = useState(first || all[0].k);
+  const [railEl, setRailEl] = useState(null);
+  const [panelEl, setPanelEl] = useState(null);
+  useDragScroll(railEl);
+  useDragScroll(panelEl);
   const tab = all.find((t) => t.k === cur) || all[0];
   const ins = at ? { t: at.top(0), r: at.right(0), b: at.bottom(0), l: at.left(0) } : { t: 'env(safe-area-inset-top, 0px)', r: 'env(safe-area-inset-right, 0px)', b: 'env(safe-area-inset-bottom, 0px)', l: 'env(safe-area-inset-left, 0px)' };
   return (
@@ -770,7 +774,7 @@ export function GSettings({ onClose, sideways = true, tabs = [], audioExtra = nu
           </button>
         </div>
         <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
-          <div role="tablist" aria-label="Settings sections" aria-orientation="vertical"
+          <div ref={setRailEl} role="tablist" aria-label="Settings sections" aria-orientation="vertical"
             style={{ width: 128, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 4, padding: '10px 0', paddingLeft: ins.l, background: P.rail, overflowY: 'auto', scrollbarWidth: 'none', boxSizing: 'content-box' }}>
             {all.map((t) => {
               const on = t.k === tab.k;
@@ -782,7 +786,7 @@ export function GSettings({ onClose, sideways = true, tabs = [], audioExtra = nu
               );
             })}
           </div>
-          <div role="tabpanel" aria-label={tab.label}
+          <div ref={setPanelEl} role="tabpanel" aria-label={tab.label}
             style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: '4px 16px 18px 14px', paddingRight: `max(16px, ${ins.r})`, paddingBottom: `max(18px, ${ins.b})`, touchAction: 'pan-y' }}>
             {tab.body}
           </div>
@@ -1076,6 +1080,11 @@ export function GSlot({ art, name, ring = 'rgba(255,255,255,0.3)', talk, muted, 
   return <button type="button" className="zgk-btn" aria-label={label} {...pressProps(() => { kitTap(); onPress(); })} style={{ ...st, cursor: 'pointer' }}>{box}</button>;
 }
 
+export function GScroll({ style, children }) {
+  const [el, setEl] = useState(null);
+  useDragScroll(el);
+  return <div ref={setEl} style={{ minHeight: 0, overflowY: 'auto', touchAction: 'pan-y', ...style }}>{children}</div>;
+}
 export function GLobbySheet({ title, onClose, children, width = 560, GS }) {
   const at = GS ? GS.at : null;
   const tac = !!useSkin().tac;
@@ -1090,7 +1099,7 @@ export function GLobbySheet({ title, onClose, children, width = 560, GS }) {
               <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3l10 10M13 3L3 13" stroke="#FFFFFF" strokeWidth="2.2" strokeLinecap="round" /></svg>
             </button>
           </div>
-          <div style={{ minHeight: 0, overflowY: 'auto', touchAction: 'pan-y' }}>{children}</div>
+          <GScroll>{children}</GScroll>
         </div>
       </div>
     );
@@ -1107,7 +1116,7 @@ export function GLobbySheet({ title, onClose, children, width = 560, GS }) {
             </span>
           </button>
         </div>
-        <div style={{ minHeight: 0, overflowY: 'auto', touchAction: 'pan-y' }}>{children}</div>
+        <GScroll>{children}</GScroll>
       </GPanel>
     </div>
   );
@@ -1481,7 +1490,7 @@ export function GKeyboard({ onType, onBack, onSend, sendOn = true, onPhone, auto
   );
 }
 
-function useDragScroll(el) {
+export function useDragScroll(el) {
   useEffect(() => {
     if (!el) return undefined;
     let st = null;

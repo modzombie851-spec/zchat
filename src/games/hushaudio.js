@@ -1,10 +1,12 @@
 import { Sfx } from './sfx.js';
 import { resBuf } from './zres.js';
 
-export const HUSH_SND = ['sounds/hush/sfx-v1.mp3', 'sounds/hush/amb-v1.mp3', 'sounds/hush/drip-v1.mp3', 'sounds/hush/hum-v1.mp3', 'sounds/dead/heart.mp3'];
-export const HUSH_MENU = 'sounds/hush/menu-v1.mp3';
-const MAP = {"roar1":[0.0,3.214],"roar2":[3.274,2.793],"growl1":[6.127,2.901],"growl2":[9.088,3.155],"growl3":[12.303,2.575],"growl4":[14.937,3.4],"snarl":[18.397,1.359],"groan1":[19.817,3.125],"groan2":[23.002,2.477],"groan3":[25.539,1.621],"groan4":[27.22,0.756],"sniff":[28.035,1.015],"scream1":[29.11,2.274],"scream2":[31.444,1.783],"hit1":[33.287,3.0],"hit2":[36.347,3.0],"hit3":[39.407,2.8],"hit4":[42.267,2.8],"hit5":[45.127,2.8],"sting1":[47.987,1.741],"sting2":[49.788,1.621],"sting3":[51.469,1.348],"bone1":[52.877,0.527],"bone2":[53.464,0.359],"stab":[53.882,0.362],"gate":[54.304,0.929],"breath0":[55.293,1.84],"breath1":[57.193,1.096],"breath2":[58.349,1.56],"breath3":[59.969,1.114],"breath4":[61.143,1.863],"breath5":[63.066,1.355],"drip0":[64.481,0.355],"drip1":[64.896,0.326],"drip2":[65.281,0.271],"drip3":[65.612,0.353],"step0":[66.025,0.132],"step1":[66.217,0.132],"step2":[66.409,0.132],"step3":[66.6,0.132],"step4":[66.792,0.132],"step5":[66.984,0.132],"step6":[67.176,0.132],"step7":[67.367,0.132],"step8":[67.559,0.132],"mstep0":[67.751,0.527],"mstep1":[68.338,0.569],"mstep2":[68.967,0.569],"mstep3":[69.596,0.541],"dopen1":[70.197,0.917],"dopen2":[71.175,1.404],"dclose1":[72.638,0.664],"dclose2":[73.362,0.59],"slam":[74.012,0.599],"thud":[74.671,0.31],"creak0":[75.041,0.6],"creak1":[75.7,0.761],"creak2":[76.521,0.304],"keys":[76.885,0.737],"keys2":[77.682,0.309],"latch":[78.051,0.239],"mclick":[78.35,0.38],"clank1":[78.789,0.269],"clank2":[79.118,0.116],"click":[79.294,0.168],"cloth":[79.523,0.348],"grab":[79.931,0.215],"drop":[80.206,0.311],"knock":[80.577,0.33],"tin":[80.966,0.212],"win":[81.238,5.0],"lose":[86.298,4.774],"moan1":[91.132,3.6],"moan2":[94.792,3.6],"whisper0":[98.452,3.6],"whisper1":[102.112,3.6],"whisper2":[105.772,3.6],"whisper3":[109.432,3.6],"whisper4":[113.092,3.6],"whisper5":[116.752,3.6]};
-let ac = null, out = null, bus = null, mus = null, rev = null, revIn = null, job = null, sprite = null;
+export const HUSH_SND = ['sounds/hush/sfx-v2.mp3', 'sounds/hush/amb-v1.mp3', 'sounds/hush/drip-v1.mp3', 'sounds/hush/hum-v1.mp3', 'sounds/dead/heart.mp3'];
+export const HUSH_MUS = { menu: 'sounds/hush/menu-v1.mp3', room: 'sounds/hush/room-v1.mp3', explore: 'sounds/hush/explore-v1.mp3', hunt: 'sounds/hush/hunt-v1.mp3', chase: 'sounds/hush/chase-v1.mp3', dead: 'sounds/hush/dead-v1.mp3' };
+const MAP = {"roar1":[0.0,3.214],"roar2":[3.274,2.793],"growl1":[6.127,2.901],"growl2":[9.088,3.155],"growl3":[12.303,2.575],"growl4":[14.937,3.4],"snarl":[18.397,1.359],"groan1":[19.817,3.125],"groan2":[23.002,2.477],"groan3":[25.539,1.621],"groan4":[27.22,0.756],"sniff":[28.035,1.015],"scream1":[29.11,2.274],"scream2":[31.444,1.783],"hit1":[33.287,3.0],"hit2":[36.347,3.0],"hit3":[39.407,2.8],"hit4":[42.267,2.8],"hit5":[45.127,2.8],"sting1":[47.987,1.741],"sting2":[49.788,1.621],"sting3":[51.469,1.348],"bone1":[52.877,0.527],"bone2":[53.464,0.359],"stab":[53.882,0.362],"gate":[54.304,0.929],"breath0":[55.293,1.84],"breath1":[57.193,1.096],"breath2":[58.349,1.56],"breath3":[59.969,1.114],"breath4":[61.143,1.863],"breath5":[63.066,1.355],"drip0":[64.481,0.355],"drip1":[64.896,0.326],"drip2":[65.281,0.271],"drip3":[65.612,0.353],"step0":[66.025,0.132],"step1":[66.217,0.132],"step2":[66.409,0.132],"step3":[66.6,0.132],"step4":[66.792,0.132],"step5":[66.984,0.132],"step6":[67.176,0.132],"step7":[67.367,0.132],"step8":[67.559,0.132],"mstep0":[67.751,0.527],"mstep1":[68.338,0.569],"mstep2":[68.967,0.569],"mstep3":[69.596,0.541],"dopen1":[70.197,0.917],"dopen2":[71.175,1.404],"dclose1":[72.638,0.664],"dclose2":[73.362,0.59],"slam":[74.012,0.599],"thud":[74.671,0.31],"creak0":[75.041,0.6],"creak1":[75.7,0.761],"creak2":[76.521,0.304],"keys":[76.885,0.737],"keys2":[77.682,0.309],"latch":[78.051,0.239],"mclick":[78.35,0.38],"clank1":[78.789,0.269],"clank2":[79.118,0.116],"click":[79.294,0.168],"cloth":[79.523,0.348],"grab":[79.931,0.215],"drop":[80.206,0.311],"knock":[80.577,0.33],"tin":[80.966,0.212],"win":[81.238,5.0],"lose":[86.298,4.774],"moan1":[91.132,3.6],"moan2":[94.792,3.6],"isee":[98.452,6.196],"iseew":[104.708,6.193],"crunch1":[110.961,0.197],"crunch2":[111.218,0.306],"body0":[111.584,0.524],"body1":[112.168,0.444],"body2":[112.672,0.394],"gore":[113.125,1.168],"whoosh":[114.354,0.453],"scream3":[114.867,0.994],"scream4":[115.921,1.269],"laugh1":[117.25,3.374],"laugh2":[120.684,2.782],"stab2":[123.526,0.324],"whisper0":[123.91,3.6],"whisper1":[127.57,3.6],"whisper2":[131.23,3.6],"whisper3":[134.89,3.6],"whisper4":[138.55,3.6],"whisper5":[142.21,3.6]};
+let ac = null, out = null, bus = null, mus = null, rev = null, revIn = null, job = null, sprite = null, ticker = 0, lastTick = 0;
+const mbuf = {}, mjob = {};
+const want = {};
 const loopBufs = {};
 const L = { x: 0, y: 1.6, z: 0, yaw: 0 };
 const voices = [];
@@ -23,6 +25,22 @@ function makeIR(sec, decay) {
     }
   }
   return b;
+}
+
+function shrink(b) {
+  const R = 24000;
+  const n = Math.max(1, Math.floor(b.duration * R));
+  const o = ac.createBuffer(1, n, R);
+  const d = o.getChannelData(0);
+  const c0 = b.getChannelData(0), c1 = b.numberOfChannels > 1 ? b.getChannelData(1) : c0;
+  const k = b.sampleRate / R, N = c0.length;
+  for (let i = 0; i < n; i++) {
+    const a = Math.floor(i * k), e = Math.min(N, Math.max(a + 1, Math.floor((i + 1) * k)));
+    let s = 0;
+    for (let j = a; j < e; j++) s += c0[j] + c1[j];
+    d[i] = s / (2 * (e - a));
+  }
+  return o;
 }
 
 function decode(ab) { return new Promise((res) => { try { ac.decodeAudioData(ab, res, () => res(null)); } catch { res(null); } }); }
@@ -97,6 +115,7 @@ export const HA = {
     }
     this.sync();
     this.ok = true;
+    if (!ticker && typeof setInterval !== 'undefined') ticker = setInterval(() => { if (performance.now() - lastTick > 120) this.tick(true); }, 60);
     return true;
   },
   load(map) {
@@ -115,16 +134,35 @@ export const HA = {
     }
     return job;
   },
-  menuMusic(on) {
-    this.wantMenu = !!on;
-    if (!this.init()) return;
-    if (!on) { this.stopLoop('menu', 1.2); return; }
-    if (loops.menu) return;
-    (async () => {
-      if (!loopBufs.menu) { const ab = await fetchBuf(HUSH_MENU); loopBufs.menu = ab ? await decode(ab) : null; }
-      if (loopBufs.menu && this.wantMenu) this.loop('menu', { buf: 'menu', vol: 0.85, bus: mus, fade: 2.5 });
-    })();
+  musicBuf(k) {
+    if (mbuf[k]) return Promise.resolve(mbuf[k]);
+    if (!HUSH_MUS[k] || !this.init()) return Promise.resolve(null);
+    if (!mjob[k]) {
+      mjob[k] = (async () => {
+        const ab = await fetchBuf(HUSH_MUS[k]);
+        const b = ab ? await decode(ab) : null;
+        if (!b) { delete mjob[k]; return null; }
+        mbuf[k] = shrink(b);
+        loopBufs[`m_${k}`] = mbuf[k];
+        return mbuf[k];
+      })();
+    }
+    return mjob[k];
   },
+  music(levels, fade = 1.6) {
+    if (!this.init()) return;
+    for (const k of Object.keys(HUSH_MUS)) {
+      const v = levels && levels[k] ? levels[k] : 0;
+      want[k] = v;
+      const key = `m_${k}`;
+      if (v > 0) {
+        if (loops[key]) { loops[key].vol = v; loops[key].fade = fade; continue; }
+        this.musicBuf(k).then((b) => { if (!b || !(want[k] > 0) || loops[key]) return; this.loop(key, { buf: key, vol: want[k], bus: mus, fade, off: 0.01 }); });
+      } else if (loops[key]) this.stopLoop(key, fade);
+    }
+  },
+  menuMusic(on) { this.music(on ? { menu: 0.85 } : null, on ? 2.5 : 1.2); },
+  dropMusic(keep) { for (const k of Object.keys(mbuf)) { if (keep && keep.includes(k)) continue; if (loops[`m_${k}`]) continue; delete mbuf[k]; delete mjob[k]; delete loopBufs[`m_${k}`]; } },
   sync() {
     if (!ac || !out) return;
     const t = ac.currentTime;
@@ -183,12 +221,21 @@ export const HA = {
     setTimeout(() => l.c.free(), (fade + 0.3) * 1000);
   },
   stopAll() { for (const k of Object.keys(loops)) this.stopLoop(k, 0.4); for (const v of voices.splice(0)) { try { v.src.stop(); } catch {} } },
-  tick() {
+  tick(self) {
     if (!ac) return;
+    if (!self) lastTick = performance.now();
     const t = ac.currentTime;
     for (const l of Object.values(loops)) {
       const age = t - l.born;
       const ramp = Math.min(1, age / l.fade);
+      if (l.c.o.bus === mus) {
+        const dtS = l.lt == null ? 0 : Math.max(0, t - l.lt);
+        l.lt = t;
+        if (l.cur == null) l.cur = 0;
+        l.cur += (l.vol - l.cur) * Math.min(1, dtS / Math.max(0.15, l.fade * 0.5));
+        place(l.c, l.cur, true);
+        continue;
+      }
       place(l.c, l.vol * ramp, true);
     }
     for (const v of voices) {

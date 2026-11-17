@@ -18683,7 +18683,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-export const APP_VERSION = '58.2V';
+export const APP_VERSION = '58.3V';
 const WN_REV = 55;
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
@@ -59200,7 +59200,7 @@ function svgMarkup(node) {
   return `<${node.type}${attrs}>${svgMarkup(node.props.children)}</${node.type}>`;
 }
 const gameArtSrcs = new Map();
-const GAME_ART_FILES = { hush: '/hush/art-v1.webp', zombie: '/zombie-art3s.webp', duo: '/duo-art.webp', gulp: '/gulp-art.webp', gulpco: '/gulp-art.webp', roll: '/roll-art.webp', race: '/race-art.webp', siege: '/bolt-art2.webp' };
+const GAME_ART_FILES = { hush: '/hush/art-v2.webp', zombie: '/zombie-art3s.webp', duo: '/duo-art.webp', gulp: '/gulp-art.webp', gulpco: '/gulp-art.webp', roll: '/roll-art.webp', race: '/race-art.webp', siege: '/bolt-art2.webp' };
 ['2048', 'bomb', 'bricks', 'c4', 'catch', 'chess', 'ckr', 'crm', 'ctrap', 'dash', 'dots', 'echo', 'fade', 'gem', 'golf', 'gomoku', 'hang', 'hilo', 'math', 'memory', 'num', 'odd', 'paint', 'pairs', 'pool', 'qduel', 'qrace', 'quiz', 'rduel', 'reflex', 'reversi', 'rps', 'rrace', 'sdk', 'ship', 'sky', 'snake', 'squish', 'stack', 'sudoku', 'taps', 'ttt', 'tug', 'wduel', 'word', 'xw', 'zap'].forEach((k) => { GAME_ART_FILES[k] = `/gart/${k}.webp`; });
 function gameArtSrc(kIn) {
   const key = String(kIn == null ? '' : kIn);

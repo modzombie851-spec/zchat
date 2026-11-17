@@ -115,8 +115,8 @@ function hostHear(G) {
     M.interest = loud;
     if (chase && P) {
       if (M.st !== 'chase' && M.roarCd <= 0 && (M.st === 'wander' || M.st === 'idle' || M.st === 'search')) {
-        M.st = 'roar'; M.actT = 1.4; M.clip = 'm_roar'; M.ct = 0; M.yaw = angTo(M.x, M.z, n.x, n.z); M.roarCd = 14; M.chaseId = n.pid; M.chaseT = 4;
-        G.ev.push({ e: 'roar', x: M.x, z: M.z });
+        M.st = 'roar'; M.actT = 1.6; M.clip = 'm_roar'; M.ct = 0; M.yaw = angTo(M.x, M.z, n.x, n.z); M.roarCd = 14; M.chaseId = n.pid; M.chaseT = 4.5;
+        G.ev.push({ e: 'roar', x: M.x, z: M.z, pid: n.pid, spot: 1 });
         continue;
       }
       if (M.st !== 'roar') { M.st = 'chase'; M.chaseId = n.pid; M.chaseT = 3.2; M.tgt = { x: n.x, z: n.z }; M.repath = 0; }
@@ -334,11 +334,12 @@ function catchPlayer(G, P, R) {
     return;
   }
   const others = Object.values(G.players).filter((q) => q.id !== P.id && !q.dead && !q.out && !q.down);
-  M.st = 'attack'; M.actT = 2.1; M.clip = R() < 0.5 ? 'z_nbite' : 'm_swipe'; M.victim = P.id;
+  M.st = 'attack'; M.actT = 2.6; M.clip = 'm_punch'; M.victim = P.id; M.spd = 0;
   if (P.hide >= 0) P.hide = -1;
-  if (others.length) { P.down = 1; P.downT = TUNE.downT; } else { P.down = 1; P.downT = 999; }
+  P.down = 0; P.dead = 1; P.downT = 0;
   P.item = dropItem(G, P);
-  G.ev.push({ e: 'catch', pid: P.id, x: M.x, z: M.z, clip: M.clip, last: others.length ? 0 : 1 });
+  const a = angTo(M.x, M.z, P.x, P.z);
+  G.ev.push({ e: 'catch', pid: P.id, x: M.x, z: M.z, px: P.x, pz: P.z, a: Math.round(a * 100) / 100, clip: M.clip, last: others.length ? 0 : 1 });
 }
 
 function dropItem(G, P) {
@@ -518,11 +519,15 @@ export function footNoise(G, P, dt) {
   return { x: P.x, z: P.z, r: TUNE.nz[k], k };
 }
 
-export function nearestHide(G, P) {
-  let best = null, bd = 1.7;
+export function nearestHide(G, P, fx, fz) {
+  let best = null, bs = -9;
   for (const h of G.lv.hides) {
     const d = d2(h.x, h.z, P.x, P.z);
-    if (d < bd) { bd = d; best = h; }
+    if (d > 1.6) continue;
+    const dir = fx == null ? 1 : ((h.x - P.x) * fx + (h.z - P.z) * fz) / (d || 1);
+    if (d > 0.95 && dir < 0.35) continue;
+    const sc = dir - d * 0.5;
+    if (sc > bs) { bs = sc; best = h; }
   }
   return best;
 }
@@ -549,13 +554,14 @@ export function itemNear(G, P, fx, fz) {
 }
 
 export function doorNear(G, P, fx, fz) {
-  let best = -1, bs = 9;
+  let best = -1, bs = -9;
   G.lv.doors.forEach((d, i) => {
     const dd = d2(d.x, d.z, P.x, P.z);
-    if (dd > 1.7) return;
+    if (dd > 2.4) return;
     const dir = ((d.x - P.x) * fx + (d.z - P.z) * fz) / (dd || 1);
-    if (dir < 0.2 && dd > 0.7) return;
-    if (dd < bs) { bs = dd; best = i; }
+    if (dir < 0.35 && dd > 0.8) return;
+    const sc = dir * 1.4 - dd * 0.45;
+    if (sc > bs) { bs = sc; best = i; }
   });
   return best;
 }
