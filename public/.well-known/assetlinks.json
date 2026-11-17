@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.getzchat.app",
+      "sha256_cert_fingerprints": [
+        "6E:23:52:DF:22:18:3A:14:CB:E0:C6:C5:AA:A2:55:AA:CE:77:F6:1D:8B:79:E3:4B:B1:B0:29:9E:CF:78:E5:08"
+      ]
+    }
+  }
+]

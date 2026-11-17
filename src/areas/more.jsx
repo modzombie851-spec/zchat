@@ -5,6 +5,7 @@ import { supabase } from '../supabaseClient.js';
 import {
   ANIM_PACKS,
   ANIM_STICKER_FILES,
+  AiReportLink,
   Avatar,
   BigButton,
   ChoiceList,
@@ -453,6 +454,7 @@ export function RestyleSheet({ item, onClose, onUse }) {
           </div>
         )}
         <div style={{ fontSize: 12, color: 'rgba(255, 255, 255, 0.55)', textAlign: 'center' }}>{stage === 'done' ? 'Hold the photo to see the original' : 'Faces and everything in the photo stay the same. Only the style changes.'}</div>
+        {stage === 'done' && <AiReportLink what="photo" detail={`Photo restyled as ${result ? result.style : style}`} dark style={{ marginTop: -6 }} />}
       </div>
     </div>
   );

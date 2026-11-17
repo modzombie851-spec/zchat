@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import ReactDOM from 'react-dom';
-import { Send, Search, X, Trash2, MoreVertical, Image as ImageIcon, ArrowLeft, Check, Camera, Share2, PhoneOff, Plus, MessageSquare } from 'lucide-react';
+import { Send, Search, X, Trash2, MoreVertical, Image as ImageIcon, ArrowLeft, Check, Camera, Share2, PhoneOff, Plus, MessageSquare, Flag } from 'lucide-react';
 import { supabase } from '../supabaseClient.js';
 import {
   AI_CHAR_TEMPLATES,
@@ -16,6 +16,8 @@ import {
   AV_SKIN,
   ActionSheet,
   AiCardsGlyph,
+  AiReportLink,
+  AiReportSheet,
   AiStickerGlyph,
   AiTalkGlyph,
   BOT_PIC,
@@ -68,6 +70,7 @@ import {
   toolErrorText,
   tplChar,
   uploadMedia,
+  useAiHold,
   useBackClose,
   useTheme,
   zchatAichat,
@@ -250,6 +253,7 @@ export function AiStickerMaker({ userId, onClose, onDone }) {
                   <StudioTool label={saving === 'send' ? 'Sending' : 'Save and send'} glyph={<StudioGlyph k="send" />} disabled={!!saving} onClick={() => save(true)} width={96} />
                 </StudioDark>
               </div>
+              <AiReportLink what="sticker" detail={`Sticker ${style}: ${words}`} dark />
             </>
           )}
           {stage === 'form' && <div style={{ fontSize: 12, color: 'rgba(255, 255, 255, 0.55)', textAlign: 'center' }}>You can make a few each day. The one you pick goes to My stickers.</div>}
@@ -488,6 +492,7 @@ export function AiStudioPage({ myId, mode = 'image', startKind, chatTitle, onClo
             {secondary.map((a) => <StudioTool key={a.how} label={saving === a.how ? 'Working' : AI_USE_LOOK[a.how][1]} aria={a.label} glyph={<StudioGlyph k={AI_USE_LOOK[a.how][0]} />} disabled={!!saving} onClick={() => useResult(a.how)} width={74} />)}
           </div>
           {note && <div role="alert" style={{ fontSize: 13.5, color: theme.danger, textAlign: 'center' }}>{note}</div>}
+          <AiReportLink what="picture" detail={`Image ${result.id || ''} ${result.kind || ''} ${result.url || ''} Prompt: ${result.prompt || ''}`} />
         </div>
       )}
       {stage === 'form' && (
@@ -962,6 +967,7 @@ export function AiVoiceSheet({ title, sub, avatar, lang, ask, onClose, z = 790 }
   const [answer, setAnswer] = useState('');
   const [fix, setFix] = useState(null);
   const [note, setNote] = useState('');
+  const [reportOpen, setReportOpen] = useState(false);
   const recRef = useRef(null);
   const mediaRef = useRef(null);
   const tokRef = useRef(0);
@@ -1149,7 +1155,9 @@ export function AiVoiceSheet({ title, sub, avatar, lang, ask, onClose, z = 790 }
             <div style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-0.01em' }}>{title}</div>
             {sub && <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 1 }}>{sub}</div>}
           </div>
-          <div style={{ width: 44 }} />
+          {answer && !heard ? (
+            <div role="button" aria-label="Report this reply" onClick={() => { hapticTap(); setReportOpen(true); }} className="zchat-press" style={{ width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: theme.muted }}><Flag size={19} /></div>
+          ) : <div style={{ width: 44 }} />}
         </div>
         <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0 24px', gap: 18 }}>
           <div role="button" aria-label={phase === 'listening' ? 'Stop listening' : phase === 'speaking' ? 'Cut in and talk' : 'Talk'} onClick={tapOrb} className="zchat-press" style={{ position: 'relative', width: 156, height: 156, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
@@ -1175,6 +1183,7 @@ export function AiVoiceSheet({ title, sub, avatar, lang, ask, onClose, z = 790 }
           </div>
         </div>
       </div>
+      {reportOpen && <AiReportSheet what="reply" detail={`Voice chat with ${title}: ${answer}`} zIndex={z + 20} onClose={() => setReportOpen(false)} />}
     </Portal>
   );
 }
@@ -1210,6 +1219,8 @@ export function EnglishPracticePage({ myId, onClose, onSnack }) {
   const [voice, setVoice] = useState(false);
   const [summary, setSummary] = useState(null);
   const [past, setPast] = useState(() => (epMem.past && epMem.past.uid === myId ? epMem.past.rows : null));
+  const [aiReport, setAiReport] = useState(null);
+  const hold = useAiHold();
   const listRef = useRef(null);
   const turnsRef = useRef(turns);
   turnsRef.current = turns;
@@ -1327,7 +1338,7 @@ export function EnglishPracticePage({ myId, onClose, onSnack }) {
       <div key={m.id} style={{ display: 'flex', flexDirection: 'column', alignItems: mine ? 'flex-end' : 'flex-start', marginTop: first ? 10 : 3 }}>
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, maxWidth: '100%', justifyContent: mine ? 'flex-end' : 'flex-start' }}>
           {!mine && <img src={BOT_PIC} alt="" draggable={false} style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, background: theme.rowBg }} />}
-          <div style={{ maxWidth: '76%', padding: '9px 13px', borderRadius: 19, ...(mine ? { borderBottomRightRadius: 6 } : { borderBottomLeftRadius: 6 }), background: mine ? theme.bubbleMe : theme.bubbleThem, color: theme.ink, fontSize: 15.5, lineHeight: 1.38, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{m.t}</div>
+          <div {...(mine ? {} : hold(() => setAiReport(m)))} style={{ maxWidth: '76%', padding: '9px 13px', borderRadius: 19, ...(mine ? { borderBottomRightRadius: 6 } : { borderBottomLeftRadius: 6 }), background: mine ? theme.bubbleMe : theme.bubbleThem, color: theme.ink, fontSize: 15.5, lineHeight: 1.38, whiteSpace: 'pre-wrap', wordBreak: 'break-word', WebkitTouchCallout: mine ? undefined : 'none' }}>{m.t}</div>
         </div>
         {mine && m.fix && (
           <div role="button" aria-expanded={open} aria-label={open ? 'Hide why' : 'See why this is better'} onClick={() => { hapticTap(); setOpenFix(open ? null : m.id); }} className="zchat-press"
@@ -1358,7 +1369,7 @@ export function EnglishPracticePage({ myId, onClose, onSnack }) {
           <div role="button" aria-label="End practice" onClick={end} className="zchat-press" style={{ height: 40, padding: '0 12px', display: 'flex', alignItems: 'center', cursor: 'pointer', fontSize: 15, fontWeight: 700, color: kitOnInk(theme) }}>End</div>
         </div>
         <div ref={listRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain', padding: '8px 12px 12px' }}>
-          <div style={{ fontSize: 12.5, color: theme.muted, textAlign: 'center', lineHeight: 1.5, padding: '14px 24px 4px' }}>Fixes show under your messages. Replies come from AI and can be wrong.</div>
+          <div style={{ fontSize: 12.5, color: theme.muted, textAlign: 'center', lineHeight: 1.5, padding: '14px 24px 4px' }}>Fixes show under your messages. Replies come from AI and can be wrong. Press and hold a reply to report it.</div>
           {turns.map(bubble)}
           {waiting && (
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, marginTop: 10 }}>
@@ -1389,6 +1400,7 @@ export function EnglishPracticePage({ myId, onClose, onSnack }) {
         </div>
       </div>
       {voice && <AiVoiceSheet title="Practice English" sub={`${levelLabel}, ${topicRow.label}`} lang={/^en[-_]/i.test(aiLang()) ? aiLang() : 'en-US'} avatar={<img src={BOT_PIC} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />} ask={sendTurn} onClose={() => setVoice(false)} />}
+      {aiReport && <AiReportSheet what="reply" detail={`English practice: ${aiReport.t || ''}`} zIndex={820} onClose={() => setAiReport(null)} onDone={() => { if (onSnack) onSnack('Thanks. We will take a look.'); }} />}
       {summary && (
         <ChatRowSheet title={summary.busy ? 'Writing your notes' : summary.error ? 'Session notes' : 'Nice practice'} subtitle={`${levelLabel}, ${topicRow.label}`} zIndex={800} portal onClose={() => { if (!summary.busy) setSummary(null); }}
           peek={(

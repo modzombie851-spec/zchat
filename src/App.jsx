@@ -6916,8 +6916,30 @@ function DailyRewardCard({ uid, onOpenWallet, style }) {
   );
 }
 
+const ANDROID_APP = (() => {
+  if (typeof window === 'undefined') return false;
+  try {
+    const url = new URL(window.location.href);
+    const fromLink = url.searchParams.get('app') === 'android';
+    const fromRef = /^android-app:\/\/com\.getzchat\.app/i.test(document.referrer || '');
+    if (fromLink || fromRef) sessionStorage.setItem('zchat-android-app', '1');
+    if (fromLink) {
+      url.searchParams.delete('app');
+      window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+    }
+    return sessionStorage.getItem('zchat-android-app') === '1';
+  } catch {
+    return false;
+  }
+})();
+export function isAndroidApp() { return ANDROID_APP; }
 export const payMem = { at: 0, data: null, job: null };
 export function loadPayOptions(force) {
+  if (ANDROID_APP) {
+    payMem.data = { packs: [], verified: null, verifiedGift: null };
+    payMem.at = Date.now();
+    return Promise.resolve(payMem.data);
+  }
   if (!force && payMem.data && Date.now() - payMem.at < 600000) return Promise.resolve(payMem.data);
   if (payMem.job) return payMem.job;
   payMem.job = (async () => {
@@ -18740,7 +18762,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-export const APP_VERSION = '58.5V';
+export const APP_VERSION = '58.6V';
 const WN_REV = 55;
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
@@ -34959,6 +34981,8 @@ function AiCharacterChat({ myId, character, onClose, onEdit, onSnack }) {
   const [menu, setMenu] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
   const [maker, setMaker] = useState(null);
+  const [aiReport, setAiReport] = useState(null);
+  const hold = useAiHold();
   const listRef = useRef(null);
   const inputRef = useRef(null);
   const aliveRef = useRef(true);
@@ -35047,7 +35071,7 @@ function AiCharacterChat({ myId, character, onClose, onEdit, onSnack }) {
     return (
       <div key={m.id} style={{ display: 'flex', justifyContent: mine ? 'flex-end' : 'flex-start', alignItems: 'flex-end', gap: 8, marginTop: firstOfRun ? 10 : 2 }}>
         {!mine && <div style={{ width: 28, flexShrink: 0 }}>{lastOfRun && <CharAvatar ch={ch} size={28} />}</div>}
-        <div data-zuser="" style={{ maxWidth: '76%', padding: '9px 13px', borderRadius: 19, ...(mine ? { borderBottomRightRadius: lastOfRun ? 6 : 19 } : { borderBottomLeftRadius: lastOfRun ? 6 : 19 }), background: mine ? theme.bubbleMe : theme.bubbleThem, color: theme.ink, fontSize: 15.5, lineHeight: 1.38, whiteSpace: 'pre-wrap', wordBreak: 'break-word', opacity: m.sending ? 0.6 : 1 }}>{m.content}</div>
+        <div data-zuser="" {...(mine ? {} : hold(() => setAiReport(m)))} style={{ maxWidth: '76%', padding: '9px 13px', borderRadius: 19, ...(mine ? { borderBottomRightRadius: lastOfRun ? 6 : 19 } : { borderBottomLeftRadius: lastOfRun ? 6 : 19 }), background: mine ? theme.bubbleMe : theme.bubbleThem, color: theme.ink, fontSize: 15.5, lineHeight: 1.38, whiteSpace: 'pre-wrap', wordBreak: 'break-word', opacity: m.sending ? 0.6 : 1, WebkitTouchCallout: mine ? undefined : 'none' }}>{m.content}</div>
       </div>
     );
   };
@@ -35070,7 +35094,7 @@ function AiCharacterChat({ myId, character, onClose, onEdit, onSnack }) {
             <div style={{ fontSize: 19, fontWeight: 800, color: theme.ink, marginTop: 10 }}>{ch.name}</div>
             {ch.tagline && <div style={{ fontSize: 14, color: theme.muted, marginTop: 3, lineHeight: 1.4 }}>{ch.tagline}</div>}
             <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 8 }}>{ch.template ? 'A ZChat character' : owner ? (vis === 'public' ? 'Made by you, shared with everyone' : 'Made by you, only you can see them') : maker ? `Made by @${maker}` : 'Made on ZChat'}</div>
-            <div style={{ fontSize: 12, color: theme.muted, marginTop: 10, lineHeight: 1.45, maxWidth: 280 }}>Replies come from AI and are made up. Do not share private details.</div>
+            <div style={{ fontSize: 12, color: theme.muted, marginTop: 10, lineHeight: 1.45, maxWidth: 280 }}>Replies come from AI and are made up. Do not share private details. Press and hold a reply to report it.</div>
           </div>
           {msgs === null ? <div style={{ display: 'flex', justifyContent: 'center', padding: 20 }}><Spinner color={theme.muted} /></div> : all.map((m, i) => bubble(m, i, all))}
           {waiting && (
@@ -35123,6 +35147,7 @@ function AiCharacterChat({ myId, character, onClose, onEdit, onSnack }) {
         <ActionSheet title={`Report ${ch.name}`} zIndex={790} onClose={() => setReportOpen(false)} items={[['sexual', 'Sexual or adult'], ['hate', 'Hateful or violent'], ['real', 'Pretends to be a real person'], ['scam', 'Scam or spam'], ['other', 'Something else']].map(([k, l]) => ({ k, label: l, on: () => report(l) }))} />
       )}
       {confirmClear && <ConfirmSheet title="Clear this chat?" text={`Your messages with ${ch.name} are deleted.`} confirmLabel="Clear chat" zIndex={800} onCancel={() => setConfirmClear(false)} onConfirm={clear} />}
+      {aiReport && <AiReportSheet what="reply" detail={`Character ${ch.name} (${ch.id}): ${aiReport.content || ''}`} zIndex={800} onClose={() => setAiReport(null)} onDone={() => { if (onSnack) onSnack('Thanks. We will take a look.'); }} />}
     </Portal>
   );
 }
@@ -57042,6 +57067,78 @@ export function ActionSheet({ title, items, onClose, zIndex = 640 }) {
   );
 }
 
+const AI_REPORT_REASONS = ['Sexual or adult', 'Hateful or violent', 'Dangerous or harmful', 'False or misleading', 'Something else'];
+let aiBotIdJob = null;
+function aiBotProfileId() {
+  if (!aiBotIdJob) {
+    aiBotIdJob = Promise.resolve(supabase.from('profiles').select('id').eq('is_bot', true).limit(1))
+      .then(({ data }) => (data && data[0] ? data[0].id : null), () => null)
+      .then((id) => { if (!id) aiBotIdJob = null; return id; });
+  }
+  return aiBotIdJob;
+}
+export async function reportAiContent(what, detail, reason) {
+  try {
+    const { data } = await supabase.auth.getSession();
+    const me = data && data.session && data.session.user ? data.session.user.id : null;
+    const bot = await aiBotProfileId();
+    if (!me || !bot) return false;
+    const text = `AI ${what}: ${reason}. ${String(detail || '').replace(/\s+/g, ' ').trim()}`.slice(0, 400);
+    const res = await reportUser(me, bot, text);
+    return !(res && res.error);
+  } catch {
+    return false;
+  }
+}
+export function AiReportSheet({ what, detail, onClose, onDone, zIndex = 1400 }) {
+  const pick = async (reason) => {
+    onClose();
+    await reportAiContent(what, detail, reason);
+    if (onDone) onDone();
+    else appSnack('Thanks. We will take a look.');
+  };
+  return <ActionSheet title={`Report this ${what}`} zIndex={zIndex} onClose={onClose} items={AI_REPORT_REASONS.map((r) => ({ k: r, label: r, icon: <Flag />, on: () => pick(r) }))} />;
+}
+export function AiReportLink({ what, detail, dark = false, zIndex = 1400, style }) {
+  const { theme } = useTheme();
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <div role="button" aria-label={`Report this ${what}`} onClick={() => { hapticTap(); setOpen(true); }} className="zchat-press"
+        style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 36, padding: '6px 12px', fontSize: 13, fontWeight: 600, color: dark ? 'rgba(255, 255, 255, 0.55)' : theme.muted, cursor: 'pointer', alignSelf: 'center', ...style }}>
+        <Flag size={14} />Report
+      </div>
+      {open && <AiReportSheet what={what} detail={detail} zIndex={zIndex} onClose={() => setOpen(false)} />}
+    </>
+  );
+}
+export function useAiHold() {
+  const st = useRef({ t: 0, x: 0, y: 0, fired: false });
+  const stop = () => { const s = st.current; if (s.t) { clearTimeout(s.t); s.t = 0; } };
+  return (onHold) => ({
+    onPointerDown: (e) => {
+      stop();
+      const s = st.current;
+      s.fired = false;
+      s.x = e.clientX;
+      s.y = e.clientY;
+      s.t = setTimeout(() => { s.t = 0; s.fired = true; hapticTap(); onHold(); }, 480);
+    },
+    onPointerMove: (e) => { const s = st.current; if (s.t && (Math.abs(e.clientX - s.x) > 10 || Math.abs(e.clientY - s.y) > 10)) stop(); },
+    onPointerUp: stop,
+    onPointerCancel: stop,
+    onContextMenu: (e) => {
+      e.preventDefault();
+      stop();
+      const s = st.current;
+      if (s.fired) return;
+      s.fired = true;
+      hapticTap();
+      onHold();
+    },
+  });
+}
+
 function VoiceFxIcon({ size = 20, color = 'currentColor' }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -63315,7 +63412,7 @@ function LaunchTermsGate({ uid, createdAt }) {
   );
 }
 
-const PUBLIC_PAGES = ['/store', '/terms', '/refund', '/privacy'];
+const PUBLIC_PAGES = ['/store', '/terms', '/refund', '/privacy', '/child-safety', '/delete-account'];
 const SUPPORT_EMAIL = 'support@getzchat.com';
 
 const PUB_ACCENT = '#8B6CFF';
@@ -63374,9 +63471,9 @@ function PublicShell({ title, updated, intro, children, wide }) {
         <div style={{ marginTop: 44, padding: '18px 18px 16px', borderRadius: 20, background: 'rgba(255, 255, 255, 0.04)', boxShadow: 'inset 0 0 0 1px rgba(255, 255, 255, 0.07)', fontSize: 13.5, color: 'rgba(255, 255, 255, 0.62)', lineHeight: 1.7 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'white', fontWeight: 800, fontSize: 15 }}><ZMark size={22} />ZChat</div>
           <div style={{ marginTop: 6 }}>Questions? Write to <a href={`mailto:${SUPPORT_EMAIL}`} style={{ color: PUB_LINK }}>{SUPPORT_EMAIL}</a></div>
-          <div>Payments are handled by Lemon Squeezy, our reseller and merchant of record.</div>
+          {!ANDROID_APP && <div>Payments are handled by Lemon Squeezy, our reseller and merchant of record.</div>}
           <div style={{ display: 'flex', gap: 16, marginTop: 8, flexWrap: 'wrap' }}>
-            {nav.map(([href, label]) => <a key={href} href={href} style={{ color: 'rgba(255, 255, 255, 0.72)', textDecoration: 'none', fontWeight: 600 }}>{label}</a>)}
+            {[...nav, ['/?page=child-safety', 'Child safety'], ['/?page=delete-account', 'Delete account']].map(([href, label]) => <a key={href} href={href} style={{ color: 'rgba(255, 255, 255, 0.72)', textDecoration: 'none', fontWeight: 600 }}>{label}</a>)}
           </div>
         </div>
       </div>
@@ -63586,7 +63683,7 @@ function PublicTermsPage() {
         <LegalList items={['Coins and items have no cash value and cannot be sold, traded or turned back into money.', 'Items you get with coins are yours to keep, unless the item says it is for a limited time.', 'Limited drops can only be bought while the drop is live. People who already have one part pay half.', 'Gifts you send are delivered right away and cannot be taken back.']} />
       </LegalSection>
       <LegalSection n={4} title="Payments and ZChat Verified">
-        <p style={legalP}>Coin packs are one time payments. ZChat Verified is a monthly plan that renews every month until you cancel it. You can cancel any time from your Lemon Squeezy receipt or at <a href="https://app.lemonsqueezy.com/my-orders" target="_blank" rel="noopener noreferrer" style={link}>My Orders</a>, and your badge stays until the paid month ends.</p>
+        {ANDROID_APP ? <p style={legalP}>Coin packs are one time payments. ZChat Verified is a monthly plan that renews every month until you cancel it. You can cancel any time from your Lemon Squeezy receipt, and your badge stays until the paid month ends.</p> : <p style={legalP}>Coin packs are one time payments. ZChat Verified is a monthly plan that renews every month until you cancel it. You can cancel any time from your Lemon Squeezy receipt or at <a href="https://app.lemonsqueezy.com/my-orders" target="_blank" rel="noopener noreferrer" style={link}>My Orders</a>, and your badge stays until the paid month ends.</p>}
         <p style={legalP}>Payments are handled by Lemon Squeezy, our reseller and merchant of record. Prices are shown in US dollars, and Lemon Squeezy&apos;s own terms also apply to your payment. Badges given by the ZChat team are separate from the paid plan.</p>
       </LegalSection>
       <LegalSection n={5} title="Refunds">
@@ -63658,10 +63755,62 @@ function PublicPrivacyPage() {
   );
 }
 
+function PublicChildSafetyPage() {
+  const link = { color: PUB_LINK };
+  return (
+    <PublicShell title="Child safety standards" updated="November 2026" intro="ZChat has zero tolerance for child sexual abuse and exploitation (CSAE). These standards explain what is not allowed, how to report it, what we do about it and how to reach us.">
+      <LegalSummary items={['Anything that sexualises, grooms or endangers a child is banned.', 'Anyone can report it from inside ZChat in a few taps.', 'We remove it, ban the accounts and report it to the authorities.']} />
+      <LegalSection n={1} title="What is not allowed">
+        <p style={legalP}>We do not allow any content or behaviour that sexually exploits, abuses or endangers children. This includes:</p>
+        <LegalList items={['Child sexual abuse material (CSAM) of any kind, including drawn, edited or computer made images.', 'Grooming, which means befriending a child to set up sexual contact or to get sexual images.', 'Sexual messages, requests or role play with anyone under 18.', 'Sextortion, which means threatening to share private images unless someone pays or sends more.', 'Trafficking, or any attempt to sell, buy or meet a child for sexual purposes.', 'Links to, offers of, or requests for any of the above.']} />
+        <p style={legalP}>Accounts that break these rules are removed for good.</p>
+      </LegalSection>
+      <LegalSection n={2} title="Who can use ZChat">
+        <p style={legalP}>You must be at least 13 years old to make a ZChat account. We ask for a date of birth when you sign up and do not let younger people in.</p>
+      </LegalSection>
+      <LegalSection n={3} title="How to report">
+        <p style={legalP}>You can report any account, message, post, story, comment or AI reply from inside ZChat. Press and hold a message and tap Report, or open a profile, tap the menu and tap Report account. You can also block anyone at any time. You can also email us at <a href={`mailto:${SUPPORT_EMAIL}`} style={link}>{SUPPORT_EMAIL}</a>.</p>
+      </LegalSection>
+      <LegalSection n={4} title="What we do">
+        <LegalList items={['Reports about children are reviewed first.', 'We remove CSAM and anything that puts a child at risk as soon as we know about it.', 'We ban the accounts involved and keep the records the law asks us to keep.', 'We report child sexual abuse material to the National Center for Missing and Exploited Children (NCMEC) or the right local authority, and we help the police when they ask.']} />
+      </LegalSection>
+      <LegalSection n={5} title="Following the law">
+        <p style={legalP}>We follow the child safety laws that apply to us and work with the authorities when they ask for help with a case.</p>
+      </LegalSection>
+      <LegalSection n={6} title="Child safety contact">
+        <p style={legalP}>Our child safety contact is the ZChat safety team at <a href={`mailto:${SUPPORT_EMAIL}`} style={link}>{SUPPORT_EMAIL}</a>. We read every message. If a child is in danger right now, call your local police first.</p>
+      </LegalSection>
+    </PublicShell>
+  );
+}
+
+function PublicDeleteAccountPage() {
+  const link = { color: PUB_LINK };
+  return (
+    <PublicShell title="Delete your ZChat account" updated="November 2026" intro="You can delete your ZChat account and its data at any time, from the app or by email.">
+      <LegalSection n={1} title="In the app">
+        <LegalList items={['Open ZChat and log in.', 'Tap Me at the bottom, then open Settings.', 'Scroll down and tap Delete my account.', 'Type DELETE and tap Delete.']} />
+        <p style={legalP}>Your account is deleted straight away.</p>
+      </LegalSection>
+      <LegalSection n={2} title="By email">
+        <p style={legalP}>Email <a href={`mailto:${SUPPORT_EMAIL}?subject=Delete%20my%20account`} style={link}>{SUPPORT_EMAIL}</a> from the email address you use for ZChat, with your username and the words Delete my account. We delete it within 30 days and email you when it is done.</p>
+      </LegalSection>
+      <LegalSection n={3} title="What is deleted">
+        <LegalList items={['Your profile, photo, name, bio and username', 'Your posts, stories, highlights, comments, likes and notes', 'Your photos and files saved on ZChat', 'Your followers, follows, blocks and group memberships', 'Your coins, items, stickers and settings']} />
+      </LegalSection>
+      <LegalSection n={4} title="What is kept">
+        <p style={legalP}>Messages you already sent stay in the other person&apos;s chat, shown as from Deleted Account. Payment records stay with Lemon Squeezy, which handles payments, for as long as tax law asks. Records about rule breaking can be kept when the law asks us to.</p>
+      </LegalSection>
+    </PublicShell>
+  );
+}
+
 function PublicPage({ path }) {
   if (path === '/store') return <PublicStorePage />;
   if (path === '/terms') return <PublicTermsPage />;
   if (path === '/refund') return <PublicRefundPage />;
+  if (path === '/child-safety') return <PublicChildSafetyPage />;
+  if (path === '/delete-account') return <PublicDeleteAccountPage />;
   return <PublicPrivacyPage />;
 }
 
