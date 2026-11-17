@@ -3,12 +3,12 @@ import { makeLevel, navPath, collideCircle, lineBlocked, rng, PROP, DOOR_W } fro
 export const TUNE = {
   walk: 2.05, run: 4.0, crouch: 1.05, crawl: 0.38,
   stamMax: 6, stamRegen: 0.9,
-  nz: { run: 9, walk: 3.4, crouch: 0.9, door: 5.5, slam: 12, pick: 4, lock: 11, unlock: 13, radio: 26, breath: 2.3, gasp: 4.8, talk: 9, flash: 1.2, revive: 4.5, knock: 6.5 },
-  mon: { wander: 1.3, hunt: 2.55, chase: 4.4, catchR: 0.95, feelR: 1.5, scale: 1.18 },
+  nz: { run: 9, walk: 3.4, crouch: 0.9, door: 4.2, slam: 12, pick: 4, lock: 11, unlock: 13, radio: 26, breath: 2.3, gasp: 4.8, talk: 9, flash: 1.2, revive: 4.5, knock: 6.5 },
+  mon: { wander: 1.12, hunt: 2.2, chase: 3.85, catchR: 0.95, feelR: 1.5, scale: 1.18, r: 0.42 },
   battery: 300, breathMax: 8, downT: 40, reviveT: 3, unlockT: 2.6,
 };
 export const ST = ['wander', 'hunt', 'chase', 'search', 'attack', 'stun', 'roar', 'smash', 'idle'];
-export const CLIPS = ['m_idle', 'stride', 'm_run', 'm_roar', 'm_swipe', 'z_nbite', 'crawl', 'scream'];
+export const CLIPS = ['m_idle', 'stride', 'm_run', 'm_roar', 'm_swipe', 'z_nbite', 'crawl', 'scream', 'm_punch'];
 const HURT = new Set(['attack']);
 
 const d2 = (ax, az, bx, bz) => Math.hypot(ax - bx, az - bz);
@@ -89,7 +89,7 @@ function hearDist(G, x, z, r) {
   const straight = d2(x, z, M.x, M.z);
   if (straight > r) return null;
   if (straight < 1.6) return straight;
-  const cost = (j) => { const di = G.doorCell[j]; return di >= 0 && G.doors[di] < 0.5 ? 4 : 0; };
+  const cost = (j) => { const di = G.doorCell[j]; return di >= 0 && G.doors[di] < 0.5 ? 5 : 0; };
   const p = navPath(lv, M.x, M.z, x, z, { limit: r * 1.25, buf: G.navBuf, cost, props: true });
   if (!p) return null;
   return p.len <= r ? p.len : null;
@@ -132,17 +132,35 @@ function pickWander(G, R) {
   const lv = G.lv, M = G.mon;
   const alive = Object.values(G.players).filter((p) => !p.dead && !p.out && !p.down);
   const tries = 30;
-  const near = alive.length && R() < 0.62 ? alive[Math.floor(R() * alive.length)] : null;
+  const near = alive.length && R() < 0.38 ? alive[Math.floor(R() * alive.length)] : null;
   for (let i = 0; i < tries; i++) {
     const s = lv.spots[Math.floor(R() * lv.spots.length)];
     if (!s) break;
     const dm = d2(s.x, s.z, M.x, M.z);
     if (dm < 5) continue;
-    if (near) { const dp = d2(s.x, s.z, near.x, near.z); if (dp < 6 || dp > 17) continue; }
+    if (near) { const dp = d2(s.x, s.z, near.x, near.z); if (dp < 8 || dp > 20) continue; }
     return { x: s.x, z: s.z };
   }
   const s = lv.spots[Math.floor(R() * lv.spots.length)];
   return s ? { x: s.x, z: s.z } : { x: M.x, z: M.z };
+}
+
+function clearLine(lv, x0, z0, x1, z1, r) {
+  if (lineBlocked(lv, x0, z0, x1, z1)) return false;
+  const dx = x1 - x0, dz = z1 - z0, l = Math.hypot(dx, dz) || 1;
+  const px = -dz / l * r, pz = dx / l * r;
+  return !lineBlocked(lv, x0 + px, z0 + pz, x1 + px, z1 + pz) && !lineBlocked(lv, x0 - px, z0 - pz, x1 - px, z1 - pz);
+}
+
+function doorAhead(G, P, from) {
+  const { S, NW, NH } = G.lv.nav;
+  for (let k = from; k < Math.min(P.length, from + 5); k++) {
+    const x = Math.floor(P[k][0] / S), z = Math.floor(P[k][1] / S);
+    if (x < 0 || z < 0 || x >= NW || z >= NH) continue;
+    const di = G.doorCell[z * NW + x];
+    if (di >= 0) return di;
+  }
+  return -1;
 }
 
 function follow(G, dt, speed) {
@@ -151,7 +169,7 @@ function follow(G, dt, speed) {
   M.repath -= dt;
   if (!M.path || M.repath <= 0) {
     const cost = (j) => { const di = G.doorCell[j]; return di >= 0 && G.doors[di] < 0.5 ? 1.5 : 0; };
-    const p = navPath(lv, M.x, M.z, M.tgt.x, M.tgt.z, { buf: G.navBuf, cost, props: false });
+    const p = navPath(lv, M.x, M.z, M.tgt.x, M.tgt.z, { buf: G.navBuf, cost, props: false, mon: true });
     M.path = p ? p.pts : null; M.pi = 0;
     M.repath = M.st === 'chase' ? 0.35 : 1.2;
     if (!p) { M.tgt = null; return true; }
@@ -159,32 +177,48 @@ function follow(G, dt, speed) {
   const P = M.path;
   while (M.pi < P.length - 1) {
     const [px, pz] = P[M.pi];
-    if (d2(px, pz, M.x, M.z) < 0.45) M.pi++; else break;
+    if (d2(px, pz, M.x, M.z) < 0.5) M.pi++; else break;
+  }
+  const di = doorAhead(G, P, M.pi);
+  if (di >= 0 && G.doors[di] < 0.72) {
+    const d = lv.doors[di];
+    const dd = d2(d.x, d.z, M.x, M.z);
+    if (dd < 1.35) {
+      M.spd = 0;
+      M.clip = 'm_idle';
+      const da = wrap(angTo(M.x, M.z, d.x, d.z) - M.yaw), turn = 4 * dt;
+      M.yaw = wrap(M.yaw + Math.max(-turn, Math.min(turn, da)));
+      if (M.doorId !== di) { M.doorId = di; M.doorT = 0; M.rattle = 0; }
+      M.doorT += dt;
+      const bash = M.st === 'chase';
+      if (G.doorTo[di] < 0.72) {
+        const closed = G.doors[di] < 0.25;
+        if (closed && !M.rattle && !bash) { M.rattle = 1; G.ev.push({ e: 'rattle', id: di, x: d.x, z: d.z }); }
+        if (M.doorT >= (bash ? 0.18 : closed ? 0.95 : 0.25)) {
+          G.doorTo[di] = 1;
+          if (bash) G.doors[di] = Math.max(G.doors[di], 0.3);
+          G.ev.push({ e: 'slam', id: di, x: d.x, z: d.z, b: bash ? 1 : 0 });
+        }
+      }
+      return false;
+    }
   }
   let look = M.pi;
-  for (let k = M.pi + 1; k < Math.min(P.length, M.pi + 6); k++) { if (lineBlocked(lv, M.x, M.z, P[k][0], P[k][1])) break; look = k; }
+  for (let k = M.pi + 1; k < Math.min(P.length, M.pi + 6); k++) { if (!clearLine(lv, M.x, M.z, P[k][0], P[k][1], TUNE.mon.r * 0.85)) break; look = k; }
   const [tx, tz] = P[look];
   const dist = d2(tx, tz, M.x, M.z);
   const goal = d2(M.tgt.x, M.tgt.z, M.x, M.z);
   if (goal < 0.6 || (M.pi >= P.length - 1 && dist < 0.5)) { M.spd = 0; return true; }
   const want = angTo(M.x, M.z, tx, tz);
   const da = wrap(want - M.yaw);
-  const turn = (M.st === 'chase' ? 7 : 4) * dt;
+  const turn = (M.st === 'chase' ? 6 : 3.4) * dt;
   M.yaw = wrap(M.yaw + Math.max(-turn, Math.min(turn, da)));
-  const slow = Math.abs(da) > 1.2 ? 0.35 : Math.abs(da) > 0.6 ? 0.7 : 1;
+  const slow = Math.abs(da) > 1.2 ? 0.3 : Math.abs(da) > 0.6 ? 0.65 : 1;
   M.spd += (speed * slow - M.spd) * Math.min(1, dt * 3);
   const step = Math.min(M.spd * dt, dist);
   const nx = M.x + Math.sin(M.yaw) * step, nz = M.z + Math.cos(M.yaw) * step;
-  const [cx, cz] = collideCircle(lv, nx, nz, 0.32);
+  const [cx, cz] = collideCircle(lv, nx, nz, TUNE.mon.r);
   M.x = cx; M.z = cz;
-  for (let i = 0; i < lv.doors.length; i++) {
-    const d = lv.doors[i];
-    if (G.doors[i] < 0.6 && d2(d.x, d.z, M.x, M.z) < 1.15) {
-      const was = G.doorTo[i];
-      G.doorTo[i] = 1; G.doors[i] = Math.max(G.doors[i], 0.62);
-      if (was < 0.5) G.ev.push({ e: 'slam', id: i, x: d.x, z: d.z });
-    }
-  }
   return false;
 }
 
@@ -524,6 +558,11 @@ export function nearestHide(G, P, fx, fz) {
   for (const h of G.lv.hides) {
     const d = d2(h.x, h.z, P.x, P.z);
     if (d > 1.6) continue;
+    if (h.k === 'locker') {
+      const front = (P.x - h.x) * Math.sin(h.yaw) + (P.z - h.z) * Math.cos(h.yaw);
+      if (front < 0.2) continue;
+      if (Object.values(G.players).some((q) => q.id !== P.id && q.hide === h.id)) continue;
+    }
     const dir = fx == null ? 1 : ((h.x - P.x) * fx + (h.z - P.z) * fz) / (d || 1);
     if (d > 0.95 && dir < 0.35) continue;
     const sc = dir - d * 0.5;
@@ -537,6 +576,7 @@ export function hideView(G, h) {
   if (!p) return null;
   const s = PROP[p.k];
   if (p.k === 'bed') return { x: p.x, z: p.z, y: 0.16, len: s[1] };
+  if (p.k === 'locker') return { x: p.x, z: p.z, y: 1.5, len: s[1] };
   return { x: p.x, z: p.z, y: 0.5, len: s[1] };
 }
 

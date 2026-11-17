@@ -144,10 +144,31 @@ export function ThrowBox({ size, style, nade, molo, nadeOn, moloOn, onNade, onMo
   );
 }
 
+export function tapProps(fn, setDown) {
+  return {
+    onPointerDown: (e) => { e.stopPropagation(); e.currentTarget.__tp = e.pointerId; if (setDown) setDown(true); },
+    onPointerUp: (e) => {
+      const el = e.currentTarget;
+      if (setDown) setDown(false);
+      if (el.__tp !== e.pointerId) return;
+      el.__tp = null;
+      if (e.pointerType === 'mouse') return;
+      const r = el.getBoundingClientRect();
+      if (e.clientX < r.left - 14 || e.clientX > r.right + 14 || e.clientY < r.top - 14 || e.clientY > r.bottom + 14) return;
+      e.stopPropagation();
+      el.__tt = performance.now();
+      fn(e);
+    },
+    onPointerCancel: (e) => { e.currentTarget.__tp = null; if (setDown) setDown(false); },
+    onPointerLeave: (e) => { if (e.pointerType === 'mouse' && setDown) setDown(false); },
+    onClick: (e) => { e.stopPropagation(); const el = e.currentTarget; if (el.__tt && performance.now() - el.__tt < 800) return; fn(e); },
+  };
+}
+
 export function TopBtn({ icon, label, onTap, style, badge, on, size = 36, text }) {
   const [down, setDown] = useState(false);
   return (
-    <button type="button" aria-label={label} onClick={(e) => { e.stopPropagation(); onTap(); }} onPointerDown={(e) => { e.stopPropagation(); setDown(true); }} onPointerUp={() => setDown(false)} onPointerCancel={() => setDown(false)} onPointerLeave={() => setDown(false)}
+    <button type="button" aria-label={label} {...tapProps(() => onTap(), setDown)}
       style={{ position: 'relative', width: size, height: size, borderRadius: '50%', border: 'none', padding: 0, cursor: 'pointer', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'auto', touchAction: 'manipulation', flexShrink: 0, ...style }}>
       <MetalRing size={size} pressed={down} color={on ? '#7CF0A6' : null} />
       {text ? <span style={{ position: 'relative', fontSize: Math.round(size * 0.3), fontWeight: 900, fontStyle: 'italic', letterSpacing: '0.03em', color: '#FFFFFF', textShadow: '0 1px 2px rgba(0,0,0,0.9)', lineHeight: 1 }}>{text}</span> : <span style={{ position: 'relative', display: 'flex' }}>{ZG[icon] ? <ZGlyph k={icon} size={Math.round(size * 0.53)} /> : <Ico k={icon} size={Math.round(size * 0.53)} />}</span>}

@@ -6,6 +6,7 @@ const GROUPS = [
     items: [
       ['Hospital walls, doors, beds, tables and props, Free Modular 3D hospital environment', 'Madduck', 'https://madduck.itch.io/modular-3d-hospital-environment', 'Free asset pack'],
       ['Flashlight, keys, padlocks, knife and radio, Retro Horror Kit', '3Dexter', 'https://3dexter.itch.io/retrohorrorkit', 'CC0'],
+      ['Lockers, 3D Locker 2', 'Taha Arslan, ShareTextures', 'https://www.sharetextures.com/models/furniture/locker-2', 'CC0'],
       ['The creature and its moves', 'Mixamo by Adobe', 'https://www.mixamo.com', 'Mixamo license'],
       ['Roars, screams, breathing, drips and the hospital hum, Horror Sound Effects Library', 'Little Robot Sound Factory, www.littlerobotsoundfactory.com', 'https://opengameart.org/content/horror-sound-effects-library', 'CC BY 3.0'],
       ['Jump scare hits, Horror Hit Soundpack 1', 'psychhead', 'https://opengameart.org/content/horror-hit-soundpack-1', 'CC0'],
@@ -15,6 +16,7 @@ const GROUPS = [
       ['Doors, keys, cloth and impacts, RPG Audio and Impact Sounds', 'Kenney', 'https://kenney.nl/assets', 'CC0'],
       ['Footsteps on tile, Footsteps on different surfaces', 'congusbongus', 'https://opengameart.org/content/footsteps-on-different-surfaces', 'CC BY 3.0'],
       ['The I see you voice', 'Vinrax', 'https://opengameart.org/content/i-see-you-voice', 'CC0'],
+      ['Screeches, howls and sniffs, 80 CC0 creature SFX', 'rubberduck', 'https://opengameart.org/content/80-cc0-creature-sfx', 'CC0'],
       ['Room and game music, Horror Game Intro, Lurking in the Shadows, Night Stalker, Ominous Pursuit and Disturbed Soundscape', 'Eric Matyas, www.soundimage.org', 'https://soundimage.org', 'Free with credit'],
       ['Menu music, Horror Main Menu', 'Pixabay artist', 'https://pixabay.com/music/', 'Pixabay license'],
     ],

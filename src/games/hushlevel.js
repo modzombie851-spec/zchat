@@ -5,6 +5,7 @@ export const EXIT_W = 1.96;
 export const PROP = {
   bed: [1.1, 2.51, 0.92], bench: [1.65, 0.55, 0.89], cab1: [1.9, 0.74, 0.81], cab2: [1.01, 0.49, 0.65], cab3: [0.65, 0.54, 0.78],
   chair: [0.56, 0.66, 0.95], table: [1.74, 1.17, 0.75], wheelchair: [0.7, 1.04, 0.95], iv: [0.5, 0.5, 1.8], mag: [0.19, 0.27, 0.01],
+  locker: [0.56, 0.58, 1.86],
 };
 
 export function rng(seed) {
@@ -195,7 +196,9 @@ export function makeLevel(seed, size = 0) {
   lv.reach = reach;
   const ok = (x, z) => reach[Math.floor(z / lv.nav.S) * lv.nav.NW + Math.floor(x / lv.nav.S)] === 1;
   lv.spots = lv.spots.filter((sp) => { const c = [[0, 0], [0.4, 0], [-0.4, 0], [0, 0.4], [0, -0.4], [0.7, 0], [-0.7, 0], [0, 0.7], [0, -0.7], [1.2, 0], [-1.2, 0], [0, 1.2], [0, -1.2]]; return c.some(([dx, dz]) => ok(sp.x + dx, sp.z + dz)); });
+  for (const hd of lv.hides) if (lv.props[hd.prop]) delete lv.props[hd.prop].hide;
   lv.hides = lv.hides.filter((hd) => [[0.9, 0], [-0.9, 0], [0, 0.9], [0, -0.9], [0, 1.5], [0, -1.5], [1.5, 0], [-1.5, 0]].some(([dx, dz]) => ok(hd.x + dx, hd.z + dz)));
+  lv.hides.forEach((hd, i) => { hd.id = i; if (lv.props[hd.prop]) lv.props[hd.prop].hide = i; });
   if (!ok(lv.monsterStart.x, lv.monsterStart.z)) lv.monsterStart = { ...lv.spawn[lv.spawn.length - 1] };
   return lv;
 }
@@ -246,6 +249,12 @@ function furnish(lv, R) {
     return put(k, x, z, yaw, extra);
   };
   const hideSpot = (p, kind) => { if (!p) return; const id = lv.hides.length; lv.hides.push({ id, x: p.x, z: p.z, yaw: p.yaw, k: kind, prop: lv.props.length - 1 }); p.hide = id; };
+  const lockers = (w, n) => {
+    let made = 0;
+    const offs = n === 1 ? [0] : n === 2 ? [-0.29, 0.29] : [-0.58, 0, 0.58];
+    for (const o of offs) { const p = along(w, 0.3, 'locker', {}, o); if (p) { hideSpot(p, 'locker'); made++; } }
+    return made;
+  };
   for (const rm of rooms) {
     const ws = walls(rm);
     const cx = (rm.x + rm.w / 2) * 2, cz = (rm.y + rm.h / 2) * 2;
@@ -263,6 +272,7 @@ function furnish(lv, R) {
           put('cab3', w.x + w.nx * 0.4 - sx * s * 0.95, w.z + w.nz * 0.4 - sz * s * 0.95, w.yaw);
         }
       }
+      if (R.chance(0.3)) for (const w of ws) { if (lockers(w, 1)) break; }
       if (R.chance(0.5)) put('wheelchair', cx + R.range(-1, 1), cz + R.range(-1, 1), R.range(0, 6.28));
       if (R.chance(0.5)) put('chair', cx + R.range(-1.5, 1.5), cz + R.range(-1.5, 1.5), R.range(0, 6.28));
     } else if (t === 'office') {
@@ -278,10 +288,12 @@ function furnish(lv, R) {
         }
         if (R.chance(0.7)) lv.props.push({ k: 'mag', x: cx + R.range(-0.5, 0.5), z: cz + R.range(-0.3, 0.3), y: 0.75, yaw: R.range(0, 6.28), box: null });
       }
+      if (R.chance(0.55)) for (const w of ws) { if (lockers(w, R.chance(0.4) ? 2 : 1)) break; }
       for (const w of ws.slice(0, 3)) along(w, 0.38, R.pick(['cab1', 'cab2', 'cab3']), {});
     } else if (t === 'storage') {
-      let n = 0;
-      for (const w of ws) { if (n >= 6) break; if (along(w, 0.38, R.pick(['cab1', 'cab2', 'cab3', 'cab1']), {})) n++; }
+      let n = 0, lk = 0;
+      for (const w of ws) { if (lk >= 1) break; const m = lockers(w, R.chance(0.5) ? 3 : 2); if (m) { lk++; n += m; } }
+      for (const w of ws) { if (n >= 7) break; if (along(w, 0.38, R.pick(['cab1', 'cab2', 'cab3', 'cab1']), {})) n++; }
       for (let i = 0; i < 2; i++) put(R.pick(['wheelchair', 'iv', 'chair']), cx + R.range(-1.2, 1.2), cz + R.range(-1.2, 1.2), R.range(0, 6.28), R.chance(0.25) ? { tip: 1 } : {});
     } else if (t === 'waiting') {
       let n = 0;
@@ -291,6 +303,7 @@ function furnish(lv, R) {
     } else if (t === 'exam') {
       const b = put('bed', cx, cz, R.chance(0.5) ? 0 : Math.PI / 2);
       if (b) hideSpot(b, 'bed');
+      if (R.chance(0.35)) for (const w of ws) { if (lockers(w, 1)) break; }
       put('iv', cx + 1.0, cz + 0.9, R.range(0, 6.28));
       for (const w of ws.slice(0, 2)) along(w, 0.3, R.pick(['cab2', 'cab3', 'cab1']), {});
       if (R.chance(0.5)) put('wheelchair', cx - 1.4, cz - 1.2, R.range(0, 6.28));
@@ -304,7 +317,16 @@ function furnish(lv, R) {
     }
   }
   for (let y = 0; y < lv.H; y++) for (let x = 0; x < W; x++) {
-    if (reg[y * W + x] !== 0 || !R.chance(0.09)) continue;
+    if (reg[y * W + x] !== 0) continue;
+    if (R.chance(0.06)) {
+      const sides = [[0, -1], [0, 1], [-1, 0], [1, 0]].filter(([dx, dy]) => at(x + dx, y + dy) !== 0 && at(x + dy, y + dx) === 0 && at(x - dy, y - dx) === 0);
+      if (sides.length) {
+        const [dx, dy] = R.pick(sides);
+        const p = put('locker', x * 2 + 1 + dx * 0.6, y * 2 + 1 + dy * 0.6, dx !== 0 ? (dx > 0 ? -Math.PI / 2 : Math.PI / 2) : (dy > 0 ? Math.PI : 0));
+        if (p) { hideSpot(p, 'locker'); continue; }
+      }
+    }
+    if (!R.chance(0.09)) continue;
     const k = R.pick(['wheelchair', 'iv', 'chair', 'bench', 'chair']);
     const px = x * 2 + 1 + R.range(-0.5, 0.5), pz = y * 2 + 1 + R.range(-0.5, 0.5);
     const tip = k === 'chair' && R.chance(0.5);
@@ -372,7 +394,22 @@ function buildNav(lv) {
     const z0 = Math.max(0, Math.ceil((s[1] - pad) / S - 0.5)), z1 = Math.min(NH - 1, Math.floor((s[3] + pad) / S - 0.5));
     for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) if (block[z * NW + x] !== 1) block[z * NW + x] = s[5] ? 2 : 1;
   }
-  return { S, NW, NH, block };
+  const mblock = new Uint8Array(NW * NH);
+  for (const s of lv.solid) {
+    const pad = s[5] ? 0.34 : 0.4;
+    const x0 = Math.max(0, Math.ceil((s[0] - pad) / S - 0.5)), x1 = Math.min(NW - 1, Math.floor((s[2] + pad) / S - 0.5));
+    const z0 = Math.max(0, Math.ceil((s[1] - pad) / S - 0.5)), z1 = Math.min(NH - 1, Math.floor((s[3] + pad) / S - 0.5));
+    for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) mblock[z * NW + x] = 1;
+  }
+  for (const d of lv.doors || []) {
+    const ax = d.h ? 0.3 : 1.15, az = d.h ? 1.15 : 0.3;
+    for (let z = Math.floor((d.z - az) / S); z <= Math.floor((d.z + az) / S); z++) for (let x = Math.floor((d.x - ax) / S); x <= Math.floor((d.x + ax) / S); x++) {
+      if (x < 0 || z < 0 || x >= NW || z >= NH) continue;
+      const i = z * NW + x;
+      if (block[i] === 0) mblock[i] = 0;
+    }
+  }
+  return { S, NW, NH, block, mblock };
 }
 
 function flood(lv, x, z) {
@@ -394,7 +431,8 @@ function flood(lv, x, z) {
 }
 
 export function navPath(lv, x0, z0, x1, z1, opts = {}) {
-  const { S, NW, NH, block } = lv.nav;
+  const { S, NW, NH } = lv.nav;
+  const block = opts.mon && lv.nav.mblock ? lv.nav.mblock : lv.nav.block;
   const ci = (x, z) => Math.min(NH - 1, Math.max(0, Math.floor(z / S))) * NW + Math.min(NW - 1, Math.max(0, Math.floor(x / S)));
   let a = ci(x0, z0), b = ci(x1, z1);
   const free = (i) => block[i] === 0 || (opts.props && block[i] === 2);

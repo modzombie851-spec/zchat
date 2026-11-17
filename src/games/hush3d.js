@@ -536,7 +536,7 @@ export function createHush3D(canvas, opts = {}) {
     gl.activeTexture(gl.TEXTURE2);
     gl.bindTexture(gl.TEXTURE_2D_ARRAY, G.mat || G.alb);
     gl.uniform1f(P.u.uMatOn, G.mat && L.matOn ? 1 : 0);
-    gl.uniform1f(P.u.uGrp, g === 1 ? 7 : 0);
+    gl.uniform1f(P.u.uGrp, g === 1 ? groups[0].n : 0);
   }
   function drawStatic(pr, it, depth) {
     const u = pr.u;

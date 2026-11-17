@@ -1,7 +1,7 @@
 import { m4 } from './race3d.js';
 import { EDGE, WALL_H, DOOR_W } from './hushlevel.js';
 
-export const LAY = { walls: 0, doorway: 1, floor: 2, ceiling: 3, door: 4, bed: 5, wood: 6, lamp: 7, exit: 8, ivbag: 9, ivpole: 10, magazine: 11, wheelchair: 12, window: 13, flashlight: 14, key: 15, knife: 16, lock: 17, radio: 18 };
+export const LAY = { walls: 0, doorway: 1, floor: 2, ceiling: 3, door: 4, bed: 5, wood: 6, locker: 7, lamp: 8, exit: 9, ivbag: 10, ivpole: 11, magazine: 12, wheelchair: 13, window: 14, flashlight: 15, key: 16, knife: 17, lock: 18, radio: 19 };
 
 export function parseGeo(buf) {
   const dv = new DataView(buf);
@@ -74,7 +74,7 @@ class Batch {
   }
 }
 
-export const SMALL0 = 7;
+export const SMALL0 = 8;
 export function meshItems(m, extra) {
   if (!m) return [];
   const out = [];
@@ -161,7 +161,7 @@ export function buildWorld(R, lv, G, opt = {}) {
     put('pillar', m4.pose(gx * 2, 0, gy * 2, 0), gx * 2, gy * 2);
     pillars.push([gx * 2, gy * 2]);
   }
-  const PH = { bed: 'bed', bench: 'bench', cab1: 'cab1', cab2: 'cab2', cab3: 'cab3', chair: 'chair', table: 'table', wheelchair: 'wheelchair', iv: 'iv', mag: 'mag' };
+  const PH = { bed: 'bed', bench: 'bench', cab1: 'cab1', cab2: 'cab2', cab3: 'cab3', chair: 'chair', table: 'table', wheelchair: 'wheelchair', iv: 'iv', mag: 'mag', locker: 'locker' };
   for (const p of lv.props) {
     const pc = G[PH[p.k]];
     if (!pc) continue;

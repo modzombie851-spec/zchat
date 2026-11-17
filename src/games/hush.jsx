@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Avatar, Portal, useBackClose, FONT, ConfirmSheet, rtKeep, rtDrop } from '../App.jsx';
 import { useJoystick, GJoy, TOUCHY, weakPhone, injectKitCss, useGameStage, stagePoint, GSkin, GSettings, GSetHead, GSetRow, GSeg, GSetSlider, GLobbySheet, GScroll } from './gamekit.jsx';
-import { Ico, CBtn, TopBtn } from './zhud.jsx';
+import { Ico, CBtn, TopBtn, tapProps } from './zhud.jsx';
 import { MetalRing } from './zbtn.jsx';
 import { CFONT } from './zlobby.jsx';
 import { parseModel, parseAnims } from './zmodel.js';
@@ -21,8 +21,8 @@ const EXITG = '#5FD98A';
 const KEYC = '#E8C77A';
 const cut = (n) => `polygon(0 0, calc(100% - ${n}px) 0, 100% ${n}px, 100% 100%, ${n}px 100%, 0 calc(100% - ${n}px))`;
 const slantBtn = (n) => `polygon(${n}px 0, 100% 0, calc(100% - ${n}px) 100%, 0 100%)`;
-const GEO = 'hush/geo-v1.bin';
-const TEXS = ['hush/alb1-v2.webp', 'hush/mat1-v2.webp', 'hush/alb2-v2.webp', 'hush/mat2-v2.webp'];
+const GEO = 'hush/geo-v2.bin';
+const TEXS = ['hush/alb1-v3.webp', 'hush/mat1-v3.webp', 'hush/alb2-v2.webp', 'hush/mat2-v2.webp'];
 const MON = ['hush/mon-v2.bin', 'hush/mon-v2_d.webp', 'hush/mon-v2_n.webp', 'dead/zanim.bin', 'dead/zanim2.bin'];
 const GAME_MUS = ['explore', 'hunt', 'chase', 'dead'].map((k) => HUSH_MUS[k]);
 const KEYI = '/hush/key-v1.webp';
@@ -39,7 +39,7 @@ const RULES = [
   ['Use what you find', 'Drop a radio to lure it away. A knife saves you once. Batteries keep your light on.'],
   ['If it catches you, you die', 'With friends, you watch your team until the round ends. Stay together and warn each other.'],
 ];
-const DESK_KEYS = [['W A S D', 'Move'], ['Mouse', 'Look'], ['Shift', 'Run'], ['C', 'Crouch'], ['F', 'Light'], ['E', 'Use'], ['Space', 'Hold breath'], ['Q', 'Drop radio'], ['Esc', 'Pause']];
+const DESK_KEYS = [['W A S D', 'Move'], ['Mouse', 'Look'], ['Shift', 'Run'], ['C', 'Crouch'], ['F', 'Light'], ['E', 'Use'], ['Space', 'Hold breath'], ['Q', 'Drop radio'], ['M', 'Map'], ['Esc', 'Pause']];
 const MB = 1048576;
 const mb = (n) => (n / MB).toFixed(n >= 10 * MB ? 0 : 1);
 
@@ -81,6 +81,118 @@ function useSpeed(got, on) {
   while (S.pts.length > 2 && now - S.pts[0][0] > 3000) S.pts.shift();
   if (S.pts.length > 1) { const a = S.pts[0], b = S.pts[S.pts.length - 1]; if (b[0] - a[0] > 400) S.v = ((b[1] - a[1]) / (b[0] - a[0])) * 1000; }
   return S.v;
+}
+
+function drawMap(cv, d) {
+  const dpr = Math.min(2.5, window.devicePixelRatio || 1);
+  const cw = cv.clientWidth, ch = cv.clientHeight;
+  if (!cw || !ch) return;
+  if (cv.width !== Math.round(cw * dpr) || cv.height !== Math.round(ch * dpr)) { cv.width = Math.round(cw * dpr); cv.height = Math.round(ch * dpr); }
+  const ctx = cv.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, cw, ch);
+  const pad = 10;
+  const cs = Math.min((cw - pad * 2) / d.W, (ch - pad * 2) / d.H);
+  const ox = (cw - cs * d.W) / 2, oy = (ch - cs * d.H) / 2;
+  const X = (x) => ox + (x / 2) * cs, Y = (z) => oy + (z / 2) * cs;
+  const seen = (x, y) => x >= 0 && y >= 0 && x < d.W && y < d.H && d.seen[y * d.W + x];
+  for (let y = 0; y < d.H; y++) for (let x = 0; x < d.W; x++) {
+    if (!seen(x, y)) continue;
+    ctx.fillStyle = d.reg[y * d.W + x] === 0 ? 'rgba(239,232,210,0.1)' : 'rgba(239,232,210,0.2)';
+    ctx.fillRect(ox + x * cs - 0.25, oy + y * cs - 0.25, cs + 0.5, cs + 0.5);
+  }
+  const lw = Math.max(1.4, cs * 0.075);
+  const seg = (x0, y0, x1, y1, col, w) => { ctx.strokeStyle = col; ctx.lineWidth = w || lw; ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke(); };
+  ctx.lineCap = 'round';
+  const WALL = 'rgba(239,232,210,0.82)', EXIT = '#5FD98A';
+  for (let y = 0; y <= d.H; y++) for (let x = 0; x < d.W; x++) {
+    const e = d.hE[y * d.W + x];
+    if (e === 0 || e === 5) continue;
+    if (!seen(x, y - 1) && !seen(x, y) && e !== 4) continue;
+    const yy = oy + y * cs, xa = ox + x * cs, xb = xa + cs;
+    if (e === 2) { seg(xa, yy, xa + cs * 0.27, yy, WALL); seg(xb - cs * 0.27, yy, xb, yy, WALL); }
+    else if (e === 4) seg(xa, yy, xb, yy, EXIT, lw * 2.2);
+    else seg(xa, yy, xb, yy, WALL);
+  }
+  for (let y = 0; y < d.H; y++) for (let x = 0; x <= d.W; x++) {
+    const e = d.vE[y * (d.W + 1) + x];
+    if (e === 0 || e === 5) continue;
+    if (!seen(x - 1, y) && !seen(x, y)) continue;
+    const xx = ox + x * cs, ya = oy + y * cs, yb = ya + cs;
+    if (e === 2) { seg(xx, ya, xx, ya + cs * 0.27, WALL); seg(xx, yb - cs * 0.27, xx, yb, WALL); }
+    else seg(xx, ya, xx, yb, WALL);
+  }
+  for (const dr of d.doors) {
+    const cx = Math.floor(dr.x / 2 - (dr.h ? 0 : 0.5)), cy = Math.floor(dr.z / 2 - (dr.h ? 0.5 : 0));
+    const vis = dr.h ? seen(Math.floor(dr.x / 2), Math.round(dr.z / 2) - 1) || seen(Math.floor(dr.x / 2), Math.round(dr.z / 2)) : seen(Math.round(dr.x / 2) - 1, Math.floor(dr.z / 2)) || seen(Math.round(dr.x / 2), Math.floor(dr.z / 2));
+    if (!vis || dr.open || cx < -1 || cy < -1) continue;
+    const px = X(dr.x), py = Y(dr.z), hw = cs * 0.23;
+    if (dr.h) seg(px - hw, py, px + hw, py, 'rgba(232,199,122,0.95)', lw * 1.3); else seg(px, py - hw, px, py + hw, 'rgba(232,199,122,0.95)', lw * 1.3);
+  }
+  if (d.exit) {
+    const ex = X(d.exit.x), ey = Y(d.exit.z);
+    ctx.fillStyle = EXIT;
+    ctx.beginPath(); ctx.arc(ex, ey, Math.max(4, cs * 0.22), 0, Math.PI * 2); ctx.fill();
+    ctx.font = `800 ${Math.max(11, Math.round(cs * 0.42))}px ${FONT}`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.fillText('Exit', ex, ey - Math.max(5, cs * 0.28));
+  }
+  for (const q of d.team) {
+    ctx.fillStyle = '#9DD9FF';
+    ctx.beginPath(); ctx.arc(X(q.x), Y(q.z), Math.max(3.5, cs * 0.17), 0, Math.PI * 2); ctx.fill();
+  }
+  const px = X(d.me.x), py = Y(d.me.z), r = Math.max(7, cs * 0.34);
+  const fx = Math.sin(d.me.yaw), fy = Math.cos(d.me.yaw);
+  ctx.beginPath();
+  ctx.moveTo(px + fx * r, py + fy * r);
+  ctx.lineTo(px - fx * r * 0.6 + fy * r * 0.6, py - fy * r * 0.6 - fx * r * 0.6);
+  ctx.lineTo(px - fx * r * 0.25, py - fy * r * 0.25);
+  ctx.lineTo(px - fx * r * 0.6 - fy * r * 0.6, py - fy * r * 0.6 + fx * r * 0.6);
+  ctx.closePath();
+  ctx.fillStyle = '#E0584A'; ctx.fill();
+  ctx.lineWidth = 1.5; ctx.strokeStyle = '#FFFFFF'; ctx.stroke();
+}
+
+function HushMap({ GS, getData, onClose }) {
+  const ref = useRef(null);
+  const [info, setInfo] = useState(null);
+  useEffect(() => {
+    let dead = false;
+    const draw = () => { if (dead) return; const d = getData(); if (!d || !ref.current) return; drawMap(ref.current, d); setInfo((o) => (o && o.keys === d.keys && o.locks === d.locks && o.open === d.open ? o : { keys: d.keys, locks: d.locks, open: d.open })); };
+    draw();
+    const iv = setInterval(draw, 200);
+    return () => { dead = true; clearInterval(iv); };
+  }, []);
+  const { top, right, bottom, left } = GS.at;
+  return (
+    <div className="hz-in" onPointerDown={(e) => e.stopPropagation()} style={{ position: 'absolute', inset: 0, zIndex: 30, background: '#060607', pointerEvents: 'auto' }}>
+      <div style={{ position: 'absolute', top: top(10), left: left(18), right: right(14), display: 'flex', alignItems: 'center', gap: 12 }}>
+        <span style={{ fontFamily: CFONT, fontSize: 26, fontWeight: 800, color: CREAM, lineHeight: 1 }}>Map</span>
+        {info && <Tag text={info.open ? 'The exit is open' : `${info.keys} of 3 keys`} color={info.open ? EXITG : KEYC} />}
+        <span style={{ flex: 1 }} />
+        <span style={{ fontSize: 12, fontWeight: 700, color: MUTED }}>Only places you have seen</span>
+        <TopBtn icon="close" label="Close the map" size={40} onTap={onClose} />
+      </div>
+      <canvas ref={ref} aria-label="Map of the hospital" style={{ position: 'absolute', left: left(18), right: right(18), top: `calc(${top(0)} + 62px)`, bottom: bottom(14), width: `calc(100% - ${left(18)} - ${right(18)})`, height: `calc(100% - ${top(0)} - 62px - ${bottom(14)})`, display: 'block' }} />
+    </div>
+  );
+}
+
+function VentView() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 100 100" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
+      <defs>
+        <filter id="hz-vsoft" x="-20%" y="-50%" width="140%" height="200%"><feGaussianBlur stdDeviation="0.45 0.7" /></filter>
+        <mask id="hz-vent" maskUnits="userSpaceOnUse" x="0" y="0" width="100" height="100">
+          <rect width="100" height="100" fill="white" />
+          <g filter="url(#hz-vsoft)">{[0, 1, 2, 3, 4].map((i) => <rect key={i} x="24" y={31 + i * 8} width="52" height="4.6" rx="1.4" fill="black" />)}</g>
+        </mask>
+        <linearGradient id="hz-vmetal" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#141518" /><stop offset="0.5" stopColor="#0B0C0E" /><stop offset="1" stopColor="#060607" /></linearGradient>
+      </defs>
+      <rect width="100" height="100" fill="url(#hz-vmetal)" mask="url(#hz-vent)" />
+      {[0, 1, 2, 3, 4].map((i) => <rect key={i} x="24.5" y={35.4 + i * 8} width="51" height="0.5" fill="rgba(150,150,158,0.16)" />)}
+    </svg>
+  );
 }
 
 function HushBoot({ GS, boot, onRetry, onClose }) {
@@ -234,6 +346,7 @@ function HushInner({ me, myId, join, friends = [], online = [], onInvite, onSear
   const [paused, setPaused] = useState(false);
   const [leaveAsk, setLeaveAsk] = useState(false);
   const [quick, setQuick] = useState(false);
+  const [mapOpen, setMapOpen] = useState(false);
   const [bubbles, setBubbles] = useState([]);
   const [names, setNames] = useState({});
   const [lobby, setLobby] = useState({ ids: [], ph: 'lobby', seed: 0, cd: 0 });
@@ -316,7 +429,7 @@ function HushInner({ me, myId, join, friends = [], online = [], onInvite, onSear
     const A = await ensureAssets(!o.solo);
     if (!A || pending.current !== o) return;
     pending.current = null;
-    setEnd(null); setHud(null); setPaused(false); setCrouchOn(false); setLightOn(true); setErr('');
+    setEnd(null); setHud(null); setPaused(false); setMapOpen(false); setCrouchOn(false); setLightOn(true); setErr('');
     setScreen('play');
     await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
     const cv = canvasRef.current;
@@ -452,6 +565,7 @@ function HushInner({ me, myId, join, friends = [], online = [], onInvite, onSear
 
   const back = () => {
     if (sheet) { setSheet(null); return; }
+    if (mapOpen) { setMapOpen(false); return; }
     if (leaveAsk) { setLeaveAsk(false); return; }
     if (boot) { cancelBoot(); return; }
     if (screen === 'play' && !end) { if (paused) setLeaveAsk(true); else setPaused(true); return; }
@@ -461,7 +575,8 @@ function HushInner({ me, myId, join, friends = [], online = [], onInvite, onSear
   };
   useBackClose(true, back);
 
-  useEffect(() => { if (runRef.current) runRef.current.pause(paused); }, [paused]);
+  useEffect(() => { if (runRef.current) runRef.current.pause(paused || (mapOpen && !inRoom)); }, [paused, mapOpen, inRoom]);
+  useEffect(() => { if (screen !== 'play' || end) setMapOpen(false); }, [screen, end]);
   useEffect(() => {
     if (screen !== 'play' || end) return undefined;
     const vis = () => { if (document.hidden) setPaused(true); };
@@ -515,6 +630,7 @@ function HushInner({ me, myId, join, friends = [], online = [], onInvite, onSear
       else if (e.code === 'KeyE') r.use(true);
       else if (e.code === 'Space') { e.preventDefault(); r.breath(true); }
       else if (e.code === 'KeyQ' || e.code === 'KeyG') r.item();
+      else if (e.code === 'KeyM') setMapOpen((v) => !v);
       mv();
     };
     const ku = (e) => {
@@ -563,6 +679,7 @@ function HushInner({ me, myId, join, friends = [], online = [], onInvite, onSear
     <div ref={GS.rootRef} onPointerDownCapture={() => HA.init()} style={{ position: 'fixed', left: 0, right: 0, top: 'var(--zvp-top, 0px)', height: 'calc(var(--zvp-h, 100%) + var(--zgx, 0px))', zIndex: 90, background: '#070708', overflow: 'hidden', touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', fontFamily: FONT, color: CREAM }}>
       <div ref={wrapRef} style={GS.wrapStyle} onPointerDown={lookDown} onPointerMove={lookMove} onPointerUp={lookUp} onPointerCancel={lookUp} onContextMenu={(e) => e.preventDefault()}>
         {screen === 'play' && <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block' }} />}
+        {screen === 'play' && !end && hud && hud.hidden === 'locker' && !hud.scare && <VentView />}
 
         {screen !== 'play' && (
           <div style={{ position: 'absolute', inset: 0 }}>
@@ -669,6 +786,7 @@ function HushInner({ me, myId, join, friends = [], online = [], onInvite, onSear
               <div style={{ position: 'absolute', right: right(14), top: top(10), display: 'flex', gap: 8, alignItems: 'center' }}>
                 {inRoom && pub && <TopBtn icon="chat" label="Quick lines" size={40} on={quick} onTap={() => setQuick((v) => !v)} />}
                 {inRoom && !pub && <TopBtn icon={micOn ? 'mic' : 'micoff'} on={micOn} label={micOn ? 'Turn your mic off' : 'Turn your mic on'} size={40} onTap={() => relay.toggleMic && relay.toggleMic()} />}
+                <TopBtn icon="map" label="Map" size={40} onTap={() => setMapOpen(true)} />
                 <TopBtn icon="pause" label="Pause" size={40} onTap={() => setPaused(true)} />
               </div>
             )}
@@ -679,7 +797,7 @@ function HushInner({ me, myId, join, friends = [], online = [], onInvite, onSear
             )}
             {quick && (
               <div style={{ position: 'absolute', right: right(14), top: `calc(${top(10)} + 50px)`, display: 'flex', flexDirection: 'column', gap: 6, pointerEvents: 'auto', zIndex: 5 }}>
-                {QUICK.map((q, i) => <button key={q} type="button" className="hz-b" onClick={() => sendQuick(i)} style={{ height: 34, padding: '0 16px', clipPath: slantBtn(8), background: 'rgba(12,12,13,0.88)', boxShadow: `inset 0 0 0 1px ${LINE}`, color: CREAM, fontFamily: CFONT, fontWeight: 800, fontSize: 15, textAlign: 'right' }}>{q}</button>)}
+                {QUICK.map((q, i) => <button key={q} type="button" className="hz-b" {...tapProps(() => sendQuick(i))} style={{ height: 34, padding: '0 16px', clipPath: slantBtn(8), background: 'rgba(12,12,13,0.88)', boxShadow: `inset 0 0 0 1px ${LINE}`, color: CREAM, fontFamily: CFONT, fontWeight: 800, fontSize: 15, textAlign: 'right' }}>{q}</button>)}
               </div>
             )}
             {(h.dead || h.out) && !h.scare && (
@@ -695,7 +813,7 @@ function HushInner({ me, myId, join, friends = [], online = [], onInvite, onSear
                 <CBtn size={bs} icon="h_run" label="Run" onDown={() => r && r.run(true)} onUp={() => r && r.run(false)} style={{ right: `calc(${right(24)} + ${useS + 16}px)`, bottom: bottom(small ? 24 : 30) }} />
                 <CBtn size={ss} icon="crouch" label={crouchOn ? 'Stand up' : 'Crouch'} active={crouchOn} onTap={() => { if (r) setCrouchOn(r.crouch()); }} style={{ right: `calc(${right(24)} + ${Math.round((useS - ss) / 2)}px)`, bottom: `calc(${bottom(small ? 30 : 36)} + ${useS + 22}px)` }} />
                 <RingBtn size={ss} text={h.breath ? `${Math.max(0, Math.ceil((1 - (h.breathT || 0)) * 8))}` : 'Hold'} sub={h.breath ? null : 'breath'} label="Hold your breath" on={!!h.breath} disabled={!!h.breathCd && !h.breath} onDown={() => r && r.breath(true)} onUp={() => r && r.breath(false)} style={{ right: `calc(${right(24)} + ${useS + 16 + Math.round((bs - ss) / 2)}px)`, bottom: `calc(${bottom(small ? 24 : 30)} + ${bs + 14}px)` }} />
-                <CBtn size={48} icon="h_torch" label={lightOn ? 'Turn the light off' : 'Turn the light on'} active={!!h.light} onTap={() => { if (r) setLightOn(r.light()); }} style={{ right: right(16), top: `calc(${top(10)} + ${inRoom && h.team ? 52 + h.team.length * 26 : 52}px)` }} />
+                <CBtn size={48} icon="h_torch" label={h.light ? 'Turn the light off' : 'Turn the light on'} active={!!h.light} onTap={() => { if (r) setLightOn(r.light()); }} style={{ right: right(16), top: `calc(${top(10)} + ${inRoom && h.team ? 52 + h.team.length * 26 : 52}px)` }} />
                 {h.item === 'radio' && <RingBtn size={ss} text="Drop" sub="radio" label="Drop the radio" onTap={() => r && r.item()} style={{ right: `calc(${right(24)} + ${useS + 16 + bs + 14}px)`, bottom: bottom(small ? 26 : 32) }} />}
               </>
             )}
@@ -724,6 +842,8 @@ function HushInner({ me, myId, join, friends = [], online = [], onInvite, onSear
             </div>
           </div>
         )}
+
+        {mapOpen && screen === 'play' && !end && !paused && <HushMap GS={GS} getData={() => (runRef.current ? runRef.current.mapData() : null)} onClose={() => setMapOpen(false)} />}
 
         {paused && screen === 'play' && !end && (
           <div className="hz-in" style={{ position: 'absolute', inset: 0, background: 'rgba(4,4,5,0.8)', zIndex: 20, pointerEvents: 'auto' }}>

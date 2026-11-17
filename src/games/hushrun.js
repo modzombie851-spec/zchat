@@ -31,7 +31,7 @@ export async function createRun(canvas, o) {
   const R = createHush3D(canvas, { shadow: tier.sh || 256, aa: true });
   if (!R) throw new Error('webgl');
   const A = o.assets;
-  R.setGroup(0, A.alb1, tier.mat ? A.mat1 : null, 7, tier.big);
+  R.setGroup(0, A.alb1, tier.mat ? A.mat1 : null, 8, tier.big);
   R.setGroup(1, A.alb2, tier.mat ? A.mat2 : null, 12, tier.small);
   const geo = parseGeo(A.geo);
   const G = makeGame(o.seed, { solo: o.solo });
@@ -54,8 +54,10 @@ export async function createRun(canvas, o) {
   G.players[me.id].yaw = sp.yaw == null ? Math.PI : sp.yaw;
   for (const p of o.others || []) G.players[p.id] = newPlayer(p.id, lv.spawn[(p.slot || 0) % lv.spawn.length], p);
   const P = () => G.players[me.id];
-  const cam = { yaw: sp.yaw == null ? Math.PI : sp.yaw, pitch: 0, eyeY: 1.62, bob: 0, bobA: 0, shake: 0, fov: 1, scare: 0, scareT: 0, fade: 1, red: 0, roll: 0, flash: 0, sat: 1, brown: 1 };
+  const cam = { yaw: sp.yaw == null ? Math.PI : sp.yaw, pitch: 0, eyeY: 1.62, bob: 0, bobA: 0, shake: 0, fov: 1, scare: 0, scareT: 0, fade: 1, red: 0, roll: 0, flash: 0, sat: 1, brown: 1, expo: 1 };
   const inp = { mx: 0, mz: 0, run: false, cr: false, breath: false, use: false };
+  const seen = new Uint8Array(lv.W * lv.H);
+  let seenT = 0;
   const st = { useT: 0, useHold: false, entry: null, toastQ: [], hold: 0, holdT: 0, holdCd: 0, breathPlay: 0, ambT: 4, whispT: 18, scareT: RAND(35, 60), netT: 0, snapT: 0, hudT: 0, lightOn: true, battLow: false, startT: performance.now(), paused: false, endT: 0, spect: null, chaseSeen: false, tutorial: o.tutorial ? 1 : 0, scale: tier.scale, ft: 16, ftN: 0, scaleT: 0, mus: '', musT: 0, chaseHold: 0, tauntT: 0, bumpT: 0, popped: new Set() };
   const death = { on: false, t: 0 };
   const dust = new Float32Array(tier.dust * 4);
@@ -95,9 +97,15 @@ export async function createRun(canvas, o) {
         if (d2(e.x, e.z, p.x, p.z) < 14) cam.shake = Math.max(cam.shake, 0.35);
         break;
       }
-      case 'growl': soundAt(pick(['growl1', 'growl2', 'growl3']), e.x, e.z, { vol: 0.95, ref: 4, rate: RAND(0.8, 0.92), y: 2.2 }); break;
-      case 'sniff': soundAt('sniff', e.x, e.z, { vol: 0.95, ref: 3, rate: RAND(0.7, 0.85), y: 2 }); break;
-      case 'slam': soundAt('slam', e.x, e.z, { vol: 1.25, ref: 5 }); soundAt('thud', e.x, e.z, { vol: 0.95, ref: 5 }); if (d2(e.x, e.z, p.x, p.z) < 10) cam.shake = Math.max(cam.shake, 0.2); break;
+      case 'growl': soundAt(pick(['growl1', 'growl2', 'growl3', 'snarl2', 'snarl3']), e.x, e.z, { vol: 0.95, ref: 4, rate: RAND(0.8, 0.92), y: 2.2 }); break;
+      case 'sniff': soundAt(pick(['sniff', 'sniff2']), e.x, e.z, { vol: 0.95, ref: 3, rate: RAND(0.7, 0.85), y: 2 }); break;
+      case 'slam': {
+        if (e.b) { soundAt('slam', e.x, e.z, { vol: 1.3, ref: 5 }); soundAt('thud', e.x, e.z, { vol: 1, ref: 5 }); soundAt(pick(['bang1', 'bang2']), e.x, e.z, { vol: 0.9, ref: 5 }); }
+        else { soundAt(pick(['dopen1', 'dopen2']), e.x, e.z, { vol: 0.9, ref: 4 }); soundAt(pick(['creak0', 'creak1', 'creak2']), e.x, e.z, { vol: 0.85, ref: 4, rate: RAND(0.7, 0.85) }); }
+        if (d2(e.x, e.z, p.x, p.z) < 10) cam.shake = Math.max(cam.shake, e.b ? 0.25 : 0.08);
+        break;
+      }
+      case 'rattle': soundAt('rattle', e.x, e.z, { vol: 1, ref: 4 }); break;
       case 'dopen': soundAt(pick(['dopen1', 'dopen2']), e.x, e.z, { vol: 0.85 }); soundAt(pick(['creak0', 'creak1', 'creak2']), e.x, e.z, { vol: 0.55, rate: RAND(0.8, 1) }); break;
       case 'dclose': soundAt(pick(['dclose1', 'dclose2']), e.x, e.z, { vol: 0.85 }); break;
       case 'key': {
@@ -146,6 +154,8 @@ export async function createRun(canvas, o) {
 
   function startDeath(e) {
     const p = P();
+    if (st.hidKind === 'locker') { HA.play('lockbang', { vol: 1.3 }); HA.play('clank1', { vol: 1, at: 0.1 }); }
+    st.hidKind = '';
     const a = e.a != null ? e.a : angTo(G.mon.x, G.mon.z, p.x, p.z);
     Object.assign(death, { on: true, t: 0, x: cam.ex, y: cam.ey, z: cam.ez, cx: null, cy: null, cz: null, vx: 0, vy: 0, vz: 0, dx: Math.sin(a), dz: Math.cos(a), flying: false, landed: false, wall: false, roll: 0, vroll: 0, pitch: 0, vp: 0, yaw: wrap(a + Math.PI), stage: 0 });
     cam.scare = 1; cam.scareT = 0;
@@ -257,26 +267,35 @@ export async function createRun(canvas, o) {
 
   function doUse(tg, p) {
     if (!tg) return;
-    if (tg.k === 'door') { act({ k: 'door', id: tg.id }); return; }
+    if (tg.k === 'door') { if (st.autoDoor && st.autoDoor.id === tg.id && performance.now() - st.autoDoor.t < 900) return; act({ k: 'door', id: tg.id }); return; }
     if (tg.k === 'pick') { act({ k: 'pick', id: tg.id }); return; }
     if (tg.k === 'hide') {
       const h = lv.hides[tg.id];
       st.entry = { x: p.x, z: p.z };
       p.hide = h.id;
       const pr = lv.props[h.prop];
-      const lx = Math.cos(pr.yaw), lz = -Math.sin(pr.yaw);
-      const side = ((p.x - h.x) * lx + (p.z - h.z) * lz) >= 0 ? 1 : -1;
-      const off = pr.k === 'bed' ? 0.3 : 0.15;
-      st.hv = { x: h.x + lx * side * off, z: h.z + lz * side * off, y: pr.k === 'bed' ? 0.12 : 0.5, yaw: Math.atan2(lx * side, lz * side) };
-      cam.yaw = st.hv.yaw; cam.pitch = pr.k === 'bed' ? 0.02 : 0;
-      HA.play('cloth', { vol: 0.8 });
+      if (pr.k === 'locker') {
+        const fx = Math.sin(pr.yaw), fz = Math.cos(pr.yaw);
+        st.hv = { x: h.x + fx * 0.33, z: h.z + fz * 0.33, y: 1.52, yaw: pr.yaw, kind: 'locker' };
+        cam.yaw = pr.yaw; cam.pitch = -0.04;
+        HA.play('lockin', { vol: 0.9 });
+      } else {
+        const lx = Math.cos(pr.yaw), lz = -Math.sin(pr.yaw);
+        const side = ((p.x - h.x) * lx + (p.z - h.z) * lz) >= 0 ? 1 : -1;
+        const off = pr.k === 'bed' ? 0.3 : 0.15;
+        st.hv = { x: h.x + lx * side * off, z: h.z + lz * side * off, y: pr.k === 'bed' ? 0.12 : 0.5, yaw: Math.atan2(lx * side, lz * side), kind: pr.k };
+        cam.yaw = st.hv.yaw; cam.pitch = pr.k === 'bed' ? 0.02 : 0;
+        HA.play('cloth', { vol: 0.8 });
+      }
+      st.hidKind = st.hv.kind;
       if (st.tutorial === 1) say('Hold your breath when it gets close', 'info', 3.4);
       return;
     }
     if (tg.k === 'unhide') {
       p.hide = -1;
       if (st.entry) { p.x = st.entry.x; p.z = st.entry.z; }
-      HA.play('cloth', { vol: 0.8 });
+      HA.play(st.hidKind === 'locker' ? 'lockout' : 'cloth', { vol: 0.8 });
+      st.hidKind = '';
       return;
     }
     if (tg.k === 'unlock') act({ k: 'unlock', i: tg.i });
@@ -291,13 +310,21 @@ export async function createRun(canvas, o) {
 
   const api = {
     G,
+    mapData() {
+      const p = P();
+      const team = Object.values(G.players).filter((q) => q.id !== me.id && !q.dead && !q.out).map((q) => ({ x: q.x, z: q.z, n: q.n }));
+      return { W: lv.W, H: lv.H, reg: lv.reg, hE: lv.hE, vE: lv.vE, seen, doors: lv.doors.map((d, i) => ({ x: d.x, z: d.z, h: d.h, open: G.doors[i] > 0.5 })), exit: lv.exit, me: { x: p.x, z: p.z, yaw: cam.yaw }, team, keys: G.keys, locks: G.locks.reduce((s, v) => s + v, 0), open: !!G.exitOpen };
+    },
     look(dx, dy) {
       const p = P();
       if (!p || cam.scare || death.on) return;
       const k = 0.0042 * (st.sens || o.sens || 1);
       cam.yaw = wrap(cam.yaw - dx * k);
       cam.pitch = clamp(cam.pitch - dy * k, -1.3, 1.25);
-      if (p.hide >= 0 && st.hv) { const rel = clamp(wrap(cam.yaw - st.hv.yaw), -1.25, 1.25); cam.yaw = wrap(st.hv.yaw + rel); cam.pitch = clamp(cam.pitch, -0.35, st.hv.y < 0.2 ? 0.16 : 0.45); }
+      if (p.hide >= 0 && st.hv) {
+        if (st.hv.kind === 'locker') { const rel = clamp(wrap(cam.yaw - st.hv.yaw), -0.55, 0.55); cam.yaw = wrap(st.hv.yaw + rel); cam.pitch = clamp(cam.pitch, -0.4, 0.25); }
+        else cam.pitch = clamp(cam.pitch, -0.35, st.hv.y < 0.2 ? 0.16 : 0.45);
+      }
     },
     move(x, y) { inp.mx = x; inp.mz = y; },
     run(b) { inp.run = !!b; },
@@ -458,6 +485,24 @@ export async function createRun(canvas, o) {
       net.send('hp', { x: Math.round(p.x * 100) / 100, z: Math.round(p.z * 100) / 100, y: Math.round(cam.yaw * 100) / 100, p: Math.round(cam.pitch * 100) / 100, c: p.cr ? 1 : 0, h: p.hide, f: p.fl, r: p.run, v: Math.round(p.mv * 10) / 10, b: p.hold ? 1 : 0, n: me.n, sv: me.sv, sl: o.slot || 0 });
     }
     if (death.on) stepDeath(dt);
+    seenT -= dt;
+    if (seenT <= 0) {
+      seenT = 0.2;
+      const sp = (p.dead || p.out) && st.spect && G.players[st.spect] ? G.players[st.spect] : p;
+      const cx0 = Math.floor(sp.x / 2), cz0 = Math.floor(sp.z / 2);
+      const ds = dynSolids(G, doorLeafBox);
+      for (let dz = -3; dz <= 3; dz++) for (let dx = -3; dx <= 3; dx++) {
+        const cx = cx0 + dx, cz = cz0 + dz;
+        if (cx < 0 || cz < 0 || cx >= lv.W || cz >= lv.H) continue;
+        const i = cz * lv.W + cx;
+        if (seen[i]) continue;
+        if ((dx || dz) && dx * dx + dz * dz > 7) continue;
+        const tx = cx * 2 + 1, tz = cz * 2 + 1;
+        if (!dx && !dz) { seen[i] = 1; continue; }
+        const vx = clamp(sp.x, tx - 0.9, tx + 0.9), vz = clamp(sp.z, tz - 0.9, tz + 0.9);
+        if (!lineBlocked(lv, sp.x, sp.z, tx, tz, ds) || !lineBlocked(lv, sp.x, sp.z, (vx + tx) / 2, (vz + tz) / 2, ds)) seen[i] = 1;
+      }
+    }
     camera(p, dt);
     audio(p, dt);
     scares(p, dt);
@@ -471,7 +516,7 @@ export async function createRun(canvas, o) {
       o.onHud({
         keys: G.keys, locks: G.locks.reduce((s, v) => s + v, 0), bat: p.bat / TUNE.battery, light: st.lightOn, stam: p.stam / TUNE.stamMax, item: p.item,
         prompt: tg ? tg.label : '', can: !!tg && tg.k !== 'none', hold: tg && tg.hold ? (st.useHold ? st.useT / tg.hold : 0) : -1, tk: tg ? tg.k : '',
-        hidden: p.hide >= 0, dead: !!p.dead, out: !!p.out, cr: !!p.cr, breath: st.hold, breathT: st.holdT / TUNE.breathMax, breathCd: st.holdCd > 0,
+        hidden: p.hide >= 0 ? (st.hidKind || 'bed') : '', dead: !!p.dead, out: !!p.out, cr: !!p.cr, breath: st.hold, breathT: st.holdT / TUNE.breathMax, breathCd: st.holdCd > 0,
         near: dm < 9 ? 1 - dm / 9 : 0, scare: !!cam.scare || death.on, toasts: st.toastQ.map((t) => ({ text: t.text, k: t.k, at: t.at })), phase: G.phase, spect: st.spect ? nameOf(st.spect) : '',
         team: Object.values(G.players).filter((q) => q.id !== me.id).map((q) => ({ id: q.id, n: q.n, dead: !!q.dead, out: !!q.out })),
       });
@@ -502,7 +547,7 @@ export async function createRun(canvas, o) {
     }
     if (!open && G.doorTo[best] < 0.5 && Math.abs(across) < 0.75 && Math.abs(along) < 0.42 && ml < p.mv * dt * 0.5 && wantIn) {
       st.bumpT += dt;
-      if (st.bumpT > 0.22) { st.bumpT = -1.2; act({ k: 'door', id: best }); }
+      if (st.bumpT > 0.22) { st.bumpT = -1.2; st.autoDoor = { id: best, t: performance.now() }; act({ k: 'door', id: best }); }
     } else if (st.bumpT > 0) st.bumpT = 0;
     else if (st.bumpT < 0) st.bumpT = Math.min(0, st.bumpT + dt);
   }
@@ -649,14 +694,27 @@ export async function createRun(canvas, o) {
     }
     st.scareT -= dt;
     if (st.scareT <= 0) {
-      st.scareT = RAND(40, 75);
-      if (dm > 12 && M.st !== 'chase') {
-        const k = Math.random();
-        const a = cam.vy + Math.PI + RAND(-0.9, 0.9), r = RAND(5, 9);
-        const ax = cam.ex + Math.sin(a) * r, az = cam.ez + Math.cos(a) * r;
-        if (k < 0.4) { soundAt('slam', ax, az, { vol: 1.3, ref: 5 }); soundAt('thud', ax, az, { vol: 1 }); cam.shake = Math.max(cam.shake, 0.15); }
-        else if (k < 0.7) soundAt(pick(['laugh1', 'laugh2']), ax, az, { vol: 0.75, ref: 4, rate: RAND(0.78, 0.9), y: 1.7 });
-        else HA.play('iseew', { pos: [ax, 1.7, az], vol: 0.8, ref: 4 });
+      const prog = G.keys / 3;
+      st.scareT = RAND(20, 38) * (1 - prog * 0.3);
+      if (dm > 10 && M.st !== 'chase') {
+        const kinds = ['slam', 'laugh', 'whisper', 'scream', 'pipe', 'glass', 'knock', 'run', 'cry', 'breath', 'drone', 'chains', 'wheel', 'scrape'].filter((k) => k !== st.lastScare && !(k === 'breath' && p.hide >= 0));
+        const k = pick(kinds);
+        st.lastScare = k;
+        const at = (r0, r1, back) => { const a = cam.vy + (back ? Math.PI : 0) + RAND(-1.3, 1.3), r = RAND(r0, r1); return [cam.ex + Math.sin(a) * r, cam.ez + Math.cos(a) * r]; };
+        if (k === 'slam') { const [x, z] = at(6, 11, true); soundAt('slam', x, z, { vol: 1.3, ref: 5 }); soundAt('thud', x, z, { vol: 1 }); cam.shake = Math.max(cam.shake, 0.15); }
+        else if (k === 'laugh') { const [x, z] = at(6, 10, true); soundAt(pick(['laugh1', 'laugh2']), x, z, { vol: 0.75, ref: 4, rate: RAND(0.78, 0.9), y: 1.7, rev: 0.4 }); }
+        else if (k === 'whisper') { const [x, z] = at(0.8, 1.4, true); soundAt(Math.random() < 0.5 ? 'iseew' : `whisper${Math.floor(Math.random() * 6)}`, x, z, { vol: 0.85, ref: 2, y: 1.7 }); }
+        else if (k === 'scream') { const [x, z] = at(11, 17, false); soundAt('farscream', x, z, { vol: 0.75, ref: 6, rate: RAND(0.85, 1), rev: 0.75, y: 1.7 }); }
+        else if (k === 'pipe') { const [x, z] = at(5, 10, false); soundAt(pick(['pipe1', 'pipe2']), x, z, { vol: 1, ref: 5, rate: RAND(0.7, 0.9), rev: 0.7, y: 2.3 }); cam.shake = Math.max(cam.shake, 0.08); }
+        else if (k === 'glass') { const [x, z] = at(8, 14, false); soundAt('glass', x, z, { vol: 0.9, ref: 5, rate: RAND(0.85, 1), rev: 0.5 }); }
+        else if (k === 'knock') { const [x, z] = at(2.2, 3.5, Math.random() < 0.5); soundAt('knock3', x, z, { vol: 1, ref: 3, rate: RAND(0.85, 1), y: 1.3 }); }
+        else if (k === 'run') { const [x, z] = at(7, 12, false); soundAt('runabove', x, z, { vol: 0.8, ref: 5, rate: RAND(0.9, 1.05), rev: 0.35, y: 2.6 }); }
+        else if (k === 'cry') { const [x, z] = at(13, 20, false); soundAt(pick(['howl', 'screech1', 'screech2']), x, z, { vol: 0.65, ref: 7, rate: RAND(0.6, 0.75), rev: 0.8, y: 1.8 }); }
+        else if (k === 'breath') { const a = cam.vy + Math.PI; soundAt('breathc', cam.ex + Math.sin(a) * 0.7, cam.ez + Math.cos(a) * 0.7, { vol: 0.7, ref: 1.5, rate: RAND(0.75, 0.85), y: 1.7 }); }
+        else if (k === 'drone') HA.play('drone', { vol: 0.55, rate: RAND(0.8, 1) });
+        else if (k === 'chains') { const [x, z] = at(6, 11, false); soundAt('chains', x, z, { vol: 0.85, ref: 4, rate: RAND(0.8, 0.95), rev: 0.5, y: 1.6 }); }
+        else if (k === 'wheel') { const [x, z] = at(3, 6, true); soundAt('wheel', x, z, { vol: 0.9, ref: 3, rate: RAND(0.7, 0.85) }); }
+        else { const [x, z] = at(6, 12, false); soundAt('scrape', x, z, { vol: 0.85, ref: 4, rate: RAND(0.6, 0.8), rev: 0.5 }); }
       }
     }
   }
@@ -665,6 +723,7 @@ export async function createRun(canvas, o) {
     const S = mon.S;
     let want = M.clip, t0 = -1;
     const lockRoot = death.on && (death.stage === 0 || M.st === 'attack');
+    const clampRoot = (hp) => { if (lockRoot) { hp[0] = 0; hp[2] = 0; } else { hp[0] = clamp(hp[0], -0.1, 0.1); hp[2] = clamp(hp[2], -0.1, 0.1); } };
     if (lockRoot) { want = death.stage === 0 ? 'm_roar' : 'm_swipe'; t0 = death.stage === 0 ? 0.5 : 0.95; }
     if (want !== S.cur && MA[want]) animPlay(S, want, t0 >= 0 ? t0 : want === 'm_roar' || want === 'z_nbite' || want === 'm_swipe' || want === 'm_punch' ? 0 : Math.random() * 0.5, want === 'm_run' ? 0.2 : t0 >= 0 ? 0.12 : 0.25);
     const c = MA[S.cur];
@@ -672,11 +731,13 @@ export async function createRun(canvas, o) {
     animTick(S, dt);
     const sample = (name, t, q, hp) => { const cl = MA[name] || MA.m_idle; sampleClip(cl, MM.nb, t, q, hp); const k = MM.hipsH / cl.srcH; hp[0] *= k; hp[1] *= k; hp[2] *= k; };
     sample(S.cur, S.t, mon.q, mon.hp);
-    if (lockRoot) { mon.hp[0] = 0; mon.hp[2] = 0; }
+    clampRoot(mon.hp);
     let Q = mon.q, HP = mon.hp;
-    if (S.prev) { sample(S.prev, S.pt, mon.q2, mon.hp2); if (lockRoot) { mon.hp2[0] = 0; mon.hp2[2] = 0; } blendInto(mon.q2, mon.hp2, mon.q, mon.hp, MM.nb, S.fade); Q = mon.q2; HP = mon.hp2; }
+    if (S.prev) { sample(S.prev, S.pt, mon.q2, mon.hp2); clampRoot(mon.hp2); blendInto(mon.q2, mon.hp2, mon.q, mon.hp, MM.nb, S.fade); Q = mon.q2; HP = mon.hp2; }
     poseSkin(MM, Q, HP, 1, mon.W, mon.skin);
-    const model = m4.pose(M.x, 0, M.z, M.yaw, 0, 0, MONK);
+    const [rx, rz] = collideCircle(lv, M.x, M.z, 0.46);
+    mon.rx = rx; mon.rz = rz;
+    const model = m4.pose(rx, 0, rz, M.yaw, 0, 0, MONK);
     const W = mon.W;
     const hx = W[HEAD * 12 + 3], hy = W[HEAD * 12 + 7], hz = W[HEAD * 12 + 11];
     M.hx = model[0] * hx + model[4] * hy + model[8] * hz + model[12];
@@ -808,10 +869,10 @@ export async function createRun(canvas, o) {
     const lowBat = p.bat < 35 ? 0.55 + 0.45 * clamp(Math.sin(t * 9) * 0.5 + Math.sin(t * 23.7) * 0.5 + 0.6, 0, 1) : 1;
     const brown = dmc < 6 ? 0.45 + 0.55 * clamp(0.5 + 0.5 * Math.sin(t * 13 + Math.sin(t * 3.1) * 4), 0, 1) : 1;
     cam.brown += (brown - cam.brown) * Math.min(1, dt * 10);
-    if (mine && st.lightOn) {
+    if (mine && st.lightOn && !(p.hide >= 0 && st.hidKind === 'locker')) {
       const low = eye[1] < 0.6;
       const fp = [eye[0] + right[0] * (low ? 0.08 : 0.16), low ? Math.max(0.3, eye[1] + 0.12) : eye[1] - 0.16, eye[2] + right[2] * (low ? 0.08 : 0.16)];
-      const k = lowBat * cam.brown;
+      const k = lowBat * cam.brown * (p.hide >= 0 ? 0.7 : 1);
       flash = { p: fp, d: fwd, range: 18, cosO: Math.cos(0.5), cosI: Math.cos(0.17), c: [FLASH_C[0] * k, FLASH_C[1] * k, FLASH_C[2] * k] };
     } else if (!mine && st.spect) {
       const s = G.players[st.spect];
@@ -841,11 +902,12 @@ export async function createRun(canvas, o) {
     const vf = 2 * Math.atan(Math.tan(1.62 / 2) / (W / H));
     const fov = clamp(vf, 0.9, 1.25) * (death.on && death.stage === 0 ? 0.85 : 1);
     const hidden = p.hide >= 0;
+    cam.expo += ((hidden && !death.on ? (st.hidKind === 'locker' ? 2.4 : 1.5) : 1) - cam.expo) * Math.min(1, dt * 1.5);
     R.frame({
       eye, at: [eye[0] + fwd[0], eye[1] + fwd[1], eye[2] + fwd[2]], up, fov, near: 0.05, far: 26,
       statics, skins, flash, flashes: flashes.slice(0, 3), shadows: tier.sh > 0, shadowHQ: tier.shHQ, lights: L8.slice(0, 8), glows,
       amb: hidden ? [0.008, 0.009, 0.012] : [0.012, 0.0135, 0.018], fog: [0.0035, 0.0045, 0.0065], fogD: 0.072, wallH: WALL_H, mat: tier.mat,
-      post: [1.0 + cam.flash * 1.5, 0.32, cam.red, cam.fade], post2: [tier.beam, cam.sat, 0, 0], hand,
+      post: [(1.0 + cam.flash * 1.5) * cam.expo, 0.32, cam.red, cam.fade], post2: [tier.beam, cam.sat, 0, 0], hand,
     });
   }
   if (o.tutorial) setTimeout(() => say('Find 3 keys. It hunts by sound', 'info', 4.2), 1200);
