@@ -194,7 +194,7 @@ export function AiStickerMaker({ userId, onClose, onDone }) {
           <div role="button" aria-label="Close AI sticker" onClick={onClose} style={{ width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={24} /></div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 17, fontWeight: 800 }}>AI sticker</div>
-            <div style={{ fontSize: 12.5, color: 'rgba(255, 255, 255, 0.6)' }}>{stage === 'pick' ? 'Pick the one you like' : 'ZChat Bot draws it for you'}</div>
+            <div style={{ fontSize: 12.5, color: 'rgba(255, 255, 255, 0.6)' }}>{stage === 'pick' ? 'Pick the one you like' : 'Mira draws it for you'}</div>
           </div>
         </div>
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '8px 16px 12px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
@@ -259,15 +259,16 @@ export function AiStickerMaker({ userId, onClose, onDone }) {
   );
 }
 const AI_STYLES = [
+  ['realistic', 'Photo'], ['portrait', 'Portrait'], ['golden', 'Golden hour'], ['film', 'Film'], ['mono', 'B&W'], ['cinema', 'Cinematic'],
   ['cartoon', 'Cartoon'], ['anime', 'Anime'], ['threed', '3D'], ['comic', 'Comic'], ['watercolor', 'Watercolour'], ['sticker', 'Sticker'], ['clay', 'Clay'], ['pixel', 'Pixel art'],
-  ['pop', 'Pop art'], ['sketch', 'Sketch'], ['oil', 'Oil paint'], ['neon', 'Neon'], ['dreamy', 'Dreamy'], ['minimal', 'Minimal'], ['realistic', 'Realistic'],
+  ['pop', 'Pop art'], ['sketch', 'Sketch'], ['oil', 'Oil paint'], ['neon', 'Neon'], ['dreamy', 'Dreamy'], ['minimal', 'Minimal'],
 ];
 const AI_IDEAS = {
-  picture: ['A tiny cat astronaut floating past Saturn', 'A rainy Tokyo street at night with neon reflections', 'A cosy reading nook with fairy lights', 'A dragon made of cherry blossoms', 'A retro robot serving ice cream', 'A lighthouse in a purple storm', 'A fox asleep in autumn leaves', 'A floating island with a waterfall', 'A paper boat sailing through a teacup', 'A city built inside a snow globe'],
+  picture: ['Fresh mangoes on a wooden table in soft morning light', 'Misty tea hills at sunrise with a winding road', 'A golden retriever puppy running through tall grass', 'A rainy city street at night with warm shop lights', 'A cosy cafe corner with a latte and a book', 'Fishing boats on a quiet beach at dawn', 'A vintage car parked on a sunny street', 'A bowl of hot ramen with steam rising', 'A tiny cat astronaut floating past Saturn', 'A lighthouse on a cliff during a storm'],
   wallpaper: ['Soft violet clouds at dawn', 'A dark forest full of fireflies', 'Gentle ocean waves at sunset', 'Night sky over snowy mountains', 'A pastel gradient with paper texture', 'Rain on a window with city lights behind', 'A lavender field under a big moon', 'Black marble with thin gold veins', 'Cherry blossom petals drifting over water', 'Northern lights over a quiet lake'],
   profile: ['A smiling red panda with round glasses', 'A cool cat in a leather jacket', 'A friendly robot holding a flower', 'A koala astronaut', 'A fox in a hoodie with a sunset behind', 'A penguin holding a tiny coffee', 'A lion wearing sunglasses', 'A happy corgi with a bow tie'],
 };
-const AI_WAIT_LINES = ['Reading your words', 'Sketching the idea', 'Mixing colours', 'Adding the details', 'Almost there'];
+const AI_WAIT_LINES = ['Reading your words', 'Setting up the shot', 'Finding the light', 'Adding the details', 'Almost there'];
 const AI_KIND_LABEL = { picture: 'Picture', wallpaper: 'Wallpaper', profile: 'Profile photo', avatar: 'Avatar' };
 
 function aiSetupMessage(error) {
@@ -279,7 +280,7 @@ function aiSetupMessage(error) {
 async function startAiImage(myId, job) {
   let id = '';
   try { id = crypto.randomUUID(); } catch { id = `${Date.now().toString(16)}-0000-4000-8000-${Math.random().toString(16).slice(2, 14).padEnd(12, '0')}`; }
-  const row = { id, user_id: myId, kind: job.kind, prompt: (job.prompt || '').slice(0, 600), style: job.style || 'cartoon', ratio: job.ratio || (job.kind === 'wallpaper' ? '9:16' : '1:1'), status: 'queued' };
+  const row = { id, user_id: myId, kind: job.kind, prompt: (job.prompt || '').slice(0, 600), style: job.style || 'realistic', ratio: job.ratio || (job.kind === 'wallpaper' ? '9:16' : '1:1'), status: 'queued' };
   const { error } = await supabase.from('ai_images').insert(row);
   if (error) return { error: aiSetupMessage(error) };
   let token = '';
@@ -359,7 +360,7 @@ export function AiStudioPage({ myId, mode = 'image', startKind, chatTitle, onClo
   const kinds = [['picture', 'Picture'], ['wallpaper', 'Wallpaper'], ...(onUseAvatar ? [['profile', 'Profile photo']] : [])];
   const [kind, setKind] = useState(avatarMode ? 'avatar' : (startKind && kinds.some(([k]) => k === startKind) ? startKind : 'picture'));
   const [prompt, setPrompt] = useState(initialPrompt || '');
-  const [style, setStyle] = useState(avatarMode ? 'threed' : 'dreamy');
+  const [style, setStyle] = useState(avatarMode ? 'portrait' : 'realistic');
   const [ratio, setRatio] = useState('1:1');
   const [photo, setPhoto] = useState(null);
   const [ideaSeed, setIdeaSeed] = useState(0);
@@ -510,7 +511,7 @@ export function AiStudioPage({ myId, mode = 'image', startKind, chatTitle, onClo
                 </div>
               )}
               <div>
-                <textarea value={prompt} onChange={(e) => { setPrompt(e.target.value.slice(0, 300)); if (note) setNote(''); }} placeholder={kind === 'wallpaper' ? 'Soft violet clouds at dawn' : kind === 'profile' ? 'A smiling red panda with round glasses' : 'A tiny cat astronaut floating past Saturn'} aria-label="Describe your picture" rows={3} style={{ ...inputStyle(theme), resize: 'none', minHeight: 84, lineHeight: 1.4, marginTop: kinds.length > 1 && !startKind ? 0 : 6 }} />
+                <textarea value={prompt} onChange={(e) => { setPrompt(e.target.value.slice(0, 300)); if (note) setNote(''); }} placeholder={kind === 'wallpaper' ? 'Soft violet clouds at dawn' : kind === 'profile' ? 'A smiling red panda with round glasses' : 'Fresh mangoes on a wooden table in morning light'} aria-label="Describe your picture" rows={3} style={{ ...inputStyle(theme), resize: 'none', minHeight: 84, lineHeight: 1.4, marginTop: kinds.length > 1 && !startKind ? 0 : 6 }} />
                 <div role="list" aria-label="Ideas" style={{ display: 'flex', flexDirection: 'column', paddingTop: 6 }}>
                   {ideas.map((t, i) => (
                     <div key={t} role="listitem" aria-label={`Idea ${t}`} onClick={() => { hapticTap(); setPrompt(t); setNote(''); }} className="zchat-row-press"
@@ -1290,14 +1291,14 @@ export function EnglishPracticePage({ myId, onClose, onSnack }) {
   };
   if (phase === 'setup') {
     return (
-      <FullPage title="Practice English" subtitle="With ZChat Bot" onBack={onClose} zIndex={78}
+      <FullPage title="Practice English" subtitle="With Mira" onBack={onClose} zIndex={78}
         footer={(
           <div style={{ display: 'flex', gap: 8 }}>
             {canVoice && <div style={{ flex: 1 }}><BigButton label="Talk out loud" tone="plain" onClick={() => start(true)} /></div>}
             <div style={{ flex: 1 }}><BigButton label="Start chatting" onClick={() => start(false)} /></div>
           </div>
         )}>
-        <div style={{ fontSize: 14, color: theme.muted, lineHeight: 1.55, padding: '8px 4px 2px' }}>Chat in English at your own pace. ZChat Bot keeps the talk going and shows small fixes under your messages. Tap a fix to see why.</div>
+        <div style={{ fontSize: 14, color: theme.muted, lineHeight: 1.55, padding: '8px 4px 2px' }}>Chat in English at your own pace. Mira keeps the talk going and shows small fixes under your messages. Tap a fix to see why.</div>
         <KitSection title="Your level">
           <SegmentedControl dense value={level} onChange={(k) => { hapticTap(); setLevel(k); }} options={EP_LEVELS} />
         </KitSection>
@@ -1480,7 +1481,7 @@ export function FlashDecksPage({ myId, onClose, onShare, onSnack }) {
       {list === null ? (
         fail !== null ? <LoadFail code={fail} onRetry={() => { setFail(null); setTick((n) => n + 1); }} /> : <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><Spinner size={22} color={theme.muted} /></div>
       ) : list.length === 0 ? (
-        <EmptyState art="saved" title="No decks yet" text="Paste your notes and ZChat Bot turns them into cards you can study." action={<PillButton primary label="Make flashcards" onClick={() => setMake(true)} />} />
+        <EmptyState art="saved" title="No decks yet" text="Paste your notes and Mira turns them into cards you can study." action={<PillButton primary label="Make flashcards" onClick={() => setMake(true)} />} />
       ) : (
         <div role="list" aria-label="Your decks" style={{ paddingTop: 6 }}>
           {list.map((d, i) => (
@@ -1573,7 +1574,7 @@ export function FlashMakePage({ myId, text, source, onClose, onShare, onSnack })
           <SegmentedControl value={n} onChange={(k) => { hapticTap(); setN(k); }} options={[['5', '5'], ['10', '10'], ['15', '15'], ['20', '20']]} />
         </div>
         {note && <div role="alert" style={{ fontSize: 13.5, color: theme.danger, lineHeight: 1.45 }}>{note}</div>}
-        <div style={{ fontSize: 12.5, color: theme.muted, lineHeight: 1.5 }}>ZChat Bot only reads the notes on this page. Cards come from AI, so check anything important.</div>
+        <div style={{ fontSize: 12.5, color: theme.muted, lineHeight: 1.5 }}>Mira only reads the notes on this page. Cards come from AI, so check anything important.</div>
       </div>
       {made && <FlashStudyPage myId={myId} deck={made} onClose={onClose} onShare={onShare} onSnack={onSnack} />}
     </FullPage>

@@ -480,6 +480,7 @@ self.addEventListener('push', (event) => {
       badge: '/badge-192.png',
       data: { url: data.url, count, baseTitle: data.title, acc, at: Date.now() },
     };
+    if (typeof data.image === 'string' && /^https:\/\//.test(data.image)) options.image = data.image;
     if (quiet) options.silent = true;
     else if (vibe) options.vibrate = vibe;
     if (tag) { options.tag = tag; options.renotify = !quiet && data.renotify !== false; }

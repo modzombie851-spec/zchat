@@ -107,6 +107,9 @@ const GROUPS = [
       ['Bolt War Old fort walls, towers, banners, barrels and props, KayKit Dungeon Remastered', 'Kay Lousberg', 'https://kaylousberg.itch.io/kaykit-dungeon-remastered', 'CC0'],
       ['Bolt War bolt bots, Animated Mech Pack', 'Quaternius', 'https://opengameart.org/content/animated-mech-pack', 'CC0'],
       ['Bolt War monsters, Textured Cute Monster Pack', 'Quaternius', 'https://opengameart.org/content/textured-cute-monster-pack', 'CC0'],
+      ['Bolt War heroes Wisp, Zorp, Glim, Fawn, Grim, Oak and Ember, Cute Animated Monsters', 'Quaternius', 'https://quaternius.com', 'CC0'],
+      ['Gift boxes, Holiday Kit', 'Kenney', 'https://kenney.nl/assets/holiday-kit', 'CC0'],
+      ['Rock paper scissors hands, from the generic hand in WebXR Input Profiles', 'Immersive Web Community Group, copyright Amazon.com, Inc. or its affiliates', 'https://github.com/immersive-web/webxr-input-profiles', 'MIT'],
     ],
   },
   {

@@ -126,6 +126,8 @@ export function useCloudRoom({ g, id, myId, enabled = true, meta, reg, sv = fals
   const metas = useRef({});
   const metaRef = useRef(meta || {});
   metaRef.current = meta || {};
+  const jaRef = useRef(0);
+  const [mv, setMv] = useState(0);
   const deliver = (payload) => {
     const set = subs.current.get(payload.t);
     if (set) set.forEach((fn) => { try { fn(payload); } catch {} });
@@ -135,14 +137,15 @@ export function useCloudRoom({ g, id, myId, enabled = true, meta, reg, sv = fals
   useEffect(() => {
     if (!enabled || !id || !myId || !cloudOn()) { setPeers([]); return undefined; }
     const list = new Set();
+    jaRef.current = 0;
     const sync = () => { const next = [...list].filter((p) => p !== myId).sort(); setPeers((prev) => (prev.join('|') === next.join('|') ? prev : next)); };
     const c = openCloud({
-      g, r: id, reg, meta: metaRef.current, sv,
+      g, r: id, reg, meta: { ...metaRef.current, jv: 1 }, sv,
       onState: (s) => setState((p) => ({ ...p, ...s })),
       onMsg: (m) => {
-        if (m.t === '$hi') { if (m.srv) setState((p) => (p.srv ? p : { ...p, srv: 1 })); list.clear(); for (const [p, mm] of m.peers || []) { list.add(p); metas.current[p] = mm; deliver({ t: 'hi', from: p, m: mm, at: Date.now() }); } sync(); return; }
+        if (m.t === '$hi') { if (m.srv) setState((p) => (p.srv ? p : { ...p, srv: 1 })); list.clear(); if (!jaRef.current) jaRef.current = Number(m.at) || Date.now(); for (const [p, mm] of m.peers || []) { list.add(p); metas.current[p] = mm; deliver({ t: 'hi', from: p, m: mm, at: Date.now() }); } sync(); setMv((v) => v + 1); setTimeout(() => { if (conn.current && conn.current.ok) conn.current.send({ t: '$meta', m: { ...metaRef.current, jv: 1, ja: jaRef.current } }); }, 0); return; }
         if (m.t === '$join') { list.add(m.id); metas.current[m.id] = m.m; sync(); deliver({ t: 'hi', from: m.id, m: m.m, at: Date.now() }); return; }
-        if (m.t === '$meta') { metas.current[m.id] = m.m; deliver({ t: 'hey', from: m.id, m: m.m, at: Date.now() }); return; }
+        if (m.t === '$meta') { metas.current[m.id] = m.m; setMv((v) => v + 1); deliver({ t: 'hey', from: m.id, m: m.m, at: Date.now() }); return; }
         if (m.t === '$leave') { list.delete(m.id); sync(); deliver({ t: 'bye', from: m.id, at: Date.now() }); return; }
         if (!m.from || m.from === myId || !m.t) return;
         if (!list.has(m.from)) { list.add(m.from); sync(); }
@@ -153,7 +156,13 @@ export function useCloudRoom({ g, id, myId, enabled = true, meta, reg, sv = fals
     return () => { c.close(); conn.current = null; list.clear(); setPeers([]); };
   }, [enabled, id, myId, g, reg, sv]);
   const metaKey = JSON.stringify(meta || {});
-  useEffect(() => { if (conn.current && conn.current.ok) conn.current.send({ t: '$meta', m: metaRef.current }); }, [metaKey]);
+  useEffect(() => { if (conn.current && conn.current.ok) conn.current.send({ t: '$meta', m: jaRef.current ? { ...metaRef.current, jv: 1, ja: jaRef.current } : { ...metaRef.current, jv: 1 } }); }, [metaKey]);
+  const lead = useMemo(() => {
+    if (!jaRef.current) return null;
+    let best = myId, bj = jaRef.current;
+    for (const p of peers) { const pm = metas.current[p] || {}; if (!pm.jv) return null; const j = Number(pm.ja) || 0; if (j && (j < bj || (j === bj && p < best))) { best = p; bj = j; } }
+    return best;
+  }, [peers, mv, myId]);
   const on = useMemo(() => (t, fn) => {
     let set = subs.current.get(t);
     if (!set) { set = new Set(); subs.current.set(t, set); }
@@ -161,5 +170,5 @@ export function useCloudRoom({ g, id, myId, enabled = true, meta, reg, sv = fals
     return () => set.delete(fn);
   }, []);
   const send = (t, data) => (conn.current ? conn.current.send({ ...(data || {}), t }) : false);
-  return useMemo(() => ({ peers, send, on, me: myId, here: peers.length > 0, ok: state.ok, rtt: state.rtt, err: state.err, srv: !!state.srv, metas: metas.current }), [peers, myId, state.ok, state.rtt, state.err, state.srv]);
+  return useMemo(() => ({ peers, send, on, me: myId, here: peers.length > 0, ok: state.ok, rtt: state.rtt, err: state.err, srv: !!state.srv, metas: metas.current, lead }), [peers, myId, state.ok, state.rtt, state.err, state.srv, lead]);
 }

@@ -31,7 +31,7 @@ const RESTYLE_LOOK = {
 };
 const UNSAFE_WORDS = /\b(nude|nudes|naked|nsfw|porn\w*|sex|sexy|sexual|boobs?|breasts?|penis|vagina|genitals?|lingerie|stripper|hentai|gore|gory|decapitat\w*|dismember\w*|nazi\w*|swastika|kkk|hitler|isis|suicide|self harm|cocaine|heroin|meth)\b/i;
 const MSG = {
-  limited: 'ZChat Bot is busy drawing right now. Try again in a minute.',
+  limited: 'Mira is busy drawing right now. Try again in a minute.',
   resting: 'AI pictures are resting for today. Try again tomorrow.',
   off: 'AI pictures are not switched on yet.',
   sticker: 'Let us keep stickers friendly. Try describing something else.',

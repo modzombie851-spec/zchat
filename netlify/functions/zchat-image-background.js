@@ -24,8 +24,15 @@ const STYLES = {
   neon: 'in a neon cyberpunk style with glowing colours',
   dreamy: 'in a dreamy pastel style with soft light',
   minimal: 'as a minimal flat illustration with few colours',
-  realistic: 'as a realistic photograph with natural light',
+  realistic: 'as a true to life professional photograph taken on a full frame camera with a 35mm lens, natural light, accurate colours and fine real world detail',
+  portrait: 'as a professional studio portrait photograph taken with an 85mm lens, soft key light with gentle fill, shallow depth of field, sharp eyes and natural skin texture',
+  golden: 'as a professional photograph taken at golden hour, warm low sun, long soft shadows, gentle natural lens flare and true colours',
+  film: 'as a 35mm film photograph with warm natural film colours, fine real grain, soft contrast and an authentic analog look',
+  mono: 'as a black and white fine art photograph with a rich tonal range, deep blacks, clean highlights and natural grain',
+  cinema: 'as a cinematic film still shot with an anamorphic lens, moody teal and orange colour grade, dramatic natural lighting and shallow depth of field',
 };
+const PHOTO_STYLES = new Set(['realistic', 'portrait', 'golden', 'film', 'mono', 'cinema']);
+const PHOTO_GUARD = 'It must look like a real photo a person took with a camera, not an illustration, painting or 3D render. Realistic proportions, natural hands and faces, real skin texture with no plastic or over smoothed look, believable lighting and no oversaturated colours.';
 
 function mfaPending(user, token) {
   try {
@@ -59,15 +66,17 @@ function clean(s, max) {
 }
 
 function promptFor(row) {
-  const style = STYLES[row.style] || STYLES.cartoon;
+  const style = STYLES[row.style] || STYLES.realistic;
   const wish = clean(row.prompt, 600);
+  const guard = PHOTO_STYLES.has(row.style) ? PHOTO_GUARD : '';
   if (row.kind === 'avatar') {
     return [
       `Turn the person in this photo into a portrait avatar ${style}.`,
       'Keep the same face shape, skin tone, hair, eyes and expression so friends recognise them.',
       'Head and shoulders, centred, facing the camera, friendly and flattering.',
-      'Simple clean background in one soft colour.',
+      guard ? 'Plain studio backdrop with soft even light.' : 'Simple clean background in one soft colour.',
       wish ? `Extra wishes: ${wish}.` : '',
+      guard,
       'No text, no watermark, no logo, no frame.',
     ].filter(Boolean).join(' ');
   }
@@ -75,17 +84,19 @@ function promptFor(row) {
     return [
       `${wish || 'A calm scene'}, ${style}.`,
       'This is a phone wallpaper for behind a chat, so keep it calm and uncluttered with gentle detail and soft contrast so chat bubbles stay easy to read.',
+      guard,
       'Fill the whole tall frame. No text, no watermark, no logo.',
-    ].join(' ');
+    ].filter(Boolean).join(' ');
   }
   if (row.kind === 'profile') {
     return [
       `${wish || 'A friendly character'}, ${style}.`,
       'A square profile picture with the subject centred and a clean simple background.',
+      guard,
       'No text, no watermark, no logo.',
-    ].join(' ');
+    ].filter(Boolean).join(' ');
   }
-  return `${wish}, ${style}. No watermark or logo. Do not add text unless the description asks for it.`;
+  return [`${wish}, ${style}.`, guard, 'No watermark or logo. Do not add text unless the description asks for it.'].filter(Boolean).join(' ');
 }
 
 async function geminiImage(parts, ratio) {

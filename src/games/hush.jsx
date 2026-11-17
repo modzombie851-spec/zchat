@@ -364,7 +364,7 @@ function HushInner({ me, myId, join, friends = [], online = [], onInvite, onSear
   relayRef.current = relay;
   const peers = relay.peers || [];
   const present = useMemo(() => [myId, ...peers].filter(Boolean).sort(), [myId, peers.join(',')]);
-  const leader = present[0] || myId;
+  const leader = (relay.lead && present.includes(relay.lead) ? relay.lead : present[0]) || myId;
   const isLeader = !inRoom || leader === myId;
   const leaderRef = useRef(isLeader);
   leaderRef.current = isLeader;

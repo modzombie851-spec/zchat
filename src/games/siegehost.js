@@ -23,7 +23,7 @@ function heroPack(W, h) {
   const mv = Math.hypot(h.vx || 0, h.vz || 0) > 0.4 ? 1 : 0;
   const f = mv | (h.hid ? 2 : 0) | (W.t - h.seen < 1.2 ? 4 : 0) | (h.pw > 0 ? 8 : 0) | (h.ocT > 0 ? 16 : 0) | (h.shield > 0 ? 32 : 0) | (h.rfT > 0 ? 64 : 0) | (h.spT > 0 ? 128 : 0) | (h.dashT > 0 ? 256 : 0) | (h.jump ? 512 : 0);
   const o = [Math.round(h.x * 20), Math.round(h.z * 20), Math.round(h.yaw * 100), Math.round(h.hp), h.st, f, Math.round(h.sup * 100), Math.round(h.rv * 100), Math.round(h.downT * 10), Math.round(h.max), Math.round((h.shield || 0) / 10), h.lv | 0];
-  const f2 = ((h.clkT || 0) > 0 ? 1 : 0) | ((h.recT || 0) > 0 ? 2 : 0) | ((h.stunT || 0) > 0 ? 4 : 0) | (h.buffs && h.buffs.fury ? 8 : 0) | (h.buffs && h.buffs.flow ? 16 : 0) | ((h.sprT || 0) > 0 ? 32 : 0) | ((h.spawnT || 0) > 0 ? 64 : 0) | (h.buffs && h.buffs.guard ? 128 : 0);
+  const f2 = ((h.clkT || 0) > 0 ? 1 : 0) | ((h.recT || 0) > 0 ? 2 : 0) | ((h.stunT || 0) > 0 ? 4 : 0) | (h.buffs && h.buffs.fury ? 8 : 0) | (h.buffs && h.buffs.flow ? 16 : 0) | ((h.sprT || 0) > 0 ? 32 : 0) | ((h.spawnT || 0) > 0 ? 64 : 0) | (h.buffs && h.buffs.guard ? 128 : 0) | ((h.phT || 0) > 0 ? 256 : 0);
   o.push(h.tl | 0, Math.round((h.respT || 0) * 10), f2, Math.round(((h.stats && h.stats.hd) || 0) / 10));
   return o;
 }
@@ -45,7 +45,7 @@ function applyPack(W, h, p, now, at) {
   if (p.length >= 16) {
     h.tl = clamp(p[12] | 0, 1, T.TL_MAX); h.respT = clamp(num(p[13]) / 10, 0, 60);
     const f2 = p[14] | 0;
-    h.clkT = f2 & 1 ? 0.35 : 0; h.recV = !!(f2 & 2); h.stunV = !!(f2 & 4); h.sprV = !!(f2 & 32); h.spawnV = !!(f2 & 64);
+    h.clkT = f2 & 1 ? 0.35 : 0; h.recV = !!(f2 & 2); h.stunV = !!(f2 & 4); h.sprV = !!(f2 & 32); h.spawnV = !!(f2 & 64); h.phV = !!(f2 & 256);
     const bf = h.buffs || (h.buffs = {});
     bf.fury = f2 & 8 ? 1 : 0; bf.flow = f2 & 16 ? 1 : 0; bf.guard = f2 & 128 ? 1 : 0;
     if (h.stats) h.stats.hd = Math.max(0, num(p[15]) * 10);
@@ -98,7 +98,8 @@ export function makeBoltHost(opt = {}) {
     if (pub) return null;
     if (H.lead && players.has(H.lead) && !players.get(H.lead).w) return H.lead;
     const hs = humans();
-    return hs.length ? hs[0].id : null;
+    H.lead = hs.length ? hs[0].id : null;
+    return H.lead;
   };
 
   const cfgNow = () => {
@@ -148,8 +149,8 @@ export function makeBoltHost(opt = {}) {
       }
       for (let i = mine.length; i < ts0; i++) {
         const id = `bot${tm}${i}`;
-        const free = E.HERO_KEYS.filter((k) => !used[tm].has(k));
-        const k = free.length ? free[Math.floor(rnd() * free.length)] : E.HERO_KEYS[(i + tm) % E.HERO_KEYS.length];
+        const free = E.BOT_KEYS.filter((k) => !used[tm].has(k));
+        const k = free.length ? free[Math.floor(rnd() * free.length)] : E.BOT_KEYS[(i + tm) % E.BOT_KEYS.length];
         used[tm].add(k);
         heroes[id] = k; cols[id] = (i + tm * 2) % 4; sks[id] = TEAM_BOT_SK[(i + tm * 2 + Math.floor(rnd() * 3)) % TEAM_BOT_SK.length];
         bots.push({ id, n: BOT_NAMES[(bots.length + Math.floor(rnd() * 4)) % BOT_NAMES.length] });
@@ -266,7 +267,7 @@ export function makeBoltHost(opt = {}) {
     if (!h || h.bot) return;
     const bid = `bot${h.tm}${H.ms | 0}`.slice(0, 16);
     const used = new Set(W.order.map((k) => W.heroes[k] && W.heroes[k].key));
-    const free = E.HERO_KEYS.filter((k) => !used.has(k));
+    const free = E.BOT_KEYS.filter((k) => !used.has(k));
     const key = free.length ? free[Math.floor(rnd() * free.length)] : h.key;
     const b = E.mkHero(bid, key, h.x, h.z, true, 1); b.hc = (h.hc + 1) % 4;
     T.initHero(W, b, h.tm, TEAM_BOT_SK[Math.floor(rnd() * TEAM_BOT_SK.length)], 0); b.x = h.x; b.z = h.z; b.tl = h.tl || 1; b.st = h.st === 0 ? 0 : 2; b.respT = h.st === 0 ? 0 : Math.max(2, h.respT || 3);

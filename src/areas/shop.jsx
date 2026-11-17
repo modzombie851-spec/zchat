@@ -4,7 +4,7 @@ import { Eye, X, Image as ImageIcon, ArrowLeft, Check, ChevronRight, ChevronLeft
 import { supabase } from '../supabaseClient.js';
 import { AppPinPad, Avatar, BIRTHDAY_PINK, BigButton, BioKey, CHAR_BUBBLES, CHAR_BUBBLE_KEYS, CUSTOM_BADGES, CX_KINDS, CharmPreview, ChipStartSheet, CoinIcon, CoinPouchArt, CollectionIcon, ConfirmDialog, ConfirmSheet, CrGlyph, CxGiftPicker, DAILY_COINS, DECOR_ALL, DECOR_BY_KEY, DECOR_SETS, DECOR_SI, DECOR_SPRITE, DecorFrameBadge, DecorHero, DecorStill, EDITION_FIRST, EmptyState, FONT, FullPage, GIFT_MAX, GiftIcon, IgHeading, IgRow, IgToggle, LIVE_WALL_BY, LineGlyph, LiveWallCanvas, LoadFail, MonthlyLimitPage, NS_KEYS, NS_OWN_SAMPLE, NS_ROOM, NameBadge, NameStyleArt, OwnStylePage, PROFILE_THEMES, PickPeoplePage, PieceGlyph, PillButton, Portal, ProfileDecorHero, ProfileEffectLayer, RARITY_STYLE, RedeemCodeSheet, SI_KINDS, SI_SOUND_PACKS, SI_STICKER_PACKS, SI_TYPING, STORE_RARITY_ORDER, SUPER_KEYS, SUPER_REACTS, SecGlyph, SegmentedControl, ShopItemArt, SiItemArt, Spinner, SpotArt, StyledName, SuperFace, THEMES, THEME_KEYS, ThemeArt, ThemeCanvas, ThemePreviewPage, TradeArt, TradeIcon, TypingStyleBubble, VERIFIED_TIERS, VerifiedBadge, WideDim, WrapPickerSheet, addSpendSent, adminWords, announceWallet, appSnack, bdayGiftWhat, bioCheck, bioCredId, bubbleKeyOf, claimDailyCoins, coinsText, copyTextToClipboard, countWord, crFirst, crOpen, cxFlag, cxHas, cxKnown, cxNs, cxOwns, cxSpec, cxWord, dailyNext, daysLeft, decorBudgetQueue, decorFamily, decorOwned, decorPartPrice, detailsCardBg, dropOwned, dropPhase, editionOf, fmtDate, formatCount, friendlyError, giftRpc, giftTheirsMem, giftTheirsPend, hapticTap, igPalette, inputStyle, isDecorKey, kitOnInk, laterInputValue, ledgerMem, limitLeft, listText, liveAddGift, liveBurst, liveCid, liveEmit, liveFirst, livePlanById, livePlanEach, livePlanMerge, livePlanSort, livePlanWhy, livePlans, livePlansEmit, liveRpc, liveRt, liveWallBg, liveWallPaid, liveWallVeil, liveWhenLow, loadPayOptions, mixHex, moneyRun, moreCoinsText, nsOwn, nsOwnSaved, payMem, pickCoverFile, playUiSound, readJsonLs, readRingtone, readTone, reducedMotion, reminderWhen, rewardActive, rpcFailText, rpcMissing, santaPut, saveDecorSets, sendPushNotification, shopItemName, shopPing, shopPrice, shortLeft, siOwns, siSpec, siteOrigin, spPlay, spendAuthBus, spendGate, superAccent, themeFallback, tradeItemName, tradeLive, tradeMem, tradeNorm, tradePut, tradeSides, tradeStatusOf, typingStyleMine, useBackClose, useBioReady, useBirthdayOf, useCr, useDecorLoaded, useEdgeSwipeBack, useGfPeople, useSecondTick, useSheetDrag, useShopTick, useTheme, useWallet, useWidthOf, useWishlist, verifyPin, walletAfter, walletMem, walletPatch, walletSpend, writeJsonLs } from '../App.jsx';
 import { GAME_KITS, GAME_KIT_BY, KIT_GAME_NAMES, kitKeyFor, kitSet, gameKitSave, useKit, GameKitArt } from '../games/kits.jsx';
-import { ShopCoinPill, ShopSky, shopBtn, shopCss2, shopGlow, shopPal, shopRar, shopTint, CharBubbleSample, DECOR_PIECES, GIFT_PAPER_EXTRA, GiftBoxIcon, GiftCodeIcon, KitSection, KitSlider, LIVE_WALL_PAID, ShopChatMock, ShopListMock, ShopProfileMock, ThemeMockProfile, WrapBoxArt, buyDeal, buyShopItem, coinTakenBack, dropsMem, giftPaper, giftRibbon, giftWrapText, hexLum, loadMilestones, reasonLine, setTypingStyleMine, shopKindWord, shopKnown, shopMem, shopOwnersMem, shopSave, shopWarm, siWord, useDeal, useDrops, useMoneyToast, useOwnedBubbles, useShopOwners, useSpendLimit } from './shared.jsx';
+import { ShopCoinPill, ShopSky, shopBtn, shopCss2, shopGlow, shopPal, shopRar, shopTint, CharBubbleSample, DECOR_PIECES, GIFT_PAPER_EXTRA, GiftBoxIcon, GiftCodeIcon, KitSection, KitSlider, LIVE_WALL_PAID, ShopChatMock, ShopListMock, ShopProfileMock, ThemeMockProfile, WrapBoxArt, GiftBox3D, buyDeal, buyShopItem, coinTakenBack, dropsMem, giftPaper, giftRibbon, giftWrapText, hexLum, loadMilestones, reasonLine, setTypingStyleMine, shopKindWord, shopKnown, shopMem, shopOwnersMem, shopSave, shopWarm, siWord, useDeal, useDrops, useMoneyToast, useOwnedBubbles, useShopOwners, useSpendLimit } from './shared.jsx';
 
 function usePayOptions() {
   const [data, setData] = useState(payMem.data);
@@ -2771,33 +2771,16 @@ export function ShopPage({ me, rewards, onClose, onWear, onRewardsChanged, onOpe
 
 function GiftBoxArt({ open, accent = '#7C5CFC', size = 200 }) {
   const still = reducedMotion();
-  const ease = 'cubic-bezier(0.2, 0.9, 0.25, 1.15)';
   return (
     <div aria-hidden="true" style={{ position: 'relative', width: size, height: size }}>
-      <div style={{ position: 'absolute', left: '50%', bottom: size * 0.04, width: size * 0.74, height: size * 0.08, transform: 'translateX(-50%)', borderRadius: '50%', background: 'rgba(0,0,0,0.35)', filter: 'blur(6px)' }} />
       {!open && [[16, 30, 0], [176, 52, 0.6], [30, 150, 1.2], [182, 140, 1.8]].map(([x, y, d]) => (
         <svg key={`${x}`} width="18" height="18" viewBox="0 0 16 16" style={{ position: 'absolute', left: (x / 200) * size - 9, top: (y / 200) * size - 9, animation: still ? 'none' : `zchat-twinkle 1.8s ease-in-out ${d}s infinite` }}>
           <path d="M8 0c.6 4.4 1.6 5.4 6 6-4.4.6-5.4 1.6-6 6-.6-4.4-1.6-5.4-6-6 4.4-.6 5.4-1.6 6-6z" fill="#FFE58A" />
         </svg>
       ))}
-      <svg width={size} height={size} viewBox="0 0 200 200" style={{ position: 'absolute', inset: 0, transition: `transform 0.5s ${ease}, opacity 0.45s ease`, transform: open ? 'translateY(26px) scale(0.86)' : 'none', opacity: open ? 0 : 1, animation: !open && !still ? 'zchat-gift-wobble 2.4s ease-in-out infinite' : 'none', transformOrigin: '50% 90%' }}>
-        <defs>
-          <linearGradient id="zgbody" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor={accent} /><stop offset="1" stopColor={mixHex(accent, '#000000', 0.62)} /></linearGradient>
-          <linearGradient id="zgrib" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#FFE58A" /><stop offset="1" stopColor="#F2B52A" /></linearGradient>
-        </defs>
-        <rect x="36" y="86" width="128" height="94" rx="14" fill="url(#zgbody)" />
-        <rect x="36" y="86" width="128" height="22" rx="6" fill="rgba(0,0,0,0.18)" />
-        <rect x="90" y="86" width="20" height="94" fill="url(#zgrib)" />
-        <path d="M44 96h40" stroke="rgba(255,255,255,0.35)" strokeWidth="4" strokeLinecap="round" />
-      </svg>
-      <svg width={size} height={size} viewBox="0 0 200 200" style={{ position: 'absolute', inset: 0, transition: `transform 0.7s ${ease}, opacity 0.5s ease 0.15s`, transform: open ? 'translate(34px, -150px) rotate(28deg)' : 'none', opacity: open ? 0 : 1, transformOrigin: '50% 60%', animation: !open && !still ? 'zchat-gift-wobble 2.4s ease-in-out infinite' : 'none' }}>
-        <path d="M100 66c-10-22-40-30-44-12-3 14 22 18 44 12z" fill="url(#zgrib)" stroke="#D9951C" strokeWidth="2" strokeLinejoin="round" />
-        <path d="M100 66c10-22 40-30 44-12 3 14-22 18-44 12z" fill="url(#zgrib)" stroke="#D9951C" strokeWidth="2" strokeLinejoin="round" />
-        <rect x="28" y="64" width="144" height="30" rx="10" fill="url(#zgbody)" />
-        <rect x="88" y="64" width="24" height="30" fill="url(#zgrib)" />
-        <circle cx="100" cy="66" r="8" fill="#F2B52A" stroke="#D9951C" strokeWidth="2" />
-        <path d="M38 72h46" stroke="rgba(255,255,255,0.4)" strokeWidth="4" strokeLinecap="round" />
-      </svg>
+      <div style={{ animation: !open && !still ? 'zchat-gift-wobble 2.4s ease-in-out infinite' : 'none', transformOrigin: '50% 90%' }}>
+        <GiftBox3D color={accent} ribbon="gold" size={size} open={open} />
+      </div>
     </div>
   );
 }

@@ -32,6 +32,7 @@ const P = {
   syringe: <><path d="M14.5 4.5l5 5M17 7l-8.8 8.8-2.9.6.6-2.9L14.7 4.7" /><path d="M10.6 8.2l1.6 1.6M8.6 10.2l1.6 1.6M5.4 18.6L3.8 20.2" /></>,
   shop: <><path d="M2.5 4.5h3l2.6 11.4h10.4" /><path d="M6.6 7h13.4l-1.6 6.1H7.9" /><circle cx="9.6" cy="19.6" r="1.5" /><circle cx="17" cy="19.6" r="1.5" /></>,
   cam: <><circle cx="12" cy="9" r="2.8" /><path d="M7 19.5c.7-3 2.6-4.6 5-4.6s4.3 1.6 5 4.6" /><path d="M4.2 13.5A8.2 8.2 0 0 1 7 4.6M19.8 13.5A8.2 8.2 0 0 0 17 4.6" /><path d="M5.8 3.8L7 4.6l-.4 1.4M18.2 3.8L17 4.6l.4 1.4" /></>,
+  pin: <><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0" /><circle cx="12" cy="10" r="3" /></>,
   map: <><path d="M3.5 6.2l5.5-2.2 6 2.2 5.5-2.2v13.6l-5.5 2.2-6-2.2-5.5 2.2z" /><path d="M9 4v13.6M15 6.2v13.6" /></>,
   down: <><path d="M6 9l6 6 6-6" /></>,
   left: <><path d="M15 6l-6 6 6 6" /></>,
@@ -223,6 +224,16 @@ export function drawMinimap(cv, d) {
   }
   if (d.pet) { const [a, b] = tx(d.pet[0], d.pet[1]); ctx.fillStyle = '#F2D27A'; ctx.beginPath(); ctx.arc(a, b, 2.6, 0, Math.PI * 2); ctx.fill(); }
   ctx.restore();
+  if (d.marks && d.marks.length) {
+    const cy = Math.cos(d.yaw), sy = Math.sin(d.yaw);
+    for (const m of d.marks) {
+      const a = -(m[0] - d.x) * sc, b = -(m[1] - d.z) * sc;
+      let px = a * cy - b * sy, py = a * sy + b * cy;
+      const L = Math.hypot(px, py), lim = r - 13;
+      if (L > lim) { px *= lim / L; py *= lim / L; }
+      mapPin(ctx, r + px, r + py + 6, 0.72, m[2]);
+    }
+  }
   ctx.save(); ctx.translate(r, r);
   const cg = ctx.createRadialGradient(0, 0, 4, 0, 0, r * 0.82);
   cg.addColorStop(0, 'rgba(255,214,90,0.42)'); cg.addColorStop(1, 'rgba(255,214,90,0)');
@@ -238,13 +249,22 @@ export function drawMinimap(cv, d) {
   ctx.fillText('N', nx, ny);
 }
 
+export function mapPin(ctx, x, y, s, col) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(s, s);
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.bezierCurveTo(-2, -4, -7, -8, -7, -12.5); ctx.arc(0, -12.5, 7, Math.PI, 0); ctx.bezierCurveTo(7, -8, 2, -4, 0, 0); ctx.closePath();
+  ctx.fillStyle = col; ctx.strokeStyle = 'rgba(0,0,0,0.85)'; ctx.lineWidth = 1.6; ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.arc(0, -12.5, 2.6, 0, Math.PI * 2); ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fill();
+  ctx.restore();
+}
+
+export const bigMapXf = (W, H, B) => { const sc = Math.min(W / (B[2] - B[0]), H / (B[3] - B[1])); return { sc, ox: (W - (B[2] - B[0]) * sc) / 2 - B[0] * sc, oz: (H - (B[3] - B[1]) * sc) / 2 - B[1] * sc }; };
+
 export function drawBigMap(cv, d) {
   if (!cv) return;
   const ctx = cv.getContext('2d');
   if (!ctx) return;
   const W = cv.width, H = cv.height, B = d.bounds, k = d.px || 1;
-  const sc = Math.min(W / (B[2] - B[0]), H / (B[3] - B[1]));
-  const ox = (W - (B[2] - B[0]) * sc) / 2 - B[0] * sc, oz = (H - (B[3] - B[1]) * sc) / 2 - B[1] * sc;
+  const { sc, ox, oz } = bigMapXf(W, H, B);
   const tx = (x, z) => [x * sc + ox, z * sc + oz];
   ctx.clearRect(0, 0, W, H);
   ctx.fillStyle = 'rgba(38,46,36,0.94)'; ctx.fillRect(0, 0, W, H);
@@ -269,6 +289,7 @@ export function drawBigMap(cv, d) {
   for (const p of d.ps || []) arrow(p[0], p[1], p[2], p[3] === 1 ? '#FFB43A' : '#5CC8FF', 1);
   if (d.pet) { const [a, b] = tx(d.pet[0], d.pet[1]); ctx.fillStyle = '#F2D27A'; ctx.beginPath(); ctx.arc(a, b, 2.6 * k, 0, Math.PI * 2); ctx.fill(); }
   arrow(d.x, d.z, d.yaw, '#FFFFFF', 1.35);
+  for (const m of d.marks || []) { const [a, b] = tx(m[0], m[1]); mapPin(ctx, a, b, k * 1.05, m[2]); }
   ctx.fillStyle = '#FFFFFF'; ctx.font = `900 ${Math.round(12 * k)}px system-ui, sans-serif`; ctx.fillText('N', W - 14 * k, 14 * k);
   ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 1.5 * k; ctx.strokeRect(0.75 * k, 0.75 * k, W - 1.5 * k, H - 1.5 * k);
 }

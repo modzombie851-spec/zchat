@@ -79,6 +79,12 @@ From Sketchfab, CC BY 4.0
 - Bolt War Old fort walls, towers, banners, barrels and props, KayKit Dungeon Remastered by Kay Lousberg (CC0): https://kaylousberg.itch.io/kaykit-dungeon-remastered
 - Bolt War bolt bots, Animated Mech Pack by Quaternius (CC0): https://opengameart.org/content/animated-mech-pack
 - Bolt War monsters, Textured Cute Monster Pack by Quaternius (CC0): https://opengameart.org/content/textured-cute-monster-pack
+- Bolt War heroes Wisp, Zorp, Glim, Fawn, Grim, Oak and Ember, Cute Animated Monsters by Quaternius (CC0): https://quaternius.com
+
+## Other models
+
+- Gift boxes, Holiday Kit by Kenney (CC0): https://kenney.nl/assets/holiday-kit
+- Rock paper scissors hands, made from the generic hand in WebXR Input Profiles by the Immersive Web Community Group, copyright Amazon.com, Inc. or its affiliates (MIT): https://github.com/immersive-web/webxr-input-profiles
 
 ## Fonts
 

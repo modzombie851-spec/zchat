@@ -120,6 +120,7 @@ import {
   ptTextFx,
   readAppLock,
   reducedMotion,
+  mixHex,
   resolveMedia,
   rpcFailText,
   reportClientError,
@@ -416,14 +417,15 @@ export function giftWrapText(w) {
   if (!p) return 'Plain box';
   return `${p.label} paper, ${giftRibbon(w.r)[1].toLowerCase()} ribbon`;
 }
-function PaperDefs({ id, k }) {
+function PaperDefs({ id, k, mats, color }) {
   const p = giftPaper(k) || GIFT_PAPERS[0];
-  const [a, b] = p.c;
+  const [a, b] = color ? [mixHex(color, '#FFFFFF', 0.18), mixHex(color, '#000000', 0.3)] : p.c;
   const base = <linearGradient id={`${id}g`} x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor={a} /><stop offset="1" stopColor={b} /></linearGradient>;
-  const pat = (w, h, kids, extra) => <pattern id={`${id}p`} patternUnits="userSpaceOnUse" width={w} height={h} {...(extra || {})}><rect width={w} height={h} fill={`url(#${id}g)`} />{kids}</pattern>;
+  const pat = (w, h, kids, extra) => (mats || [null]).map((m, i) => <pattern key={i} id={`${id}p${mats ? i : ''}`} patternUnits="userSpaceOnUse" width={w} height={h} patternTransform={[m, extra && extra.patternTransform].filter(Boolean).join(' ') || undefined}>{mats ? null : <rect width={w} height={h} fill={`url(#${id}g)`} />}{kids}</pattern>);
   const star = (x, y, s, c) => { const q = (n) => +(n * s).toFixed(2); return <path key={`${x}${y}`} d={`M${x} ${y - s}c${q(0.1)} ${q(0.73)} ${q(0.27)} ${q(0.9)} ${s} ${s}c${q(-0.73)} ${q(0.1)} ${q(-0.9)} ${q(0.27)} ${-s} ${s}c${q(-0.1)} ${q(-0.73)} ${q(-0.27)} ${q(-0.9)} ${-s} ${-s}c${q(0.73)} ${q(-0.1)} ${q(0.9)} ${q(-0.27)} ${s} ${-s}z`} fill={c} />; };
   let body = null;
-  if (k === 'confetti') body = pat(44, 44, [['#FFD66B', 6, 8, 20], ['#FF8FB0', 26, 6, -30], ['#7CF2C9', 34, 26, 40], ['#FFFFFF', 12, 30, -15], ['#FFD66B', 22, 38, 60]].map(([c, x, y, r]) => <rect key={`${x}${y}`} x={x} y={y} width="7" height="3.2" rx="1.6" fill={c} transform={`rotate(${r} ${x + 3.5} ${y + 1.6})`} />));
+  if (color) body = null;
+  else if (k === 'confetti') body = pat(44, 44, [['#FFD66B', 6, 8, 20], ['#FF8FB0', 26, 6, -30], ['#7CF2C9', 34, 26, 40], ['#FFFFFF', 12, 30, -15], ['#FFD66B', 22, 38, 60]].map(([c, x, y, r]) => <rect key={`${x}${y}`} x={x} y={y} width="7" height="3.2" rx="1.6" fill={c} transform={`rotate(${r} ${x + 3.5} ${y + 1.6})`} />));
   else if (k === 'stripes') body = pat(26, 26, <rect x="0" y="0" width="10" height="26" fill={b} />, { patternTransform: 'rotate(40)' });
   else if (k === 'dots') body = pat(30, 30, [<circle key="a" cx="7.5" cy="7.5" r="4.2" fill="#FFFFFF" fillOpacity="0.92" />, <circle key="b" cx="22.5" cy="22.5" r="4.2" fill="#FFFFFF" fillOpacity="0.92" />]);
   else if (k === 'stars') body = pat(48, 48, [star(12, 12, 4.2, '#FFD66B'), star(36, 30, 3.2, '#FFE9A8'), <circle key="c" cx="30" cy="10" r="1.1" fill="#FFFFFF" />, <circle key="d" cx="10" cy="36" r="1.3" fill="#FFFFFF" fillOpacity="0.8" />, <circle key="e" cx="42" cy="44" r="0.9" fill="#FFFFFF" />]);
@@ -434,54 +436,60 @@ function PaperDefs({ id, k }) {
   else if (k === 'birthday') body = pat(46, 46, [<g key="a" transform="translate(12 12)"><rect x="-2.2" y="0" width="4.4" height="11" rx="1.4" fill="#FFFFFF" /><path d="M0 -6c2.4 2.6 2.4 4.4 0 5.6c-2.4-1.2-2.4-3 0-5.6z" fill="#FFB938" /></g>, <circle key="b" cx="34" cy="10" r="2.6" fill="#8A6CFF" fillOpacity="0.75" />, <circle key="c" cx="30" cy="34" r="2.2" fill="#FFFFFF" fillOpacity="0.9" />, <rect key="d" x="6" y="34" width="7" height="3" rx="1.5" fill="#57C7FF" transform="rotate(25 9 35)" />]);
   return <defs>{base}{body}</defs>;
 }
-function wrapFillOf(id, k) { return ['confetti', 'stripes', 'dots', 'stars', 'galaxy', 'goldfoil', 'sakura', 'neon', 'birthday'].includes(k) ? `url(#${id}p)` : `url(#${id}g)`; }
-export function WrapBoxArt({ paper, ribbon, size = 200, open = false, still }) {
-  const id = `zw${React.useId().replace(/[^a-zA-Z0-9]/g, '')}`;
+const GIFT_S = 360;
+const GIFT_FACES = [
+  [0, 55.06, 299.1, 204.29, 340.04, 55.06, 175.77, 128, 96],
+  [0, 204.29, 340.04, 304.94, 279.34, 204.29, 216.71, 128, 96],
+  [1, 39.44, 177, 207.32, 223.06, 39.44, 135.89, 144, 32],
+  [1, 207.32, 223.06, 320.56, 154.78, 207.32, 181.95, 144, 32],
+  [1, 39.44, 135.89, 207.32, 181.95, 152.68, 67.61, 144, 144],
+];
+const GIFT_IMG = ['/gift/base-shade-v1.webp', '/gift/base-ribbon-v1.webp', '/gift/lid-shade-v1.webp', '/gift/lid-ribbon-v1.webp'];
+const giftR = (n) => +n.toFixed(4);
+const GIFT_MATS = GIFT_FACES.map(([, ox, oy, ux, uy, vx, vy, lu, lv]) => `matrix(${giftR((ux - ox) / lu)} ${giftR((uy - oy) / lu)} ${giftR((ox - vx) / lv)} ${giftR((oy - vy) / lv)} ${vx} ${vy})`);
+const GIFT_PTS = GIFT_FACES.map(([, ox, oy, ux, uy, vx, vy]) => {
+  const pts = [[vx, vy], [vx + ux - ox, vy + uy - oy], [ux, uy], [ox, oy]];
+  const cx = pts.reduce((t, q) => t + q[0], 0) / 4, cy = pts.reduce((t, q) => t + q[1], 0) / 4;
+  return pts.map(([x, y]) => { const dx = x - cx, dy = y - cy, L = Math.hypot(dx, dy) || 1; return `${(x + (dx / L) * 2).toFixed(1)},${(y + (dy / L) * 2).toFixed(1)}`; }).join(' ');
+});
+const PATTERNED = ['confetti', 'stripes', 'dots', 'stars', 'galaxy', 'goldfoil', 'sakura', 'neon', 'birthday'];
+function giftRgb(h) { const n = parseInt(String(h || '#FFFFFF').slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => v / 255); }
+export function GiftBox3D({ paper, ribbon, color, size = 200, open = false, still }) {
+  const id = `zg${React.useId().replace(/[^a-zA-Z0-9]/g, '')}`;
   const rb = giftRibbon(ribbon);
-  const fill = wrapFillOf(id, paper);
+  const patterned = !color && PATTERNED.includes(paper);
   const calm = still || reducedMotion();
   const ease = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
-  const zig = 'L106 72 L95 84 L106 96 L95 108 L106 120 L95 132 L106 144 L95 156 L106 168 L95 180 L100 190';
-  const half = (side) => (
-    <g clipPath={`url(#${id}${side})`} style={{ transformBox: 'fill-box', transformOrigin: side === 'l' ? '100% 100%' : '0% 100%', transition: calm ? 'none' : `transform 520ms ${ease} 170ms, opacity 360ms ease 330ms`, transform: open ? (side === 'l' ? 'translate(-64px, 34px) rotate(-26deg)' : 'translate(64px, 34px) rotate(26deg)') : 'none', opacity: open ? 0 : 1 }}>
-      <rect x="36" y="86" width="128" height="94" rx="14" fill={fill} />
-      <rect x="36" y="86" width="128" height="94" rx="14" fill={`url(#${id}s)`} />
-      <rect x="36" y="86" width="128" height="18" fill="rgba(0,0,0,0.16)" />
-      <rect x="28" y="64" width="144" height="30" rx="10" fill={fill} />
-      <rect x="28" y="64" width="144" height="30" rx="10" fill={`url(#${id}t)`} />
-      <rect x="36" y="128" width="128" height="15" fill={`url(#${id}r)`} />
-      <path d="M38 72h44" stroke="rgba(255,255,255,0.42)" strokeWidth="4" strokeLinecap="round" />
+  const lo = giftRgb(rb[3]), hi = giftRgb(rb[2]);
+  const ch = (i) => `${giftR(hi[i] - lo[i] * 0.55)} ${giftR(lo[i] * 0.55)}`;
+  const part = (n) => (
+    <g style={{ isolation: 'isolate' }}>
+      <g mask={`url(#${id}m${n})`}>
+        {GIFT_FACES.map((f, i) => (f[0] === n ? <polygon key={i} points={GIFT_PTS[i]} fill={`url(#${id}g)`} /> : null))}
+        {patterned && GIFT_FACES.map((f, i) => (f[0] === n ? <polygon key={`p${i}`} points={GIFT_PTS[i]} fill={`url(#${id}p${i})`} /> : null))}
+      </g>
+      <image href={GIFT_IMG[n * 2]} x="0" y="0" width={GIFT_S} height={GIFT_S} style={{ mixBlendMode: 'multiply' }} />
+      <image href={GIFT_IMG[n * 2 + 1]} x="0" y="0" width={GIFT_S} height={GIFT_S} filter={`url(#${id}t)`} />
     </g>
   );
   return (
-    <svg width={size} height={size} viewBox="0 0 200 200" aria-hidden="true" style={{ display: 'block', overflow: 'visible' }}>
-      <PaperDefs id={id} k={paper} />
+    <svg width={size} height={size} viewBox={`0 0 ${GIFT_S} ${GIFT_S}`} aria-hidden="true" style={{ display: 'block', overflow: 'visible' }}>
+      <PaperDefs id={id} k={paper} mats={patterned ? GIFT_MATS : null} color={color} />
       <defs>
-        <linearGradient id={`${id}r`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={rb[2]} /><stop offset="1" stopColor={rb[3]} /></linearGradient>
-        <linearGradient id={`${id}s`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#000000" stopOpacity="0" /><stop offset="1" stopColor="#000000" stopOpacity="0.22" /></linearGradient>
-        <linearGradient id={`${id}t`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#FFFFFF" stopOpacity="0.16" /><stop offset="1" stopColor="#000000" stopOpacity="0.08" /></linearGradient>
-        <clipPath id={`${id}l`}><path d={`M0 0H100V60${zig}V200H0Z`} /></clipPath>
-        <clipPath id={`${id}rt`}><path d={`M200 0H100V60${zig}V200H200Z`} /></clipPath>
+        <filter id={`${id}w`} colorInterpolationFilters="sRGB"><feColorMatrix type="matrix" values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 1 0" /></filter>
+        <filter id={`${id}t`} colorInterpolationFilters="sRGB"><feComponentTransfer><feFuncR type="linear" slope={ch(0).split(' ')[0]} intercept={ch(0).split(' ')[1]} /><feFuncG type="linear" slope={ch(1).split(' ')[0]} intercept={ch(1).split(' ')[1]} /><feFuncB type="linear" slope={ch(2).split(' ')[0]} intercept={ch(2).split(' ')[1]} /></feComponentTransfer></filter>
+        <mask id={`${id}m0`} maskUnits="userSpaceOnUse" x="0" y="0" width={GIFT_S} height={GIFT_S}><image href={GIFT_IMG[0]} x="0" y="0" width={GIFT_S} height={GIFT_S} filter={`url(#${id}w)`} /></mask>
+        <mask id={`${id}m1`} maskUnits="userSpaceOnUse" x="0" y="0" width={GIFT_S} height={GIFT_S}><image href={GIFT_IMG[2]} x="0" y="0" width={GIFT_S} height={GIFT_S} filter={`url(#${id}w)`} /></mask>
+        <radialGradient id={`${id}sh`} cx="0.5" cy="0.5" r="0.5"><stop offset="0" stopColor="#000000" stopOpacity="0.34" /><stop offset="1" stopColor="#000000" stopOpacity="0" /></radialGradient>
       </defs>
-      <ellipse cx="100" cy="186" rx="70" ry="7" fill="rgba(0,0,0,0.28)" style={{ transition: calm ? 'none' : 'opacity 300ms ease 300ms', opacity: open ? 0 : 1 }} />
-      {half('l')}
-      <g clipPath={`url(#${id}rt)`} style={{ transformBox: 'fill-box', transformOrigin: '0% 100%', transition: calm ? 'none' : `transform 520ms ${ease} 170ms, opacity 360ms ease 330ms`, transform: open ? 'translate(64px, 34px) rotate(26deg)' : 'none', opacity: open ? 0 : 1 }}>
-        <rect x="36" y="86" width="128" height="94" rx="14" fill={fill} />
-        <rect x="36" y="86" width="128" height="94" rx="14" fill={`url(#${id}s)`} />
-        <rect x="36" y="86" width="128" height="18" fill="rgba(0,0,0,0.16)" />
-        <rect x="28" y="64" width="144" height="30" rx="10" fill={fill} />
-        <rect x="28" y="64" width="144" height="30" rx="10" fill={`url(#${id}t)`} />
-        <rect x="36" y="128" width="128" height="15" fill={`url(#${id}r)`} />
-      </g>
-      <rect x="91" y="64" width="18" height="116" fill={`url(#${id}r)`} style={{ transformBox: 'fill-box', transformOrigin: '50% 0%', transition: calm ? 'none' : `transform 240ms ${ease}, opacity 200ms ease 60ms`, transform: open ? 'scaleY(0)' : 'none', opacity: open ? 0 : 1 }} />
-      <g style={{ transformBox: 'fill-box', transformOrigin: '50% 80%', transition: calm ? 'none' : `transform 300ms ${ease}, opacity 220ms ease 80ms`, transform: open ? 'translateY(-26px) rotate(130deg) scale(0.3)' : 'none', opacity: open ? 0 : 1 }}>
-        <path d="M100 66c-10-22-40-30-44-12-3 14 22 18 44 12z" fill={`url(#${id}r)`} stroke={rb[3]} strokeWidth="2" strokeLinejoin="round" />
-        <path d="M100 66c10-22 40-30 44-12 3 14-22 18-44 12z" fill={`url(#${id}r)`} stroke={rb[3]} strokeWidth="2" strokeLinejoin="round" />
-        <path d="M96 70c-6 10-12 18-20 22M104 70c6 10 12 18 20 22" stroke={rb[3]} strokeWidth="5" strokeLinecap="round" fill="none" />
-        <circle cx="100" cy="66" r="8" fill={rb[2]} stroke={rb[3]} strokeWidth="2" />
-      </g>
+      <ellipse cx="182" cy="322" rx="150" ry="34" fill={`url(#${id}sh)`} style={{ transition: calm ? 'none' : 'opacity 300ms ease 260ms', opacity: open ? 0 : 1 }} />
+      <g style={{ transformBox: 'fill-box', transformOrigin: '50% 100%', transition: calm ? 'none' : `transform 480ms ${ease} 160ms, opacity 320ms ease 300ms`, transform: open ? 'translateY(24px) scale(0.86)' : 'none', opacity: open ? 0 : 1 }}>{part(0)}</g>
+      <g style={{ transformBox: 'fill-box', transformOrigin: '50% 100%', transition: calm ? 'none' : `transform 560ms ${ease}, opacity 380ms ease 180ms`, transform: open ? 'translate(46px, -170px) rotate(24deg)' : 'none', opacity: open ? 0 : 1 }}>{part(1)}</g>
     </svg>
   );
+}
+export function WrapBoxArt({ paper, ribbon, size = 200, open = false, still }) {
+  return <GiftBox3D paper={paper} ribbon={ribbon} size={size} open={open} still={still} />;
 }
 
 export async function buyShopItem(kind, key) {
@@ -543,7 +551,7 @@ export async function aipStartJob(kind, opts) {
   const drop = () => { supabase.from('ai_photo_jobs').delete().eq('id', id).then(() => {}, () => {}); };
   try {
     const res = await fetch('/.netlify/functions/zchat-aiphoto-background', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ id, photo: opts.photo || undefined, ratio: opts.ratio || undefined }) });
-    if (!res.ok && res.status !== 202) { drop(); return { error: res.status === 404 ? 'ZChat Bot drawing switches on once the ZChat tools are set up.' : 'ZChat Bot can not draw right now. Try again soon.' }; }
+    if (!res.ok && res.status !== 202) { drop(); return { error: res.status === 404 ? 'Mira drawing switches on once the ZChat tools are set up.' : 'Mira can not draw right now. Try again soon.' }; }
   } catch {
     drop();
     return { error: 'Could not reach ZChat. Check your connection and try again.' };
@@ -2301,6 +2309,11 @@ export function AiStyleThumb({ k }) {
     dreamy: <><defs><linearGradient id={id} x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#C9B8FF" /><stop offset="1" stopColor="#FFC9E0" /></linearGradient></defs><rect width="64" height="64" fill={`url(#${id})`} /><circle cx="32" cy="32" r="13" fill="#FFFFFF" opacity="0.55" /><circle cx="32" cy="32" r="8" fill="#FFFFFF" opacity="0.8" /><circle cx="14" cy="16" r="1.6" fill="#FFFFFF" /><circle cx="50" cy="48" r="1.4" fill="#FFFFFF" /><circle cx="48" cy="14" r="1.1" fill="#FFFFFF" /></>,
     minimal: <><rect width="64" height="64" fill="#ECEDF0" /><circle cx="38" cy="26" r="9" fill="#7C5CFC" /><path d="M12 44h40" stroke="#1E1E1E" strokeWidth="2.5" strokeLinecap="round" /></>,
     realistic: <><defs><linearGradient id={id} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#7DB6F5" /><stop offset="1" stopColor="#E6F1FC" /></linearGradient></defs><rect width="64" height="64" fill={`url(#${id})`} /><circle cx="46" cy="18" r="5" fill="#FFF3C4" /><path d="M0 50l16-20 10 12 12-18 26 26v14H0Z" fill="#5C7FA8" /><path d="M0 56l20-14 14 8 12-6 18 10v10H0Z" fill="#2F4C6E" /></>,
+    portrait: <><defs><radialGradient id={id} cx="0.5" cy="0.38" r="0.7"><stop offset="0" stopColor="#5A5F6B" /><stop offset="1" stopColor="#17191E" /></radialGradient><linearGradient id={`${id}s`} x1="0" y1="0" x2="1" y2="0"><stop offset="0" stopColor="#E9C3A6" /><stop offset="1" stopColor="#9C7259" /></linearGradient></defs><rect width="64" height="64" fill={`url(#${id})`} /><ellipse cx="32" cy="27" rx="9.5" ry="11.5" fill={`url(#${id}s)`} /><path d="M12 64c1.5-12 9.5-18.5 20-18.5S50.5 52 52 64Z" fill="#2B2F38" /><path d="M23 22c1-7 6-10 10-10s9.5 3 9.5 10c-3-3-6-4.5-10-4.5S26 19 23 22Z" fill="#2A1E19" /></>,
+    golden: <><defs><linearGradient id={id} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#6C5B9E" /><stop offset="0.45" stopColor="#F08A5D" /><stop offset="0.8" stopColor="#FFC56E" /></linearGradient><radialGradient id={`${id}g`} cx="0.5" cy="0.5" r="0.5"><stop offset="0" stopColor="#FFF4D2" /><stop offset="0.45" stopColor="#FFD58A" stopOpacity="0.7" /><stop offset="1" stopColor="#FFB45E" stopOpacity="0" /></radialGradient></defs><rect width="64" height="64" fill={`url(#${id})`} /><circle cx="32" cy="45" r="16" fill={`url(#${id}g)`} /><circle cx="32" cy="45" r="5.5" fill="#FFF6DA" /><path d="M0 49c10-4 18-4 26-1s18 3 38-3v19H0Z" fill="#3B2A35" /><path d="M0 55c14-3 26-2 36 0s20 1 28-1v11H0Z" fill="#1F1720" /></>,
+    film: <><rect width="64" height="64" fill="#141210" /><defs><linearGradient id={id} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#B9C9C4" /><stop offset="1" stopColor="#E8D9BC" /></linearGradient></defs><rect x="0" y="10" width="64" height="44" fill={`url(#${id})`} /><path d="M0 44l14-12 9 8 11-11 30 22v3H0Z" fill="#7C8A74" /><path d="M0 50l18-9 13 6 12-4 21 8v3H0Z" fill="#4D5A4A" />{[3, 13, 23, 33, 43, 53].map((x) => <rect key={x} x={x} y="3" width="6" height="4" rx="1" fill="#E9E1D1" opacity="0.85" />)}{[3, 13, 23, 33, 43, 53].map((x) => <rect key={`b${x}`} x={x} y="57" width="6" height="4" rx="1" fill="#E9E1D1" opacity="0.85" />)}</>,
+    mono: <><defs><linearGradient id={id} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#8E8E8E" /><stop offset="1" stopColor="#E4E4E4" /></linearGradient></defs><rect width="64" height="64" fill={`url(#${id})`} /><circle cx="44" cy="19" r="5" fill="#F7F7F7" /><path d="M0 50l16-20 10 12 12-18 26 26v14H0Z" fill="#6A6A6A" /><path d="M0 56l20-14 14 8 12-6 18 10v10H0Z" fill="#2E2E2E" /></>,
+    cinema: <><defs><linearGradient id={id} x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#1C5E66" /><stop offset="0.6" stopColor="#2F8C8A" /><stop offset="1" stopColor="#F0A35E" /></linearGradient></defs><rect width="64" height="64" fill={`url(#${id})`} /><path d="M0 44l10-6 8 4 8-14 7 9 8-5 23 14v18H0Z" fill="#12343A" /><rect x="40" y="26" width="3" height="18" fill="#F6C27A" opacity="0.9" /><rect width="64" height="12" fill="#000000" /><rect y="52" width="64" height="12" fill="#000000" /></>,
   }[k];
   return <svg width="100%" height="100%" viewBox="0 0 64 64" aria-hidden="true" style={{ display: 'block' }}>{body}</svg>;
 }

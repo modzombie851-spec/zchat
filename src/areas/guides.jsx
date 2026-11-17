@@ -425,13 +425,14 @@ function permSteps(p, kind) {
     return [
       { art: <SceneAndMenu ring="site" />, title: 'Tap the settings icon', text: 'Tap the small icon at the left of the address bar.' },
       { art: <SceneAndPerm kind={kind} />, title: `Turn on ${name}`, text: `Open Permissions and switch on ${what}. Then tap the button in ZChat again.` },
+      ...(kind === 'notif' ? [] : [{ art: <SceneAndList label="Settings" />, title: 'Still blocked?', text: `Open your phone Settings, then Apps, Chrome and Permissions. Allow ${name}, then come back to ZChat.` }]),
     ];
   }
   if (p.android) {
     return [
       { art: <SceneAndList label="Settings" />, title: 'Open Chrome settings', text: 'Open Chrome, tap the three dots at the top right, then Settings and Site settings.' },
       { art: <SceneAndSiteList kind={kind} />, title: `Tap ${name}, then getzchat.com`, text: 'ZChat is under Blocked. Tap it and choose Allow.' },
-      { art: <SceneAndPerm kind={kind} />, title: 'Come back and try again', text: kind === 'notif' ? 'Open ZChat again. New messages now reach you.' : `Open ZChat again and tap the ${kind === 'camera' ? 'camera' : 'mic'} button.` },
+      { art: <SceneAndPerm kind={kind} />, title: 'Come back and try again', text: kind === 'notif' ? 'Open ZChat again. New messages now reach you.' : `Open ZChat again and tap the ${kind === 'camera' ? 'camera' : 'mic'} button. Still blocked? Open your phone Settings, then Apps, Chrome and Permissions, and allow ${name}.` },
     ];
   }
   return [

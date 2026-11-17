@@ -6,7 +6,7 @@ const MP_BASES = [`https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MP_VER
 const FACE_MODEL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
 const SEG_MODEL = 'https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/latest/selfie_segmenter.tflite';
 const MP = { vis: null, fs: null, face: null, seg: null, jobs: {} };
-const dynImport = (u) => new Function('u', 'return import(u)')(u);
+const dynImport = (u) => import(/* @vite-ignore */ u);
 
 async function loadVision() {
   if (MP.vis) return MP;

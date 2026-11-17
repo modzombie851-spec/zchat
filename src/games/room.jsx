@@ -884,7 +884,7 @@ export function GameRoomPage({ st, prevOf, myId, me, peer, intent, onClose }) {
             : g === 'golf' ? <GolfView st={st} myId={myId} onMove={move} onMeta={setMeta} peerName={peerName} onBusy={setBusy} onFlash={flash} />
               : <ClassicView st={st} myId={myId} onMove={move} peerName={peerName} onMeta={setMeta} />;
   return (
-    <GameRoom k={g} title={title} sub={meta.sub || (isBot ? 'With ZChat Bot' : relay.here ? `${peerName} is here` : `With ${peerName}`)} players={players} center={meta.center} status={status} statusHot={meta.hot}
+    <GameRoom k={g} title={title} sub={meta.sub || (isBot ? 'With Mira' : relay.here ? `${peerName} is here` : `With ${peerName}`)} players={players} center={meta.center} status={status} statusHot={meta.hot}
       cast={player ? { game: g, room: `${g}-${st.id}-${String(myId).slice(0, 8)}`, myId, me, info: { bot: isBot ? 1 : 0 } } : null}
       menu={menu} rules={zap ? { ...gameRulesFor(st), guide: <ZapCardGuide mayhem={st.md === 'mayhem'} /> } : gameRulesFor(st)} social={social} toast={toast} still={still} ready={ready} bottom={meta.bottom || null}
       splash={{ title, sub: `You vs ${peerName}`, art: <GameArt k={g === 'pool' && st.v === 9 ? 'pool9' : g} width={236} height={148} radius={30} />, players: [players[0], players[1]] }}

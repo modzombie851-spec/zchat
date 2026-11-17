@@ -132,6 +132,7 @@ export class RoomCore {
       if (t === 'ml') { S.melee(c.id, m.k); return; }
       if (t === 'th') { S.throwAt(c.id, m.k, Number(m.x), Number(m.z)); return; }
       if (t === 'ct' || t === 'emo') { this.broadcast({ ...m, from: c.id, at: Date.now() }, c.id); return; }
+      if (t === 'mk') { this.broadcast({ t: 'mk', from: c.id, at: Date.now(), ...(m.c ? { c: 1 } : { x: Number(m.x) || 0, z: Number(m.z) || 0, lv: m.lv ? 1 : 0 }) }, c.id); return; }
       return;
     }
     const out = JSON.stringify({ ...m, from: c.id, at: Date.now() });

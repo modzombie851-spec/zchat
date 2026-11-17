@@ -231,6 +231,7 @@ export function makeSim(o = {}) {
     const p = S.players.get(id);
     if (!p) return;
     S.players.delete(id);
+    if (!p.bot && p.left && p.st !== 2 && S.ph !== 'over') { let j = 0; for (const w of p.inv || []) { if (w === 'pistol' || !WEAPONS[w] || S.loot.length > 140) continue; const a = j++ * 2.1 + R() * 0.4, c = collide(p.x + Math.sin(a) * 1.1, p.z + Math.cos(a) * 1.1, 0.3, p.lv | 0); addLoot('gun', w, c[0], c[1], p.lv | 0, '', 2, p.x, p.z); } }
     for (const q of S.players.values()) if (q.revBy === id) { q.revBy = null; q.rev = 0; }
     emit(['pl', id]);
     S.fillBots();
@@ -720,7 +721,8 @@ export function makeSim(o = {}) {
     if (L.k === 'cash') { p.cash = Math.min(CASH_MAX, (p.cash || 0) + L.v); return L.v; }
     if (L.k === 'gun') {
       const inv = p.inv || [p.w];
-      if (!WEAPONS[L.v] || inv.includes(L.v)) return 0;
+      if (!WEAPONS[L.v]) return 0;
+      if (inv.includes(L.v)) return manual ? 1 : 0;
       if (inv.length < 3) { p.inv = inv.concat(L.v); return 1; }
       if (!manual) return 0;
       const cur = p.w, i = Math.max(0, inv.indexOf(cur));

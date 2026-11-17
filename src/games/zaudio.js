@@ -2,7 +2,7 @@ import { Sfx } from './sfx.js';
 import { resBuf } from './zres.js';
 
 const FILES = {
-  ui_click: 0.35, ui_tap: 0.3, cash: 0.7, k_open: 0.45, k_close: 0.4, k_buy: 0.55, k_err: 0.5, k_tog: 0.45, k_latch: 0.65, k_cloth: 0.55, velcro: 0.9, r_cock: 0.75, r_shell: 0.55, dry: 0.6, pin: 0.5, whoosh: 0.7,
+  ui_click: 0.35, ui_tap: 0.3, ui_ping: 0.6, cash: 0.7, k_open: 0.45, k_close: 0.4, k_buy: 0.55, k_err: 0.5, k_tog: 0.45, k_latch: 0.65, k_cloth: 0.55, velcro: 0.9, r_cock: 0.75, r_shell: 0.55, dry: 0.6, pin: 0.5, whoosh: 0.7,
   heart: 0.9, nbounce: 0.6, g_ak47: 0.85, g_uzi: 1.7, g_qq9: 0.8, g_lmg: 0.85, g_deagle: 0.85, g_awm: 0.95, g_xpr: 0.85, g_mgl: 0.95, g_spas: 0.9, sv_what: 1, sv_lost: 1, sv_alive: 1, sv_salut: 1, sv_greet: 1, sv_time: 1, gore: 1, heli: 0.9, em_laugh_m: 1, em_laugh_f: 1, em_cheer_m: 1, em_cheer_f: 1, em_hey: 1, em_dance: 0.9, em_samba: 0.95, em_hiphop: 0.85, em_clap: 0.9, g_rifle: 0.8, g_smg: 0.8, g_pistol: 0.8, g_sniper: 0.9, g_shotgun: 0.9,
   r_rifle: 0.55, r_pistol: 0.9, r_sniper: 0.6, r_pump: 0.65,
   boom: 0.95, boom2: 0.9,

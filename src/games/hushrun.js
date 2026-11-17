@@ -7,6 +7,7 @@ import {
   nearestHide, itemNear, doorNear, lockNear, lockPos, dynSolids, emit, TUNE, d2, angTo, wrap,
 } from './hushgame.js';
 import { sampleClip, blendInto, poseSkin } from './zmodel.js';
+import { ssScale } from './zsurv.js';
 import { HA } from './hushaudio.js';
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -47,6 +48,7 @@ export async function createRun(canvas, o) {
   const MM = A.mon.M;
   const mon = { S: animState(), q: new Float32Array(MM.nb * 4), hp: [0, 0, 0], q2: new Float32Array(MM.nb * 4), hp2: [0, 0, 0], W: new Float32Array(MM.nb * 12), skin: new Float32Array(MM.nb * 12), stepD: 0, voiceT: 2, lastX: 0, lastZ: 0 };
   const surv = new Map();
+  const bloods = [];
   const survMesh = new Map();
   const me = o.me;
   const sp = lv.spawn[Math.max(0, o.slot || 0) % lv.spawn.length];
@@ -83,6 +85,11 @@ export async function createRun(canvas, o) {
   function soundAt(name, x, z, o2 = {}) { return HA.play(name, { pos: [x, o2.y == null ? 1 : o2.y, z], vol: o2.vol == null ? 1 : o2.vol, rate: o2.rate, ref: o2.ref || 3, roll: o2.roll, max: o2.max, rev: o2.rev, at: o2.at }); }
   const headPos = () => { const M = G.mon; return [M.hx != null ? M.hx : M.x, M.hy != null ? M.hy : 2.1, M.hz != null ? M.hz : M.z]; };
 
+  function bleed(x, z, big, wait, k) {
+    if (bloods.length > 40) bloods.shift();
+    const h = (Math.abs(Math.sin(x * 12.9898 + z * 78.233 + (k || 0)) * 43758.5453)) % 1;
+    bloods.push({ x, y: 0.012, z, s: big ? 1.05 + h * 0.3 : 0.4 + h * 0.18, rot: h * 6.283, seed: h, a: 0, g: 0.35, t: -(wait || 0), big: !!big });
+  }
   function onEvent(e) {
     const p = P();
     switch (e.e) {
@@ -139,7 +146,9 @@ export async function createRun(canvas, o) {
           if (q) { q.dead = 1; q.fly = { t: 0, a: e.a || 0 }; }
           say(`${nameOf(e.pid)} is dead`, 'bad', 3.4);
         }
+        { const px0 = Number(e.px) || 0, pz0 = Number(e.pz) || 0, a0 = Number(e.a) || 0; bleed(px0, pz0, false, 0.55, 1); bleed(px0 + Math.sin(a0) * 2.6, pz0 + Math.cos(a0) * 2.6, true, 0.9, 2); }
         break;
+      case 'dead': { const q = G.players[e.pid]; if (q) bleed(q.x, q.z, true, 0.2, 3); break; }
       case 'stab':
         soundAt(pick(['stab', 'stab2']), e.x, e.z, { vol: 1.25 });
         soundAt('roar1', e.x, e.z, { vol: 1.25, rate: 1.1, y: 2.2 });
@@ -374,6 +383,8 @@ export async function createRun(canvas, o) {
     dispose() { stop = true; cancelAnimationFrame(raf); HA.stopAll(); R.dispose(); },
     resize() { fit(); },
     get scale() { return st.scale; },
+    get bloods() { return bloods; },
+    bleedAt(x, z, big) { bleed(x, z, big, 0, 7); },
     setScale(v) { st.scale = v; st.lock = true; fit(); },
   };
 
@@ -769,7 +780,7 @@ export async function createRun(canvas, o) {
     if (!AN[want]) want = 'p_idle';
     if (want !== s.S.cur) animPlay(s.S, want, 0, 0.2);
     const c = AN[s.S.cur];
-    if (c && c.speed > 0 && q.mv > 0.05) s.S.rate = clamp(q.mv / Math.max(0.05, c.speed * (M2.hipsH / c.srcH)), 0.6, 1.6); else s.S.rate = 1;
+    if (c && c.speed > 0 && q.mv > 0.05) s.S.rate = clamp(q.mv / Math.max(0.05, c.speed * (M2.hipsH / c.srcH) * ssScale(M2)), 0.6, 1.6); else s.S.rate = 1;
     if (q.dead && c && s.S.t > c.dur - 0.05) s.S.t = c.dur - 0.05; else animTick(s.S, dt);
     const smp = (name, t, qq, hp) => { const cl = AN[name] || AN.p_idle; sampleClip(cl, M2.nb, t, qq, hp); const k = M2.hipsH / cl.srcH; hp[0] *= k; hp[1] *= k; hp[2] *= k; };
     smp(s.S.cur, s.S.t, s.q, s.hp);
@@ -842,7 +853,7 @@ export async function createRun(canvas, o) {
       if (q.fly) { q.fly.t = Math.min(0.5, q.fly.t + dt); const k = Math.sin(q.fly.t / 0.5 * Math.PI / 2) * 2.6; qx += Math.sin(q.fly.a) * k; qz += Math.cos(q.fly.a) * k; }
       if (s) {
         survPose(q, s, dt);
-        skins.push({ mesh: s.mesh.mesh, tex: s.mesh.tex, nrm: s.mesh.nrm, bones: s.skin, model: m4.pose(qx, 0, qz, q.dead && q.fly ? q.fly.a + Math.PI : q.yaw), c: [qx, 1, qz], r: 1.3, tint: TK, rough: 0.7 });
+        skins.push({ mesh: s.mesh.mesh, tex: s.mesh.tex, nrm: s.mesh.nrm, bones: s.skin, model: m4.pose(qx, 0, qz, q.dead && q.fly ? q.fly.a + Math.PI : q.yaw, 0, 0, ssScale(s.a.M)), c: [qx, 1, qz], r: 1.3, tint: TK, rough: 0.7 });
       }
       if (q.fl && !q.dead && q.hide < 0) {
         const qy = q.cr ? 1.0 : 1.45;
@@ -903,9 +914,17 @@ export async function createRun(canvas, o) {
     const fov = clamp(vf, 0.9, 1.25) * (death.on && death.stage === 0 ? 0.85 : 1);
     const hidden = p.hide >= 0;
     cam.expo += ((hidden && !death.on ? (st.hidKind === 'locker' ? 2.4 : 1.5) : 1) - cam.expo) * Math.min(1, dt * 1.5);
+    const decals = [];
+    for (const b of bloods) {
+      b.t += dt;
+      if (b.t < 0) continue;
+      b.a = Math.min(1, b.t / 0.5);
+      b.g = b.big ? 0.35 + 0.65 * (1 - Math.exp(-b.t / 2.6)) : Math.min(1, 0.55 + b.t * 1.6);
+      if (Math.abs(b.x - eye[0]) + Math.abs(b.z - eye[2]) < 22) decals.push(b);
+    }
     R.frame({
       eye, at: [eye[0] + fwd[0], eye[1] + fwd[1], eye[2] + fwd[2]], up, fov, near: 0.05, far: 26,
-      statics, skins, flash, flashes: flashes.slice(0, 3), shadows: tier.sh > 0, shadowHQ: tier.shHQ, lights: L8.slice(0, 8), glows,
+      statics, skins, decals, flash, flashes: flashes.slice(0, 3), shadows: tier.sh > 0, shadowHQ: tier.shHQ, lights: L8.slice(0, 8), glows,
       amb: hidden ? [0.008, 0.009, 0.012] : [0.012, 0.0135, 0.018], fog: [0.0035, 0.0045, 0.0065], fogD: 0.072, wallH: WALL_H, mat: tier.mat,
       post: [(1.0 + cam.flash * 1.5) * cam.expo, 0.32, cam.red, cam.fade], post2: [tier.beam, cam.sat, 0, 0], hand,
     });

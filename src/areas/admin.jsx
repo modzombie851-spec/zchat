@@ -115,7 +115,7 @@ function appFileList() {
   CHAT_THEMES.forEach((th) => { if (th.file) add('Chat themes', th.file); });
   ANIM_PACKS.forEach((p) => add('Stickers', p.icon));
   ANIM_STICKERS.forEach((s) => add('Stickers', s.file));
-  ['/icon-192.png', '/badge-192.png', '/bot-avatar.jpg', '/manifest.json', '/sw.js'].forEach((u) => add('App', u));
+  ['/icon-192.png', '/badge-192.png', '/mira-avatar-v1.jpg', '/manifest.json', '/sw.js'].forEach((u) => add('App', u));
   return out;
 }
 function AdminFiles() {
@@ -597,7 +597,7 @@ function AdminKnowledge() {
   return (
     <>
       <div style={{ padding: '6px 0 2px' }}>
-        <div style={{ fontWeight: 800, fontSize: 19, color: theme.ink, letterSpacing: '-0.01em' }}>What ZChat Bot has learned</div>
+        <div style={{ fontWeight: 800, fontSize: 19, color: theme.ink, letterSpacing: '-0.01em' }}>What Mira has learned</div>
         <div style={{ fontSize: 13, color: theme.muted, marginTop: 6, lineHeight: 1.5 }}>People teach it in chat. It shares what it learned with others who ask, without saying who taught it. Private details, links and anything unsafe are filtered out before they are saved.</div>
       </div>
       {note && <div style={{ marginTop: 10 }}><AdminNote text={note} /></div>}

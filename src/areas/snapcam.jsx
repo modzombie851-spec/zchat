@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useBackClose, FONT, hapticTap, playUiSound, applyPhotoFilter, photoFilterCss, FilterFx, paintFilterFx, PHOTO_FILTERS, Spinner, playSong, stopSong, MusicPicker } from '../App.jsx';
+import { useBackClose, FONT, hapticTap, playUiSound, permDenied, openPermHelp, applyPhotoFilter, photoFilterCss, FilterFx, paintFilterFx, PHOTO_FILTERS, Spinner, playSong, stopSong, MusicPicker } from '../App.jsx';
 
 import { LENSES, BIG_EYES, lensThumb, loadFace, loadSeg, faceReady, segReady, detectFaces, segmentInto, coverBox, mapper, geomOf, smoothGeom, drawLens, drawBigEyes } from './snaplens.js';
 
@@ -17,6 +17,7 @@ const BGS = [
 const MID = { x: 0.5, y: 0.5 };
 const NIGHT_CSS = 'brightness(1.4) contrast(1.06) saturate(1.08)';
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const ZOOM_MAX = 8;
 const canvasOf = (cache, key, w, h) => {
   let c = cache[key];
   if (!c) { c = document.createElement('canvas'); cache[key] = c; }
@@ -227,6 +228,10 @@ export function SnapCamera({ onClose, onCapture, onPickGallery, startMode = 'pho
   const [segState, setSegState] = useState('idle');
   const [noFace, setNoFace] = useState(false);
   const [zoomChip, setZoomChip] = useState(0);
+  const [zoomMin, setZoomMin] = useState(1);
+  const [permOff, setPermOff] = useState(false);
+  const [camTry, setCamTry] = useState(0);
+  const [zoomNow, setZoomNow] = useState(1);
   const [nameChip, setNameChip] = useState(null);
   const videoRef = useRef(null);
   const stageRef = useRef(null);
@@ -234,7 +239,7 @@ export function SnapCamera({ onClose, onCapture, onPickGallery, startMode = 'pho
   const carRef = useRef(null);
   const streamRef = useRef(null);
   const streamNo = useRef(0);
-  const S = useRef({ zoom: 1, raw: [], jaw: [], mask: {}, lastFace: 0, lastSeg: 0, seenFace: 0, cache: {}, bgImg: null, userImg: null });
+  const S = useRef({ zoom: 1, z: 1, hw: null, raw: [], jaw: [], mask: {}, lastFace: 0, lastSeg: 0, seenFace: 0, cache: {}, bgImg: null, userImg: null });
   const recRef = useRef(null);
   const holdT = useRef(null);
   const ptr = useRef(null);
@@ -257,22 +262,53 @@ export function SnapCamera({ onClose, onCapture, onPickGallery, startMode = 'pho
         if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop());
         const md = navigator.mediaDevices;
         if (!md || !md.getUserMedia) { setError('This browser cannot open the camera. Pick from your gallery instead.'); return; }
-        const video = { facingMode: facing, width: { ideal: 1920 }, height: { ideal: 1080 } };
+        const base = { facingMode: facing, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } };
+        const video = { ...base, zoom: true };
         let stream = null;
-        try { stream = await md.getUserMedia({ video, audio: true }); } catch { stream = await md.getUserMedia({ video, audio: false }); }
+        try { stream = await md.getUserMedia({ video, audio: true }); } catch (e1) {
+          if (permDenied(e1)) throw e1;
+          try { stream = await md.getUserMedia({ video, audio: false }); } catch (e2) {
+            if (permDenied(e2)) throw e2;
+            stream = await md.getUserMedia({ video: base, audio: false });
+          }
+        }
         if (cancelled) { stream.getTracks().forEach((t) => t.stop()); return; }
         streamRef.current = stream;
+        const st0 = S.current;
+        st0.hw = null; st0.z = 1; st0.zoom = 1;
+        try {
+          const tr = stream.getVideoTracks()[0];
+          const c = tr && tr.getCapabilities ? tr.getCapabilities() : null;
+          if (c && c.zoom && Number.isFinite(c.zoom.min) && Number.isFinite(c.zoom.max) && c.zoom.max > c.zoom.min) {
+            const s0 = tr.getSettings ? tr.getSettings() : {};
+            st0.hw = { min: c.zoom.min, max: c.zoom.max, step: c.zoom.step || 0.1, cur: Number(s0.zoom) || 1, want: null, busy: false };
+            if (Math.abs(st0.hw.cur - 1) > 0.01 && st0.hw.min <= 1 && st0.hw.max >= 1) { st0.hw.cur = 1; tr.applyConstraints({ advanced: [{ zoom: 1 }] }).catch(() => {}); }
+          }
+        } catch {}
+        setZoomMin(st0.hw && st0.hw.min < 0.99 ? Math.max(0.5, st0.hw.min) : 1);
+        setZoomNow(1);
         const v = videoRef.current;
         if (v) { v.srcObject = stream; v.play().catch(() => {}); }
         streamNo.current += 1;
         setReady(true);
         setError('');
-      } catch {
-        setError('Allow camera access to take photos and videos.');
+      } catch (e) {
+        if (permDenied(e)) { setError('Camera access is off for ZChat.'); setPermOff(true); }
+        else setError('The camera could not start. Close other apps using it and try again.');
       }
     })();
     return () => { cancelled = true; };
-  }, [facing]);
+  }, [facing, camTry]);
+  useEffect(() => {
+    if (!permOff) return undefined;
+    let alive = true;
+    let ps = null;
+    const on = () => { if (alive && ps && ps.state === 'granted') { setPermOff(false); setError(''); setCamTry((n) => n + 1); } };
+    try { if (navigator.permissions && navigator.permissions.query) navigator.permissions.query({ name: 'camera' }).then((x) => { ps = x; try { x.addEventListener('change', on); } catch {} }, () => {}); } catch {}
+    const vis = () => { if (document.visibilityState === 'visible' && alive) { setPermOff(false); setError(''); setCamTry((n) => n + 1); } };
+    document.addEventListener('visibilitychange', vis);
+    return () => { alive = false; document.removeEventListener('visibilitychange', vis); try { if (ps) ps.removeEventListener('change', on); } catch {} };
+  }, [permOff]);
 
   useEffect(() => () => {
     clearTimeout(holdT.current); clearInterval(countRef.current);
@@ -392,19 +428,54 @@ export function SnapCamera({ onClose, onCapture, onPickGallery, startMode = 'pho
     return out;
   };
   const meta = () => (live.current.song ? { song: live.current.song } : {});
+  const fullPhoto = async () => {
+    const L = live.current, st = S.current;
+    if (L.lens !== 'none' || L.bg !== 'none' || L.beauty > 0.01 || typeof window === 'undefined' || typeof window.ImageCapture !== 'function' || typeof createImageBitmap !== 'function') return null;
+    const tr = streamRef.current && streamRef.current.getVideoTracks()[0];
+    const cv = stageRef.current, v = videoRef.current;
+    if (!tr || tr.readyState !== 'live' || !cv || !cv.width || !v || !v.videoWidth) return null;
+    let bmp = null;
+    try {
+      const ic = new window.ImageCapture(tr);
+      const blob = await Promise.race([ic.takePhoto(), wait(3500).then(() => null)]);
+      if (!blob) return null;
+      bmp = await createImageBitmap(blob, { imageOrientation: 'from-image' });
+      if ((bmp.width > bmp.height) !== (v.videoWidth > v.videoHeight)) return null;
+      const aspect = cv.width / cv.height;
+      let sw = bmp.width, sh = bmp.width / aspect;
+      if (sh > bmp.height) { sh = bmp.height; sw = sh * aspect; }
+      sw /= st.zoom; sh /= st.zoom;
+      const k = Math.min(1, 3072 / Math.max(sw, sh));
+      const W = Math.round(sw * k), H = Math.round(sh * k);
+      if (Math.max(W, H) < 1600) return null;
+      const out = document.createElement('canvas'); out.width = W; out.height = H;
+      const ctx = out.getContext('2d');
+      ctx.imageSmoothingEnabled = true;
+      try { ctx.imageSmoothingQuality = 'high'; } catch {}
+      if (L.facing === 'user') { ctx.translate(W, 0); ctx.scale(-1, 1); }
+      ctx.drawImage(bmp, (bmp.width - sw) / 2, (bmp.height - sh) / 2, sw, sh, 0, 0, W, H);
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      if (L.filter !== 'none') applyPhotoFilter(ctx, W, H, L.filter);
+      if (L.night) brighten(ctx, W, H, 1.32);
+      return out;
+    } catch { return null; } finally { try { if (bmp && bmp.close) bmp.close(); } catch {} }
+  };
+  const snapBusy = useRef(false);
   const snapPhoto = async () => {
-    if (making) return;
+    if (making || snapBusy.current) return;
+    snapBusy.current = true;
     const L = live.current;
     let lit = false;
     if (L.flash === 'on') {
       if (L.facing === 'user') { setScreenFlash(true); await wait(260); } else { lit = await torch(true); if (lit) await wait(320); }
     }
-    const out = renderStill(1920);
-    if (L.flash === 'on') { if (L.facing === 'user') setTimeout(() => setScreenFlash(false), 120); else if (lit) torch(false); }
-    if (!out) return;
     playUiSound('shutter');
-    setScreenFlash((v) => v || L.flash !== 'on');
-    setTimeout(() => setScreenFlash(false), 140);
+    const quick = L.flash !== 'on' ? renderStill(1920) : null;
+    if (L.flash !== 'on') { setScreenFlash(true); setTimeout(() => setScreenFlash(false), 140); }
+    const out = (await fullPhoto()) || quick || renderStill(1920);
+    snapBusy.current = false;
+    if (L.flash === 'on') { if (L.facing === 'user') setTimeout(() => setScreenFlash(false), 120); else if (lit) torch(false); }
+    if (!out) { say('That photo did not work. Try again.'); return; }
     try { out.toBlob((blob) => { if (blob) onCapture(new File([blob], `photo-${Date.now()}.jpg`, { type: 'image/jpeg' }), meta()); else say('That photo did not work. Try again.'); }, 'image/jpeg', 0.92); } catch { say('That photo did not work. Try again.'); }
   };
   const startRec = () => {
@@ -443,7 +514,6 @@ export function SnapCamera({ onClose, onCapture, onPickGallery, startMode = 'pho
     const R = recRef.current;
     recRef.current = null;
     setRec(false); setLocked(false); setHolding(false);
-    S.current.zoom = Math.max(1, Math.min(S.current.zoom, 5));
     torch(false);
     try { stopSong(); } catch {}
     if (R && R.rec && R.rec.state !== 'inactive') { playUiSound('record-stop'); R.rec.stop(); }
@@ -526,7 +596,7 @@ export function SnapCamera({ onClose, onCapture, onPickGallery, startMode = 'pho
   const trayItems = tray === 'lenses'
     ? [{ k: 'none', name: 'No lens', icon: 'none' }, ...LENSES.map((l) => ({ k: l.k, name: l.name, glyph: lensThumb(l.k) }))]
     : tray === 'filters'
-      ? PHOTO_FILTERS.map((f) => ({ k: f.k, name: f.label, thumb: liveThumb, css: photoFilterCss(f.k) }))
+      ? PHOTO_FILTERS.map((f) => ({ k: f.k, name: f.label, thumb: liveThumb, css: photoFilterCss(f.k), fx: f.k }))
       : BGS.map((b) => ({ k: b.k, name: b.name, thumb: b.fx ? liveThumb : (b.k === 'photo' && S.current.userThumb) || null, css: b.fx || 'none', icon: b.fx ? null : b.k === 'none' ? 'none' : 'photo' }));
   const curKey = tray === 'lenses' ? lens : tray === 'filters' ? filter : bg;
   const curIdx = Math.max(0, trayItems.findIndex((it) => it.k === curKey));
@@ -562,13 +632,52 @@ export function SnapCamera({ onClose, onCapture, onPickGallery, startMode = 'pho
     try { el.scrollTo({ left, behavior: smooth ? 'smooth' : 'auto' }); } catch { el.scrollLeft = left; }
   };
 
+  const setZoom = (zIn, chip = true) => {
+    const st = S.current;
+    const lo = st.hw && st.hw.min < 0.99 ? Math.max(0.5, st.hw.min) : 1;
+    const z = Math.max(lo, Math.min(ZOOM_MAX, zIn));
+    st.z = z;
+    const hw = st.hw;
+    if (hw) {
+      const hz = Math.max(hw.min, Math.min(hw.max, z));
+      st.zoom = Math.max(1, z / hz);
+      if (Math.abs(hz - hw.cur) >= Math.max(0.01, hw.step / 2)) {
+        hw.cur = hz;
+        hw.want = hz;
+        const push = () => {
+          const tr = streamRef.current && streamRef.current.getVideoTracks()[0];
+          if (!tr || !tr.applyConstraints) { hw.busy = false; return; }
+          hw.busy = true;
+          const val = hw.want;
+          tr.applyConstraints({ advanced: [{ zoom: val }] }).catch(() => {}).then(() => { hw.busy = false; if (hw.want !== val) push(); });
+        };
+        if (!hw.busy) push();
+      }
+    } else st.zoom = z;
+    if (chip) setZoomChip(z);
+    setZoomNow(Math.round(z * 10) / 10);
+  };
+  const zoomAnim = useRef(0);
+  const zoomTo = (target) => {
+    cancelAnimationFrame(zoomAnim.current);
+    const from = S.current.z || 1;
+    const t0 = performance.now();
+    hapticTap();
+    const step = (t) => {
+      const k = Math.min(1, (t - t0) / 220);
+      const e = 1 - (1 - k) * (1 - k);
+      setZoom(from + (target - from) * e, false);
+      if (k < 1) zoomAnim.current = requestAnimationFrame(step);
+    };
+    zoomAnim.current = requestAnimationFrame(step);
+  };
   const ringDown = (e) => {
     e.preventDefault();
     if (!ready || making || error) return;
     if (countRef.current) { cancelTimer(); return; }
     if (rec && locked) { stopRec(); return; }
     const el = carRef.current;
-    ptr.current = { id: e.pointerId, x: e.clientX, y: e.clientY, sl: el ? el.scrollLeft : 0, drag: false, z0: S.current.zoom };
+    ptr.current = { id: e.pointerId, x: e.clientX, y: e.clientY, sl: el ? el.scrollLeft : 0, drag: false, z0: S.current.z || 1 };
     clearTimeout(scrollT.current);
     try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
     setHolding(true);
@@ -580,8 +689,8 @@ export function SnapCamera({ onClose, onCapture, onPickGallery, startMode = 'pho
     if (!p || p.id !== e.pointerId) return;
     const dx = e.clientX - p.x, dy = e.clientY - p.y;
     if (recRef.current) {
-      const z = Math.max(1, Math.min(5, p.z0 + Math.max(0, -dy) / 110));
-      if (Math.abs(z - S.current.zoom) > 0.01) { S.current.zoom = z; setZoomChip(z); }
+      const z = p.z0 * Math.pow(ZOOM_MAX / Math.max(0.5, p.z0), Math.min(1, Math.max(0, -dy) / 320));
+      if (Math.abs(z - (S.current.z || 1)) > 0.01) setZoom(z);
       if (!locked && dx < -70 && Math.abs(dy) < 60) { setLocked(true); hapticTap(); say('Hands free recording'); }
       return;
     }
@@ -613,7 +722,7 @@ export function SnapCamera({ onClose, onCapture, onPickGallery, startMode = 'pho
   const stageDown = (e) => {
     const P = pinch.current;
     P.pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (P.pts.size === 2) { const [a, b] = [...P.pts.values()]; P.d0 = Math.hypot(a.x - b.x, a.y - b.y); P.z0 = S.current.zoom; }
+    if (P.pts.size === 2) { const [a, b] = [...P.pts.values()]; P.d0 = Math.hypot(a.x - b.x, a.y - b.y); P.z0 = S.current.z || 1; cancelAnimationFrame(zoomAnim.current); }
     if (P.pts.size === 1) {
       const now = Date.now();
       if (now - P.lastTap < 300 && !rec && !making) { P.lastTap = 0; flip(); } else P.lastTap = now;
@@ -623,10 +732,10 @@ export function SnapCamera({ onClose, onCapture, onPickGallery, startMode = 'pho
     const P = pinch.current;
     if (!P.pts.has(e.pointerId)) return;
     P.pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (P.pts.size === 2 && P.d0 > 10) { const [a, b] = [...P.pts.values()]; const z = Math.max(1, Math.min(5, P.z0 * Math.hypot(a.x - b.x, a.y - b.y) / P.d0)); S.current.zoom = z; setZoomChip(z); }
+    if (P.pts.size === 2 && P.d0 > 10) { const [a, b] = [...P.pts.values()]; setZoom(P.z0 * Math.hypot(a.x - b.x, a.y - b.y) / P.d0); }
   };
   const stageUp = (e) => { pinch.current.pts.delete(e.pointerId); if (!pinch.current.pts.size) setTimeout(() => setZoomChip((z) => (recRef.current ? z : 0)), 900); };
-  const flip = () => { if (rec || making) return; S.current.zoom = 1; S.current.cache = {}; S.current.raw = []; setFacing((f) => { const n = f === 'user' ? 'environment' : 'user'; try { localStorage.setItem('zchat-cam-facing', n); } catch {} return n; }); };
+  const flip = () => { if (rec || making) return; cancelAnimationFrame(zoomAnim.current); S.current.zoom = 1; S.current.z = 1; S.current.cache = {}; S.current.raw = []; setFacing((f) => { const n = f === 'user' ? 'environment' : 'user'; try { localStorage.setItem('zchat-cam-facing', n); } catch {} return n; }); };
   const onUserPhoto = (e) => {
     const f = e.target.files && e.target.files[0];
     e.target.value = '';
@@ -678,7 +787,7 @@ export function SnapCamera({ onClose, onCapture, onPickGallery, startMode = 'pho
               <CamIcon k="music" size={15} /><span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{song.a ? `${song.t}, ${song.a}` : song.t}</span><CamIcon k="close" size={13} />
             </div>
           )}
-          {zoomChip > 1.01 && <div style={{ padding: '4px 10px', borderRadius: 12, background: 'rgba(0,0,0,0.35)', fontSize: 13, fontWeight: 800 }}>{`${zoomChip.toFixed(1)}x`}</div>}
+          {zoomChip && Math.abs(zoomChip - 1) > 0.01 && <div style={{ padding: '4px 10px', borderRadius: 12, background: 'rgba(0,0,0,0.35)', fontSize: 13, fontWeight: 800 }}>{`${zoomChip.toFixed(1)}x`}</div>}
           {status && <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', borderRadius: 16, background: 'rgba(0,0,0,0.4)', fontSize: 13, fontWeight: 700 }}><Spinner size={14} color="#FFFFFF" />{status}</div>}
           {failed && <div role="button" aria-label="Try loading the effects again" onClick={() => { if (faceState === 'error') setFaceState('idle'); if (segState === 'error') setSegState('idle'); }} style={{ padding: '6px 12px', borderRadius: 16, background: 'rgba(0,0,0,0.45)', fontSize: 13, fontWeight: 700, cursor: 'pointer', pointerEvents: 'auto', textAlign: 'center' }}>Effects did not load. Tap to try again.</div>}
         </div>
@@ -703,7 +812,14 @@ export function SnapCamera({ onClose, onCapture, onPickGallery, startMode = 'pho
         </div>
       )}
 
-      {error && <div style={{ position: 'absolute', left: 24, right: 24, top: '38%', textAlign: 'center', fontSize: 15, fontWeight: 600, zIndex: 3, textShadow: shadow }}>{error}</div>}
+      {error && (
+        <div style={{ position: 'absolute', left: 24, right: 24, top: '34%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, textAlign: 'center', zIndex: 3 }}>
+          <div style={{ fontSize: 15.5, fontWeight: 700, textShadow: shadow }}>{error}</div>
+          {permOff
+            ? <button type="button" onClick={() => { hapticTap(); openPermHelp('camera'); }} style={{ height: 44, padding: '0 20px', borderRadius: 22, border: 'none', background: '#FFFFFF', color: '#111111', fontFamily: FONT, fontSize: 14.5, fontWeight: 800, cursor: 'pointer' }}>Show me how to turn it on</button>
+            : <button type="button" onClick={() => { hapticTap(); setError(''); setCamTry((n) => n + 1); }} style={{ height: 44, padding: '0 20px', borderRadius: 22, border: 'none', background: 'rgba(255,255,255,0.18)', color: '#FFFFFF', fontFamily: FONT, fontSize: 14.5, fontWeight: 800, cursor: 'pointer' }}>Try again</button>}
+        </div>
+      )}
       {count > 0 && <div aria-live="polite" style={{ position: 'absolute', left: 0, right: 0, top: '36%', textAlign: 'center', fontSize: 96, fontWeight: 800, zIndex: 4, textShadow: '0 4px 24px rgba(0,0,0,0.45)' }}>{count}</div>}
       {making && (
         <div className="zchat-pop" style={{ position: 'absolute', left: '50%', top: '42%', transform: 'translate(-50%, -50%)', padding: '12px 20px', borderRadius: 22, background: 'rgba(0,0,0,0.6)', fontSize: 15, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 10, whiteSpace: 'nowrap', zIndex: 4 }}>
@@ -718,6 +834,21 @@ export function SnapCamera({ onClose, onCapture, onPickGallery, startMode = 'pho
           {!nameChip && noFace && lens !== 'none' && <div style={{ padding: '5px 12px', borderRadius: 14, background: 'rgba(0,0,0,0.35)', fontSize: 13, fontWeight: 700 }}>Point the camera at a face</div>}
           {!nameChip && !noFace && curLens && curLens.hint && faceState === 'ready' && showUi && <div style={{ padding: '5px 12px', borderRadius: 14, background: 'rgba(0,0,0,0.35)', fontSize: 13, fontWeight: 700 }}>{curLens.hint}</div>}
         </div>
+        {showUi && ready && !error && (
+          <div role="group" aria-label="Zoom" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: 4, borderRadius: 20, background: 'rgba(0,0,0,0.32)' }}>
+            {[...(zoomMin < 0.99 ? [zoomMin] : []), 1, 2, 5].map((z, i, arr) => {
+              const nx = arr[i + 1] || Infinity;
+              const on = zoomNow >= z - 0.04 && zoomNow < nx - 0.04;
+              const lab = z < 1 ? String(Math.round(z * 10) / 10).replace(/^0/, '') : String(z);
+              return (
+                <div key={z} role="button" aria-label={`Zoom ${z}x`} aria-pressed={on} onClick={() => zoomTo(z)}
+                  style={{ minWidth: on ? 38 : 30, height: on ? 38 : 30, padding: on ? '0 6px' : 0, boxSizing: 'border-box', borderRadius: 19, display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.28)', color: on ? '#FFD84D' : '#FFFFFF', fontSize: on ? 13 : 11.5, fontWeight: 800, cursor: 'pointer', transition: 'all 0.15s ease' }}>
+                  {on ? `${Math.round(zoomNow * 10) / 10}x`.replace(/^0\./, '.') : lab}
+                </div>
+              );
+            })}
+          </div>
+        )}
         {showUi && (
           <div role="tablist" aria-label="Camera effects" style={{ display: 'flex', gap: 20 }}>
             {tabs.map(([k, label]) => (
@@ -730,7 +861,7 @@ export function SnapCamera({ onClose, onCapture, onPickGallery, startMode = 'pho
             {trayItems.map((it, i) => (
               <div key={`${tray}.${it.k}`} role="button" aria-label={it.name} aria-pressed={i === curIdx} onClick={() => { if (i !== curIdx) { scrollToIdx(i, true); pickIdx(i); } }}
                 style={{ width: ITEM, height: ITEM, flexShrink: 0, borderRadius: '50%', overflow: 'hidden', scrollSnapAlign: 'center', background: it.glyph ? 'rgba(0,0,0,0.42)' : 'rgba(255,255,255,0.18)', boxShadow: '0 0 0 2px rgba(255,255,255,0.75), 0 2px 8px rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', opacity: i === curIdx ? 0 : 1, transition: 'opacity 120ms' }}>
-                {it.glyph ? <img src={it.glyph} alt="" draggable={false} style={{ width: '74%', height: '74%', display: 'block' }} /> : it.thumb ? <img src={it.thumb} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', filter: it.css || 'none' }} /> : <CamIcon k={it.icon || 'none'} size={26} />}
+                {it.glyph ? <img src={it.glyph} alt="" draggable={false} style={{ width: '74%', height: '74%', display: 'block' }} /> : it.thumb ? <div style={{ position: 'relative', width: '100%', height: '100%' }}><img src={it.thumb} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', filter: it.css || 'none' }} />{it.fx && <FilterFx k={it.fx} radius="50%" />}</div> : <CamIcon k={it.icon || 'none'} size={26} />}
               </div>
             ))}
           </div>

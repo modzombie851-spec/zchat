@@ -145,7 +145,7 @@ async function quota(uid, kind, n) {
   if (mine < 1) return { stop: null, none: true };
   const all = await take(EVERYONE, `${kind}_all`, mine, DAY_CAPS[`${kind}_all`]);
   if (all === null) return { stop: reply(503, { error: 'This switches on once the latest ZChat setup is finished.' }) };
-  if (all < 1) return { stop: reply(503, { error: 'ZChat Bot is resting for today. Try again tomorrow.' }) };
+  if (all < 1) return { stop: reply(503, { error: 'Mira is resting for today. Try again tomorrow.' }) };
   return { n: Math.min(mine, all) };
 }
 
@@ -177,7 +177,7 @@ async function ask(user, body) {
   if (q.stop) return q.stop;
   if (q.none) return reply(429, { error: 'You have asked about a lot of photos today. Try again tomorrow.' });
   const sys = [
-    'You are ZChat Bot, the helper inside the ZChat chat app. Someone is looking at a photo and asks you about it.',
+    'You are Mira, the helper inside the ZChat chat app. Someone is looking at a photo and asks you about it.',
     'Answer in one to three short sentences, plain and friendly, in the language of the question.',
     'Only say what you can see in the photo or know for sure about it. If you are not sure, say so briefly.',
     'You can not tell who a real person is from their face. If asked, say so kindly and describe what you can see instead.',
@@ -193,7 +193,7 @@ async function ask(user, body) {
     turns.push({ role: 'user', parts: [{ text: i + 1 < history.length ? history[i + 1].q : question }] });
   });
   const out = await vision(turns, sys, 30000, false, 0.4);
-  if (!out || out.limited) return reply(503, { error: limitText(out, 'ZChat Bot is busy right now. Try again soon.') });
+  if (!out || out.limited) return reply(503, { error: limitText(out, 'Mira is busy right now. Try again soon.') });
   if (out.blocked) return reply(200, { text: 'I would rather not answer that one. Ask me something else about the photo?' });
   return reply(200, { text: noDashes(out.text).slice(0, 1500) });
 }

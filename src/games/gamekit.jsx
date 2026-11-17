@@ -732,7 +732,10 @@ function ctlTab(g, v, sideways, pv, layout) {
   );
 }
 
+const GAME_DND_KEY = 'zchat-game-dnd';
+export const gameDndOn = () => { try { return localStorage.getItem(GAME_DND_KEY) !== '0'; } catch { return true; } };
 function AudioTab({ extra }) {
+  const [dnd, setDnd] = useState(gameDndOn);
   const [snd, setSnd] = useState(() => !!Sfx.sfxOn);
   const [mus, setMus] = useState(() => !!Sfx.musicOn);
   const [sv, setSv] = useState(() => Sfx.sfxVol == null ? 1 : Sfx.sfxVol);
@@ -744,6 +747,8 @@ function AudioTab({ extra }) {
       <GSetRow label="Music"><GSetToggle on={mus} label="Music" onToggle={(n) => { setMus(n); Sfx.init(); Sfx.setMusic(n); }} /></GSetRow>
       <GSetRow label="Music volume"><GSetSlider value={mv} label="Music volume" onChange={(x) => { setMv(x); Sfx.init(); if (Sfx.setMusicVol) Sfx.setMusicVol(x); }} /></GSetRow>
       {extra}
+      <GSetHead>Messages</GSetHead>
+      <GSetRow label="Do not disturb" sub="Hide new message pop ups and sounds while you play"><GSetToggle on={dnd} label="Do not disturb" onToggle={(n) => { setDnd(n); try { localStorage.setItem(GAME_DND_KEY, n ? '1' : '0'); } catch {} }} /></GSetRow>
     </>
   );
 }
@@ -1122,9 +1127,37 @@ export function GLobbySheet({ title, onClose, children, width = 560, GS }) {
   );
 }
 
+const scrollHost = (el) => {
+  for (let n = el && el.parentElement; n && n !== document.body; n = n.parentElement) {
+    const cs = getComputedStyle(n);
+    if ((/(auto|scroll)/.test(cs.overflowY) && n.scrollHeight > n.clientHeight + 2) || (/(auto|scroll)/.test(cs.overflowX) && n.scrollWidth > n.clientWidth + 2)) return n;
+  }
+  return null;
+};
 export function pressProps(fn) {
   return {
-    onPointerDown: (e) => { e.stopPropagation(); if (e.button > 0) return; e.currentTarget.dataset.pd = String(Date.now()); fn(e); },
+    onPointerDown: (e) => {
+      e.stopPropagation();
+      if (e.button > 0) return;
+      const el = e.currentTarget;
+      el.dataset.pd = String(Date.now());
+      const host = e.pointerType === 'mouse' ? null : scrollHost(el);
+      if (!host) { fn(e); return; }
+      const x0 = e.clientX, y0 = e.clientY, sx = host.scrollLeft, sy = host.scrollTop, id = e.pointerId;
+      const done = () => { window.removeEventListener('pointerup', up, true); window.removeEventListener('pointercancel', up, true); };
+      const up = (ev) => {
+        if (ev.pointerId !== id) return;
+        done();
+        const moved = Math.abs(ev.clientX - x0) + Math.abs(ev.clientY - y0) > 10 || Math.abs(host.scrollLeft - sx) + Math.abs(host.scrollTop - sy) > 3;
+        if (ev.type !== 'pointerup' || moved) return;
+        const r = el.getBoundingClientRect();
+        if (ev.clientX < r.left - 12 || ev.clientX > r.right + 12 || ev.clientY < r.top - 12 || ev.clientY > r.bottom + 12) return;
+        el.dataset.pd = String(Date.now());
+        fn(ev);
+      };
+      window.addEventListener('pointerup', up, true);
+      window.addEventListener('pointercancel', up, true);
+    },
     onClick: (e) => { e.stopPropagation(); if (Date.now() - Number(e.currentTarget.dataset.pd || 0) < 800) return; fn(e); },
     onMouseDown: (e) => { if (e.button === 0 && e.currentTarget.getAttribute('role') !== 'textbox') e.preventDefault(); },
   };

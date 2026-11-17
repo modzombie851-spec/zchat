@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
 import ReactDOM from 'react-dom';
-import { Send, Search, Mail, ShieldCheck, ShieldOff, AtSign, LogOut, Eye, EyeOff, Lock, X, Trash2, User, Phone, Image as ImageIcon, Smile, ArrowLeft, Check, CheckCheck, Settings as SettingsIcon, Moon, Sun, UserPlus, FileText, HelpCircle, ChevronRight, Bell, Volume2, Volume1, VolumeX, Palette, Mic, Play, Download, Users, Camera, Reply, Ban, Share2, Type, Pencil, Undo2, BellOff, Link as LinkIcon, ShieldAlert, Heart, Repeat, Clock, Timer, Smartphone, Plus, Megaphone, Database, Activity, MessageSquare } from 'lucide-react';
+import { Gamepad2, Send, Search, Mail, ShieldCheck, ShieldOff, AtSign, LogOut, Eye, EyeOff, Lock, X, Trash2, User, Phone, Image as ImageIcon, Smile, ArrowLeft, Check, CheckCheck, Settings as SettingsIcon, Moon, Sun, UserPlus, FileText, HelpCircle, ChevronRight, Bell, Volume2, Volume1, VolumeX, Palette, Mic, Play, Download, Users, Camera, Reply, Ban, Share2, Type, Pencil, Undo2, BellOff, Link as LinkIcon, ShieldAlert, Heart, Repeat, Clock, Timer, Smartphone, Plus, Megaphone, Database, Activity, MessageSquare } from 'lucide-react';
 import { supabase, signInWithPassword, sendMessage } from '../supabaseClient.js';
 import {
   openPermHelp,
@@ -29,6 +29,7 @@ import {
   ChatLockUnlock,
   ChatRowSheet,
   ChoiceList,
+  purchaseWording,
   CoinIcon,
   CommunityGlyph,
   ConfirmDialog,
@@ -212,6 +213,7 @@ import {
   pfOpenPage,
   playUiSound,
   postThumbOf,
+  VideoThumb,
   primaryBtn,
   privMetaPush,
   profileFnMissing,
@@ -473,6 +475,14 @@ export function MessagePrivacyPage({ me, onClose, onSaved }) {
   );
 }
 
+export function maskEmail(e) {
+  const s = String(e || '');
+  const at = s.indexOf('@');
+  if (at < 1) return s;
+  const name = s.slice(0, at), dom = s.slice(at + 1);
+  const keep = name.length <= 2 ? 1 : 2;
+  return `${name.slice(0, keep)}${'\u2022'.repeat(Math.max(3, Math.min(6, name.length - keep)))}@${dom}`;
+}
 function ChangeEmailPage({ email, onClose }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
@@ -495,7 +505,7 @@ function ChangeEmailPage({ email, onClose }) {
     setBusy(false);
   };
   return (
-    <FullPage title="Email address" subtitle={email || ''} onBack={onClose} zIndex={70}
+    <FullPage title="Email address" subtitle={email ? maskEmail(email) : ''} onBack={onClose} zIndex={70}
       footer={sent ? <BigButton label="Done" onClick={onClose} /> : <BigButton label={busy ? 'Sending' : 'Send confirmation'} disabled={!valid || busy} onClick={submit} />}>
       {sent ? (
         <div style={{ textAlign: 'center', padding: '36px 10px' }}>
@@ -505,7 +515,7 @@ function ChangeEmailPage({ email, onClose }) {
         </div>
       ) : (
         <>
-          <div style={{ fontSize: 13.5, color: theme.muted, lineHeight: 1.55, padding: '12px 2px 4px', textWrap: 'pretty' }}>Your current email is {email || 'not set'}. You keep using it to log in until you confirm the new one.</div>
+          <div style={{ fontSize: 13.5, color: theme.muted, lineHeight: 1.55, padding: '12px 2px 4px', textWrap: 'pretty' }}>Your current email is {email ? maskEmail(email) : 'not set'}. You keep using it to log in until you confirm the new one.</div>
           <IgHeading>New email</IgHeading>
           <input value={next} onChange={(e) => { setNext(e.target.value); setErr(''); }} placeholder="you@example.com" aria-label="New email" type="email" autoCapitalize="none" autoComplete="email"
             onKeyDown={(e) => { if (e.key === 'Enter') submit(); }} style={{ ...inputStyle(theme), fontSize: 16 }} />
@@ -890,6 +900,35 @@ function SafetyPrivacyRows({ me }) {
     </>
   );
 }
+const VIS_OPTS = [
+  { k: 'public', label: 'Public', sub: 'Anyone on ZChat can see your posts, highlights and followers' },
+  { k: 'private', label: 'Private', sub: 'Only followers you approve can see your posts and stories' },
+];
+export function AccountVisibilityCard({ me, onSaved }) {
+  const { theme } = useTheme();
+  const [priv, setPriv] = useState(!!(me && me.is_private));
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { setPriv(!!(me && me.is_private)); }, [me && me.is_private]);
+  if (!me) return null;
+  const pick = async (k) => {
+    const next = k === 'private';
+    if (next === priv || busy) return;
+    setPriv(next);
+    setBusy(true);
+    const { data, error } = await updateProfile(me.id, { is_private: next });
+    setBusy(false);
+    if (error || !data) { setPriv(!next); appSnack('That did not save. Try again.'); return; }
+    appSnack(next ? 'Your account is private now' : 'Your account is public now');
+    if (onSaved) onSaved({ is_private: next });
+  };
+  const opts = VIS_OPTS.map((o) => ({ ...o, icon: o.k === 'private' ? <Lock size={19} /> : <Eye size={19} /> }));
+  return (
+    <div style={{ margin: '4px 0 10px' }}>
+      <div style={{ padding: '6px 4px 2px', fontSize: 13, fontWeight: 700, color: theme.muted }}>Account privacy</div>
+      <ChoiceList label="Account privacy" value={priv ? 'private' : 'public'} onChange={pick} options={opts} />
+    </div>
+  );
+}
 function SearchVisibilityRow({ me }) {
   const key = `zchat-search-${me.id}`;
   const [on, setOn] = useState(() => { const v = readJsonLs(key, null); return typeof v === 'boolean' ? v : !me.is_private; });
@@ -1040,9 +1079,9 @@ export function SettingsPanel({ onOpenWallet, onClose, onOpenPrivacy, onLogout, 
     { title: 'Your account', rows: [
       { icon: <User />, label: 'Edit profile', onClick: onEditProfile },
       { icon: <UserPlus />, label: 'Switch account', onClick: onOpenAccounts },
-      { icon: <Mail />, label: 'Email address', value: currentEmail.length > 20 ? `${currentEmail.slice(0, 18)}\u2026` : currentEmail, onClick: () => setSubPage('email') },
+      { icon: <Mail />, label: 'Email address', value: maskEmail(currentEmail).length > 22 ? `${maskEmail(currentEmail).slice(0, 20)}\u2026` : maskEmail(currentEmail), onClick: () => setSubPage('email') },
       me ? { icon: <Moon />, label: 'Take a break', onClick: () => setSubPage('break') } : null,
-      me ? { icon: <CreatorToolsGlyph />, label: 'Creator tools', toggle: !!creatorOn, onClick: () => { setCreatorOn(!creatorOn); appSnack(creatorOn ? 'Creator tools are off. Turn them on here any time.' : 'Creator tools are on. Find them on your profile.'); } } : null,
+      me ? { icon: <CreatorToolsGlyph />, label: 'Creator tools on profile', toggle: !!creatorOn, onClick: () => { setCreatorOn(!creatorOn); appSnack(creatorOn ? 'Creator tools are hidden. Show them here any time.' : 'Creator tools are on. Find them on your profile.'); } } : null,
     ] },
     { title: 'Login and security', rows: [
       { icon: <SecGlyph k="checkup" />, label: 'Security checkup', value: checkupLabel(me && me.id), onClick: () => setSubPage('checkup') },
@@ -1241,6 +1280,7 @@ export function SettingsPanel({ onOpenWallet, onClose, onOpenPrivacy, onLogout, 
           <>
             <SectionHeader title="Privacy" />
             <PageArt k="privacy" text="Choose who can see your profile and who can reach you." />
+            {me && <AccountVisibilityCard me={me} onSaved={onPrivacySaved} />}
             <SettingsRow icon={<SecGlyph k="checkup" />} label="Security checkup" sub="Go through the important settings one at a time" onClick={() => setSubPage('checkup')} />
             <SettingsRow icon={<Eye size={16} />} label="Who can see what" sub="Profile, bio, online, tags, groups, leaderboards" onClick={() => setSection('whocansee')} />
             <SettingsRow icon={<GamepadIcon size={16} />} label="Games" sub="What you play, watching and joining" onClick={() => setSubPage('games')} />
@@ -1403,7 +1443,7 @@ export function AccountSwitcherPanel({ accounts, currentId, switchingId, onBack,
               <div style={{ fontWeight: 700, fontSize: 15, color: theme.ink, display: 'flex', alignItems: 'center', minWidth: 0 }}>
                 <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{a.name}</span><VerifiedBadge tier={tiers[a.id] || a.verified} custom={a.custom_badge} size={14} />
               </div>
-              <div style={{ fontSize: 13, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 1 }}>{a.id === currentId ? 'Logged in now' : a.email}</div>
+              <div style={{ fontSize: 13, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 1 }}>{a.id === currentId ? 'Logged in now' : maskEmail(a.email)}</div>
             </div>
             {switchingId === a.id ? <Spinner size={16} color={theme.coral} /> : a.id === currentId ? (
               <div style={{ width: 26, height: 26, borderRadius: 13, background: theme.coral, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Check size={15} strokeWidth={3} /></div>
@@ -1438,9 +1478,16 @@ function NotifThumb({ thumb }) {
   const { theme } = useTheme();
   const [failedSrc, setFailedSrc] = useState(null);
   if (!thumb) return null;
+  const box = { width: 46, height: 46, borderRadius: 10, overflow: 'hidden', flexShrink: 0, background: theme.soft, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.muted, position: 'relative', boxShadow: `inset 0 0 0 1px ${theme.hair}` };
+  const img = thumb.url && failedSrc !== thumb.url;
   return (
-    <div style={{ width: 44, height: 44, borderRadius: 8, overflow: 'hidden', flexShrink: 0, background: theme.soft, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.muted }}>
-      {thumb.url && failedSrc !== thumb.url ? <img src={thumb.url} alt="" loading="lazy" draggable={false} onError={() => setFailedSrc(thumb.url)} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} /> : thumb.video ? <Play size={16} /> : null}
+    <div style={box}>
+      {img ? <img src={thumb.url} alt="" loading="lazy" draggable={false} onError={() => setFailedSrc(thumb.url)} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+        : thumb.video && thumb.vsrc ? <VideoThumb src={thumb.vsrc} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }} />
+          : thumb.text ? <div style={{ padding: '4px 5px', fontSize: 7.5, lineHeight: 1.25, fontWeight: 600, color: theme.ink2 || theme.ink, overflow: 'hidden', height: '100%', boxSizing: 'border-box', wordBreak: 'break-word', textAlign: 'left', width: '100%' }}>{thumb.text}</div>
+            : thumb.video ? <Play size={16} /> : null}
+      {thumb.video && <div aria-hidden="true" style={{ position: 'absolute', left: 3, bottom: 3, width: 15, height: 15, borderRadius: 8, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Play size={8} color="#FFFFFF" fill="#FFFFFF" /></div>}
+      {thumb.many && <div aria-hidden="true" style={{ position: 'absolute', right: 3, top: 3, width: 9, height: 9, borderRadius: 2, border: '1.5px solid #FFFFFF', boxShadow: '0 0 2px rgba(0,0,0,0.6)' }} />}
     </div>
   );
 }
@@ -1802,11 +1849,11 @@ export function NotificationsPage({ visitorsOn = false, onOpenVisitors = null, m
       case 'trade': return r.meta && r.meta.ev === 'done' ? <>Your trade with {who} is done. Your new items are in your Collection.</> : <>{who} {snippet || 'sent you a trade offer'}.</>;
       case 'creator': return r.profile ? <>{who} {snippet}</> : <>{snippet}</>;
       case 'tip': return r.meta && r.meta.coins ? <>{who} tipped {coinsText(r.meta.coins)} on your post{r.meta.note ? `: "${String(r.meta.note).slice(0, 80)}"` : '.'}</> : <>{who} {snippet || 'tipped you'}.</>;
-      case 'coins': return r.meta && Number(r.meta.coins) < 0 ? <><b style={{ fontWeight: 700, color: theme.ink }}>The ZChat team</b> took back {coinsText(-Number(r.meta.coins))}{r.meta.note ? `: "${String(r.meta.note).slice(0, 80)}"` : '.'}</> : <>{snippet || 'Your coins changed.'}</>;
+      case 'coins': return r.meta && Number(r.meta.coins) < 0 ? <><b style={{ fontWeight: 700, color: theme.ink }}>The ZChat team</b> took back {coinsText(-Number(r.meta.coins))}{r.meta.note ? `: "${String(r.meta.note).slice(0, 80)}"` : '.'}</> : <>{purchaseWording(snippet, true) || 'Your coins changed.'}</>;
       case 'anniversary': return <>{snippet || <>You and {who} met on ZChat {r.years && r.years > 1 ? `${r.years} years` : 'a year'} ago today.</>}</>;
       case 'achievement': return <><b style={{ fontWeight: 700, color: theme.ink }}>New achievement</b> {snippet}</>;
       case 'question': return <><b style={{ fontWeight: 700, color: theme.ink }}>New question</b> {snippet}</>;
-      case 'reward': return /^(You |\d[\d,]* coins were )/.test(snippet) ? <>{snippet}</> : <><b style={{ fontWeight: 700, color: theme.ink }}>Reward</b> {snippet}</>;
+      case 'reward': { const sn = purchaseWording(snippet, true); return /^(You |\d[\d,]* coins were )/.test(sn) ? <>{sn}</> : <><b style={{ fontWeight: 700, color: theme.ink }}>{sn !== snippet ? 'Purchase' : 'Reward'}</b> {sn}</>; }
       case 'login': return r.meta && r.meta.device_id && r.meta.device_id === getDeviceId()
         ? <><b style={{ fontWeight: 700, color: theme.ink }}>New login</b> on this device{r.meta.place ? `, ${r.meta.place}` : ''}.</>
         : <><b style={{ fontWeight: 700, color: theme.ink }}>New login</b> on {snippet || 'a new device'}. Not you? Tap to review your devices.</>;
@@ -2611,13 +2658,9 @@ export function AccountPrivacyPanel({ profile, onClose, onSaved }) {
     <FullPage title="Privacy" onBack={onClose} zIndex={60}
       footer={<button onClick={save} disabled={saving || !dirty} className="zchat-press" style={{ ...primaryBtn(theme, saving || !dirty) }}>{saving ? <Spinner /> : 'Save changes'}</button>}>
       <div style={{ marginTop: 6 }}>
-        <div role="button" aria-label="Private account" onClick={() => setIsPrivate((s) => !s)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '13px 2px', cursor: 'pointer' }}>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: theme.ink }}>Private account</div>
-            <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 2, lineHeight: 1.4 }}>New followers need your approval before they see your posts</div>
-          </div>
-          <ToggleSwitch on={isPrivate} onClick={(e) => { e.stopPropagation(); setIsPrivate((s) => !s); }} />
-        </div>
+        <div style={{ padding: '6px 2px 2px', fontSize: 13, fontWeight: 600, color: theme.muted }}>Account privacy</div>
+        <ChoiceList label="Account privacy" value={isPrivate ? 'private' : 'public'} onChange={(k) => setIsPrivate(k === 'private')}
+          options={VIS_OPTS.map((o) => ({ ...o, icon: o.k === 'private' ? <Lock size={19} /> : <Eye size={19} /> }))} />
       </div>
       <div style={{ padding: '22px 2px 4px', fontSize: 13, fontWeight: 600, color: theme.muted }}>Visible to others</div>
       <div>
@@ -4265,12 +4308,14 @@ export function SecurityCheckupPage({ me, onClose, onSaved, hideActivity, onTogg
 function QuietHoursSection() {
   const { theme } = useTheme();
   const [q, setQ] = useState(readQuiet);
+  const [gdnd, setGdnd] = useState(() => { try { return localStorage.getItem('zchat-game-dnd') !== '0'; } catch { return true; } });
   const save = (next) => { setQ(next); try { localStorage.setItem('zchat-quiet', JSON.stringify(next)); } catch {} writeWorkerPref('/__quiet', () => next); };
   const hourLabel = (h) => fmtHM(new Date(2020, 0, 1, h));
   const sel = { ...inputStyle(theme), width: 'auto', minWidth: 110, padding: '8px 10px', fontSize: 14.5 };
   return (
     <div>
       <IgRow inset={false} icon={<Moon size={16} />} label="Quiet hours" sub="No message sounds while you sleep" right={<IgToggle on={q.on} onClick={() => save({ ...q, on: !q.on })} />} />
+      <IgRow inset={false} icon={<Gamepad2 size={16} />} label="Do not disturb in games" sub="Hide message pop ups and sounds during a match" right={<IgToggle on={gdnd} onClick={() => { const n = !gdnd; setGdnd(n); try { localStorage.setItem('zchat-game-dnd', n ? '1' : '0'); } catch {} }} />} />
       {q.on && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 2px', borderBottom: `1px solid ${theme.border}`, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 14.5, color: theme.ink, fontWeight: 600 }}>From</span>

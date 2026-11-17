@@ -6296,13 +6296,13 @@ export function PsAltSheet({ item, value, onSave, onClose }) {
         onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !isTouchDevice()) { e.preventDefault(); onSave(text.trim()); onClose(); } }}
         style={{ ...psDarkInput, resize: 'none', minHeight: 104 }} />
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '8px 2px 0' }}>
-        <div role="button" aria-label="Suggest alt text with ZChat Bot" onClick={suggest} className="zchat-press" style={{ display: 'flex', alignItems: 'center', gap: 8, height: 36, padding: '0 14px 0 6px', borderRadius: 18, background: 'rgba(255,255,255,0.12)', cursor: busy ? 'default' : 'pointer', fontSize: 14, fontWeight: 700 }}>
-          {busy ? <span style={{ width: 24, display: 'flex', justifyContent: 'center' }}><Spinner size={14} /></span> : <img src="/bot-avatar.jpg" alt="" style={{ width: 24, height: 24, borderRadius: '50%', objectFit: 'cover' }} />}
+        <div role="button" aria-label="Suggest alt text with Mira" onClick={suggest} className="zchat-press" style={{ display: 'flex', alignItems: 'center', gap: 8, height: 36, padding: '0 14px 0 6px', borderRadius: 18, background: 'rgba(255,255,255,0.12)', cursor: busy ? 'default' : 'pointer', fontSize: 14, fontWeight: 700 }}>
+          {busy ? <span style={{ width: 24, display: 'flex', justifyContent: 'center' }}><Spinner size={14} /></span> : <img src="/mira-avatar-v1.jpg" alt="" style={{ width: 24, height: 24, borderRadius: '50%', objectFit: 'cover' }} />}
           {busy ? 'Looking at the photo' : 'Suggest'}
         </div>
         <span style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.55)', fontVariantNumeric: 'tabular-nums' }}>{text.length}/300</span>
       </div>
-      <div role={note ? 'alert' : undefined} style={{ fontSize: 12.5, lineHeight: 1.45, color: note ? '#FFB4BC' : 'rgba(255,255,255,0.5)', padding: '8px 2px 14px', minHeight: 18 }}>{note || 'ZChat Bot writes a first try. Read it before you post.'}</div>
+      <div role={note ? 'alert' : undefined} style={{ fontSize: 12.5, lineHeight: 1.45, color: note ? '#FFB4BC' : 'rgba(255,255,255,0.5)', padding: '8px 2px 14px', minHeight: 18 }}>{note || 'Mira writes a first try. Read it before you post.'}</div>
       <PsDarkButton label="Done" onClick={() => { onSave(text.trim()); onClose(); }} />
     </PsSheet>
   );
@@ -6689,22 +6689,24 @@ function WnSegments({ total, at, onArt, dark }) {
   );
 }
 
-const WN_PHOTOS = { locker584: '/wn584-locker.webp', map584: '/wn584-map.webp', vent584: '/wn584-vent.webp', sound584: '/wn584-sound.webp', door584: '/wn584-door.webp', arlo581: '/wn581-arlo.webp', wren581: '/wn581-wren.webp', tusk581: '/wn581-tusk.webp', bones581: '/wn581-bones.webp', hex581: '/wn581-hex.webp', rattle581: '/wn581-rattle.webp', voice581: '/wn581-voice.webp', leave581: '/wn581-leave.webp', team580: '/wn580-team.webp', login580: '/wn580-login.webp', grave580: '/wn580-grave.webp', heroes580: '/wn580-heroes.webp', servers580: '/wn580-servers.webp', level580: '/wn580-level.webp', invite580: '/wn580-invite.webp', coll580: '/wn580-coll.webp', lobby579: '/wn579-lobby.webp', city579: '/wn579-city.webp', fort579: '/wn579-fort.webp', pvp578: '/wn578-pvp.webp', mars578: '/wn578-mars.webp', chat574: '/wn574-chat.webp', cards574: '/wn574-cards.webp', shop573: '/wn573-shop.webp', try573: '/wn573-try.webp', cmt573: '/wn573-comments.webp', rally57: '/race-art.webp', set57: '/wn57-set.webp', lay57: '/wn57-lay.webp', bolt57: '/wn57-bolt.webp', hub57: '/wn57-hub.webp', zombies49: '/wn49-zombies.webp', mutant49: '/wn49-mutant.webp', guns50: '/wn50-guns.webp', house50: '/wn50-house.webp', pond50: '/wn50-pond.webp', buttons50: '/wn50-buttons.webp', settings50: '/wn50-settings.webp', pack51: '/wn51-pack.webp', emote51: '/wn51-emote.webp', lobby51: '/wn51-lobby.webp', waves52: '/wn52-waves.webp', sky52: '/wn52-sky.webp', map52: '/wn52-map.webp', boss53: '/wn53-boss.webp', fire53: '/wn53-fire.webp', dog53: '/wn53-dog.webp', train53: '/wn53-train.webp', hud531: '/wn531-hud.webp', moves531: '/wn531-moves.webp', pc531: '/wn531-pc.webp', squad54: '/wn54-squad.webp', boom54: '/wn54-boom.webp', heli54: '/wn54-heli.webp', gas54: '/wn54-gas.webp' , shop55: '/wn55-shop.webp', stall55: '/wn55-stall.webp', boss55: '/wn55-boss.webp', climb55: '/wn55-climb.webp', drop55: '/wn55-drop.webp', squad55: '/wn55-squad.webp', hud55: '/wn55-hud.webp', set55: '/wn55-settings.webp', music55: '/wn55-music.webp', guns55: '/wn55-guns.webp', zj55: '/zombie-art2.webp', bolt55: '/bolt-art2.webp', torch55: '/duo-art.webp' };
+const WN_PHOTOS = { heroes585: '/wn585-heroes.webp', mark585: '/wn585-mark.webp', mira585: '/wn585-mira.webp', stack585: '/wn585-stack.webp', rps585: '/wn585-rps.webp', gift585: '/wn585-gift.webp', locker584: '/wn584-locker.webp', map584: '/wn584-map.webp', vent584: '/wn584-vent.webp', sound584: '/wn584-sound.webp', door584: '/wn584-door.webp', arlo581: '/wn581-arlo.webp', wren581: '/wn581-wren.webp', tusk581: '/wn581-tusk.webp', bones581: '/wn581-bones.webp', hex581: '/wn581-hex.webp', rattle581: '/wn581-rattle.webp', voice581: '/wn581-voice.webp', leave581: '/wn581-leave.webp', team580: '/wn580-team.webp', login580: '/wn580-login.webp', grave580: '/wn580-grave.webp', heroes580: '/wn580-heroes.webp', servers580: '/wn580-servers.webp', level580: '/wn580-level.webp', invite580: '/wn580-invite.webp', coll580: '/wn580-coll.webp', lobby579: '/wn579-lobby.webp', city579: '/wn579-city.webp', fort579: '/wn579-fort.webp', pvp578: '/wn578-pvp.webp', mars578: '/wn578-mars.webp', chat574: '/wn574-chat.webp', cards574: '/wn574-cards.webp', shop573: '/wn573-shop.webp', try573: '/wn573-try.webp', cmt573: '/wn573-comments.webp', rally57: '/race-art.webp', set57: '/wn57-set.webp', lay57: '/wn57-lay.webp', bolt57: '/wn57-bolt.webp', hub57: '/wn57-hub.webp', zombies49: '/wn49-zombies.webp', mutant49: '/wn49-mutant.webp', guns50: '/wn50-guns.webp', house50: '/wn50-house.webp', pond50: '/wn50-pond.webp', buttons50: '/wn50-buttons.webp', settings50: '/wn50-settings.webp', pack51: '/wn51-pack.webp', emote51: '/wn51-emote.webp', lobby51: '/wn51-lobby.webp', waves52: '/wn52-waves.webp', sky52: '/wn52-sky.webp', map52: '/wn52-map.webp', boss53: '/wn53-boss.webp', fire53: '/wn53-fire.webp', dog53: '/wn53-dog.webp', train53: '/wn53-train.webp', hud531: '/wn531-hud.webp', moves531: '/wn531-moves.webp', pc531: '/wn531-pc.webp', squad54: '/wn54-squad.webp', boom54: '/wn54-boom.webp', heli54: '/wn54-heli.webp', gas54: '/wn54-gas.webp' , shop55: '/wn55-shop.webp', stall55: '/wn55-stall.webp', boss55: '/wn55-boss.webp', climb55: '/wn55-climb.webp', drop55: '/wn55-drop.webp', squad55: '/wn55-squad.webp', hud55: '/wn55-hud.webp', set55: '/wn55-settings.webp', music55: '/wn55-music.webp', guns55: '/wn55-guns.webp', zj55: '/zombie-art2.webp', bolt55: '/bolt-art2.webp', torch55: '/duo-art.webp' };
 const WN_HIGHLIGHTS = [
-  { k: 'locker584', art: 'locker584', go: 'hush', cta: 'Play Hush', title: 'Hide in lockers', text: 'Climb into a metal locker and watch it through the vents. Hold your breath when it comes close.' },
-  { k: 'map584', art: 'map584', go: 'hush', cta: 'Play Hush', title: 'A map', text: 'Tap the map button to see the places you have been, where you are and the way out.' },
+  { k: 'heroes585', art: 'heroes585', go: 'siege', cta: 'Play Bolt War', title: 'Seven new heroes', text: 'Wisp, Zorp, Glim, Fawn, Grim, Oak and Ember join Bolt War, each with their own attack, super and gadget.' },
+  { k: 'mark585', art: 'mark585', go: 'zombie', cta: 'Play Zombie Junction', title: 'Mark spots for your squad', text: 'Tap the pin to mark a spot or loot for your team, place pins on the big map and swap weapons right from the loot list.' },
 ];
 const WN_SECTIONS = [
-  { title: 'Hush', items: [
-    { art: 'vent584', title: 'Watch it while you hide', text: 'Under beds and tables you can look in every direction, and lockers have vents to peek through.' },
-    { art: 'door584', title: 'Closed doors slow it down', text: 'It has to stop and open closed doors. Listen for the handle before it comes in.' },
-    { art: 'sound584', title: 'More horror sounds', text: 'Screams far away, banging pipes, knocks on the walls and breathing right behind you.' },
+  { title: 'Also new', items: [
+    { art: 'mira585', title: 'Meet Mira', text: 'Your AI helper has a new name and a new look. Ask Mira anything in chat.' },
+    { art: 'gift585', title: 'New gift boxes', text: 'Gifts now arrive in real looking boxes with your paper and ribbon.' },
+    { art: 'stack585', title: 'Tower Stack, rebuilt', text: 'A new 3D tower, perfect drop combos and new sounds.' },
+    { art: 'rps585', title: 'Real hands in Rock paper scissors', text: 'Hands shake and throw for real before every reveal.' },
   ] },
 ];
 const WN_NEW_COUNT = WN_SECTIONS.reduce((n, sec) => n + sec.items.length, 0);
 const WN_SUMMARY = `${WN_NEW_COUNT} new things to try.`;
 
 const WN_EARLIER = [
+  { title: 'Hide in lockers and a map in Hush', text: 'Metal lockers with vents to peek through, a map with the way out, closed doors that slow it down and more horror sounds.' },
   { title: 'Hush looks real now', text: 'Real light and shadows, a new creature that screams I see you, a real death when it catches you, music on every screen and new buttons.' },
   { title: 'Hush, a new horror game', text: 'Something blind hunts a dark hospital by sound. Find 3 keys, open the exit and get out, alone or with up to 3 friends.' },
   { title: 'New hero powers and a Bolt War announcer', text: 'Six heroes got new attacks, supers and gadgets, a voice calls the fight, health refills while you attack and every game asks before you leave.' },
@@ -6740,7 +6742,7 @@ const WN_EARLIER = [
   { title: 'Roll Squad, watching friends and game clocks', text: 'A live ball game for up to four friends, a new Gulp, Torchbound enemies and mirror puzzles, watching friends play live, and clocks for chess and checkers.' },
   { title: 'Gulp and endless Torchbound', text: 'A live fish game, new temples every time you play, missions, voice and quick chat in Torchbound, and new rock paper scissors hands.' },
   { title: 'Torchbound and bubble pets', text: 'A live temple game for two, 51 soft 3D bubble pets, real rock paper scissors, Squish with water balloons and better group games.' },
-  { title: 'Saved Messages, a cleaner profile and new game pictures', text: 'Your own Saved Messages chat, profile visitors, 9 ball pool, chess clocks, Squish duels and a new attach menu.' },
+  { title: 'Notes to self, a cleaner profile and new game pictures', text: 'Your own Notes to self chat, profile visitors, 9 ball pool, chess clocks, Squish duels and a new attach menu.' },
   { title: 'A game shop, cues and zodiac signs', text: 'The Shop as a little game world with full sets, pool cues and carrom strikers, zodiac signs on profiles and fun on your chats page.' },
   { title: 'Play online, Zap Mayhem and new Mini golf', text: 'Game rooms with room IDs, harder bots, Zap Mayhem, a new Mini golf, boards and tables in the Shop, game faces and a quick account switch.' },
   { title: 'Game rooms, a new Shop and Sinhala and Tamil', text: 'Games full screen with live moves, Carrom, Zap and Squish, a brand new Shop with real previews, better replies, and ZChat in සිංහල and தமிழ்.' },

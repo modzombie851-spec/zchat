@@ -221,7 +221,7 @@ async function askChat(user, body) {
   const sys = 'You help someone find things in their own chat history. You get their question and a part of the chat, one message per line as [id] name, time: text. The person asking is called "Me". Find the messages that answer the question. Reply with only JSON like {"answer":"...","ids":["123","456"],"sure":true}. "answer" is one short line under 25 words that answers the question using only what the messages say, with the names, days and times as written. "ids" lists one to four ids of the messages that hold the answer, most useful first. "sure" is true only if the messages clearly answer it. If nothing here answers it, reply {"answer":"","ids":[],"sure":false}. Never guess or add anything that is not in the messages. Write the answer in the language of the question. Never use hyphens, dashes or underscores.';
   const transcript = `${today ? `Today is ${today}.\n` : ''}Question: ${q}\n\nChat part:\n${items.map((x) => `[${x.id}] ${x.n}${x.w ? `, ${x.w}` : ''}: ${x.t}`).join('\n')}`;
   const out = await askModel(sys, transcript, { json: true, ms: 25000 });
-  if (!out || out.limited) return reply(503, { error: limitText(out, 'ZChat Bot is busy right now. Try again soon.') });
+  if (!out || out.limited) return reply(503, { error: limitText(out, 'Mira is busy right now. Try again soon.') });
   if (out.blocked) return reply(200, { answer: '', ids: [], sure: false });
   const j = jsonOf(out.text) || {};
   const ids = (Array.isArray(j.ids) ? j.ids : []).map((v) => String(v)).filter((v) => seen.has(v)).slice(0, 4);
@@ -246,11 +246,11 @@ async function talk(user, body) {
   const text = clip(body.text, 1000);
   if (!UUID_RE.test(botId) || !text) return reply(400, { error: 'Say something first.' });
   const { data: bot } = await supabase.from('profiles').select('id, is_bot, is_deleted').eq('id', botId).maybeSingle();
-  if (!bot || !bot.is_bot || bot.is_deleted) return reply(404, { error: 'ZChat Bot is not around right now.' });
+  if (!bot || !bot.is_bot || bot.is_deleted) return reply(404, { error: 'Mira is not around right now.' });
   const dayStart = new Date();
   dayStart.setUTCHours(0, 0, 0, 0);
   const { count } = await supabase.from('messages').select('id', { count: 'exact', head: true }).eq('sender_id', botId).eq('receiver_id', user.id).gte('created_at', dayStart.toISOString());
-  if ((count || 0) >= BOT_DAILY) return reply(429, { error: 'That is the most ZChat Bot can answer in one day. Try again tomorrow.' });
+  if ((count || 0) >= BOT_DAILY) return reply(429, { error: 'That is the most Mira can answer in one day. Try again tomorrow.' });
   if ((await bumpUsage(user.id, 'talk')) > LIMITS.talk) return reply(429, { error: 'You have talked a lot today. Try again tomorrow.' });
   const [{ data: prof }, { data: hist }] = await Promise.all([
     supabase.from('profiles').select('name').eq('id', user.id).maybeSingle(),
@@ -262,7 +262,7 @@ async function talk(user, body) {
   const name = clip(prof && prof.name, 40).split(' ')[0] || 'there';
   const lang = clip(body.lang, 20);
   const sys = [
-    'You are ZChat Bot, the AI assistant inside the ZChat app, made by Zombie. Never say you are Gemini or mention Google.',
+    'You are Mira, the AI assistant inside the ZChat app, made by Zombie. Never say you are Gemini or mention Google.',
     `You are in a spoken voice conversation with ${name}. Your reply is read out loud.`,
     'Talk like a warm, natural person on a call: short sentences, usually one to three, unless they ask for more. No markdown, no lists, no headings, no code, no emojis and no links. Say numbers, dates and times the way people say them out loud.',
     `Reply in the language they speak${lang ? ` (their phone is set to ${lang})` : ''}. Do not greet them again unless they greet you.`,
@@ -270,9 +270,9 @@ async function talk(user, body) {
   ].join('\n');
   const convo = `${turns.map((x) => `${x.role === 'You' ? 'You' : name}: ${x.t}`).join('\n')}\n${name}: ${text}\nYou:`.slice(-12000);
   const out = await askModel(sys, convo, { temperature: 0.8, ms: 20000, localMs: 9000 });
-  if (!out || out.limited) return reply(503, { error: limitText(out, 'ZChat Bot is busy right now. Try again soon.') });
-  const said = out.blocked ? 'Let us keep things friendly. What else can I help with?' : speakable(out.text).replace(/^\s*(ZChat Bot|You)\s*:\s*/i, '').slice(0, 2000);
-  if (!said) return reply(503, { error: 'ZChat Bot is busy right now. Try again soon.' });
+  if (!out || out.limited) return reply(503, { error: limitText(out, 'Mira is busy right now. Try again soon.') });
+  const said = out.blocked ? 'Let us keep things friendly. What else can I help with?' : speakable(out.text).replace(/^\s*(Mira|ZChat Bot|You)\s*:\s*/i, '').slice(0, 2000);
+  if (!said) return reply(503, { error: 'Mira is busy right now. Try again soon.' });
   const content = /^\s*z[a-z]{2,8}:/i.test(said) ? `​${said}` : said;
   const { data: row, error } = await supabase.from('messages').insert({ sender_id: botId, receiver_id: user.id, type: 'text', content }).select('*').single();
   if (error || !row) return reply(500, { error: 'The answer could not be saved. Try again.' });

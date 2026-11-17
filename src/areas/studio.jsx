@@ -77,6 +77,7 @@ import {
   announceDrafts,
   appSnack,
   applyPhotoFilter,
+  photoFilterLayers,
   avatarCfgOf,
   avatarSvgUrl,
   backStack,
@@ -323,7 +324,7 @@ function pdfItemsFor(rows, { myId, isGroup, nameOf, photos }) {
     const time = fmtHM(d);
     if (m.type === 'system') { const ds = describeMessage(m); if (ds && ds.text) items.push({ k: 'sys', t: ds.text, time }); return; }
     const mine = m.sender_id === myId;
-    const it = { k: 'm', me: mine, who: isGroup && !mine ? (m.bot_reply ? 'ZChat Bot' : nameOf(m.sender_id)) : null, time, text: '', edited: !!m.edited, fwd: !!m.forwarded };
+    const it = { k: 'm', me: mine, who: isGroup && !mine ? (m.bot_reply ? 'Mira' : nameOf(m.sender_id)) : null, time, text: '', edited: !!m.edited, fwd: !!m.forwarded };
     if (m.reply_to_id != null) {
       const rm = byId.get(String(m.reply_to_id));
       if (rm && !rm.deleted) it.quote = { who: rm.sender_id === myId ? 'You' : nameOf(rm.sender_id), t: parseOnce(rm) || parseBlur(rm) ? quoteTextFor(rm) : plainPreviewText(quoteTextFor(rm)).slice(0, 180) };
@@ -2541,6 +2542,8 @@ export function MediaComposer({ files, recipientName, onCancel, onSend: onSendBa
   const [sending, setSending] = useState(false);
   const [stage, setStage] = useState({ w: 0, h: 0 });
   const [draftCrop, setDraftCrop] = useState(null);
+  const cropBoxRef = useRef(null);
+  const cropLive = useRef(null);
   const [cropAspect, setCropAspect] = useState(null);
   const [brushColor, setBrushColor] = useState('#FF3B30');
   const [brushSize, setBrushSize] = useState(8);
@@ -2841,6 +2844,18 @@ export function MediaComposer({ files, recipientName, onCancel, onSend: onSendBa
     e.stopPropagation();
     e.currentTarget.setPointerCapture?.(e.pointerId);
     dragRef.current = { type: 'crop', handle, sx: e.clientX, sy: e.clientY, orig: { ...draftCrop } };
+    cropLive.current = null;
+    if (cropBoxRef.current) cropBoxRef.current.style.transition = 'none';
+  };
+  const cropPaint = (c) => {
+    cropLive.current = c;
+    const el = cropBoxRef.current;
+    if (!el) { setDraftCrop(c); return; }
+    const { frameW: fw, frameH: fh } = frameRef.current;
+    el.style.left = `${c.x * fw}px`;
+    el.style.top = `${c.y * fh}px`;
+    el.style.width = `${c.w * fw}px`;
+    el.style.height = `${c.h * fh}px`;
   };
   const cropMove = (e) => {
     const d = dragRef.current;
@@ -2852,7 +2867,7 @@ export function MediaComposer({ files, recipientName, onCancel, onSend: onSendBa
     const min = 0.1;
     const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
     if (d.handle === 'move') {
-      setDraftCrop({ ...o, x: clamp(o.x + dx, 0, 1 - o.w), y: clamp(o.y + dy, 0, 1 - o.h) });
+      cropPaint({ ...o, x: clamp(o.x + dx, 0, 1 - o.w), y: clamp(o.y + dy, 0, 1 - o.h) });
       return;
     }
     const right = o.x + o.w;
@@ -2865,16 +2880,26 @@ export function MediaComposer({ files, recipientName, onCancel, onSend: onSendBa
     if (d.handle.includes('e')) { w = clamp(o.w + dx, min, 1 - o.x); }
     if (d.handle.includes('n')) { y = clamp(o.y + dy, 0, bottom - min); h = bottom - y; }
     if (d.handle.includes('s')) { h = clamp(o.h + dy, min, 1 - o.y); }
-    if (cropAspect) {
+    if (cropAspect && (d.handle === 'n' || d.handle === 's')) {
+      w = (h * H * cropAspect) / W;
+      if (o.x + w > 1) { w = 1 - o.x; h = (w * W) / (H * cropAspect); if (d.handle === 'n') y = bottom - h; }
+    } else if (cropAspect) {
       h = (w * W) / (H * cropAspect);
       const maxH = d.handle.includes('n') ? bottom : 1 - o.y;
       if (h > maxH) { h = maxH; w = (h * H * cropAspect) / W; }
       if (d.handle.includes('w')) x = right - w;
       if (d.handle.includes('n')) y = bottom - h;
     }
-    setDraftCrop({ x, y, w, h });
+    cropPaint({ x, y, w, h });
   };
-  const dragEnd = () => { dragRef.current = null; };
+  const dragEnd = () => {
+    const d = dragRef.current;
+    dragRef.current = null;
+    if (d && d.type === 'crop') {
+      if (cropBoxRef.current) cropBoxRef.current.style.transition = '';
+      if (cropLive.current) { const c = cropLive.current; cropLive.current = null; setDraftCrop(c); }
+    }
+  };
 
   const finishCrop = () => {
     const c = draftCrop;
@@ -3129,7 +3154,19 @@ export function MediaComposer({ files, recipientName, onCancel, onSend: onSendBa
     const reg = cur.crop || { x: 0, y: 0, w: 1, h: 1 };
     const left = reg.x * fr.innerW;
     img.style.display = 'block';
-    img.style.filter = photoFilterCss(PHOTO_FILTERS[cand].k);
+    const fk = PHOTO_FILTERS[cand].k;
+    if (img.firstChild) img.firstChild.style.filter = photoFilterCss(fk);
+    const lay = photoFilterLayers(fk);
+    for (let q = 0; q < 3; q++) {
+      const d = img.children[q + 1];
+      if (!d) continue;
+      const st = lay[q];
+      if (!st) { d.style.display = 'none'; continue; }
+      d.style.cssText = 'position:absolute;inset:0;pointer-events:none';
+      d.style.background = st.background;
+      if (st.mixBlendMode) d.style.mixBlendMode = st.mixBlendMode;
+      if (st.opacity != null) d.style.opacity = String(st.opacity);
+    }
     img.style.clipPath = dx < 0 ? `inset(0 0 0 ${Math.max(0, left + fr.frameW + dx)}px)` : `inset(0 ${Math.max(0, fr.innerW - (left + dx))}px 0 0)`;
   };
   const fsDown = (e) => {
@@ -3443,7 +3480,10 @@ export function MediaComposer({ files, recipientName, onCancel, onSend: onSendBa
                 <>
                   <img src={cur.url} alt="" draggable={false} style={{ width: '100%', height: '100%', display: 'block', userSelect: 'none', pointerEvents: 'none', filter: photoFilterCss(cur.filter) }} />
                   <FilterFx k={cur.filter} />
-                  <img ref={fsImgRef} src={cur.url} alt="" aria-hidden="true" draggable={false} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'none', userSelect: 'none', pointerEvents: 'none', willChange: 'clip-path' }} />
+                  <div ref={fsImgRef} aria-hidden="true" style={{ position: 'absolute', inset: 0, display: 'none', pointerEvents: 'none', willChange: 'clip-path' }}>
+                    <img src={cur.url} alt="" draggable={false} style={{ width: '100%', height: '100%', display: 'block', userSelect: 'none' }} />
+                    <div /><div /><div />
+                  </div>
                   <canvas ref={blurCanvasRef} aria-label={mode === 'blur' ? 'Paint to blur' : undefined} aria-hidden={mode === 'blur' ? undefined : 'true'} onPointerDown={blurDown} onPointerMove={blurMove} onPointerUp={blurUp} onPointerCancel={blurUp}
                     style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: blurCount || mode === 'blur' ? 'block' : 'none', pointerEvents: mode === 'blur' ? 'auto' : 'none', touchAction: 'none', cursor: mode === 'blur' ? 'crosshair' : 'default' }} />
                 </>
@@ -3493,11 +3533,18 @@ export function MediaComposer({ files, recipientName, onCancel, onSend: onSendBa
               </div>
             )}
             {mode === 'crop' && draftCrop && (
-              <div onPointerDown={(e) => cropDown(e, 'move')} onPointerMove={cropMove} onPointerUp={dragEnd} onPointerCancel={dragEnd}
+              <div ref={cropBoxRef} onPointerDown={(e) => cropDown(e, 'move')} onPointerMove={cropMove} onPointerUp={dragEnd} onPointerCancel={dragEnd}
                 style={{
                   position: 'absolute', left: draftCrop.x * frameW, top: draftCrop.y * frameH, width: draftCrop.w * frameW, height: draftCrop.h * frameH,
                   boxShadow: '0 0 0 4000px rgba(0,0,0,0.6)', outline: '1px solid rgba(255,255,255,0.9)', touchAction: 'none', cursor: 'move',
+                  transition: 'left 0.18s ease, top 0.18s ease, width 0.18s ease, height 0.18s ease', willChange: 'left, top, width, height',
                 }}>
+                {['n', 's', 'e', 'w'].map((hnd) => (
+                  <div key={hnd} onPointerDown={(e) => cropDown(e, hnd)} onPointerMove={cropMove} onPointerUp={dragEnd} onPointerCancel={dragEnd}
+                    style={{ position: 'absolute', touchAction: 'none', cursor: hnd === 'n' || hnd === 's' ? 'ns-resize' : 'ew-resize', ...(hnd === 'n' || hnd === 's' ? { left: 30, right: 30, height: 36, [hnd === 'n' ? 'top' : 'bottom']: -18 } : { top: 30, bottom: 30, width: 36, [hnd === 'w' ? 'left' : 'right']: -18 }), display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div style={hnd === 'n' || hnd === 's' ? { width: 26, height: 4, borderRadius: 2, background: '#FFFFFF' } : { width: 4, height: 26, borderRadius: 2, background: '#FFFFFF' }} />
+                  </div>
+                ))}
                 {[1, 2].map((n) => (
                   <React.Fragment key={n}>
                     <div style={{ position: 'absolute', left: `${(n * 100) / 3}%`, top: 0, bottom: 0, width: 1, background: 'rgba(255,255,255,0.35)', pointerEvents: 'none' }} />
@@ -5558,7 +5605,7 @@ const PAINT_STAMPS = ['❤️', '⭐', '✨', '\u{1F525}', '\u{1F602}', '\u{1F97
 const PAINT_FONTS = [['sans', 'Clean', `800 {s}px ${FONT}`], ['serif', 'Classic', '700 {s}px Georgia, "Times New Roman", serif'], ['mono', 'Typewriter', '700 {s}px "Courier New", Courier, monospace'], ['hand', 'Hand', '700 {s}px "Comic Sans MS", "Chalkboard SE", "Marker Felt", cursive']];
 const PAINT_IDEAS = ['A cat in a spaceship', 'Your dream house', 'A monster eating pizza', 'Your best friend as a superhero', 'A city at night', 'A tiny dragon', 'Breakfast with a face', 'A robot walking a dog', 'The view from your window', 'A fish wearing a hat', 'Your pet as a king', 'A rainy day', 'An alien at the beach', 'A treehouse', 'A birthday cake for a friend', 'A dinosaur playing football', 'Your favourite food', 'A happy cloud', 'A snowman on holiday', 'A secret door in a tree', 'The moon having a party', 'A cactus with feelings', 'A bus full of animals', 'A castle made of candy', 'Your face as an emoji', 'A sleepy owl', 'Two cats asleep on a bed at night', 'A rocket made of fruit', 'A shark at the dentist', 'A garden on a roof'];
 const PAINT_BOT_ASKS = [
-  { k: 'guess', label: 'What did I draw?', sub: 'Let ZChat Bot guess', prompt: 'Look at my drawing and guess what it is. Keep it short and fun, like a friend guessing.' },
+  { k: 'guess', label: 'What did I draw?', sub: 'Let Mira guess', prompt: 'Look at my drawing and guess what it is. Keep it short and fun, like a friend guessing.' },
   { k: 'rate', label: 'Rate my drawing', sub: 'A score and one thing it likes', prompt: 'Rate my drawing out of 10 and tell me one thing you like about it. Be kind and short.' },
   { k: 'tip', label: 'How can I make it better?', sub: 'One simple tip', prompt: 'Give me one simple tip to make this drawing better. One or two short sentences.' },
   { k: 'idea', label: 'What should I draw?', sub: 'A fresh idea', prompt: 'Give me one fun idea for what to draw next. Just the idea in one short sentence.' },
@@ -7748,7 +7795,7 @@ export function PaintStudio({ onClose, onSend, recipientName, onAskBot, initial 
     }
     if (q.k !== 'idea' && !file) { setAskState({ k: q.k, loading: false, text: 'Draw something first, then ask again.' }); return; }
     const res = await onAskBot(file, q.prompt);
-    setAskState({ k: q.k, loading: false, text: (res && (res.text || res.error)) || 'ZChat Bot could not answer right now. Try again in a moment.' });
+    setAskState({ k: q.k, loading: false, text: (res && (res.text || res.error)) || 'Mira could not answer right now. Try again in a moment.' });
   };
   const [backGen, setBackGen] = useState(0);
   const requestClose = (fromBack) => {
@@ -7843,7 +7890,7 @@ export function PaintStudio({ onClose, onSend, recipientName, onAskBot, initial 
             {barBtn('redo', 'Redo', redo, !redoCount)}
             <div style={{ flex: 1, minWidth: 0, textAlign: 'center', fontSize: 12.5, color: c.dim, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{zoomPct > 100 ? `${zoomPct}%` : (recipientName ? `To ${recipientName}` : '')}</div>
             {zoomPct > 100 && barBtn('fit', 'Fit to screen', () => applyZoom(1, 0, 0))}
-            {onAskBot && barBtn('bot', 'Ask ZChat Bot', () => { setAskState(null); setSheet('ask'); })}
+            {onAskBot && barBtn('bot', 'Ask Mira', () => { setAskState(null); setSheet('ask'); })}
             {barBtn('more', 'More options', () => setSheet('more'))}
             {onSend && (
               <button type="button" onClick={send} disabled={busy || !(count || template || bgPhoto)} className="zchat-press"
@@ -7989,17 +8036,17 @@ export function PaintStudio({ onClose, onSend, recipientName, onAskBot, initial 
         </PaintSheet>
       )}
       {sheet === 'ask' && (
-        <PaintSheet title="Ask ZChat Bot" onClose={() => setSheet(null)}>
+        <PaintSheet title="Ask Mira" onClose={() => setSheet(null)}>
           {!askState && (
             <>
-              <div style={{ fontSize: 13.5, color: theme.muted, lineHeight: 1.5, marginBottom: 6 }}>ZChat Bot looks at your drawing and answers. Your question and drawing also show up in your chat with ZChat Bot.</div>
+              <div style={{ fontSize: 13.5, color: theme.muted, lineHeight: 1.5, marginBottom: 6 }}>Mira looks at your drawing and answers. Your question and drawing also show up in your chat with Mira.</div>
               {PAINT_BOT_ASKS.map((q) => optionRow(q.label, q.sub, <ChevronRight size={18} color={theme.muted} />, () => ask(q)))}
             </>
           )}
           {askState && askState.loading && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '24px 4px' }}>
               <Spinner size={20} color={theme.coral} />
-              <div style={{ fontSize: 15, fontWeight: 600, color: theme.ink }}>ZChat Bot is looking</div>
+              <div style={{ fontSize: 15, fontWeight: 600, color: theme.ink }}>Mira is looking</div>
             </div>
           )}
           {askState && !askState.loading && (

@@ -696,8 +696,8 @@ export function useRoomLink({ id, myId, enabled = true, meta, fast, audio = fals
     if (useCl) {
       const links = {};
       for (const p of cl.peers) links[p] = 'server';
-      return { peers: cl.peers, send: (t, d) => clRef.current.send(t, d), on: cl.on, me: myId, here: cl.peers.length > 0, links, cloud: true, rtt: cl.rtt, ok: cl.ok, srv: cl.srv, ...voice };
+      return { peers: cl.peers, send: (t, d) => clRef.current.send(t, d), on: cl.on, me: myId, here: cl.peers.length > 0, links, cloud: true, rtt: cl.rtt, ok: cl.ok, srv: cl.srv, lead: cl.lead, ...voice };
     }
     return { peers: mesh.peers, send: (t, d) => mesh.send(t, d), on: mesh.on, me: myId, here: mesh.peers.length > 0, links: mesh.links, ...voice };
-  }, [useCl, cl.peers, cl.on, cl.rtt, cl.ok, cl.srv, mesh.peers, mesh.on, mesh.links, mesh.mic, mesh.mics, mesh.muted, mesh.vols, mesh.vall, myId]);
+  }, [useCl, cl.peers, cl.on, cl.rtt, cl.ok, cl.srv, cl.lead, mesh.peers, mesh.on, mesh.links, mesh.mic, mesh.mics, mesh.muted, mesh.vols, mesh.vall, myId]);
 }

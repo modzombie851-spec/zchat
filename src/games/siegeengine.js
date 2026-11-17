@@ -125,10 +125,60 @@ export const HEROES = {
     sup: { k: 'boomerang', rng: 9, spd: 17, dmg: 650, w: 0.9, need: 3000, name: 'Bone boomerang', text: 'A huge bone flies out and comes back, hitting enemies both ways.' },
     gad: { k: 'smoke', rad: 3.2, t: 4.5, name: 'Smoke bomb', text: 'A cloud of smoke that hides him and his friends inside it.' },
   },
+  wisp: {
+    name: 'Wisp', role: 'Phantom', text: 'A ghost that drifts through fights and hits from odd angles.', hp: 3000, spd: 5.9, col: '#8FE3FF', want: 6, stats: [2, 3, 3, 5],
+    atkName: 'Spirit light', atkText: 'A ghost light that turns to chase the nearest enemy.',
+    atk: { k: 'skull', rng: 10.5, spd: 15, turn: 4, dmg: 720, rad: 1.2, w: 0.42, reload: 1.3, cd: 0.4 },
+    sup: { k: 'phase', t: 4, rad: 1.6, tick: 0.3, dmg: 330, guard: 0.8, need: 3000, name: 'Phase out', text: 'Turns to mist, runs faster, takes far less damage and hurts every enemy it drifts through.' },
+    gad: { k: 'decoy', t: 4, name: 'Shade', text: 'A ghostly copy of Wisp that aliens chase.' },
+  },
+  zorp: {
+    name: 'Zorp', role: 'Shocker', text: 'Zaps that jump from enemy to enemy.', hp: 3100, spd: 5.5, col: '#7BEA5A', want: 7, stats: [3, 3, 4, 4],
+    atkName: 'Static arc', atkText: 'A zap that jumps between up to four enemies.',
+    atk: { k: 'zap', rng: 8.8, dmg: 470, chain: 3, hop: 3.8, reload: 1.25, cd: 0.38 },
+    sup: { k: 'storm', t: 4, rad: 7.5, tick: 0.35, hits: 2, dmg: 420, need: 3300, name: 'Ion storm', text: 'Lightning strikes enemies all around him for a few seconds.' },
+    gad: { k: 'nova', rad: 4.2, dmg: 380, slow: 0.55, slowT: 2.5, name: 'Static burst', text: 'A burst of static that slows enemies around him.' },
+  },
+  glim: {
+    name: 'Glim', role: 'Psychic', text: 'Bends space to pull enemies together.', hp: 3000, spd: 5.4, col: '#C08BFF', want: 8, stats: [2, 4, 4, 3],
+    atkName: 'Mind orb', atkText: 'A slow orb of mind power that goes through enemies.',
+    atk: { k: 'orb', rng: 11, spd: 15, dmg: 760, heal: 0, w: 0.7, reload: 1.45, cd: 0.45 },
+    sup: { k: 'vortex', rng: 11, rad: 4, t: 3.2, tick: 0.45, dmg: 280, pull: 3, need: 3400, name: 'Gravity well', text: 'A well that pulls enemies in and crushes them.' },
+    gad: { k: 'hook', rng: 8, spd: 28, dmg: 450, stun: 0.9, w: 0.5, name: 'Mind grip', text: 'Grabs the first enemy it hits and pulls it close.' },
+  },
+  fawn: {
+    name: 'Fawn', role: 'Ranger', text: 'Quick shots from range and a charge when it gets close.', hp: 3200, spd: 5.8, col: '#E0A464', want: 8.5, stats: [3, 3, 4, 4],
+    atkName: 'Thorn darts', atkText: 'Three thorns, one right after another.',
+    atk: { k: 'burst', n: 3, gap: 0.08, rng: 12.5, spd: 36, dmg: 310, w: 0.3, reload: 1.15, cd: 0.4 },
+    sup: { k: 'bloom', rad: 6.5, heal: 1700, dmg: 450, kb: 6, need: 2900, name: 'Forest bloom', text: 'Heals and revives friends close to her.' },
+    gad: { k: 'charge', len: 6.5, t: 0.3, dmg: 600, kb: 9, name: 'Antler rush', text: 'Rushes forward and knocks aliens aside.' },
+  },
+  grim: {
+    name: 'Grim', role: 'Warlock', text: 'Fire from below and fire from the sky.', hp: 3400, spd: 5.3, col: '#59D16A', want: 6.5, stats: [3, 4, 3, 3],
+    atkName: 'Hellfire', atkText: 'A wide spray of fire.',
+    atk: { k: 'spread', n: 4, arc: 0.44, rng: 8.4, spd: 25, dmg: 330, w: 0.32, reload: 1.3, cd: 0.42 },
+    sup: { k: 'barrage', rng: 12, n: 6, rad: 2.3, dmg: 950, flight: 0.85, need: 3600, name: 'Meteor rain', text: 'Burning rocks fall on one spot.' },
+    gad: { k: 'blight', rad: 3.2, t: 5, tick: 0.5, dmg: 180, name: 'Brimstone', text: 'Burning ground that hurts enemies who stand on it.' },
+  },
+  oak: {
+    name: 'Oak', role: 'Warden', text: 'A tree that holds the line and roots enemies in place.', hp: 6400, spd: 4.8, col: '#7FBF4A', want: 2.4, stats: [5, 4, 1, 2],
+    atkName: 'Branch slam', atkText: 'A wide slam that knocks enemies back.',
+    atk: { k: 'smash', rng: 3.3, arc: 1.8, dmg: 1150, kb: 6, reload: 1.35, cd: 0.5 },
+    sup: { k: 'roots', rad: 5.2, t: 4, tick: 0.5, dmg: 260, stun: 1.6, heal: 260, need: 3200, name: 'Deep roots', text: 'Roots grab every enemy around him while he heals.' },
+    gad: { k: 'spikes', n: 6, gap: 1.1, rad: 1.15, dmg: 480, stun: 0.8, name: 'Root spikes', text: 'Roots burst out of the ground in a line ahead of him.' },
+  },
+  ember: {
+    name: 'Ember', role: 'Dragon', text: 'A flying dragon that burns everything in front of it.', hp: 3600, spd: 5.5, col: '#FFB238', want: 7, stats: [3, 4, 3, 4],
+    atkName: 'Fireball', atkText: 'A fireball that bursts where it lands.',
+    atk: { k: 'rocket', rng: 12, spd: 22, dmg: 720, rad: 1.8, w: 0.42, reload: 1.5, cd: 0.48 },
+    sup: { k: 'breath', rng: 6.8, arc: 0.95, t: 2.4, tick: 0.2, dmg: 260, need: 3400, name: 'Dragon breath', text: 'Breathes fire in front of it for a few seconds.' },
+    gad: { k: 'jet', len: 7, t: 0.55, dmg: 760, rad: 2.6, name: 'Wing leap', text: 'Flies over walls and blasts where it lands.' },
+  },
 };
 export const LOB_KINDS = new Set(['lob', 'mega', 'barrage', 'vortex']);
-export const SELF_SUP = new Set(['slam', 'freeze', 'bloom', 'rage', 'undying', 'fortress']);
-export const HERO_KEYS = ['blaze', 'pip', 'boom', 'mira', 'rex', 'volt', 'kai', 'ivy', 'nyx', 'arlo', 'wren', 'tusk', 'bones', 'hex', 'rattle'];
+export const SELF_SUP = new Set(['slam', 'freeze', 'bloom', 'rage', 'undying', 'fortress', 'phase', 'storm', 'roots']);
+export const BOT_KEYS = ['blaze', 'pip', 'boom', 'mira', 'rex', 'volt', 'kai', 'ivy', 'nyx', 'arlo', 'wren', 'tusk', 'bones', 'hex', 'rattle'];
+export const HERO_KEYS = [...BOT_KEYS, 'wisp', 'zorp', 'glim', 'fawn', 'grim', 'oak', 'ember'];
 export const MAX_LEVEL = 10;
 export const levelCost = (lv) => 80 * lv;
 export const levelMods = (lv) => { const L = clamp(lv | 0, 1, MAX_LEVEL); return { hp: 1 + 0.06 * (L - 1), dmg: 1 + 0.05 * (L - 1) }; };
@@ -1223,6 +1273,28 @@ export function fireHero(W, h, kind, a, dist, seed) {
     }
     return;
   }
+  if (S.k === 'phase') {
+    h.phT = S.t; h.spT = Math.max(h.spT || 0, S.t); h.guardT = Math.max(h.guardT || 0, S.t); h.guardK = S.guard;
+    W.fields.push({ k: 'phase', own: h.id, x: h.x, z: h.z, rad: S.rad * M.rad, t: S.t, max: S.t, tick: S.tick, tk: S.tick, d: dmgOf(h, S.dmg), follow: 1 });
+    emit(W, { k: 'phase', id: h.id, x: h.x, z: h.z, t: S.t });
+    return;
+  }
+  if (S.k === 'storm') {
+    W.fields.push({ k: 'storm', own: h.id, x: h.x, z: h.z, rad: S.rad * M.rad, t: S.t, max: S.t, tick: 0.05, tk: S.tick, d: dmgOf(h, S.dmg), hits: S.hits, follow: 1 });
+    emit(W, { k: 'storm', id: h.id, x: h.x, z: h.z, r: S.rad * M.rad });
+    return;
+  }
+  if (S.k === 'roots') {
+    emit(W, { k: 'roots', id: h.id, x: h.x, z: h.z, r: S.rad * M.rad });
+    aoe(W, h, h.x, h.z, S.rad * M.rad, dmgOf(h, S.dmg), { stun: S.stun * M.stun, sup: true }, host);
+    W.fields.push({ k: 'roots', own: h.id, x: h.x, z: h.z, rad: S.rad * M.rad, t: S.t, max: S.t, tick: S.tick, tk: S.tick, d: dmgOf(h, S.dmg), heal: S.heal });
+    return;
+  }
+  if (S.k === 'breath') {
+    W.fields.push({ k: 'breath', own: h.id, x: h.x, z: h.z, rad: S.rng, arc: S.arc, t: S.t, max: S.t, tick: 0.02, tk: S.tick, d: dmgOf(h, S.dmg), follow: 1 });
+    emit(W, { k: 'breath', id: h.id, x: h.x, z: h.z, a, r: S.rng, t: S.t });
+    return;
+  }
   if (S.k === 'slam' || S.k === 'freeze') {
     emit(W, { k: S.k, id: h.id, x: h.x, z: h.z, r: S.rad });
     aoe(W, h, h.x, h.z, S.rad, dmgOf(h, S.dmg), { kb: S.kb || 0, stun: S.stun * (S.k === 'slam' ? M.stun : M.slow), sup: true }, host);
@@ -1432,6 +1504,7 @@ export function stepHero(W, h, inp, dt) {
   h.dashCD = Math.max(0, h.dashCD - dt); h.gadCD = Math.max(0, h.gadCD - dt);
   h.ocT = Math.max(0, h.ocT - dt); h.rfT = Math.max(0, h.rfT - dt); h.spT = Math.max(0, h.spT - dt); h.rushT = Math.max(0, (h.rushT || 0) - dt);
   if (h.clkT > 0) { h.clkT -= dt; if (h.clkT <= 0) { h.clkT = 0; emit(W, { k: 'unveil', id: h.id, x: h.x, z: h.z }); } }
+  if (h.phT > 0) h.phT = Math.max(0, h.phT - dt);
   if (h.shT > 0) { h.shT -= dt; if (h.shT <= 0) h.shield = 0; }
   const ox = h.x, oz = h.z;
   if (h.jump) {
@@ -1539,6 +1612,7 @@ function stepGear(W, dt) {
     F.t -= dt;
     if (F.t <= 0) { W.fields.splice(i, 1); emit(W, { k: 'fieldEnd', f: F.k, x: F.x, z: F.z }); continue; }
     const oh = W.heroes[F.own];
+    if (F.follow && oh) { if (oh.st !== 0) { F.t = 0; continue; } F.x = oh.x; F.z = oh.z; }
     if (F.k === 'smoke') { for (const o of heroList(W)) if (o.st === 0 && (!W.pvp || (oh && o.tm === oh.tm)) && Math.hypot(o.x - F.x, o.z - F.z) < F.rad) o.smk = W.t + 0.25; continue; }
     if (!oh) continue;
     if (F.k === 'vortex') {
@@ -1560,7 +1634,28 @@ function stepGear(W, dt) {
     F.tick -= dt;
     if (F.tick > 0) continue;
     F.tick += F.tk;
-    aoe(W, oh, F.x, F.z, F.rad, F.d, F.k === 'vortex' ? { sup: true } : { noSup: true, sup: true }, host);
+    if (F.k === 'storm') {
+      const pool = [], tg = foeHeroes(W, oh).filter((t) => Math.hypot(t.x - F.x, t.z - F.z) < F.rad + 0.4);
+      for (const b of W.robots) if (b.hp > 0 && !(b.sp > 0) && foeTo(oh, b) && Math.hypot(b.x - F.x, b.z - F.z) < F.rad + b.r) pool.push(b);
+      for (let n = 0; n < F.hits && (pool.length || tg.length); n++) {
+        if (tg.length && (!pool.length || W.rnd() < 0.5)) { const t = tg.splice(Math.floor(W.rnd() * tg.length), 1)[0]; pvpHit(W, oh, t, F.d, 0, 0, { sup: true }); emit(W, { k: 'zap', id: oh.id, pts: [[oh.x, oh.z], [t.x, t.z]] }); continue; }
+        const b = pool.splice(Math.floor(W.rnd() * pool.length), 1)[0];
+        creditSup(W, { own: oh.id, sup: true }, hurtRobot(W, b, F.d, oh.id, 0, 0, { host, stun: 0.25 }));
+        emit(W, { k: 'zap', id: oh.id, pts: [[oh.x, oh.z], [b.x, b.z]] });
+      }
+      continue;
+    }
+    if (F.k === 'breath') {
+      const a = oh.yaw || 0, fx = Math.sin(a), fz = Math.cos(a);
+      const reach = Math.max(1, Math.min(F.rad, rayWall(W.A, oh.x, oh.z, fx, fz, F.rad) + 0.5));
+      const inCone = (x, z, r) => { const dx = x - oh.x, dz = z - oh.z, d = Math.hypot(dx, dz); return d < reach + r && (d < 0.9 || Math.abs(wrapA(Math.atan2(dx, dz) - a)) < F.arc / 2); };
+      for (const t of foeHeroes(W, oh)) if (inCone(t.x, t.z, 0.4)) pvpHit(W, oh, t, F.d, fx, fz, { sup: true });
+      for (const b of W.robots) { if (b.hp <= 0 || b.sp > 0 || !foeTo(oh, b) || !inCone(b.x, b.z, b.r)) continue; creditSup(W, { own: oh.id, sup: true }, hurtRobot(W, b, F.d, oh.id, fx, fz, { host })); }
+      emit(W, { k: 'breath', id: oh.id, x: oh.x, z: oh.z, a, r: reach, tick: 1 });
+      continue;
+    }
+    aoe(W, oh, F.x, F.z, F.rad, F.d, F.k === 'vortex' ? { sup: true } : F.k === 'roots' ? { sup: true, stun: 0.6 } : { noSup: true, sup: true }, host);
+    if (F.k === 'roots' && oh.st === 0) healHero(W, oh, F.heal, oh.id);
     emit(W, { k: 'fieldTick', f: F.k, x: F.x, z: F.z, r: F.rad });
   }
   for (let i = W.pend.length - 1; i >= 0; i--) {

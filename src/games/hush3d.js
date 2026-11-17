@@ -287,6 +287,49 @@ void main() {
   o = vec4(uGC * a, 1.0);
 }`;
 
+const BVS = `#version 300 es
+layout(location=0) in vec2 aQ;
+uniform mat4 uVP;
+uniform vec4 uD;
+uniform vec2 uR;
+out vec3 vPos; out vec2 vQ;
+void main() {
+  vQ = aQ;
+  vec2 q = vec2(aQ.x * uR.x - aQ.y * uR.y, aQ.x * uR.y + aQ.y * uR.x) * uD.w;
+  vPos = vec3(uD.x + q.x, uD.y, uD.z + q.y);
+  gl_Position = uVP * vec4(vPos, 1.0);
+}`;
+const BFS = `#version 300 es
+precision highp float;
+in vec3 vPos; in vec2 vQ;
+uniform vec3 uB;
+${LIGHT_GLSL}
+out vec4 o;
+float h2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float vn(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(h2(i), h2(i + vec2(1.0, 0.0)), f.x), mix(h2(i + vec2(0.0, 1.0)), h2(i + vec2(1.0, 1.0)), f.x), f.y); }
+void main() {
+  vec2 p = vQ;
+  float r = length(p), sd = uB.x * 31.7;
+  float n = vn(p * 2.2 + sd) * 0.55 + vn(p * 5.0 - sd) * 0.3 + vn(p * 11.0 + sd * 0.5) * 0.15;
+  float rim = (0.42 + n * 0.34) * uB.z;
+  float body = 1.0 - smoothstep(rim - 0.03, rim + 0.02, r);
+  float drops = 0.0;
+  for (int i = 0; i < 9; i++) {
+    float fi = float(i);
+    float an = h2(vec2(fi, sd)) * 6.2831, rr = (0.55 + h2(vec2(sd, fi)) * 0.4) * uB.z, s = 0.02 + h2(vec2(fi * 3.1, sd + 1.0)) * 0.045;
+    vec2 c = vec2(cos(an), sin(an)) * rr;
+    drops = max(drops, 1.0 - smoothstep(s * 0.6, s, length((p - c) * vec2(1.0, 1.0 + h2(vec2(fi, 2.0)) * 0.8))));
+  }
+  float a = max(body, drops) * uB.y;
+  if (a < 0.01) discard;
+  float edge = smoothstep(0.14, 0.0, abs(r - rim));
+  float deep = smoothstep(rim, 0.0, r);
+  vec3 al = mix(vec3(0.075, 0.004, 0.004), vec3(0.15, 0.008, 0.006), n) * (1.0 - edge * 0.5);
+  vec3 N = normalize(vec3((vn(p * 13.0 + sd) - 0.5) * 0.08, 1.0, (vn(p * 13.0 - sd) - 0.5) * 0.08));
+  vec3 c = lightAll(vPos, N, al, vec3(0.05), mix(0.34, 0.08, deep), 1.0);
+  o = vec4(finish(c, vPos), a);
+}`;
+
 function compile(gl, vs, fs) {
   const mk = (type, src) => {
     const s = gl.createShader(type);
@@ -312,7 +355,7 @@ export const IDENT = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0,
 export function createHush3D(canvas, opts = {}) {
   const gl = canvas.getContext('webgl2', { antialias: opts.aa !== false, alpha: false, depth: true, powerPreference: 'high-performance', preserveDrawingBuffer: !!opts.keep });
   if (!gl) return null;
-  const P = compile(gl, SVS, SFS), D = compile(gl, DVS, DFS), PT = compile(gl, PVS, PFS), GL = compile(gl, GVS, GFS);
+  const P = compile(gl, SVS, SFS), D = compile(gl, DVS, DFS), PT = compile(gl, PVS, PFS), GL = compile(gl, GVS, GFS), BL = compile(gl, BVS, BFS);
   const skinProg = new Map();
   const skinP = (nb) => { let s = skinProg.get(nb); if (!s) { s = { k: compile(gl, KVS(nb), KFS), d: compile(gl, DKVS(nb), DFS) }; skinProg.set(nb, s); } return s; };
   const owned = [];
@@ -655,6 +698,30 @@ export function createHush3D(canvas, opts = {}) {
       gl.bindVertexArray(it.mesh.vao);
       gl.drawElements(gl.TRIANGLES, it.mesh.n, gl.UNSIGNED_SHORT, 0);
       drawn++;
+    }
+    if (sc.decals && sc.decals.length) {
+      const cull = gl.isEnabled(gl.CULL_FACE);
+      gl.disable(gl.CULL_FACE);
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      gl.depthMask(false);
+      gl.enable(gl.POLYGON_OFFSET_FILL);
+      gl.polygonOffset(-1, -4);
+      gl.useProgram(BL.p);
+      setLights(BL, res);
+      gl.uniformMatrix4fv(BL.u.uVP, false, VP);
+      gl.bindVertexArray(quad.vao);
+      for (const d of sc.decals) {
+        if (!inFrustum([d.x, d.y, d.z], d.s)) continue;
+        gl.uniform4f(BL.u.uD, d.x, d.y, d.z, d.s);
+        gl.uniform2f(BL.u.uR, Math.cos(d.rot), Math.sin(d.rot));
+        gl.uniform3f(BL.u.uB, d.seed, d.a, d.g == null ? 1 : d.g);
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+      }
+      gl.disable(gl.POLYGON_OFFSET_FILL);
+      gl.depthMask(true);
+      gl.disable(gl.BLEND);
+      if (cull) gl.enable(gl.CULL_FACE);
     }
     const right = [view[0], view[4], view[8]], up = [view[1], view[5], view[9]];
     if ((sc.glows && sc.glows.length) || (dust.n && sc.flash)) {

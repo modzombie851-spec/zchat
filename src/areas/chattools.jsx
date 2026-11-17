@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useLayoutEffect, useMemo } from 're
 import ReactDOM from 'react-dom';
 import { Send, Paperclip, Search, Mail, AtSign, Eye, EyeOff, Lock, Flag, X, Trash2, User, Phone, Image as ImageIcon, Video as VideoIcon, ArrowLeft, Check, CheckCheck, FileText, ChevronRight, Compass, Bell, Mic, Play, Pause, Download, Users, Ban, Edit3, Archive, Bookmark, Copy, Type, Pencil, BellOff, Link as LinkIcon, Clock, Timer, Plus, Activity, MessageSquare } from 'lucide-react';
 import { supabase, sendMessage } from '../supabaseClient.js';
-import { SAVED_BLUE, jsonAfter, uploadMedia, openPermHelp, permDenied, AX_TABS_DEFAULT, AX_TAB_KEYS, ActionSheet, AiPracticeGlyph, AiTalkGlyph, AlbumIcon, AskPhotoIcon, AudioBubble, Avatar, AxTabGlyph, BADGE_SHAPE_PATH, BOMB_MAX, BOT_FOLLOWER_BASE, BUBBLE_COLORS, BUBBLE_CW, BackupViewerPage, BigButton, BroadcastIcon, CHAR_BUBBLES, CM_FANCY, COMPOSER_AUTOSIZE, COUNTRIES, CalendarIcon, ChannelIcon, CharBubbleDecor, ChatThemePage, ChoiceList, CommunityGlyph, ConfirmDialog, ConfirmSheet, DRAFT_MAX, DayDivider, DetailRow, DetailSection, DraftThumb, EditHistoryIcon, EmptyState, FONT, FONT_STYLES, FolderIcon, FollowActionButton, FollowListModal, FullPage, GamepadIcon, GroupAvatar, HeaderIconButton, IgHeading, IgRow, IgToggle, IgTopBar, ImageViewer, JOIN_DONE, JOIN_ROWS, LINK_REGEX, LineGlyph, LineTabs, ListModal, LoadFail, MAX_CHARS, MailBadgeIcon, MediaImg, NameBadge, PROFILE_COLS, PageArt, PickTiles, PillButton, Pin_, Portal, PostTile, PreviewLine, QRD_EXP, QRD_LOG, QR_LOGIN_ID, ReportReasonPicker, RichText, SOUNDBOARD, SavedPostsGrid, SegmentedControl, SpamShieldIcon, Spinner, StudioGlyph, TOOL_RAW_ERRORS, TRANSLATE_LANGS, TextBombIcon, TranslateIcon, UserListRow, VaultPinPage, VerifiedBadge, VideoThumb, VideoViewer, ViewerTopBar, WaImportIcon, WideDim, aiVoiceOk, albumChatKey, announceDrafts, appAlert, appSnack, autoTrFor, axCvColor, axLook, axLookApply, axPrefs, axSet, axTabsOf, badgeTierFromTitle, billMoney, bubbleKeyOf, bubbleLayout, bubbleWrapCss, charBubbleCss, chatMarksMem, chatPrefKey, chatThemeThem, chosenPeopleMem, cmFancyText, copyTextToClipboard, countWord, countryFlag, customTones, dayDividerLabel, defaultTranslateLang, deleteDraft, disappearLabel, draftSync, ensureAudioCtx, ensureTextFonts, favoriteSync, fetchMyProfile, fetchPeerKey, fetchProfilesView, fmtDate, fmtHM, fmtUsage, followRequestsMem, followSync, fontStyleCss, formatBytes, formatCount, formatListTime, friendlyError, g1Name, g1Questions, groupRankOf, hapticTap, hiddenWordsCfg, histCur, histServerRow, identitySqlKnown, igPalette, inputStyle, isG1Welcome, isNetworkProblem, isPrivateMedia, isSpecialContent, isTouchDevice, joinRowsFresh, kitOnInk, langChoiceOptions, latestSync, linkifyText, listenNow, loadAlbumsFor, loadCustomTones, loadFailCode, loadImageEl, loadImageElement, loadJoinRows, loadSavedFolders, loadSprite, mailPanelMem, makeAccentPalette, mediaCacheKey, mediaDbOp, messageTextFor, myDeviceKey, notYetPosted, parseBlur, parseEventMsg, parseExtraCard, parseGameMessage, parseLocationMessage, parseOnce, parsePoll, parseProfileLink, parseWrapped, peoplePickerMem, plainPreviewText, playSoundboard, playUiSound, pollPicks, prepareImageFile, primaryBtn, privacyAllows, processToneBlob, profileStatsCache, publishDeviceKey, pushFoldersRemote, putSavedFolders, qrAlignments, qrLoginOpen, qrRawModules, quoteTextFor, readChatTabs, readFolders, readJsonLs, readQuickReplies, readReminders, readUsage, readVault, readersOf, realFolderId, reducedMotion, reminderWhen, resolveMedia, rpcFailText, rpcMissing, rtDrop, rtKeep, rtName, rtOnRefresh, safeLinkUrl, sanitizeAvatarList, saveFoldersEverywhere, saveHiddenWordsCfg, saveProfileStats, savedFolderErr, savedFolderPending, savedFoldersMem, savedFoldersOf, savedMessagesMem, searchAccounts, searchPageMem, secretSupported, sendPushNotification, sha256Hex, shrinkChatPhoto, signedMediaNow, specialPreview, spriteBufs, storyLongPress, textSizePx, themeGradCss, timeAgoLong, toolErrorText, uploadChatMedia, uploadCustomTone, usageDayKey, usageLimitMin, useAx, useBackClose, useCachedMedia, useEdgeSwipeBack, useGroupReads, useMediaUrl, usePref, useSheetDrag, useTheme, useVault, useWaImports, waCountText, waIdx, waIdxRefresh, waIdxSet, waMissing, waRange, writeJsonLs, writeReminders, writeVault, zchatAichat, zchatTools } from '../App.jsx';
+import { SAVED_BLUE, jsonAfter, uploadMedia, openPermHelp, permDenied, AX_TABS_DEFAULT, AX_TAB_KEYS, ActionSheet, AiPracticeGlyph, AiTalkGlyph, AlbumIcon, AskPhotoIcon, AudioBubble, Avatar, AxTabGlyph, BADGE_SHAPE_PATH, BOMB_MAX, BOT_FOLLOWER_BASE, BUBBLE_COLORS, BUBBLE_CW, BackupViewerPage, BigButton, BroadcastIcon, CHAR_BUBBLES, CM_FANCY, COMPOSER_AUTOSIZE, COUNTRIES, CalendarIcon, ChannelIcon, CharBubbleDecor, ChatThemePage, ChoiceList, CommunityGlyph, ConfirmDialog, ConfirmSheet, DRAFT_MAX, DayDivider, DetailRow, DetailSection, DraftThumb, EditHistoryIcon, EmptyState, FONT, FONT_STYLES, FolderIcon, FollowActionButton, FollowListModal, FullPage, GamepadIcon, GroupAvatar, HeaderIconButton, IgHeading, IgRow, IgToggle, IgTopBar, ImageViewer, JOIN_DONE, JOIN_ROWS, LINK_REGEX, LineGlyph, LineTabs, ListModal, LoadFail, MAX_CHARS, MailBadgeIcon, purchaseWording, MediaImg, NameBadge, PROFILE_COLS, PageArt, PickTiles, PillButton, Pin_, Portal, PostTile, PreviewLine, QRD_EXP, QRD_LOG, QR_LOGIN_ID, ReportReasonPicker, RichText, SOUNDBOARD, SavedPostsGrid, SegmentedControl, SpamShieldIcon, Spinner, StudioGlyph, TOOL_RAW_ERRORS, TRANSLATE_LANGS, TextBombIcon, TranslateIcon, UserListRow, VaultPinPage, VerifiedBadge, VideoThumb, VideoViewer, ViewerTopBar, WaImportIcon, WideDim, aiVoiceOk, albumChatKey, announceDrafts, appAlert, appSnack, autoTrFor, axCvColor, axLook, axLookApply, axPrefs, axSet, axTabsOf, badgeTierFromTitle, billMoney, bubbleKeyOf, bubbleLayout, bubbleWrapCss, charBubbleCss, chatMarksMem, chatPrefKey, chatThemeThem, chosenPeopleMem, cmFancyText, copyTextToClipboard, countWord, countryFlag, customTones, dayDividerLabel, defaultTranslateLang, deleteDraft, disappearLabel, draftSync, ensureAudioCtx, ensureTextFonts, favoriteSync, fetchMyProfile, fetchPeerKey, fetchProfilesView, fmtDate, fmtHM, fmtUsage, followRequestsMem, followSync, fontStyleCss, formatBytes, formatCount, formatListTime, friendlyError, g1Name, g1Questions, groupRankOf, hapticTap, hiddenWordsCfg, histCur, histServerRow, identitySqlKnown, igPalette, inputStyle, isG1Welcome, isNetworkProblem, isPrivateMedia, isSpecialContent, isTouchDevice, joinRowsFresh, kitOnInk, langChoiceOptions, latestSync, linkifyText, listenNow, loadAlbumsFor, loadCustomTones, loadFailCode, loadImageEl, loadImageElement, loadJoinRows, loadSavedFolders, loadSprite, mailPanelMem, makeAccentPalette, mediaCacheKey, mediaDbOp, messageTextFor, myDeviceKey, notYetPosted, parseBlur, parseEventMsg, parseExtraCard, parseGameMessage, parseLocationMessage, parseOnce, parsePoll, parseProfileLink, parseWrapped, peoplePickerMem, plainPreviewText, playSoundboard, playUiSound, pollPicks, prepareImageFile, primaryBtn, privacyAllows, processToneBlob, profileStatsCache, publishDeviceKey, pushFoldersRemote, putSavedFolders, qrAlignments, qrLoginOpen, qrRawModules, quoteTextFor, readChatTabs, readFolders, readJsonLs, readQuickReplies, readReminders, readUsage, readVault, readersOf, realFolderId, reducedMotion, reminderWhen, resolveMedia, rpcFailText, rpcMissing, rtDrop, rtKeep, rtName, rtOnRefresh, safeLinkUrl, sanitizeAvatarList, saveFoldersEverywhere, saveHiddenWordsCfg, saveProfileStats, savedFolderErr, savedFolderPending, savedFoldersMem, savedFoldersOf, savedMessagesMem, searchAccounts, searchPageMem, secretSupported, sendPushNotification, sha256Hex, shrinkChatPhoto, signedMediaNow, specialPreview, spriteBufs, storyLongPress, textSizePx, themeGradCss, timeAgoLong, toolErrorText, uploadChatMedia, uploadCustomTone, usageDayKey, usageLimitMin, useAx, useBackClose, useCachedMedia, useEdgeSwipeBack, useGroupReads, useMediaUrl, usePref, useSheetDrag, useTheme, useVault, useWaImports, waCountText, waIdx, waIdxRefresh, waIdxSet, waMissing, waRange, writeJsonLs, writeReminders, writeVault, zchatAichat, zchatTools } from '../App.jsx';
 import { AX_TAB_INFO, AxTabsPreview, BubblesIcon, CharBubbleSample, ChatToolsSection, DetailActions, DetailTiles, DisappearSheet, KitSection, KitSlider, MediaStrip, MediaVideo, PdfGlyph, PhotoFindIcon, SensTileVeil, SettingsRowPlain, ThemeIcon, aipFit, aipImageData, aipToken, axLookNow, detailRows, draftDateLabel, lastBackupLabel, openDraftFull, readZipIndex, useDraftList, useOwnedBubbles, useTrendingTags, zipEntryBlob } from './shared.jsx';
 
 function setAxLook(patch) {
@@ -1146,6 +1146,7 @@ export function MailPanel({ myId, onClose, initialMailId, onUnreadDelta }) {
   const [picking, setPicking] = useState(false);
   const [picked, setPicked] = useState(() => new Set());
   const [confirmBulk, setConfirmBulk] = useState(null);
+  const [mailFilter, setMailFilter] = useState('all');
   useBackClose(!!selected, () => setSelected(null));
   useBackClose(picking, () => { setPicking(false); setPicked(new Set()); });
   useBackClose(!!actionFor, () => setActionFor(null));
@@ -1234,6 +1235,19 @@ export function MailPanel({ myId, onClose, initialMailId, onUnreadDelta }) {
   };
 
   const allIds = (mails || []).map((m) => m.id);
+  const mTitle = (m) => (m.sender_id ? m.title : purchaseWording(m.title, m.type !== 'badge'));
+  const mBody = (m) => (m.sender_id ? m.body : purchaseWording(m.body, m.type !== 'badge'));
+  const mKind = (m) => (m.type === 'badge' ? 'buy' : m.type === 'report_warning' ? 'safety' : m.type === 'mention' ? 'mention' : m.type === 'update' ? 'news' : 'other');
+  const KIND_LABEL = { buy: 'Purchases', safety: 'Safety', mention: 'Mentions', news: 'Updates' };
+  const kindsHere = [...new Set((mails || []).map(mKind))].filter((k) => KIND_LABEL[k]);
+  const unreadHere = (mails || []).filter((m) => !m.read).length;
+  const filterOpts = [['all', 'All'], ...(unreadHere ? [['unread', `Unread ${unreadHere}`]] : []), ...kindsHere.map((k) => [k, KIND_LABEL[k]])];
+  const shownMails = sortedMails ? sortedMails.filter((m) => (mailFilter === 'all' ? true : mailFilter === 'unread' ? !m.read : mKind(m) === mailFilter)) : null;
+  const mailSections = shownMails ? [
+    ['Pinned', shownMails.filter((m) => pinnedIds.has(m.id))],
+    ['New', shownMails.filter((m) => !pinnedIds.has(m.id) && !m.read)],
+    ['Earlier', shownMails.filter((m) => !pinnedIds.has(m.id) && m.read)],
+  ].filter((x) => x[1].length) : null;
   const togglePick = (id) => {
     setPicked((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   };
@@ -1282,54 +1296,78 @@ export function MailPanel({ myId, onClose, initialMailId, onUnreadDelta }) {
           </>
         )} />
       {selected ? (
-        <div key={selected.id} className="zchat-mail-zoom" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '22px 20px', paddingBottom: 'calc(22px + env(safe-area-inset-bottom))' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-            <MailIcon m={selected} size={44} />
-            <div>
-              <div style={{ fontWeight: 800, fontSize: 15.5, color: theme.ink }}>{selected.title}</div>
+        <div key={selected.id} className="zchat-mail-zoom" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '18px 16px', paddingBottom: 'calc(22px + env(safe-area-inset-bottom))' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, margin: '4px 4px 16px' }}>
+            {selected.sender ? <Avatar emoji={selected.sender.avatar} name={selected.sender.name} size={52} /> : <MailIcon m={selected} size={52} />}
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: 800, fontSize: 17.5, color: theme.ink, lineHeight: 1.25, textWrap: 'balance' }}>{mTitle(selected)}</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11.5, color: theme.muted, fontWeight: 600 }}>{mailSenderName(selected.type)} <VerifiedTick size={12} /> <span style={{ fontWeight: 400, marginLeft: 2 }}>{new Date(selected.created_at).toLocaleString()}</span></div>
             </div>
           </div>
-          <div data-zuser="" style={{ fontSize: 14, color: theme.ink, lineHeight: 1.6, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{selected.body}</div>
+          <div data-zuser="" style={{ fontSize: 14.5, color: theme.ink, lineHeight: 1.65, wordBreak: 'break-word', whiteSpace: 'pre-wrap', background: theme.soft, borderRadius: 18, padding: '16px 16px 18px' }}>{mBody(selected)}</div>
+          <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+            <button type="button" onClick={() => togglePin(selected.id)} className="zchat-press" style={{ flex: 1, height: 42, borderRadius: 12, border: 'none', background: theme.soft, color: theme.ink, fontFamily: 'inherit', fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, cursor: 'pointer' }}><Pin_ size={15} />{pinnedIds.has(selected.id) ? 'Unpin' : 'Pin'}</button>
+            <button type="button" onClick={() => setConfirmDeleteId(selected.id)} className="zchat-press" style={{ flex: 1, height: 42, borderRadius: 12, border: 'none', background: theme.soft, color: theme.danger, fontFamily: 'inherit', fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, cursor: 'pointer' }}><Trash2 size={15} />Delete</button>
+          </div>
         </div>
       ) : (
-        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '6px 10px', paddingBottom: 'calc(6px + env(safe-area-inset-bottom))' }}>
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 10px', paddingBottom: 'calc(10px + env(safe-area-inset-bottom))' }}>
+          {sortedMails && sortedMails.length > 0 && filterOpts.length > 1 && !picking && (
+            <div role="tablist" aria-label="Mail filters" style={{ display: 'flex', gap: 8, overflowX: 'auto', padding: '6px 4px 10px', scrollbarWidth: 'none' }}>
+              {filterOpts.map(([k, l]) => (
+                <div key={k} role="tab" aria-selected={mailFilter === k} onClick={() => { hapticTap(); setMailFilter(k); }} className="zchat-press"
+                  style={{ height: 32, padding: '0 14px', borderRadius: 16, flexShrink: 0, display: 'flex', alignItems: 'center', fontSize: 13.5, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', background: mailFilter === k ? theme.ink : theme.soft, color: mailFilter === k ? (theme.dark ? '#000' : '#fff') : theme.ink }}>{l}</div>
+              ))}
+            </div>
+          )}
           {sortedMails === null ? (
             <div style={{ display: 'flex', justifyContent: 'center', padding: 30 }}><Spinner color={theme.ink} /></div>
           ) : sortedMails.length === 0 ? (
             <EmptyState art="mail" title="No mail yet" text="Notes from the ZChat team and account notices land here." />
+          ) : !shownMails.length ? (
+            <div style={{ padding: '40px 20px', textAlign: 'center', fontSize: 14, color: theme.muted }}>Nothing here right now.</div>
           ) : (
-            sortedMails.map((m) => (
-              <div key={m.id} onClick={() => (picking ? togglePick(m.id) : openMail(m))}
-                onPointerDown={() => !picking && startPress(m)} onPointerUp={cancelPress} onPointerLeave={cancelPress} onPointerCancel={cancelPress}
-                style={{
-                position: 'relative', display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', cursor: 'pointer', borderRadius: 14, marginBottom: 2,
-                background: picked.has(m.id) ? `${theme.coral}1A` : pinnedIds.has(m.id) ? `${theme.coral}0F` : 'transparent',
-              }}>
-                {picking && (
-                  <div style={{ width: 22, height: 22, borderRadius: '50%', flexShrink: 0, border: `2px solid ${picked.has(m.id) ? theme.coral : theme.border}`, background: picked.has(m.id) ? theme.coral : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    {picked.has(m.id) && <Check size={13} color="white" strokeWidth={4} />}
-                  </div>
-                )}
-                <div style={{ position: 'relative', flexShrink: 0 }}>
-                  {m.sender
-                    ? <div style={{ position: 'relative', width: 46, height: 46, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                        <Avatar emoji={m.sender.avatar} name={m.sender.name} size={44} />
-                        <div style={{ position: 'absolute', right: -4, bottom: -4, width: 20, height: 20, borderRadius: 7, background: theme.panelBg, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 4 }}><MailIcon m={m} size={16} /></div>
+            mailSections.map(([sec, list]) => (
+              <div key={sec} style={{ marginBottom: 6 }}>
+                <div style={{ padding: '8px 6px 6px', fontSize: 13, fontWeight: 700, color: theme.muted }}>{sec}</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {list.map((m) => {
+                    const k = mKind(m);
+                    return (
+                      <div key={m.id} onClick={() => (picking ? togglePick(m.id) : openMail(m))}
+                        onPointerDown={() => !picking && startPress(m)} onPointerUp={cancelPress} onPointerLeave={cancelPress} onPointerCancel={cancelPress}
+                        className="zchat-row-press"
+                        style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', gap: 12, padding: '12px 12px', cursor: 'pointer', borderRadius: 16, background: picked.has(m.id) ? `${theme.coral}1F` : !m.read ? theme.soft : 'transparent' }}>
+                        {picking && (
+                          <div style={{ width: 22, height: 22, marginTop: 11, borderRadius: '50%', flexShrink: 0, border: `2px solid ${picked.has(m.id) ? theme.coral : theme.border}`, background: picked.has(m.id) ? theme.coral : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            {picked.has(m.id) && <Check size={13} color="white" strokeWidth={4} />}
+                          </div>
+                        )}
+                        <div style={{ position: 'relative', flexShrink: 0 }}>
+                          {m.sender
+                            ? <div style={{ position: 'relative', width: 46, height: 46, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <Avatar emoji={m.sender.avatar} name={m.sender.name} size={44} />
+                                <div style={{ position: 'absolute', right: -4, bottom: -4, width: 20, height: 20, borderRadius: 7, background: theme.panelBg, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 4 }}><MailIcon m={m} size={16} /></div>
+                              </div>
+                            : <MailIcon m={m} size={44} />}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                            <div style={{ flex: 1, minWidth: 0, fontWeight: m.read ? 650 : 800, fontSize: 14.5, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.sender ? m.sender.name : mTitle(m)}</div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, color: m.read ? theme.muted : kitOnInk(theme), fontWeight: m.read ? 500 : 700, flexShrink: 0 }}>{timeAgo(m.created_at)}{!m.read && <span aria-label="Unread" style={{ width: 8, height: 8, borderRadius: '50%', background: theme.coral }} />}</div>
+                          </div>
+                          {m.sender && <div style={{ fontSize: 13, fontWeight: 650, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 1 }}>{mTitle(m)}</div>}
+                          <div data-zuser="" style={{ fontSize: 13, color: theme.muted, lineHeight: 1.4, marginTop: 2, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', wordBreak: 'break-word' }}>{mBody(m)}</div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, fontSize: 11.5, fontWeight: 650, color: theme.muted }}>
+                            {pinnedIds.has(m.id) && <Pin_ size={11} />}
+                            {KIND_LABEL[k] && <span style={{ padding: '2px 8px', borderRadius: 8, background: theme.dark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)' }}>{KIND_LABEL[k] === 'Purchases' ? 'Purchase' : KIND_LABEL[k] === 'Updates' ? 'Update' : KIND_LABEL[k] === 'Mentions' ? 'Mention' : KIND_LABEL[k]}</span>}
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>{mailSenderName(m.type)}<VerifiedTick size={11} /></span>
+                          </div>
+                        </div>
                       </div>
-                    : <MailIcon m={m} size={42} />}
-                  {!m.read && <div style={{ position: 'absolute', top: -2, right: -2, width: 10, height: 10, borderRadius: '50%', background: theme.coral, border: `2px solid ${theme.panelBg}` }} />}
+                    );
+                  })}
                 </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    {pinnedIds.has(m.id) && <Pin_ size={11} />}
-                    <div style={{ fontWeight: m.read ? 600 : 800, fontSize: 13.5, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'flex', alignItems: 'center' }}>
-                      {m.sender ? <><span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.sender.name}</span><VerifiedBadge tier={m.sender.verified} custom={m.sender.custom_badge} size={12} /><span style={{ color: theme.muted, fontWeight: 600, marginLeft: 6, overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.title.replace(new RegExp(`^${m.sender.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*`), '')}</span></> : m.title}
-                    </div>
-                  </div>
-                  <div data-zuser="" style={{ fontSize: 12, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.body}</div>
-                </div>
-                <div style={{ fontSize: 10.5, color: theme.muted, flexShrink: 0 }}>{timeAgo(m.created_at)}</div>
               </div>
             ))
           )}
@@ -2046,25 +2084,25 @@ export function AskPhotoSheet({ src, onClose }) {
     } else {
       setTurns((list) => list.slice(0, -1));
       setQ(text);
-      setNote(aipError(r, 'ZChat Bot'));
+      setNote(aipError(r, 'Mira'));
     }
   };
   const bubble = (mine, children, key) => (
     <div key={key} style={{ display: 'flex', justifyContent: mine ? 'flex-end' : 'flex-start', gap: 8, alignItems: 'flex-end' }}>
-      {!mine && <img src="/bot-avatar.jpg" alt="" draggable={false} style={{ width: 26, height: 26, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />}
+      {!mine && <img src="/mira-avatar-v1.jpg" alt="" draggable={false} style={{ width: 26, height: 26, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />}
       <div style={{ maxWidth: '78%', padding: '9px 13px', borderRadius: mine ? '18px 18px 6px 18px' : '18px 18px 18px 6px', background: mine ? theme.coral : theme.rowBg, color: mine ? '#FFFFFF' : theme.ink, fontSize: 15, lineHeight: 1.45, whiteSpace: 'pre-wrap', wordBreak: 'break-word', userSelect: 'text', WebkitUserSelect: 'text' }}>{children}</div>
     </div>
   );
   return (
     <Portal>
       <div onClick={onClose} className="zchat-fade" style={{ position: 'fixed', left: 0, right: 0, top: 'var(--zvp-top, 0px)', height: 'var(--zvp-h, 100%)', zIndex: 1250, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', background: 'rgba(0, 0, 0, 0.45)', fontFamily: FONT }}>
-        <div onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Ask ZChat Bot about this photo" className="zchat-sheet-up" style={{ transform: drag.sheetStyle.transform, transition: drag.sheetStyle.transition, width: '100%', maxWidth: 460, height: 'min(78vh, calc(100% - 24px))', display: 'flex', flexDirection: 'column', background: theme.panelBg, borderRadius: '24px 24px 0 0', overflow: 'hidden', boxShadow: '0 -10px 40px rgba(0, 0, 0, 0.25)' }}>
+        <div onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Ask Mira about this photo" className="zchat-sheet-up" style={{ transform: drag.sheetStyle.transform, transition: drag.sheetStyle.transition, width: '100%', maxWidth: 460, height: 'min(78vh, calc(100% - 24px))', display: 'flex', flexDirection: 'column', background: theme.panelBg, borderRadius: '24px 24px 0 0', overflow: 'hidden', boxShadow: '0 -10px 40px rgba(0, 0, 0, 0.25)' }}>
           <div {...drag.sheetProps} style={{ touchAction: 'none', flexShrink: 0 }}>
             <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 2px' }}><div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border }} /></div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 18px 12px', borderBottom: `1px solid ${theme.border}` }}>
               <div style={{ width: 44, height: 44, borderRadius: 10, overflow: 'hidden', background: theme.rowBg, flexShrink: 0 }}>{thumb && <img src={thumb} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}</div>
               <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink }}>Ask ZChat Bot</div>
+                <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink }}>Ask Mira</div>
                 <div style={{ fontSize: 12, color: theme.muted }}>About this photo. Nothing is kept after you close this.</div>
               </div>
             </div>
@@ -2304,7 +2342,7 @@ function chatAskLine(m, labelFor) {
   }
   t = String(t || '').replace(/\s+/g, ' ').trim().slice(0, 400);
   if (!t) return null;
-  const who = m.bot_reply ? 'ZChat Bot' : labelFor(m.sender_id);
+  const who = m.bot_reply ? 'Mira' : labelFor(m.sender_id);
   return { id: String(m.id), n: who === 'You' ? 'Me' : String(who || 'Someone').slice(0, 30), w: chatAskWhen(m.created_at), t, m };
 }
 export function ChatAskPanel({ query, loaded, fetchOlder, labelFor, chatName, onJump }) {
@@ -2379,16 +2417,16 @@ export function ChatAskPanel({ query, loaded, fetchOlder, labelFor, chatName, on
       if (take(r, part)) break;
       end = start;
     }
-    if (!best || !best.hits.length) { setSt({ q, none: true, text: 'ZChat Bot could not find that in this chat.' }); return; }
+    if (!best || !best.hits.length) { setSt({ q, none: true, text: 'Mira could not find that in this chat.' }); return; }
     playUiSound('receive');
     setSt({ q, answer: best.answer, hits: best.hits });
   };
   const box = { margin: '0 12px 10px', borderRadius: 16, background: theme.dark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.045)', flexShrink: 0 };
   if (!st) {
     return (
-      <div role="button" aria-label="Ask ZChat Bot about this chat" onClick={run} className="zchat-row-press zchat-fade" style={{ ...box, display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', cursor: 'pointer' }}>
+      <div role="button" aria-label="Ask Mira about this chat" onClick={run} className="zchat-row-press zchat-fade" style={{ ...box, display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', cursor: 'pointer' }}>
         <AiPracticeGlyph size={18} color={kitOnInk(theme)} />
-        <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><span style={{ fontWeight: 700 }}>Ask ZChat Bot</span><span style={{ color: theme.muted }}>{` ${q}`}</span></span>
+        <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><span style={{ fontWeight: 700 }}>Ask Mira</span><span style={{ color: theme.muted }}>{` ${q}`}</span></span>
         <ChevronRight size={16} color={theme.muted} />
       </div>
     );
@@ -2397,7 +2435,7 @@ export function ChatAskPanel({ query, loaded, fetchOlder, labelFor, chatName, on
     <div className="zchat-fade" style={{ ...box, padding: '10px 12px 8px', maxHeight: '44vh', overflowY: 'auto', overscrollBehavior: 'contain' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <AiPracticeGlyph size={17} color={kitOnInk(theme)} />
-        <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 700, color: theme.muted }}>{st.busy ? (st.step > 1 ? 'Reading older messages' : 'Reading this chat') : 'ZChat Bot'}</span>
+        <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 700, color: theme.muted }}>{st.busy ? (st.step > 1 ? 'Reading older messages' : 'Reading this chat') : 'Mira'}</span>
         {st.busy ? <Spinner size={14} color={theme.muted} /> : <div role="button" aria-label="Close answer" onClick={() => { runRef.current += 1; setSt(null); }} className="zchat-press" style={{ width: 28, height: 28, marginRight: -6, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: theme.muted }}><X size={16} /></div>}
       </div>
       {st.error && (
@@ -2423,7 +2461,7 @@ export function ChatAskPanel({ query, loaded, fetchOlder, labelFor, chatName, on
           </div>
         </>
       )}
-      {!st.busy && <div style={{ fontSize: 11.5, color: theme.muted, lineHeight: 1.45, paddingTop: 6 }}>Only you see this. ZChat Bot reads these messages once and keeps nothing.</div>}
+      {!st.busy && <div style={{ fontSize: 11.5, color: theme.muted, lineHeight: 1.45, paddingTop: 6 }}>Only you see this. Mira reads these messages once and keeps nothing.</div>}
     </div>
   );
 }
@@ -2570,7 +2608,7 @@ function ChatPhotoSearch({ uid, chatKey, photos, q, onQ, onOpen }) {
           {job && job.running ? 'Nothing yet. Still looking through the photos.' : labelled < pics.length && !(job && job.error) ? 'Looking through the photos' : `No photos of ${q.trim()} in this chat`}
         </div>
       ))}
-      {words.length > 0 && <div style={{ fontSize: 11.5, color: theme.muted, padding: '2px 2px 10px', lineHeight: 1.45 }}>ZChat Bot looks at the photos in this chat to find them. The words it picks are kept only for you.</div>}
+      {words.length > 0 && <div style={{ fontSize: 11.5, color: theme.muted, padding: '2px 2px 10px', lineHeight: 1.45 }}>Mira looks at the photos in this chat to find them. The words it picks are kept only for you.</div>}
     </div>
   );
 }
@@ -2624,7 +2662,7 @@ export function PhotoFindPage({ uid, onClose, onOpen }) {
       {!words.length && (
         <>
           {total === 0 && state !== 'loading' && !(job && job.running) ? (
-            <EmptyState art="search" title="Find photos by what is in them" text="ZChat Bot looks through the photos in your chats so you can search them, like beach, dog or receipt. The words it picks are kept only for you."
+            <EmptyState art="search" title="Find photos by what is in them" text="Mira looks through the photos in your chats so you can search them, like beach, dog or receipt. The words it picks are kept only for you."
               action={<PillButton primary label="Look through my photos" onClick={lookThrough} />} />
           ) : (
             <>
@@ -2653,7 +2691,7 @@ export function PhotoFindPage({ uid, onClose, onOpen }) {
         </div>
       )}
       {words.length > 0 && res && !res.length && !busy && !err && (
-        <EmptyState art="search" title={`No photos of ${q.trim()}`} text={total ? 'Try another word, or look through more of your recent photos.' : 'Look through your photos first so ZChat Bot can find them.'}
+        <EmptyState art="search" title={`No photos of ${q.trim()}`} text={total ? 'Try another word, or look through more of your recent photos.' : 'Look through your photos first so Mira can find them.'}
           action={job && job.running ? null : <PillButton label="Look through recent photos" onClick={lookThrough} />} />
       )}
       {words.length > 0 && busy && !res && <div style={{ display: 'flex', justifyContent: 'center', padding: 30 }}><Spinner size={20} color={theme.muted} /></div>}
@@ -3170,15 +3208,15 @@ export function ReplyIdeasPanel({ ideas, onUse }) {
   const soft = theme.dark ? 'rgba(29,123,240,0.22)' : 'rgba(29,123,240,0.12)';
   const bubble = { alignSelf: 'flex-end', maxWidth: '86%', boxSizing: 'border-box', padding: '8px 13px', borderRadius: 18, borderBottomRightRadius: 5, background: soft, color: theme.ink, fontSize: 15, lineHeight: 1.32, wordBreak: 'break-word', whiteSpace: 'pre-wrap', boxShadow: `inset 0 0 0 1px ${theme.coral}33` };
   return (
-    <div ref={boxRef} className="zchat-fade" role="dialog" aria-label="Reply ideas from ZChat Bot" style={{ flexShrink: 0, padding: '8px 14px 6px', background: theme.bgGradient, borderTop: `1px solid ${theme.hair || theme.border}` }}>
+    <div ref={boxRef} className="zchat-fade" role="dialog" aria-label="Reply ideas from Mira" style={{ flexShrink: 0, padding: '8px 14px 6px', background: theme.bgGradient, borderTop: `1px solid ${theme.hair || theme.border}` }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-        <img src="/bot-avatar.jpg" alt="" draggable={false} style={{ width: 20, height: 20, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
-        <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 600, color: theme.muted }}>Reply ideas from ZChat Bot</span>
+        <img src="/mira-avatar-v1.jpg" alt="" draggable={false} style={{ width: 20, height: 20, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+        <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 600, color: theme.muted }}>Reply ideas from Mira</span>
         <div role="button" aria-label="Close reply ideas" onPointerDown={(e) => e.preventDefault()} onClick={ideas.close} className="zchat-press" style={{ width: 30, height: 30, margin: '-6px -6px -6px 0', display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.muted, cursor: 'pointer', flexShrink: 0 }}><X size={17} /></div>
       </div>
       {!okd ? (
         <div style={{ padding: '2px 2px 4px' }}>
-          <div style={{ fontSize: 14, color: theme.ink, lineHeight: 1.45 }}>ZChat Bot reads the last few messages of this chat to write three short replies you could send. Nothing is saved, and nothing is sent until you send it.</div>
+          <div style={{ fontSize: 14, color: theme.ink, lineHeight: 1.45 }}>Mira reads the last few messages of this chat to write three short replies you could send. Nothing is saved, and nothing is sent until you send it.</div>
           <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
             <div role="button" aria-label="Show reply ideas" onPointerDown={(e) => e.preventDefault()} onClick={() => { hapticTap(); try { localStorage.setItem('zchat-reply-ideas-ok', '1'); } catch {} setOkd(true); }} className="zchat-press" style={{ height: 34, padding: '0 16px', borderRadius: 17, background: theme.coral, color: '#FFFFFF', fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', cursor: 'pointer' }}>Show ideas</div>
             <div role="button" aria-label="Not now" onPointerDown={(e) => e.preventDefault()} onClick={ideas.close} className="zchat-press" style={{ height: 34, padding: '0 10px', display: 'flex', alignItems: 'center', color: theme.ink2, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Not now</div>
@@ -6894,7 +6932,7 @@ export function SavedMessagesPanel({ myId, me, onClose, onChanged, onOpenChat })
     <>
     <WideDim onClose={onClose} z={40} />
     <div {...edgeBack} style={{ position: 'fixed', inset: 0, zIndex: 40, background: theme.bgGradient, display: 'flex', flexDirection: 'column', fontFamily: FONT }} className="zchat-panel-open zchat-wide-page">
-      <IgTopBar title="Saved Messages" onBack={onClose} right={savedTab === 'messages' ? <div role="button" aria-label={searchOn ? 'Close search' : 'Search saved messages'} onClick={() => { hapticTap(); setSearchOn((v) => !v); if (searchOn) setQ(''); }} className="zchat-press" style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: theme.ink }}>{searchOn ? <X size={21} /> : <Search size={21} />}</div> : null} />
+      <IgTopBar title="Notes to self" onBack={onClose} right={savedTab === 'messages' ? <div role="button" aria-label={searchOn ? 'Close search' : 'Search saved messages'} onClick={() => { hapticTap(); setSearchOn((v) => !v); if (searchOn) setQ(''); }} className="zchat-press" style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: theme.ink }}>{searchOn ? <X size={21} /> : <Search size={21} />}</div> : null} />
       <LineTabs fill kind="button" value={savedTab} onChange={(k) => { if (k !== savedTab) { hapticTap(); setSavedTab(k); } }} h={44} fs={15} style={{ marginBottom: 10 }}
         tabs={[['messages', 'Messages'], ['posts', 'Posts']].map(([k, label]) => ({ k, label, aria: `Saved ${label.toLowerCase()}` }))} />
       {savedTab === 'posts' ? (
@@ -6923,7 +6961,7 @@ export function SavedMessagesPanel({ myId, me, onClose, onChanged, onOpenChat })
         ) : shown.length === 0 ? (
           <div style={{ margin: 'auto 0', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '24px 18px' }}>
             <span style={{ width: 76, height: 76, borderRadius: '50%', background: SAVED_BLUE, color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Bookmark size={34} fill="#FFFFFF" /></span>
-            <div style={{ fontSize: 17, fontWeight: 800, color: theme.ink, marginTop: 14 }}>{term ? 'Nothing found' : curFolder ? `Nothing in ${curFolder.name} yet` : 'Your Saved Messages'}</div>
+            <div style={{ fontSize: 17, fontWeight: 800, color: theme.ink, marginTop: 14 }}>{term ? 'Nothing found' : curFolder ? `Nothing in ${curFolder.name} yet` : 'Your notes to self'}</div>
             <div style={{ fontSize: 14, color: theme.muted, marginTop: 6, lineHeight: 1.5, maxWidth: 300 }}>{term ? 'Try a different word.' : 'Send yourself notes, photos, videos and files. Press and hold any message in a chat and tap Save to keep it here.'}</div>
           </div>
         ) : savedTimeline(shown).map((it) => it.day ? (
@@ -6933,14 +6971,18 @@ export function SavedMessagesPanel({ myId, me, onClose, onChanged, onOpenChat })
         ))}
       </div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', padding: '8px 10px', paddingBottom: 'calc(8px + env(safe-area-inset-bottom))', borderTop: `0.5px solid ${theme.hair}` }}>
-        <label aria-label="Add a photo, video or file" className="zchat-press" style={{ width: 42, height: 42, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.ink, cursor: 'pointer', flexShrink: 0 }}>
+        <label aria-label="Add photos or videos from your gallery" className="zchat-press" style={{ width: 42, height: 42, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.ink, cursor: 'pointer', flexShrink: 0 }}>
+          <ImageIcon size={21} />
+          <input type="file" multiple accept="image/*,video/*" style={{ display: 'none' }} onChange={(e) => { const fs = [...(e.target.files || [])]; e.target.value = ''; if (fs.length) addFiles(fs); }} />
+        </label>
+        <label aria-label="Add a file" className="zchat-press" style={{ width: 42, height: 42, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.ink, cursor: 'pointer', flexShrink: 0 }}>
           <Paperclip size={21} />
           <input type="file" multiple accept="image/*,video/*,audio/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip" style={{ display: 'none' }} onChange={(e) => { const fs = [...(e.target.files || [])]; e.target.value = ''; if (fs.length) addFiles(fs); }} />
         </label>
         <textarea value={note} onChange={(e) => setNote(e.target.value.slice(0, 2000))} rows={1} placeholder="Message" aria-label="Write a note to yourself"
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !isTouchDevice()) { e.preventDefault(); addNote(); } }}
           style={{ ...inputStyle(theme), flex: 1, resize: 'none', maxHeight: 110, padding: '11px 14px', fontSize: 15, borderRadius: 21 }} />
-        <div role="button" aria-label="Send to Saved Messages" onClick={addNote} className="zchat-press" style={{ width: 42, height: 42, borderRadius: '50%', background: note.trim() ? theme.coral : theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: note.trim() ? 'pointer' : 'default', flexShrink: 0 }}>
+        <div role="button" aria-label="Send to Notes to self" onClick={addNote} className="zchat-press" style={{ width: 42, height: 42, borderRadius: '50%', background: note.trim() ? theme.coral : theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: note.trim() ? 'pointer' : 'default', flexShrink: 0 }}>
           {busy ? <Spinner size={16} /> : <Send size={18} color={note.trim() ? '#FFFFFF' : theme.muted} />}
         </div>
       </div>

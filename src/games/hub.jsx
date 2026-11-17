@@ -469,11 +469,11 @@ export function GamesPage({ onClose, onChallenge, onShareScore, initialGame, fri
             {solos.map((k, i, a) => { const b = bestOf(k); return <Tile key={k} k={k} wide={a.length % 2 === 1 && i === a.length - 1} title={GAME_TITLES[k]} sub={k === 'sudoku' ? 'Easy to expert' : b ? `Best ${formatGameScore(k, b)}` : subFor(k)} onClick={() => openSolo(k)} />; })}
           </div>
           {onPlayBot && (
-            <div role="button" aria-label="Play ZChat Bot" onClick={() => { tap(); onPlayBot(); }} className="zchat-row-press"
+            <div role="button" aria-label="Play Mira" onClick={() => { tap(); onPlayBot(); }} className="zchat-row-press"
               style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 12px', marginTop: 20, borderRadius: 18, cursor: 'pointer', background: theme.rowBg }}>
-              <Avatar emoji={botPicUrl()} name="ZChat Bot" size={44} />
+              <Avatar emoji={botPicUrl()} name="Mira" size={44} />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 15.5, fontWeight: 800, color: theme.ink }}>Play ZChat Bot</div>
+                <div style={{ fontSize: 15.5, fontWeight: 800, color: theme.ink }}>Play Mira</div>
                 <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 1 }}>Easy, Medium or Hard, any time</div>
               </div>
               <GameButton small color="white" label="Play" onClick={() => { tap(); onPlayBot(); }} />
@@ -564,7 +564,7 @@ export function GamePickerSheet({ profile, onPick, onMore, onClose }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 18px 12px' }}>
             <Avatar emoji={profile.avatar} name={profile.name} size={44} />
             <div style={{ minWidth: 0, flex: 1 }}>
-              <div style={{ fontWeight: 850, fontSize: 18, letterSpacing: '-0.01em', color: theme.ink }}>{bot ? 'Play ZChat Bot' : `Play with ${first}`}</div>
+              <div style={{ fontWeight: 850, fontSize: 18, letterSpacing: '-0.01em', color: theme.ink }}>{bot ? 'Play Mira' : `Play with ${first}`}</div>
               <div style={{ fontSize: 12.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{bot ? 'Pick how hard, then a game' : together ? `You played ${together} ${together === 1 ? 'game' : 'games'} together` : 'You both play in a full screen game room'}</div>
             </div>
           </div>

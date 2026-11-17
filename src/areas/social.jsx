@@ -721,6 +721,7 @@ export function FeedPanel({ me, userId, onClose, onOpenProfile, ownerFilter = nu
   const holdRef = useRef(null);
   const tabSwipeRef = useRef(null);
   useFeedViewTracking(scrollerRef, items, userId);
+  const likeFloats = useLiveLikes(scrollerRef, items, userId, setCounts);
   const toggleSave = (post) => {
     const on = !saved.has(post.id);
     setSaved((prev) => {
@@ -922,7 +923,7 @@ export function FeedPanel({ me, userId, onClose, onOpenProfile, ownerFilter = nu
       setTimeout(() => setPinNote(''), 2200);
       return;
     }
-    if (!isLiked && res.state === true && post.user_id !== userId) sendPushNotification(post.user_id, 'ZChat', `${(me && me.name) || 'Someone'} liked your post`, `/?post=${post.id}`, me && me.avatar);
+    if (!isLiked && res.state === true && post.user_id !== userId) { const th = postThumbOf(post); sendPushNotification(post.user_id, 'ZChat', `${(me && me.name) || 'Someone'} liked your post`, `/?post=${post.id}`, me && me.avatar, th && th.url ? { image: th.url } : undefined); }
   };
   const onTapMedia = (post) => {
     const now = Date.now();
@@ -990,8 +991,9 @@ export function FeedPanel({ me, userId, onClose, onOpenProfile, ownerFilter = nu
                     <Avatar emoji={post.owner.avatar} name={post.owner.name} size={48} />
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, color: 'white' }}>
-                    <div role="button" aria-label="Like" onClick={() => toggleLike(post)} style={{ display: 'flex', cursor: 'pointer' }}>
+                    <div role="button" aria-label="Like" onClick={() => toggleLike(post)} style={{ position: 'relative', display: 'flex', cursor: 'pointer' }}>
                       <Heart size={31} color={likes[post.id] ? '#ff2d55' : 'white'} fill={likes[post.id] ? '#ff2d55' : 'none'} />
+                      {likeFloats.filter((f) => f.pid === post.id).map((f) => <span key={f.id} aria-hidden="true" style={{ position: 'absolute', left: 4 + f.dx, top: -6, pointerEvents: 'none', animation: `zchat-heart-float 1.6s ease-out ${Math.max(0, f.at - Date.now())}ms both` }}><Heart size={20} color="#ff2d55" fill="#ff2d55" /></span>)}
                     </div>
                     {!hideL && <span role="button" aria-label="Show who liked" onClick={() => setLikersFor(post)} style={{ fontSize: 11.5, fontWeight: 800, textShadow: '0 1px 4px rgba(0,0,0,0.6)', cursor: 'pointer', padding: '0 8px' }}>{formatCount(c.likes)}</span>}
                   </div>
@@ -1084,6 +1086,35 @@ export function FeedPanel({ me, userId, onClose, onOpenProfile, ownerFilter = nu
   );
 }
 
+function useLiveLikes(scrollerRef, items, myId, setCounts) {
+  const [active, setActive] = useState(null);
+  const [floats, setFloats] = useState([]);
+  useEffect(() => {
+    const root = scrollerRef.current;
+    if (!root || typeof IntersectionObserver === 'undefined') return undefined;
+    const io = new IntersectionObserver((entries) => { for (const en of entries) if (en.isIntersecting && en.intersectionRatio >= 0.6) setActive(en.target.getAttribute('data-post-view')); }, { root, threshold: [0.6] });
+    root.querySelectorAll('[data-post-view]').forEach((el) => io.observe(el));
+    return () => io.disconnect();
+  }, [items]);
+  useEffect(() => {
+    if (!active) return undefined;
+    let gone = false, t = 0, keep = null;
+    const refresh = async () => {
+      const { count } = await supabase.from('post_likes').select('post_id', { count: 'exact', head: true }).eq('post_id', active);
+      if (gone || count == null) return;
+      setCounts((p) => {
+        const cur = p[active] || { likes: 0, comments: 0 };
+        if (cur.likes === count) return p;
+        if (count > cur.likes) { const n = Math.min(5, count - cur.likes), now = Date.now(); setFloats((f) => [...f.filter((x) => now - x.at < 2400).slice(-10), ...Array.from({ length: n }, (_, i) => ({ id: `${now}-${i}`, pid: active, at: now + i * 160, dx: Math.round((Math.random() - 0.5) * 18) }))]); }
+        return { ...p, [active]: { ...cur, likes: count } };
+      });
+    };
+    try { keep = rtKeep(() => supabase.channel(rtName(`plk-${active}`)).on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'post_likes', filter: `post_id=eq.${active}` }, (pl) => { if (pl && pl.new && pl.new.user_id !== myId) { clearTimeout(t); t = setTimeout(refresh, 250); } })); } catch {}
+    const iv = setInterval(() => { if (document.visibilityState === 'visible') refresh(); }, 9000);
+    return () => { gone = true; clearTimeout(t); clearInterval(iv); if (keep) rtDrop(keep); };
+  }, [active, myId]);
+  return floats;
+}
 function useFeedViewTracking(scrollerRef, items, myId) {
   useEffect(() => {
     const root = scrollerRef.current;
@@ -3248,6 +3279,8 @@ export function ChannelPage({ channelId, seed, userId, me, onClose, onShare }) {
   );
 }
 
+const reelSound = { on: (() => { try { return localStorage.getItem('zchat-feed-sound') === 'on'; } catch { return false; } })(), subs: new Set() };
+const setReelSound = (on) => { reelSound.on = on; try { localStorage.setItem('zchat-feed-sound', on ? 'on' : 'off'); } catch {} reelSound.subs.forEach((f) => f(on)); };
 function ReelVideo({ post, rootRef, onDoubleTap }) {
   const wrapRef = useRef(null);
   const videoRef = useRef(null);
@@ -3256,7 +3289,8 @@ function ReelVideo({ post, rootRef, onDoubleTap }) {
   const tapTimerRef = useRef(null);
   const flashTimerRef = useRef(null);
   const pausedByUserRef = useRef(false);
-  const [muted, setMuted] = useState(true);
+  const [muted, setMuted] = useState(() => !reelSound.on);
+  useEffect(() => { const f = (on) => setMuted(!on); reelSound.subs.add(f); return () => { reelSound.subs.delete(f); }; }, []);
   const [flash, setFlash] = useState(null);
   const [portrait, setPortrait] = useState(false);
   const showFlash = (kind) => {
@@ -3268,7 +3302,7 @@ function ReelVideo({ post, rootRef, onDoubleTap }) {
     const el = videoRef.current;
     const wrap = wrapRef.current;
     if (!el || !wrap) return undefined;
-    const start = () => { const p = el.play(); if (p && p.catch) p.catch(() => {}); };
+    const start = () => { el.muted = !reelSound.on; const p = el.play(); if (p && p.catch) p.catch(() => { if (!el.muted) { el.muted = true; setMuted(true); const p2 = el.play(); if (p2 && p2.catch) p2.catch(() => {}); } }); };
     if (typeof IntersectionObserver === 'undefined') { start(); return undefined; }
     const io = new IntersectionObserver((entries) => {
       entries.forEach((en) => {
@@ -3320,7 +3354,7 @@ function ReelVideo({ post, rootRef, onDoubleTap }) {
           {flash === 'pause' ? <Pause size={30} color="white" fill="white" /> : <Play size={30} color="white" fill="white" />}
         </div>
       )}
-      <div role="button" aria-label={muted ? 'Turn sound on' : 'Turn sound off'} onClick={(e) => { e.stopPropagation(); setMuted((m) => !m); }}
+      <div role="button" aria-label={muted ? 'Turn sound on' : 'Turn sound off'} onClick={(e) => { e.stopPropagation(); setReelSound(muted); }}
         style={{ position: 'absolute', top: 'calc(64px + env(safe-area-inset-top))', right: 12, width: 36, height: 36, borderRadius: '50%', background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 4 }}>
         {muted ? <VolumeX size={18} color="white" /> : <Volume2 size={18} color="white" />}
       </div>
